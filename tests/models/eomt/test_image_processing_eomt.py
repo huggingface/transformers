@@ -87,14 +87,14 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
@@ -111,10 +111,10 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             expected_output_image_shape = (
-                self.image_processing_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 3,
-                self.image_processing_tester.height,
-                self.image_processing_tester.width,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
             )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -123,9 +123,9 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
         pass
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
@@ -142,17 +142,17 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             expected_output_image_shape = (
-                self.image_processing_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 3,
-                self.image_processing_tester.height,
-                self.image_processing_tester.width,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
             )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -168,22 +168,22 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
 
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             expected_output_image_shape = (
-                self.image_processing_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 3,
-                self.image_processing_tester.height,
-                self.image_processing_tester.width,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
             )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_backends_equivalence(self):
         """Test equivalence across backends including segmentation maps."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
@@ -207,20 +207,20 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
 
     def test_slow_fast_equivalence_batched(self):
         """Test batched equivalence across backends including segmentation maps."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images, dummy_maps = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k(
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
             batched=True
         )
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 
@@ -245,10 +245,10 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
                 )
 
     def test_post_process_semantic_segmentation(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
             # Set longest_edge to None to test for semantic segmentatiom.
-            processor.size = {"shortest_edge": self.image_processing_tester.height, "longest_edge": None}
+            processor.size = {"shortest_edge": self.image_processor_tester.height, "longest_edge": None}
             image = load_image(
                 url_to_local_path(
                     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
@@ -261,7 +261,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             target_sizes = [image.size[::-1]]
 
             # For semantic segmentation, the BS of output is 2 coz, two patches are created for the image.
-            outputs = self.image_processing_tester.prepare_fake_eomt_outputs(
+            outputs = self.image_processor_tester.prepare_fake_eomt_outputs(
                 inputs["pixel_values"].shape[0], patch_offsets
             )
             segmentation = processor.post_process_semantic_segmentation(outputs, target_sizes)
@@ -269,7 +269,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             self.assertEqual(segmentation[0].shape, (image.height, image.width))
 
     def test_post_process_panoptic_segmentation(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
             image = load_image(
                 url_to_local_path(
@@ -280,7 +280,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             original_sizes = [image.size[::-1], image.size[::-1]]
 
             # lets test for batched input of 2
-            outputs = self.image_processing_tester.prepare_fake_eomt_outputs(2)
+            outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
             segmentation = processor.post_process_panoptic_segmentation(outputs, original_sizes)
 
             self.assertTrue(len(segmentation) == 2)
@@ -291,7 +291,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
                 self.assertEqual(el["segmentation"].shape, (image.height, image.width))
 
     def test_post_process_instance_segmentation(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
             image = load_image(
                 url_to_local_path(
@@ -302,7 +302,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             original_sizes = [image.size[::-1], image.size[::-1]]
 
             # lets test for batched input of 2
-            outputs = self.image_processing_tester.prepare_fake_eomt_outputs(2)
+            outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
             segmentation = processor.post_process_instance_segmentation(outputs, original_sizes)
 
             self.assertTrue(len(segmentation) == 2)

@@ -59,38 +59,38 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for sample_images in image_inputs:
                 for image in sample_images:
                     self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_numpy_4_channels(self):
         # Idefics3 always processes images as RGB, so it always returns images with 3 channels
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processor_dict = self.image_processor_dict
             image_processing = image_processing_class(**image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
             for sample_images in image_inputs:
                 for image in sample_images:
@@ -98,43 +98,43 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for images in image_inputs:
                 for image in images:
@@ -142,13 +142,13 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 tuple(encoded_images.shape),
-                (self.image_processing_tester.batch_size, *expected_output_image_shape),
+                (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )

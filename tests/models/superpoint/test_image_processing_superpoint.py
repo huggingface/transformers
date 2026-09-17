@@ -59,10 +59,10 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processing(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -75,9 +75,9 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         pass
 
     def test_input_image_properly_converted_to_grayscale(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs()
+            image_inputs = self.image_processor_tester.prepare_image_inputs()
             pre_processed_images = image_processor.preprocess(image_inputs)
             for image in pre_processed_images["pixel_values"]:
                 if isinstance(image, torch.Tensor):
@@ -103,11 +103,11 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 self.assertTrue(all_below_image_size)
                 self.assertTrue(all_above_zero)
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs()
+            image_inputs = self.image_processor_tester.prepare_image_inputs()
             pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
-            outputs = self.image_processing_tester.prepare_keypoint_detection_output(**pre_processed_images)
+            outputs = self.image_processor_tester.prepare_keypoint_detection_output(**pre_processed_images)
 
             tuple_image_sizes = [(image.size[0], image.size[1]) for image in image_inputs]
             tuple_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tuple_image_sizes)

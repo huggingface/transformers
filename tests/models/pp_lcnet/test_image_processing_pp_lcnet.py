@@ -44,7 +44,7 @@ class PPLCNetImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     @unittest.skip(reason="PPLCNet does not support 4 channel images yet")
     def test_call_numpy_4_channels(self):

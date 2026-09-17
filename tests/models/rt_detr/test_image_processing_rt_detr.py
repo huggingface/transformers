@@ -70,7 +70,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_valid_coco_detection_annotations(self):
         # prepare image and target
@@ -80,7 +80,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         params = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class.from_pretrained("PekingU/rtdetr_r50vd")
 
@@ -117,7 +117,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         target = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class.from_pretrained("PekingU/rtdetr_r50vd")
             encoding = image_processing(images=image, annotations=target, return_tensors="pt")
@@ -157,7 +157,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_outputs(self):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoding = image_processing(images=image, return_tensors="pt")
 
@@ -186,7 +186,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image = load_image(url_to_local_path(url))
             images.append(image)
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # apply image processing
             image_processing = image_processing_class(**self.image_processor_dict)
             encoding = image_processing(images=images, return_tensors="pt")
@@ -240,7 +240,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class()
             encoding = image_processing(
                 images=images,
@@ -340,9 +340,9 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         target = {"image_id": 39769, "annotations": target}
 
-        if "torchvision" not in self.image_processor_classes:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest("torchvision backend not available")
-        processor = self.image_processor_classes["torchvision"]()
+        processor = self.image_processing_classes["torchvision"]()
         # 1. run processor on CPU
         encoding_cpu = processor(images=image, annotations=target, return_tensors="pt", device="cpu")
         # 2. run processor on accelerator

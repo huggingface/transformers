@@ -61,17 +61,17 @@ class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def assert_image_processor_output(self, output, batch_size):
         grid_h = grid_w = 2
         patches_per_image = grid_h * grid_w
         expected_output_shape = (
             batch_size * patches_per_image,
-            self.image_processing_tester.num_channels
-            * self.image_processing_tester.temporal_patch_size
-            * self.image_processing_tester.patch_size
-            * self.image_processing_tester.patch_size,
+            self.image_processor_tester.num_channels
+            * self.image_processor_tester.temporal_patch_size
+            * self.image_processor_tester.patch_size
+            * self.image_processor_tester.patch_size,
         )
         expected_grid_thw = torch.tensor([[1, grid_h, grid_w]] * batch_size)
 
@@ -79,7 +79,7 @@ class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue((output.image_grid_thw == expected_grid_thw).all())
 
     def test_image_processor_to_json_string(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
             for key, value in self.image_processor_dict.items():
@@ -87,42 +87,42 @@ class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.assertEqual(obj[key], value)
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             self.assert_image_processor_output(image_processing(image_inputs[0], return_tensors="pt"), batch_size=1)
             self.assert_image_processor_output(
                 image_processing(image_inputs, return_tensors="pt"),
-                batch_size=self.image_processing_tester.batch_size,
+                batch_size=self.image_processor_tester.batch_size,
             )
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             self.assert_image_processor_output(image_processing(image_inputs[0], return_tensors="pt"), batch_size=1)
             self.assert_image_processor_output(
                 image_processing(image_inputs, return_tensors="pt"),
-                batch_size=self.image_processing_tester.batch_size,
+                batch_size=self.image_processor_tester.batch_size,
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             self.assert_image_processor_output(image_processing(image_inputs[0], return_tensors="pt"), batch_size=1)
             self.assert_image_processor_output(
                 image_processing(image_inputs, return_tensors="pt"),
-                batch_size=self.image_processing_tester.batch_size,
+                batch_size=self.image_processor_tester.batch_size,
             )
 
     @unittest.skip(reason="HunYuanVL image processors are designed for 3-channel RGB images")

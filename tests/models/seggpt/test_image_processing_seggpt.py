@@ -90,18 +90,18 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_palette(self):
         num_labels = 3
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             palette = image_processing.get_palette(num_labels)
             self.assertEqual(len(palette), num_labels + 1)
             self.assertEqual(palette[0], (0, 0, 0))
 
     def test_mask_equivalence(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class()
 
             mask_binary = prepare_mask()
@@ -113,7 +113,7 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
             self.assertTrue((inputs_binary["prompt_masks"] == inputs_rgb["prompt_masks"]).all().item())
 
     def test_mask_to_rgb(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             mask = prepare_mask()
             mask = np.array(mask)
@@ -139,14 +139,14 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
             self.assertTrue(check_two_colors(mask_painted, color2=(255, 255, 255)))
 
     def test_post_processing_semantic_segmentation(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            outputs = self.image_processing_tester.get_fake_image_segmentation_output()
+            outputs = self.image_processor_tester.get_fake_image_segmentation_output()
             post_processed = image_processor.post_process_semantic_segmentation(outputs)
 
-            self.assertEqual(len(post_processed), self.image_processing_tester.batch_size)
+            self.assertEqual(len(post_processed), self.image_processor_tester.batch_size)
 
-            expected_semantic_map_shape = self.image_processing_tester.expected_post_processed_shape()
+            expected_semantic_map_shape = self.image_processor_tester.expected_post_processed_shape()
             self.assertEqual(post_processed[0].shape, expected_semantic_map_shape)
 
     @slow
@@ -156,7 +156,7 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
         prompt_image = images[0]
         prompt_mask = masks[0]
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_pretrained("BAAI/seggpt-vit-large")
 
             inputs = image_processor(
@@ -199,7 +199,7 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
             torch.testing.assert_close(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, rtol=1e-4, atol=1e-4)
 
     def test_prompt_mask_equivalence(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_height, image_width = (
                 self.image_processing_tester.size["height"],
@@ -279,7 +279,7 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
 
     def test_backends_equivalence(self):
         """Override to test equivalence across prompt_images and prompt_masks outputs as well."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         image_height, image_width = (
@@ -290,7 +290,7 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
         mask_np = np.zeros((image_height, image_width), dtype=np.uint8)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(
                 images=image_np,

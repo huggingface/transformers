@@ -53,59 +53,59 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
             encoded_images = image_processing(image_inputs[0], boxes=boxes, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
 
             # Test batched
-            boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processing_tester.batch_size
+            boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
             encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
                 tuple(encoded_images.shape),
                 (self.image_processing_tester.batch_size * 2, *expected_output_image_shape),
             )
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
             encoded_images = image_processing(image_inputs[0], boxes=boxes, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
 
             # Test batched
-            boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processing_tester.batch_size
+            boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
             encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
                 tuple(encoded_images.shape),
                 (self.image_processing_tester.batch_size * 2, *expected_output_image_shape),
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -113,25 +113,25 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Test not batched input
             boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
             encoded_images = image_processing(image_inputs[0], boxes=boxes, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
 
             # Test batched
-            boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processing_tester.batch_size
+            boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
             encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
                 tuple(encoded_images.shape),
                 (self.image_processing_tester.batch_size * 2, *expected_output_image_shape),
             )
 
     def test_call_numpy_4_channels(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # create random numpy tensors
-            self.image_processing_tester.num_channels = 4
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            self.image_processor_tester.num_channels = 4
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             # Test not batched input
             boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
             encoded_images = image_processor(
@@ -142,11 +142,11 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_mean=(0.0, 0.0, 0.0, 0.0),
                 image_std=(1.0, 1.0, 1.0, 1.0),
             ).pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (len(boxes[0]), *expected_output_image_shape))
 
             # Test batched
-            boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processing_tester.batch_size
+            boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
             encoded_images = image_processor(
                 image_inputs,
                 boxes=boxes,
@@ -155,25 +155,25 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_mean=(0.0, 0.0, 0.0, 0.0),
                 image_std=(1.0, 1.0, 1.0, 1.0),
             ).pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
                 tuple(encoded_images.shape),
-                (self.image_processing_tester.batch_size * len(boxes[0]), *expected_output_image_shape),
+                (self.image_processor_tester.batch_size * len(boxes[0]), *expected_output_image_shape),
             )
-            self.image_processing_tester.num_channels = 3
+            self.image_processor_tester.num_channels = 3
 
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
         """VitPose requires boxes parameter for preprocessing."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_coco_image("000000039769.jpg")
         boxes = [[[0, 0, 1, 1]]]
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, boxes=boxes, return_tensors="pt")
 
@@ -186,14 +186,14 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch
     def test_backends_equivalence_batched(self):
         """VitPose requires boxes parameter for batched preprocessing."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         boxes = [[[0, 0, 1, 1]]] * len(dummy_images)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, boxes=boxes, return_tensors="pt")
 
@@ -209,12 +209,12 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         """VitPose requires boxes parameter for preprocessing."""
         from transformers.testing_utils import torch_device
 
-        if "torchvision" not in self.image_processor_classes:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest("Skipping compilation test as torchvision backend is not available")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
-        image_processor = self.image_processor_classes["torchvision"](**self.image_processor_dict)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         boxes = [[[0, 0, 1, 1]]]
         output_eager = image_processor(input_image, boxes=boxes, device=torch_device, return_tensors="pt")
 

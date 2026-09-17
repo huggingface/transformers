@@ -48,11 +48,11 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     @slow
     def test_image_processor_integration_test(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class()
 
             image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -63,7 +63,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @slow
     def test_image_processor_integration_test_resize(self):
-        for backend_name in self.image_processor_classes.keys():
+        for backend_name in self.image_processing_classes.keys():
             checkpoint = "google/owlv2-base-patch16-ensemble"
             processor = AutoProcessor.from_pretrained(checkpoint, backend=backend_name)
             model = Owlv2ForObjectDetection.from_pretrained(checkpoint)

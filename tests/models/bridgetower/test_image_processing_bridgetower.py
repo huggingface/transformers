@@ -47,12 +47,12 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(
@@ -62,7 +62,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         )
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -77,18 +77,18 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @require_vision
     @require_torch
     def test_slow_fast_equivalence_batched(self):
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 

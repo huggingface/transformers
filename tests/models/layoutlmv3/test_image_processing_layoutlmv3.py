@@ -35,7 +35,7 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_LayoutLMv3_integration_test(self):
         from datasets import load_dataset
@@ -43,7 +43,7 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
 
         # with apply_OCR = True
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class()
 
             image = ds[0]["image"].convert("RGB")

@@ -49,14 +49,14 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_call_segmentation_maps(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
             image_processor = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             maps = []
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -68,17 +68,17 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoding["pixel_values"].shape,
                 (
                     1,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.pad_size["height"],
-                    self.image_processing_tester.pad_size["width"],
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.pad_size["height"],
+                    self.image_processor_tester.pad_size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
                     1,
-                    self.image_processing_tester.mask_pad_size["height"],
-                    self.image_processing_tester.mask_pad_size["width"],
+                    self.image_processor_tester.mask_pad_size["height"],
+                    self.image_processor_tester.mask_pad_size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -90,18 +90,18 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(
                 encoding["pixel_values"].shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.pad_size["height"],
-                    self.image_processing_tester.pad_size["width"],
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.pad_size["height"],
+                    self.image_processor_tester.pad_size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.mask_pad_size["height"],
-                    self.image_processing_tester.mask_pad_size["width"],
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.mask_pad_size["height"],
+                    self.image_processor_tester.mask_pad_size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -109,24 +109,24 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
-            image, segmentation_map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k()
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
             encoding = image_processor(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
                 encoding["pixel_values"].shape,
                 (
                     1,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.pad_size["height"],
-                    self.image_processing_tester.pad_size["width"],
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.pad_size["height"],
+                    self.image_processor_tester.pad_size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
                     1,
-                    self.image_processing_tester.mask_pad_size["height"],
-                    self.image_processing_tester.mask_pad_size["width"],
+                    self.image_processor_tester.mask_pad_size["height"],
+                    self.image_processor_tester.mask_pad_size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -134,7 +134,7 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k(
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
                 batched=True
             )
 
@@ -143,17 +143,17 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoding["pixel_values"].shape,
                 (
                     2,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.pad_size["height"],
-                    self.image_processing_tester.pad_size["width"],
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.pad_size["height"],
+                    self.image_processor_tester.pad_size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
                     2,
-                    self.image_processing_tester.mask_pad_size["height"],
-                    self.image_processing_tester.mask_pad_size["width"],
+                    self.image_processor_tester.mask_pad_size["height"],
+                    self.image_processor_tester.mask_pad_size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -162,13 +162,13 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_backends_equivalence(self):
         """Override base class test to also compare segmentation labels."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
@@ -190,15 +190,15 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_backends_equivalence_batched(self):
         """Override base class test to also compare segmentation labels."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images, dummy_maps = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k(
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
             batched=True
         )
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 

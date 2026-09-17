@@ -39,11 +39,11 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_keep_aspect_ratio(self):
         size = {"height": 512, "width": 512}
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
 
             image = np.zeros((489, 640, 3))
@@ -54,7 +54,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     def test_prompt_depth_processing(self):
         size = {"height": 756, "width": 756}
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
 
             image = np.zeros((756, 1008, 3))
@@ -69,7 +69,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     def test_backends_equivalence(self):
         """Override base class test to also compare prompt_depth."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         image = np.zeros((756, 1008, 3))
@@ -77,7 +77,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
         size = {"height": 756, "width": 756}
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(
                 size=size, keep_aspect_ratio=True, ensure_multiple_of=32, do_pad=True, size_divisor=51
             )
@@ -98,16 +98,16 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     def test_slow_fast_equivalence_batched(self):
         """Override base class test to also compare prompt_depth."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        batch_size = self.image_processing_tester.batch_size
-        images = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        batch_size = self.image_processor_tester.batch_size
+        images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
         prompt_depths = [np.random.random((192, 256)) for _ in range(batch_size)]
 
         size = {"height": 756, "width": 756}
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(size=size, keep_aspect_ratio=False, ensure_multiple_of=32)
             encodings[backend_name] = image_processor(images, prompt_depth=prompt_depths, return_tensors="pt")
 

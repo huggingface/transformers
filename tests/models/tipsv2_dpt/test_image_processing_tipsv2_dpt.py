@@ -53,7 +53,7 @@ class Tipsv2DptImageProcessingTest(
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_post_process_depth_estimation(self):
         image_processor = Tipsv2DptImageProcessor()

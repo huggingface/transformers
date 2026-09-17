@@ -53,18 +53,18 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @property
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_without_pan_and_scan(self):
         """
         Disable do_pan_and_scan parameter.
         """
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processor = image_processing_class.from_dict(self.image_processor_dict, do_pan_and_scan=False)
 
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
@@ -83,7 +83,7 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         Enables Pan and Scan path by choosing the correct input image resolution. If you are changing
         image processor attributes for PaS, please update this test.
         """
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -109,11 +109,11 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
@@ -128,11 +128,11 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
@@ -147,11 +147,11 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -174,7 +174,7 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch
     def test_backends_equivalence_batched_pas(self):
         """Test pan and scan equivalence across backends."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         crop_config = {
@@ -185,10 +185,10 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         }
         image_processor_dict = self.image_processor_dict
         image_processor_dict.update(crop_config)
-        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 

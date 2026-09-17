@@ -88,10 +88,10 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_to_json_string(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
             for key, value in self.image_processor_dict.items():
@@ -104,11 +104,11 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(best_resolution, (560, 280))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], Image.Image)
 
@@ -131,11 +131,11 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], np.ndarray)
 
@@ -158,11 +158,11 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image[0], torch.Tensor)
@@ -190,9 +190,9 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         pass
 
     def test_nested_input(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
 
             # Test batched as a list of images
             process_out = image_processing(image_inputs, return_tensors="pt")
@@ -224,7 +224,7 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         pass
 
     def test_custom_image_size(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processing.save_pretrained(tmpdirname)
@@ -232,20 +232,20 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                     tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
                 )
 
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             process_out = image_processor_loaded(image_inputs, return_tensors="pt")
             expected_output_video_shape = [112, 588]
             self.assertListEqual(list(process_out.pixel_values.shape), expected_output_video_shape)
 
     def test_custom_pixels(self):
         pixel_choices = frozenset(itertools.product((100, 150, 200, 20000), (100, 150, 200, 20000)))
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             for a_pixels, b_pixels in pixel_choices:
                 image_processor_dict["min_pixels"] = min(a_pixels, b_pixels)
                 image_processor_dict["max_pixels"] = max(a_pixels, b_pixels)
                 image_processor = image_processing_class(**image_processor_dict)
-                image_inputs = self.image_processing_tester.prepare_image_inputs()
+                image_inputs = self.image_processor_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
                 image_processor(image_inputs, return_tensors="pt")
 
@@ -253,13 +253,13 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @require_torch
     def test_backends_equivalence(self):
         """Override to also compare image_grid_thw across backends."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_coco_image("000000039769.jpg")
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -276,18 +276,18 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @require_torch
     def test_backends_equivalence_batched(self):
         """Override to also compare image_grid_thw across backends."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
@@ -301,7 +301,7 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self._assert_tensors_equivalence(reference.image_grid_thw.float(), encoding.image_grid_thw.float())
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
             self.assertEqual(num_patches, 49)

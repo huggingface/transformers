@@ -83,15 +83,15 @@ class DetrImageProcessingTest(
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_from_dict_with_legacy_integer_size(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 1333})
 
     def test_should_raise_if_annotation_format_invalid(self):
-        image_processor_dict = self.image_processing_tester.prepare_image_processor_dict()
+        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
 
         with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             detection_target = json.loads(f.read())
@@ -105,7 +105,7 @@ class DetrImageProcessingTest(
         }
 
         image_processor_params = {**image_processor_dict, **{"format": "_INVALID_FORMAT_"}}
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**image_processor_params)
 
             with self.assertRaises(ValueError) as e:
@@ -121,7 +121,7 @@ class DetrImageProcessingTest(
 
         params = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class.from_pretrained("facebook/detr-resnet-50")
 
@@ -158,7 +158,7 @@ class DetrImageProcessingTest(
 
         target = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class.from_pretrained("facebook/detr-resnet-50")
             encoding = image_processing(images=image, annotations=target, return_tensors="pt")
@@ -205,7 +205,7 @@ class DetrImageProcessingTest(
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class.from_pretrained("facebook/detr-resnet-50-panoptic")
             encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
@@ -272,7 +272,7 @@ class DetrImageProcessingTest(
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class()
             encoding = image_processing(
                 images=images,
@@ -392,7 +392,7 @@ class DetrImageProcessingTest(
         images = [image_0, image_1]
         annotations = [annotation_0, annotation_1]
 
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(
@@ -488,7 +488,7 @@ class DetrImageProcessingTest(
             torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     def test_max_width_max_height_resizing_and_pad_strategy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
 
             # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50
@@ -535,7 +535,7 @@ class DetrImageProcessingTest(
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))
 
     def test_longest_edge_shortest_edge_resizing_strategy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_1 = torch.ones([958, 653, 3], dtype=torch.uint8)
 
             # max size is set; width < height;
@@ -598,9 +598,9 @@ class DetrImageProcessingTest(
 
         target = {"image_id": 39769, "annotations": target}
 
-        if "torchvision" not in self.image_processor_classes:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest("torchvision backend not available")
-        processor = self.image_processor_classes["torchvision"]()
+        processor = self.image_processing_classes["torchvision"]()
         # 1. run processor on CPU
         encoding_cpu = processor(images=image, annotations=target, return_tensors="pt", device="cpu")
         # 2. run processor on accelerator
@@ -658,9 +658,9 @@ class DetrImageProcessingTest(
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
-        if "torchvision" not in self.image_processor_classes:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest("torchvision backend not available")
-        processor = self.image_processor_classes["torchvision"](format="coco_panoptic")
+        processor = self.image_processing_classes["torchvision"](format="coco_panoptic")
         # 1. run processor on CPU
         encoding_cpu = processor(
             images=image, annotations=target, masks_path=masks_path, return_tensors="pt", device="cpu"

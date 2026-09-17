@@ -43,7 +43,7 @@ class CHMv2ImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegm
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     @unittest.skip(reason="CHMv2 only has a fast image processor, no slow version")
     def test_image_processor_save_load_with_autoimageprocessor(self):

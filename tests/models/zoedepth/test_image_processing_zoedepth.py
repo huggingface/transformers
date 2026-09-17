@@ -69,7 +69,7 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_ensure_multiple_of(self):
         # Test variable by turning off all other variables which affect the size, size which is not multiple of 32
@@ -77,7 +77,7 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         size = {"height": 380, "width": 513}
         multiple = 32
-        for image_processor_class in self.image_processor_classes.values():
+        for image_processor_class in self.image_processing_classes.values():
             image_processor = image_processor_class(
                 do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
             )
@@ -93,7 +93,7 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         height, width = 512, 512
         size = {"height": height, "width": width}
         multiple = 32
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(
                 do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
             )
@@ -109,7 +109,7 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.zeros((height, width, 3))
 
         size = {"height": 512, "width": 512}
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(
                 do_pad=False, keep_aspect_ratio=True, size=size, ensure_multiple_of=1
             )
@@ -119,7 +119,7 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(list(pixel_values.shape), [1, 3, 512, 670])
 
         # Test `keep_aspect_ratio=False` by turning off all other variables which affect the size
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(
                 do_pad=False, keep_aspect_ratio=False, size=size, ensure_multiple_of=1
             )
@@ -133,7 +133,7 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         size = {"height": 511, "width": 511}
         multiple = 32
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=multiple)
 
             pixel_values = image_processor(image, return_tensors="pt").pixel_values
@@ -144,18 +144,18 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # extend this test to check if removal of padding works fine!
     def test_post_processing_equivalence(self):
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping post-processing equivalence test as there are less than 2 backends")
 
-        outputs = self.image_processing_tester.prepare_depth_outputs()
-        list(self.image_processor_classes.keys())
-        image_processor_torchvision = self.image_processor_classes["torchvision"](**self.image_processor_dict)
-        image_processor_pil = self.image_processor_classes["pil"](**self.image_processor_dict)
+        outputs = self.image_processor_tester.prepare_depth_outputs()
+        list(self.image_processing_classes.keys())
+        image_processor_torchvision = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor_pil = self.image_processing_classes["pil"](**self.image_processor_dict)
 
-        source_sizes = [outputs.predicted_depth.shape[1:]] * self.image_processing_tester.batch_size
+        source_sizes = [outputs.predicted_depth.shape[1:]] * self.image_processor_tester.batch_size
         target_sizes = [
             torch.Size([outputs.predicted_depth.shape[1] // 2, *(outputs.predicted_depth.shape[2:])])
-        ] * self.image_processing_tester.batch_size
+        ] * self.image_processor_tester.batch_size
 
         processed_torchvision = image_processor_torchvision.post_process_depth_estimation(
             outputs,

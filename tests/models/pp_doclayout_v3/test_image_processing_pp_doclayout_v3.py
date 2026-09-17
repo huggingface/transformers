@@ -42,7 +42,7 @@ class PPDocLayoutV3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     @unittest.skip(
         reason="PPDocLayoutV3 uses antialias=False which is not supported for 4-channel images consistently"
@@ -59,6 +59,6 @@ class PPDocLayoutV3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             order_logits=torch.rand(1, 300, 300),
             out_masks=torch.rand(1, 300, 200, 200),
         )
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_processor.post_process_object_detection(outputs, threshold=0.1, target_sizes=[(24, 24)])

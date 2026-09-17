@@ -63,11 +63,11 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)
-        size = self.image_processing_tester.size_divisor
+        size = self.image_processor_tester.size_divisor
 
         pad_height = (old_height // size + 1) * size - old_height
         pad_width = (old_width // size + 1) * size - old_width
@@ -75,39 +75,39 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Swin2SRImageProcessor does not support batched input
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     # Swin2SRImageProcessor does not support batched input
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     # Swin2SRImageProcessor does not support batched input
     def test_call_numpy_4_channels(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            self.image_processing_tester.num_channels = 4
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            self.image_processor_tester.num_channels = 4
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
@@ -115,34 +115,34 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(
                 image_inputs[0], return_tensors="pt", input_data_format="channels_last"
             ).pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
-            self.image_processing_tester.num_channels = 3
+            self.image_processor_tester.num_channels = 3
 
     # Swin2SRImageProcessor does not support batched input
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     def test_backends_equivalence_batched(self):
         """Swin2SR requires equal-resolution images for batched processing (returns stacked tensor)."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(image_inputs, return_tensors="pt")
 

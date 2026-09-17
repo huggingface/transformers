@@ -61,88 +61,88 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_call_pil_high_res(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_high_res_image_shape(
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
                 [image_inputs[0]]
             )
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_high_res_image_shape(
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
                 image_inputs
             )
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_numpy_high_res(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_high_res_image_shape(
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
                 [image_inputs[0]]
             )
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_high_res_image_shape(
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
                 image_inputs
             )
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pytorch_high_res(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_high_res_image_shape(
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
                 [image_inputs[0]]
             )
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
-            expected_output_image_shape = self.image_processing_tester.expected_output_high_res_image_shape(
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
                 image_inputs
             )
             encoded_images = image_processing(image_inputs, return_tensors="pt").high_res_pixel_values
             self.assertEqual(
                 tuple(encoded_images.shape),
-                (self.image_processing_tester.batch_size, *expected_output_image_shape),
+                (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
 
     def test_backends_equivalence(self):
         """Override to also compare high_res_pixel_values."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_coco_image("000000039769.jpg")
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -159,13 +159,13 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
 
     def test_backends_equivalence_batched(self):
         """Override to also compare high_res_pixel_values (variable shape - list of tensors)."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors=None)
 

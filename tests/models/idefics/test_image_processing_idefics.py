@@ -63,7 +63,7 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     @require_torchvision
     def test_torchvision_numpy_transforms_equivalency(self):
@@ -77,8 +77,8 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             return alpha_composite
 
         # Verify that the default inference transforms match an equivalent torchvision.Compose pipeline.
-        for image_processing_class in self.image_processor_classes.values():
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+        for image_processing_class in self.image_processing_classes.values():
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             image_processor = image_processing_class(**self.image_processor_dict)
 
             image_size = image_processor.image_size
@@ -104,14 +104,14 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -125,14 +125,14 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_backends_equivalence_batched(self):
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
@@ -149,12 +149,12 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @pytest.mark.torch_compile_test
     def test_can_compile_torchvision_backend(self):
         # Test compilation with torchvision backend (equivalent to fast processor)
-        if "torchvision" not in self.image_processor_classes:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest("Skipping compilation test as torchvision backend is not available")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
-        image_processor = self.image_processor_classes["torchvision"](**self.image_processor_dict)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")

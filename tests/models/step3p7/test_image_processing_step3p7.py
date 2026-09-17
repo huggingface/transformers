@@ -64,10 +64,10 @@ class Step3p7ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def _processor(self):
-        image_processing_class = next(iter(self.image_processor_classes.values()))
+        image_processing_class = next(iter(self.image_processing_classes.values()))
         return image_processing_class(**self.image_processor_dict)
 
     def test_no_local_patches_for_image_fitting_global_view(self):

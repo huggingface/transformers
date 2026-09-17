@@ -50,13 +50,13 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_rescale(self):
         # EfficientNet optionally rescales between -1 and 1 instead of the usual 0 and 1
         image_np = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
 
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             if backend_name == "torchvision":
                 image = torch.from_numpy(image_np)
@@ -80,7 +80,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
     @require_vision
     @require_torch
     def test_rescale_normalize(self):
-        if "torchvision" not in self.image_processor_classes:
+        if "torchvision" not in self.image_processing_classes:
             self.skipTest(reason="Skipping rescale_normalize test as torchvision backend is not available")
 
         image = torch.arange(0, 256, 1, dtype=torch.uint8).reshape(1, 8, 32).repeat(3, 1, 1)
@@ -89,7 +89,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         image_mean_1 = (0.5, 0.5, 0.5)
         image_std_1 = (0.5, 0.5, 0.5)
 
-        image_processor = self.image_processor_classes["torchvision"](**self.image_processor_dict)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
 
         # Rescale between [-1, 1] with rescale_factor=1/127.5 and rescale_offset=True. Then normalize
         rescaled_normalized = image_processor.rescale_and_normalize_efficientnet(

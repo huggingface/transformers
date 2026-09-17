@@ -51,18 +51,18 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_from_dict_with_legacy_size_tuple(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Legacy configs use (width, height) order.
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=(42, 84))
             self.assertEqual(image_processor.size, {"height": 84, "width": 42})
 
     def test_image_processor_preprocess_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             height = 84
             width = 42
@@ -72,7 +72,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoded_images.shape,
                 (
                     1,
-                    self.image_processing_tester.num_channels,
+                    self.image_processor_tester.num_channels,
                     height,
                     width,
                 ),
@@ -80,11 +80,11 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @is_flaky()
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Set seed for deterministic test - ensures reproducible image generation
             set_seed(42)
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
@@ -93,9 +93,9 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoded_images.shape,
                 (
                     1,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
 
@@ -103,20 +103,20 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(
                 encoded_images.shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
 
     @is_flaky()
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Set seed for deterministic test - ensures reproducible image generation
             set_seed(42)
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
@@ -125,9 +125,9 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoded_images.shape,
                 (
                     1,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
 
@@ -135,20 +135,20 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(
                 encoded_images.shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
 
     @is_flaky()
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Set seed for deterministic test - ensures reproducible image generation
             set_seed(42)
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
@@ -157,9 +157,9 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoded_images.shape,
                 (
                     1,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
 
@@ -167,10 +167,10 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(
                 encoded_images.shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
 

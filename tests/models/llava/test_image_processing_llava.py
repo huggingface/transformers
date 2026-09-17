@@ -52,7 +52,7 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     # Ignore copy
     # Ignore copy
@@ -78,11 +78,11 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 result.paste(image, ((height - width) // 2, 0))
                 return result
 
-        for i, (backend_name, image_processing_class) in enumerate(self.image_processor_classes.items()):
+        for i, (backend_name, image_processing_class) in enumerate(self.image_processing_classes.items()):
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             numpify = backend_name == "pil"
             torchify = backend_name == "torchvision"
-            image_inputs = self.image_processing_tester.prepare_image_inputs(
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
                 equal_resolution=False, numpify=numpify, torchify=torchify
             )
 

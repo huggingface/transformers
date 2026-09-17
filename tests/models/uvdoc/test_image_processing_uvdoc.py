@@ -36,14 +36,14 @@ class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     @unittest.skip("UVDoc image processors doesn't support 4 channel images")
     def test_call_numpy_4_channels(self):
         pass
 
     def test_post_process_document_rectification(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             batch_size = 2
@@ -78,7 +78,7 @@ class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_post_process_document_rectification_different_sizes(self):
         """Test post-processing with original images of different sizes (list of tensors)."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # Create predictions for 2 images (model output size is fixed)

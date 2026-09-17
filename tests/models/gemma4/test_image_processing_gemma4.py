@@ -65,11 +65,11 @@ class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_defaults(self):
         """Test default parameter values for Gemma4 matching VARASP_SL280_K3."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             proc = image_processing_class()
             self.assertEqual(proc.patch_size, 16)
             self.assertEqual(proc.max_soft_tokens, 280)
@@ -81,7 +81,7 @@ class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_output_keys(self):
         """Test that the output contains pixel_values, image_position_ids, and num_soft_tokens_per_image."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image = Image.fromarray(np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8))
             result = image_processing(image, return_tensors="pt")
@@ -118,7 +118,7 @@ class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @parameterized.expand([(70), (140), (280), (560), (1120)])
     def test_max_soft_tokens_values(self, max_soft_tokens):
         """Test that the processor produces valid patchified output for each supported max_soft_tokens value."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(patch_size=16, max_soft_tokens=max_soft_tokens, pooling_kernel_size=3)
             image = Image.fromarray(np.random.randint(0, 255, (200, 300, 3), dtype=np.uint8))
             result = processor(image, return_tensors="pt")
@@ -135,14 +135,14 @@ class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_position_ids_structure(self):
         """Test that image_position_ids has correct real and padding structure."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image = Image.fromarray(np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8))
             result = image_processing(image, return_tensors="pt")
 
             position_ids = result.image_position_ids[0]  # (max_patches, 2)
             max_patches = (
-                self.image_processing_tester.max_soft_tokens * self.image_processing_tester.pooling_kernel_size**2
+                self.image_processor_tester.max_soft_tokens * self.image_processor_tester.pooling_kernel_size**2
             )
 
             # Real positions should be non-negative
@@ -165,7 +165,7 @@ class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_padding_patches_are_zero(self):
         """Test that padding patches in pixel_values are filled with zeros."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image = Image.fromarray(np.random.randint(1, 255, (100, 100, 3), dtype=np.uint8))
             result = image_processing(image, return_tensors="pt")

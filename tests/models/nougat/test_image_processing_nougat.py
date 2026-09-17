@@ -66,18 +66,18 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_expected_output(self):
-        dummy_image = self.image_processing_tester.prepare_dummy_image()
-        for image_processing_class in self.image_processor_classes.values():
+        dummy_image = self.image_processor_tester.prepare_dummy_image()
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             inputs = image_processor(dummy_image, return_tensors="pt")
             torch.testing.assert_close(inputs["pixel_values"].mean(), torch.tensor(0.4906), rtol=1e-3, atol=1e-3)
 
     def test_crop_margin_all_white(self):
         image = np.uint8(np.ones((3, 100, 100)) * 255)
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             if backend_name == "torchvision":
                 image = torch.from_numpy(image)
                 image_processor = image_processing_class(**self.image_processor_dict)
@@ -92,7 +92,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.ones((3, 100, 100), dtype=np.uint8) * 255
         image[:, 45:55, 45:55] = 0
         expected_cropped = image[:, 45:55, 45:55]
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             if backend_name == "torchvision":
                 image = torch.from_numpy(image)
                 expected_cropped = torch.from_numpy(expected_cropped)
@@ -106,7 +106,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_align_long_axis_no_rotation(self):
         image = np.uint8(np.ones((3, 100, 200)) * 255)
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             size = SizeDict(height=200, width=300)
             image_processor = image_processing_class(**self.image_processor_dict)
             if backend_name == "torchvision":
@@ -119,7 +119,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_align_long_axis_with_rotation(self):
         image = np.uint8(np.ones((3, 200, 100)) * 255)
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             size = SizeDict(height=300, width=200)
             if backend_name == "torchvision":
@@ -132,7 +132,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_align_long_axis_data_format(self):
         image = np.uint8(np.ones((3, 100, 200)) * 255)
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             size = SizeDict(height=200, width=300)
             image_processor = image_processing_class(**self.image_processor_dict)
             if backend_name == "torchvision":
@@ -156,7 +156,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_crop_margin_equality_cv2_python(self):
         image = self.prepare_dummy_np_image()
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             if backend_name == "torchvision":
                 image = torch.from_numpy(image)
@@ -169,15 +169,15 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertAlmostEqual(image_cropped_python.mean(), 237.43881150708458, delta=0.001)
 
     def test_call_numpy_4_channels(self):
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             if backend_name == "pil":
                 # Test that can process images which have an arbitrary number of channels
                 # Initialize image_processing
                 image_processor = image_processing_class(**self.image_processor_dict)
 
                 # create random numpy tensors
-                self.image_processing_tester.num_channels = 4
-                image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+                self.image_processor_tester.num_channels = 4
+                image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
                 # Test not batched input
                 encoded_images = image_processor(
@@ -187,7 +187,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     image_mean=(0.0, 0.0, 0.0, 0.0),
                     image_std=(1.0, 1.0, 1.0, 1.0),
                 ).pixel_values
-                expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(
+                expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(
                     [image_inputs[0]]
                 )
                 self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
@@ -200,7 +200,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     image_mean=(0.0, 0.0, 0.0, 0.0),
                     image_std=(1.0, 1.0, 1.0, 1.0),
                 ).pixel_values
-                expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+                expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
                 self.assertEqual(
                     tuple(encoded_images.shape),
                     (self.image_processing_tester.batch_size, *expected_output_image_shape),
@@ -208,7 +208,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_backends_equivalence(self):
         """Test equivalence across backends. PIL backend delegates to Torchvision for pixel-perfect match."""
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(
@@ -218,7 +218,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 

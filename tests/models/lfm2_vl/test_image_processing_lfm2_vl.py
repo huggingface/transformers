@@ -73,12 +73,12 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     @require_vision
     def test_smart_resize(self):
         # verify that smart resize output dims are divisible by encoder_patch_size * downsample_factor
-        image_processing = self.image_processor_classes["torchvision"](**self.image_processor_dict)
+        image_processing = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         width, height = image_processing.smart_resize(
             height=500,
             width=300,
@@ -94,7 +94,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     def test_get_grid_layout(self):
         # splitting a 512×512 image into tiles of size processor.image_processor.tile_size
-        image_processing = self.image_processor_classes["torchvision"](**self.image_processor_dict)
+        image_processing = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         rows, cols, _, _, num_patches = image_processing._get_grid_layout(
             height=1024,
             width=1024,
@@ -125,9 +125,9 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy(self):
         # Initialize image_processing
-        image_processing = self.image_processor_classes["torchvision"](**self.image_processor_dict)
+        image_processing = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for sample_images in image_inputs:
             for image in sample_images:
                 self.assertIsInstance(image, np.ndarray)
@@ -144,7 +144,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_images.shape),
             (
-                self.image_processing_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 image_processing.max_num_patches,
                 3 * image_processing.encoder_patch_size**2,
             ),
@@ -154,9 +154,9 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Lfm2Vl always processes images as RGB, so it always returns images with 3 channels
         # Initialize image_processing
         image_processor_dict = self.image_processor_dict
-        image_processing = self.image_processor_classes["torchvision"](**image_processor_dict)
+        image_processing = self.image_processing_classes["torchvision"](**image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
         for sample_images in image_inputs:
             for image in sample_images:
@@ -174,7 +174,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_images.shape),
             (
-                self.image_processing_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 image_processing.max_num_patches,
                 3 * image_processing.encoder_patch_size**2,
             ),
@@ -182,9 +182,9 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pil(self):
         # Initialize image_processing
-        image_processing = self.image_processor_classes["torchvision"](**self.image_processor_dict)
+        image_processing = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for images in image_inputs:
             for image in images:
                 self.assertIsInstance(image, Image.Image)
@@ -201,7 +201,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_images.shape),
             (
-                self.image_processing_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 image_processing.max_num_patches,
                 3 * image_processing.encoder_patch_size**2,
             ),
@@ -209,9 +209,9 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pytorch(self):
         # Initialize image_processing
-        image_processing = self.image_processor_classes["torchvision"](**self.image_processor_dict)
+        image_processing = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         for images in image_inputs:
             for image in images:
@@ -229,7 +229,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_images.shape),
             (
-                self.image_processing_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 image_processing.max_num_patches,
                 3 * image_processing.encoder_patch_size**2,
             ),
@@ -237,7 +237,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_small_image_no_tiling_no_thumbnail(self):
         """Small image with tiling disabled should use smart resize, no thumbnail."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=False,
             use_thumbnail=True,  # even if enabled, should not be used for small/non-tiled images
         )
@@ -253,7 +253,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_small_image_tiling_enabled_no_thumbnail(self):
         """Small image with tiling enabled should not be tiled (too small), no thumbnail."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             use_thumbnail=True,
             min_tiles=2,
@@ -271,7 +271,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_large_image_no_tiling_smart_resize(self):
         """Large image with tiling disabled should use smart resize, no thumbnail."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=False,
             use_thumbnail=True,  # even if enabled, should not be used
         )
@@ -287,7 +287,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_large_image_tiling_enabled_thumbnail_disabled(self):
         """Large image with tiling enabled but thumbnail disabled should tile without thumbnail."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             use_thumbnail=False,
             min_tiles=2,
@@ -312,7 +312,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_large_image_tiling_enabled_thumbnail_enabled(self):
         """Large image with tiling and thumbnail enabled should tile AND add thumbnail."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             use_thumbnail=True,
             min_tiles=2,
@@ -337,7 +337,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_landscape_image_aspect_ratio(self):
         """Test that landscape images (wider than tall) are processed correctly."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             use_thumbnail=True,
             min_tiles=2,
@@ -356,7 +356,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_extreme_aspect_ratio_wide(self):
         """Test extremely wide image (panorama-like)."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             use_thumbnail=True,
             min_tiles=2,
@@ -375,7 +375,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_extreme_aspect_ratio_tall(self):
         """Test extremely tall image."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             use_thumbnail=True,
             min_tiles=2,
@@ -396,7 +396,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_sizes_returned_with_row_col_info(self):
         """Test that image_sizes is returned when return_row_col_info=True."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
         image = Image.new("RGB", (512, 256), color="green")
         result = image_processing([[image]], return_tensors="pt", return_row_col_info=True)
 
@@ -413,7 +413,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_output_consistency_across_formats(self):
         """Test that outputs are consistent regardless of input format (PIL, numpy, torch)."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         # Create same image in different formats
         pil_image = Image.new("RGB", (256, 256), color="white")
@@ -434,7 +434,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_multiple_images_per_sample(self):
         """Test processing multiple images in a single sample: [[img1, img2, img3]]."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         img1 = Image.new("RGB", (256, 256), color="red")
         img2 = Image.new("RGB", (256, 256), color="green")
@@ -449,7 +449,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_mixed_image_counts_across_batch(self):
         """Test batch with different number of images per sample: [[img1], [img2, img3]]."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         img1 = Image.new("RGB", (256, 256), color="red")
         img2 = Image.new("RGB", (256, 256), color="green")
@@ -464,7 +464,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_multiple_images_different_sizes(self):
         """Test multiple images per sample with different sizes."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         img_small = Image.new("RGB", (256, 256), color="red")
         img_medium = Image.new("RGB", (512, 512), color="green")
@@ -481,7 +481,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_forced_grid_config_min_equals_max(self):
         """Test forcing a specific grid configuration with min_tiles == max_tiles."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             min_tiles=4,
             max_tiles=4,  # Force exactly 4 tiles
@@ -503,7 +503,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_min_tiles_greater_than_max_tiles_raises_error(self):
         """Test that min_tiles > max_tiles raises ValueError."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             min_tiles=10,
             max_tiles=2,  # Invalid: min > max
@@ -519,7 +519,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_very_small_image(self):
         """Test image smaller than encoder_patch_size."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=False,
             encoder_patch_size=16,
         )
@@ -533,7 +533,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_grayscale_image(self):
         """Test that grayscale (1-channel) images are converted to RGB."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         # Create grayscale image
         grayscale_image = Image.new("L", (256, 256), color=128)
@@ -547,7 +547,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_rgba_4_channel_image(self):
         """Test that RGBA (4-channel) images are converted to RGB."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         # Create RGBA image with alpha channel
         rgba_image = Image.new("RGBA", (256, 256), color=(255, 0, 0, 128))
@@ -560,7 +560,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_numpy_4_channel_rgba(self):
         """Test actual 4-channel numpy array input - convert to PIL for RGB conversion."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         # Create 4-channel numpy array (RGBA) and convert to PIL Image for RGB conversion
         rgba_np = np.random.randint(0, 255, (256, 256, 4), dtype=np.uint8)
@@ -574,7 +574,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_single_pixel_image(self):
         """Test 1x1 pixel image (extreme edge case)."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         single_pixel = Image.new("RGB", (1, 1), color="blue")
         result = image_processing([[single_pixel]], return_tensors="pt")
@@ -604,7 +604,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_is_image_too_large_small_image(self):
         """Test _is_image_too_large with small image."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             max_image_tokens=256,
             encoder_patch_size=16,
             downsample_factor=2,
@@ -623,7 +623,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_is_image_too_large_large_image(self):
         """Test _is_image_too_large with large image."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             max_image_tokens=256,
             encoder_patch_size=16,
             downsample_factor=2,
@@ -644,7 +644,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_batch_mixed_image_sizes(self):
         """Test batch processing with different image sizes requiring different processing paths."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         # Create images with significantly different sizes
         small_image = Image.new("RGB", (256, 256), color="red")
@@ -673,7 +673,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_batch_mixed_aspect_ratios(self):
         """Test batch with mixed aspect ratios."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         square = Image.new("RGB", (512, 512), color="red")
         landscape = Image.new("RGB", (1024, 512), color="green")
@@ -704,7 +704,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_disable_grouping_single_image(self):
         """Test disable_grouping parameter with single image."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         image = Image.new("RGB", (512, 512), color="purple")
 
@@ -731,7 +731,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_disable_grouping_batch(self):
         """Test disable_grouping parameter with batch of images."""
-        image_processing = self.image_processor_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
 
         # Images of same size - normally would be grouped
         img1 = Image.new("RGB", (256, 256), color="red")
@@ -746,7 +746,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_batch_with_tiling(self):
         """Test batch processing when some images need tiling."""
-        image_processing = self.image_processor_classes["torchvision"](
+        image_processing = self.image_processing_classes["torchvision"](
             do_image_splitting=True,
             use_thumbnail=True,
             min_tiles=2,
@@ -786,7 +786,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         """
         for use_thumbnail in [False, True]:
             with self.subTest(use_thumbnail=use_thumbnail):
-                image_processing = self.image_processor_classes["torchvision"](
+                image_processing = self.image_processing_classes["torchvision"](
                     do_image_splitting=True,
                     use_thumbnail=use_thumbnail,
                     min_tiles=2,

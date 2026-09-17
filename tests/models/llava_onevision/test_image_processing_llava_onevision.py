@@ -51,14 +51,14 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     @property
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
@@ -73,11 +73,11 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
@@ -92,11 +92,11 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -118,9 +118,9 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         pass
 
     def test_nested_input(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
 
             # Test batched as a list of images
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
@@ -139,9 +139,9 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     def test_multi_images(self):
         length = 384
         scale_single, scale_multi = 2, 3
-        image_processor_dict = self.image_processing_tester.prepare_image_processor_dict()
+        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
         image_processor_dict["size"] = {"height": length, "width": length}  # patch size
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**image_processor_dict)
 
             # Test batched as a nested list of images, where each sublist is one batch
@@ -177,7 +177,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         pass
 
     def test_pad_for_patching(self):
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             if backend_name == "torchvision":
                 numpify = False
                 torchify = True
@@ -186,7 +186,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
                 torchify = False
             image_processing = image_processing_class(**self.image_processor_dict)
             # Create odd-sized images
-            image_input = self.image_processing_tester.prepare_image_inputs(
+            image_input = self.image_processor_tester.prepare_image_inputs(
                 equal_resolution=True,
                 numpify=numpify,
                 torchify=torchify,
@@ -206,11 +206,11 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertEqual(encoded_images.shape[-2:], image_shape)
 
     def test_call_without_padding(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], do_pad=False).pixel_values

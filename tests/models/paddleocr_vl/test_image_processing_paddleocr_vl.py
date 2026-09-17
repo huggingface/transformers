@@ -93,10 +93,10 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_to_json_string(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
             for key, value in self.image_processor_dict.items():
@@ -109,73 +109,73 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(best_resolution, (560, 280))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Single image
             encoded = image_processing(image_inputs[0], return_tensors="pt")
-            expected_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded.pixel_values.shape), expected_shape)
             self.assertEqual(encoded.image_grid_thw.shape, (1, 3))
 
             # Batched
             encoded = image_processing(image_inputs, return_tensors="pt")
-            expected_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded.pixel_values.shape), expected_shape)
-            self.assertEqual(encoded.image_grid_thw.shape, (self.image_processing_tester.batch_size, 3))
+            self.assertEqual(encoded.image_grid_thw.shape, (self.image_processor_tester.batch_size, 3))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Single image
             encoded = image_processing(image_inputs[0], return_tensors="pt")
-            expected_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded.pixel_values.shape), expected_shape)
             self.assertEqual(encoded.image_grid_thw.shape, (1, 3))
 
             # Batched
             encoded = image_processing(image_inputs, return_tensors="pt")
-            expected_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded.pixel_values.shape), expected_shape)
-            self.assertEqual(encoded.image_grid_thw.shape, (self.image_processing_tester.batch_size, 3))
+            self.assertEqual(encoded.image_grid_thw.shape, (self.image_processor_tester.batch_size, 3))
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             # Single image
             encoded = image_processing(image_inputs[0], return_tensors="pt")
-            expected_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
+            expected_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded.pixel_values.shape), expected_shape)
             self.assertEqual(encoded.image_grid_thw.shape, (1, 3))
 
             # Batched
             encoded = image_processing(image_inputs, return_tensors="pt")
-            expected_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
+            expected_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded.pixel_values.shape), expected_shape)
-            self.assertEqual(encoded.image_grid_thw.shape, (self.image_processing_tester.batch_size, 3))
+            self.assertEqual(encoded.image_grid_thw.shape, (self.image_processor_tester.batch_size, 3))
 
     def test_call_equal_resolution(self):
         """With equal-resolution images, the batched output shapes are fully deterministic."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # equal_resolution=True → all images are max_resolution × max_resolution = 80×80
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
 
             # smart_resize(80, 80, factor=28, min_pixels=56*56, max_pixels=28*28*1280) → (84, 84)
             # grid_h = grid_w = 84 / 14 = 6, N_per_image = 36
             expected_n_patches_per_image = 6 * 6
-            batch_size = self.image_processing_tester.batch_size
+            batch_size = self.image_processor_tester.batch_size
 
             process_out = image_processing(image_inputs, return_tensors="pt")
             self.assertEqual(
@@ -190,7 +190,7 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         pass
 
     def test_custom_image_size(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processing.save_pretrained(tmpdirname)
@@ -198,7 +198,7 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                     tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
                 )
 
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             # equal_resolution=True → all images are max_resolution × max_resolution = 80×80
             # smart_resize(80, 80, factor=28, min_pixels=28*28=784, max_pixels=56*56=3136):
             #   h_bar=84, 84*84=7056 > 3136, so reduce:
@@ -207,33 +207,33 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             #   grid_h=4, grid_w=4 → N=16 per image
             process_out = image_processor_loaded(image_inputs, return_tensors="pt")
             expected_n = 16  # 4*4 grid (56/14 = 4)
-            self.assertEqual(process_out.pixel_values.shape[0], self.image_processing_tester.batch_size * expected_n)
+            self.assertEqual(process_out.pixel_values.shape[0], self.image_processor_tester.batch_size * expected_n)
             self.assertEqual(process_out.pixel_values.shape[1:], (3, 14, 14))
 
     def test_custom_pixels(self):
         # Use pixel values >= 784 (28*28) to avoid smart_resize producing 0-size outputs
         # for images in the 56x80 px range used in the tester (factor=28 requires output >= 28px)
         pixel_choices = frozenset(itertools.product((1000, 5000, 50000), (1000, 5000, 50000)))
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             for a_pixels, b_pixels in pixel_choices:
                 image_processor_dict["min_pixels"] = min(a_pixels, b_pixels)
                 image_processor_dict["max_pixels"] = max(a_pixels, b_pixels)
                 image_processor = image_processing_class(**image_processor_dict)
-                image_inputs = self.image_processing_tester.prepare_image_inputs()
+                image_inputs = self.image_processor_tester.prepare_image_inputs()
                 # Just verify no error is raised
                 image_processor(image_inputs, return_tensors="pt")
 
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(image_inputs, return_tensors="pt")
 
@@ -250,13 +250,13 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @require_vision
     @require_torch
     def test_backends_equivalence_batched(self):
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
@@ -270,7 +270,7 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             )
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # 100×100 → smart_resize(100, 100, factor=28, min_pixels=56*56, max_pixels=28*28*1280)
             # h_bar=112, w_bar=112, grid_h=8, grid_w=8 → 64 patches

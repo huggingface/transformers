@@ -60,33 +60,33 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def assert_packed_output(self, output, batch_size):
         """Check Edge's flattened patch matrix against its per-image THW grids."""
         expected_num_patches = int(output.image_grid_thw.prod(dim=-1).sum())
-        expected_patch_width = self.image_processing_tester.num_channels * self.image_processing_tester.patch_size**2
+        expected_patch_width = self.image_processor_tester.num_channels * self.image_processor_tester.patch_size**2
 
         self.assertEqual(output.image_grid_thw.shape[0], batch_size)
         self.assertEqual(tuple(output.pixel_values.shape), (expected_num_patches, expected_patch_width))
 
     def test_call_pil(self):
         """Adapt the shared PIL test to Edge's packed patch output layout."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
 
             output = image_processor(image_inputs[0], return_tensors="pt")
             self.assert_packed_output(output, batch_size=1)
 
             output = image_processor(image_inputs, return_tensors="pt")
-            self.assert_packed_output(output, batch_size=self.image_processing_tester.batch_size)
+            self.assert_packed_output(output, batch_size=self.image_processor_tester.batch_size)
 
     def test_call_numpy(self):
         """Adapt the shared NumPy test to Edge's packed patch output layout."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], np.ndarray)
 
@@ -94,19 +94,19 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assert_packed_output(output, batch_size=1)
 
             output = image_processor(image_inputs, return_tensors="pt")
-            self.assert_packed_output(output, batch_size=self.image_processing_tester.batch_size)
+            self.assert_packed_output(output, batch_size=self.image_processor_tester.batch_size)
 
     def test_call_pytorch(self):
         """Adapt the shared PyTorch test to Edge's packed patch output layout."""
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             output = image_processor(image_inputs[0], return_tensors="pt")
             self.assert_packed_output(output, batch_size=1)
 
             output = image_processor(image_inputs, return_tensors="pt")
-            self.assert_packed_output(output, batch_size=self.image_processing_tester.batch_size)
+            self.assert_packed_output(output, batch_size=self.image_processor_tester.batch_size)
 
     @unittest.skip(reason="Cosmos3EdgeImageProcessor converts inputs to RGB")
     def test_call_numpy_4_channels(self):

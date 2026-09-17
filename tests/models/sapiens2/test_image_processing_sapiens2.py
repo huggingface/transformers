@@ -56,12 +56,12 @@ class Sapiens2ImageProcessingTest(
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_call_segmentation_maps(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             maps = [torch.zeros(image.shape[-2:]).long() for image in image_inputs]
 
             # Single image + map
@@ -70,14 +70,14 @@ class Sapiens2ImageProcessingTest(
                 encoding["pixel_values"].shape,
                 (
                     1,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
-                (1, self.image_processing_tester.size["height"], self.image_processing_tester.size["width"]),
+                (1, self.image_processor_tester.size["height"], self.image_processor_tester.size["width"]),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
             self.assertTrue(encoding["labels"].min().item() >= 0)
@@ -88,18 +88,18 @@ class Sapiens2ImageProcessingTest(
             self.assertEqual(
                 encoding["pixel_values"].shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.size["height"],
-                    self.image_processing_tester.size["width"],
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)

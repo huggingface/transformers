@@ -53,10 +53,10 @@ class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_defaults(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             proc = image_processing_class()
             self.assertEqual(proc.size["height"], 40)
             self.assertEqual(proc.size["width"], 40)
@@ -67,7 +67,7 @@ class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(proc.resample, PILImageResampling.LANCZOS)
 
     def test_output_keys(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image = Image.fromarray(np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8))
             result = image_processing(image, return_tensors="pt")
@@ -75,7 +75,7 @@ class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def _check_packed_output(self, encoding, num_images):
         """Inkling packs every image's patches into one (sum(num_patches), 2, H, W, 3) tensor."""
-        size = self.image_processing_tester.size
+        size = self.image_processor_tester.size
         pixel_values = encoding.pixel_values
         num_patches = encoding.num_patches
         self.assertEqual(pixel_values.dtype, torch.float32)
@@ -85,37 +85,37 @@ class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(pixel_values.shape[0], int(num_patches.sum()))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             self._check_packed_output(image_processing(image_inputs[0], return_tensors="pt"), 1)
             self._check_packed_output(
-                image_processing(image_inputs, return_tensors="pt"), self.image_processing_tester.batch_size
+                image_processing(image_inputs, return_tensors="pt"), self.image_processor_tester.batch_size
             )
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             self._check_packed_output(image_processing(image_inputs[0], return_tensors="pt"), 1)
             self._check_packed_output(
-                image_processing(image_inputs, return_tensors="pt"), self.image_processing_tester.batch_size
+                image_processing(image_inputs, return_tensors="pt"), self.image_processor_tester.batch_size
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             self._check_packed_output(image_processing(image_inputs[0], return_tensors="pt"), 1)
             self._check_packed_output(
-                image_processing(image_inputs, return_tensors="pt"), self.image_processing_tester.batch_size
+                image_processing(image_inputs, return_tensors="pt"), self.image_processor_tester.batch_size
             )

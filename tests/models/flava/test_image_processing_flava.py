@@ -98,10 +98,10 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_from_dict_with_codebook_size_overrides(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(
                 self.image_processor_dict, codebook_size=33, codebook_crop_size=66
             )
@@ -109,11 +109,11 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.codebook_crop_size, {"height": 66, "width": 66})
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, PIL.Image.Image)
 
@@ -123,16 +123,16 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Test no bool masked pos
             self.assertFalse("bool_masked_pos" in encoded_images)
 
-            expected_height, expected_width = self.image_processing_tester.get_expected_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
 
             self.assertEqual(
                 encoded_images.pixel_values.shape,
-                (1, self.image_processing_tester.num_channels, expected_height, expected_width),
+                (1, self.image_processor_tester.num_channels, expected_height, expected_width),
             )
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt")
-            expected_height, expected_width = self.image_processing_tester.get_expected_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
 
             # Test no bool masked pos
             self.assertFalse("bool_masked_pos" in encoded_images)
@@ -140,49 +140,49 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(
                 encoded_images.pixel_values.shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
                     expected_height,
                     expected_width,
                 ),
             )
 
     def _test_call_framework(self, instance_class, prepare_kwargs):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random tensors
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, **prepare_kwargs)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, **prepare_kwargs)
             for image in image_inputs:
                 self.assertIsInstance(image, instance_class)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt")
 
-            expected_height, expected_width = self.image_processing_tester.get_expected_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
             self.assertEqual(
                 encoded_images.pixel_values.shape,
-                (1, self.image_processing_tester.num_channels, expected_height, expected_width),
+                (1, self.image_processor_tester.num_channels, expected_height, expected_width),
             )
 
             encoded_images = image_processing(image_inputs, return_image_mask=True, return_tensors="pt")
 
-            expected_height, expected_width = self.image_processing_tester.get_expected_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
             self.assertEqual(
                 encoded_images.pixel_values.shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
                     expected_height,
                     expected_width,
                 ),
             )
 
-            expected_height, expected_width = self.image_processing_tester.get_expected_mask_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_mask_size()
             self.assertEqual(
                 encoded_images.bool_masked_pos.shape,
                 (
-                    self.image_processing_tester.batch_size,
+                    self.image_processor_tester.batch_size,
                     expected_height,
                     expected_width,
                 ),
@@ -191,12 +191,12 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
 
-            expected_height, expected_width = self.image_processing_tester.get_expected_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
             self.assertEqual(
                 encoded_images.shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
                     expected_height,
                     expected_width,
                 ),
@@ -205,22 +205,22 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Test masking
             encoded_images = image_processing(image_inputs, return_image_mask=True, return_tensors="pt")
 
-            expected_height, expected_width = self.image_processing_tester.get_expected_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
             self.assertEqual(
                 encoded_images.pixel_values.shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
                     expected_height,
                     expected_width,
                 ),
             )
 
-            expected_height, expected_width = self.image_processing_tester.get_expected_mask_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_mask_size()
             self.assertEqual(
                 encoded_images.bool_masked_pos.shape,
                 (
-                    self.image_processing_tester.batch_size,
+                    self.image_processor_tester.batch_size,
                     expected_height,
                     expected_width,
                 ),
@@ -231,7 +231,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy_4_channels(self):
         # Get the first backend class to modify num_channels
-        first_backend_class = list(self.image_processor_classes.values())[0]
+        first_backend_class = list(self.image_processing_classes.values())[0]
         original_num_channels = (
             first_backend_class.num_channels if hasattr(first_backend_class, "num_channels") else None
         )
@@ -246,41 +246,41 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self._test_call_framework(torch.Tensor, prepare_kwargs={"torchify": True})
 
     def test_masking(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             random.seed(1234)
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_image_mask=True, return_tensors="pt")
             self.assertEqual(encoded_images.bool_masked_pos.sum().item(), 75)
 
     def test_codebook_pixels(self):
-        for image_processing_class in self.image_processor_classes.values():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, PIL.Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_codebook_pixels=True, return_tensors="pt")
-            expected_height, expected_width = self.image_processing_tester.get_expected_codebook_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_codebook_image_size()
             self.assertEqual(
                 encoded_images.codebook_pixel_values.shape,
-                (1, self.image_processing_tester.num_channels, expected_height, expected_width),
+                (1, self.image_processor_tester.num_channels, expected_height, expected_width),
             )
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_codebook_pixels=True, return_tensors="pt")
-            expected_height, expected_width = self.image_processing_tester.get_expected_codebook_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_codebook_image_size()
             self.assertEqual(
                 encoded_images.codebook_pixel_values.shape,
                 (
-                    self.image_processing_tester.batch_size,
-                    self.image_processing_tester.num_channels,
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
                     expected_height,
                     expected_width,
                 ),
@@ -289,14 +289,14 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
-        if len(self.image_processor_classes) < 2:
+        if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processor_classes.items():
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(
                 dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
