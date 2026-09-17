@@ -93,8 +93,8 @@ class Apertus1p5TextConfig(PreTrainedConfig):
     output_vocab_size (`int`, *optional*):
         Number of LM-head rows kept after pruning the multimodal token rows from the output projection; the
         retained output ids are `0..output_vocab_size - 1`. `None` means the head is unpruned (`vocab_size`
-        rows). Input embeddings always use `vocab_size`, and logits returned without `labels` are padded to that
-        logical width with `torch.finfo(dtype).min` scores for the input-only tail. Released checkpoints
+        rows). Input embeddings always use `vocab_size`, while returned logits use the LM-head width,
+        with or without `labels`. Released checkpoints
         use `tie_word_embeddings=False` to keep the pruned head separate from the input embeddings.
 
     Example:
@@ -187,9 +187,8 @@ class Apertus1p5Config(PreTrainedConfig):
         Configuration of the Apertus 1.5 language backbone. The extended vocabulary (text + visual + audio tokens)
         lives in `text_config.vocab_size`, which sizes the input embedding table. The LM head uses
         `text_config.output_vocab_size` physical rows when set, otherwise it uses the full
-        `text_config.vocab_size`. Model outputs have `text_config.vocab_size` logits (loss-only calls with
-        `labels` keep the physical width); input-only ids beyond the physical LM head are padded with
-        `torch.finfo(dtype).min` scores and cannot be selected by unconstrained generation.
+        `text_config.vocab_size`. Returned logits always use the LM-head width, with or without `labels`;
+        input-only ids beyond the physical LM head have no output scores and cannot be generated.
     vision_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
         Configuration of the bundled EMU3.5-derived vision tokenizer.
     audio_config (`Union[dict, WavTokenizerConfig]`, *optional*):

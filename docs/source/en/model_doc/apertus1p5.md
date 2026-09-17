@@ -60,17 +60,16 @@ The model composes three parts:
   audio. The reconstruction decoder is omitted from the joint checkpoint.
 
 > [!NOTE]
-> Consequences of the pruned output layer: with `labels`, the model computes the standard causal language
-> modeling loss and returns logits at the physical head width. Without `labels`, no loss is computed and logits
-> are padded to the full vocabulary width with `torch.finfo(dtype).min` scores for the input-only multimodal
-> tail, so unconstrained generation (sampling, beam search, classifier-free guidance, ...) works generically
-> and never selects a multimodal id. Generation constraints that target input-only ids
-> (`prefix_allowed_tokens_fn`, `force_words_ids`, forced tokens) are unsupported and
-> silently emit ids the head has no learned distribution for. DoLa decoding (`dola_layers`) is also unsupported:
-> it applies the physical LM head directly to intermediate hidden states, whose logits do not have the padded
-> logical vocabulary width. Label positions holding input-only ids must be masked with `-100`, and
-> `Trainer`'s `label_smoothing_factor` is unsupported (its loss diverges over
-> the tail). Released checkpoints keep `tie_word_embeddings=False` in both the text and composite configs.
+> Returned logits always use the physical LM-head width: `output_vocab_size` when set, otherwise `vocab_size`.
+> The input embedding table still uses the full `vocab_size`. Input-only multimodal ids have no output scores
+> and cannot be generated; generation constraints must target ids within the output vocabulary.
+> With `labels`, the model computes the standard causal language modeling loss. Label positions holding
+> input-only ids must be masked with `-100`.
+> `Apertus1p5TextForCausalLM` supports `Trainer` label smoothing with masked labels. For the composite
+> `Apertus1p5ForConditionalGeneration`, use a custom loss that applies causal label shifting when smoothing:
+> `Trainer` does not automatically shift labels for that model class. DoLa decoding is not covered by this
+> integration's tests.
+> Released checkpoints keep `tie_word_embeddings=False` in both the text and composite configs.
 > Generic embedding resizing or explicitly enabling weight tying does not preserve the pruned-head layout.
 
 Images are always encoded one at a time, even in batched inputs, because the vision tokenizer contains global
