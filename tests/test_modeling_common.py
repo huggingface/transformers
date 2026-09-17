@@ -6017,8 +6017,6 @@ class ModelTesterMixin(ExportTesterMixin):
             short_model_kwargs = {"decoder_input_ids": short_input.clone()}
             long_model_kwargs = {"decoder_input_ids": long_input.clone()}
 
-        # Deep-copy rope_parameters before mutating so the tester's shared dict is not contaminated
-        text_config.rope_parameters = copy.deepcopy(text_config.rope_parameters)
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         _set_config_rope_params(
             text_config,
@@ -6162,8 +6160,6 @@ class ModelTesterMixin(ExportTesterMixin):
             position_ids_short = position_ids_short[None, ...].repeat(num_multimodal_rope_axis, 1, 1)
             position_ids_long = position_ids_long[None, ...].repeat(num_multimodal_rope_axis, 1, 1)
 
-        # Deep-copy rope_parameters before mutating so the tester's shared dict is not contaminated
-        text_config.rope_parameters = copy.deepcopy(text_config.rope_parameters)
         # Sanity check original RoPE
         _set_config_rope_params(
             text_config,
@@ -6511,7 +6507,7 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
-    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
+    config.rope_parameters = copy.deepcopy(getattr(config, "rope_parameters", {}) or {})
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
     # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
