@@ -13,15 +13,38 @@
 # limitations under the License.
 """Various helpers to handle MLA and DSA input preparation"""
 
-from functools import wraps
+from functools import lru_cache, wraps
 
+import torch
 from torch import nn
 
 from ..utils.generic import is_flash_attention_requested
+from ..utils.import_utils import _make_compile_constant
+
+
+@lru_cache
+@_make_compile_constant
+def supports_mla_hardware() -> bool:
+    if not torch.cuda.is_available():
+        return False
+
+    major, _ = torch.cuda.get_device_capability()
+    return major in (10, 11)
 
 
 def supports_mla(module: nn.Module):
-    return getattr(module, "is_mla", False) and is_flash_attention_requested(module.config, version=4)
+    """Proper MLA is only supported under very strict conditions."""
+
+    if not getattr(module, "is_mla", False):
+        return False
+
+    if not is_flash_attention_requested(module.config, version=4):
+        return False
+
+    if getattr(module, "qk_rope_head_dim", -1) != 64 or getattr(module, "kv_lora_rank", -1) != 512:
+        return False
+
+    return supports_mla_hardware()
 
 
 def conditional_kv_expansion(func):
