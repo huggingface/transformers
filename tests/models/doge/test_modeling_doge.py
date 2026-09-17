@@ -394,6 +394,7 @@ class DogeIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = Expectations(
             {
                 (None, None): "Here's everything I know about dogs. Dogs is the best animal in the world, and they are the most common pets. Dogs are known for their unique personalities and behaviors,",
+                ("cuda", 8): "Here's everything I know about dogs. Dogs is the best animal in the world, and they are the most common pets. Dogs are known for their unique personalities and behaviors,",
             }
         ).get_expectation()  # fmt: skip
 
