@@ -777,30 +777,19 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     We need to make sure that token 1 is in rank 0 range, so rank 0 sends it and rank 1 does not have it in its slice.
     """
 
-    def _dispatch_experts_forward(
+    def _dispatch_tokens(
         self,
-        experts_forward: Callable,
-        num_local_experts: int,
         hidden_states: torch.Tensor,
         top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        num_local_experts: int,
         ep_group,
         ep_size: int,
-    ) -> torch.Tensor:
-        """
-        Expert-parallel forward by token dispatch. Every rank routes its own tokens, sends each selected (token, expert)
-        pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives with
-        `experts_forward` (the experts module's own forward, called as a top-1 routing with unit weights), sends the
-        results back and combines them with the routing weights. An expert's gradient therefore sums the batches of
-        its EP group; the expert FSDP reduction divides by `fsdp_size` to match the trunk's average (see `fsdp.py`).
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[int], list[int]]:
+        """Send each selected (token, expert) pair to the rank that owns the expert.
 
-        Every local expert also runs on one zero pad row, dropped before the results are sent back. It keeps the
-        expert output connected to the received tokens and to every expert's weights on every rank, whatever the
-        experts implementation does with an empty input, so the reverse all-to-all and the expert FSDP reduction run
-        in the backward of every rank, including one whose experts nobody picked this step.
+        Also returns the sort order and the per-rank split sizes that `_combine_tokens` needs to reverse the exchange.
         """
-
-        num_tokens, hidden_dim = hidden_states.shape
+        hidden_dim = hidden_states.size(-1)
         num_top_k = top_k_index.size(-1)
 
         # Sorting the selected pairs by expert groups them by owner rank, since each rank owns a contiguous range of
@@ -825,29 +814,49 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         )
         recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
         recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
+        return recv_tokens, recv_expert_ids, order, send_sizes, recv_sizes
 
-        # One zero pad row per local expert, so no expert ever sees an empty input (see the docstring). Eager
-        # experts return a disconnected `zeros_like` on zero tokens, which would drop this rank out of the reverse
-        # all-to-all backward and the expert FSDP reduce-scatter while the other ranks wait on both.
-        num_recv = recv_tokens.size(0)
-        pad_expert_ids = torch.arange(num_local_experts, device=hidden_states.device)
-        padded_tokens = torch.cat([recv_tokens, recv_tokens.new_zeros(num_local_experts, hidden_dim)])
-        padded_expert_ids = torch.cat([recv_expert_ids, pad_expert_ids]).unsqueeze(-1)
-        unit_weights = torch.ones_like(padded_expert_ids, dtype=recv_tokens.dtype)
-        expert_out = experts_forward(padded_tokens, padded_expert_ids, unit_weights)[:num_recv]
+    def _run_local_experts(
+        self,
+        experts_forward: Callable,
+        tokens: torch.Tensor,
+        expert_ids: torch.Tensor,
+        num_local_experts: int,
+    ) -> torch.Tensor:
+        """Run local experts with top-1 routing and unit weights; apply routing weights after combine."""
+        # One zero row per expert keeps tokens and all expert weights connected to backward. Without it,
+        # empty eager experts can skip the reverse all-to-all and FSDP reduction, leaving other ranks waiting.
+        num_tokens, hidden_dim = tokens.shape
+        local_expert_ids = torch.arange(num_local_experts, device=tokens.device)
+        tokens = torch.cat([tokens, tokens.new_zeros(num_local_experts, hidden_dim)])
+        expert_ids = torch.cat([expert_ids, local_expert_ids]).unsqueeze(-1)
+        weights = torch.ones_like(expert_ids, dtype=tokens.dtype)
+        return experts_forward(tokens, expert_ids, weights)[:num_tokens]
 
-        # Send the results back to the owners of the tokens and combine them with the routing weights.
+    def _combine_tokens(
+        self,
+        expert_output: torch.Tensor,
+        top_k_weights: torch.Tensor,
+        order: torch.Tensor,
+        send_sizes: list[int],
+        recv_sizes: list[int],
+        ep_group,
+    ) -> torch.Tensor:
+        """Return expert outputs to the token owners and combine them with routing weights."""
+        num_tokens, num_top_k = top_k_weights.shape
+        hidden_dim = expert_output.size(-1)
         recv_out = all_to_all_single(
-            expert_out.new_empty(send_tokens.size(0), hidden_dim),
-            expert_out,
+            expert_output.new_empty(order.numel(), hidden_dim),
+            expert_output,
             output_split_sizes=send_sizes,
             input_split_sizes=recv_sizes,
             group=ep_group,
         )
-        inverse_order = torch.empty_like(order)
-        inverse_order[order] = torch.arange(order.numel(), device=order.device)
-        combined = recv_out[inverse_order] * top_k_weights.reshape(-1, 1)
-        return combined.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
+        # Restore the original (token, top-k slot) order, then apply routing weights.
+        token_outputs = torch.empty_like(recv_out)
+        token_outputs[order] = recv_out
+        token_outputs = token_outputs.view(num_tokens, num_top_k, hidden_dim)
+        return (token_outputs * top_k_weights.unsqueeze(-1)).sum(dim=1)
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None):
         # Capture the module's own forward now: below, `module.forward` becomes `tp_forward`.
@@ -877,15 +886,13 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 )
             with self.context_around_forward(module, ep_mesh):
                 # The sharding leaves the module with its local expert count.
-                output = self._dispatch_experts_forward(
-                    experts_forward,
-                    module.num_experts,
-                    hidden_states,
-                    top_k_index,
-                    top_k_weights,
-                    ep_group,
-                    ep_size,
+                tokens, expert_ids, order, send_sizes, recv_sizes = self._dispatch_tokens(
+                    hidden_states, top_k_index, module.num_experts, ep_group, ep_size
                 )
+                expert_output = self._run_local_experts(experts_forward, tokens, expert_ids, module.num_experts)
+                output = self._combine_tokens(
+                    expert_output, top_k_weights, order, send_sizes, recv_sizes, ep_group
+                ).to(hidden_states.dtype)
             if tp_size > 1:
                 full_output = output.new_zeros(num_tokens, output.size(-1))
                 full_output[rows] = output
