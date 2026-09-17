@@ -661,7 +661,7 @@ def _process_flash_attention_kwargs(
         max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the key/value tensor during a varlen forward.
         qv (`torch.Tensor`, *optional*):
-            TODO
+            The MLA latents absorbed by the Flash Attention API. See `integrations/mla` for more information.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
