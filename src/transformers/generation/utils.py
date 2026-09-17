@@ -2706,9 +2706,11 @@ class GenerationMixin(ContinuousMixin):
         # We can drop the mask altogether if it's all 1s, i.e. no padding, to make downstream attention mask creation and inference
         # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
         # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
+        # Keep the mask for eager attention to preserve model-side mask construction.
         if (
             not self.config.is_encoder_decoder
             and accepts_attention_mask
+            and self.config.get_text_config()._attn_implementation != "eager"
             and (model_kwargs["attention_mask"] == 1).all()
         ):
             # Record the length to slice correctly in `_prefill` if restarting from existing Cache
