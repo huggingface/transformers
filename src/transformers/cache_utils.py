@@ -822,7 +822,6 @@ class QuantizedLayer(DynamicLayer):
         # The quantized states are dropped instead of zeroed, so that the next `update` quantizes from scratch
         self._quantized_keys = self._quantized_values = None
         self._pending_beam_idx = None
-        self.is_initialized = False
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
