@@ -290,10 +290,11 @@ class TorchvisionBackend(BaseImageProcessor):
         image: "torch.Tensor",
         mean: float | Iterable[float],
         std: float | Iterable[float],
+        inplace: bool = False,
         **kwargs,
     ) -> "torch.Tensor":
         """Normalize an image using Torchvision."""
-        return tvF.normalize(image, mean, std)
+        return tvF.normalize(image, mean, std, inplace=inplace)
 
     @lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
@@ -331,7 +332,12 @@ class TorchvisionBackend(BaseImageProcessor):
             device=images.device,
         )
         if do_normalize:
-            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+            # Copying float32 inputs before normalizing in place is slower than out-of-place normalization. For other
+            # dtypes, conversion already created a fresh tensor that can be normalized in place without another copy.
+            if images.dtype == torch.float32:
+                images = self.normalize(images, image_mean, image_std)
+            else:
+                images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std, inplace=True)
         elif do_rescale:
             images = self.rescale(images, rescale_factor)
 
