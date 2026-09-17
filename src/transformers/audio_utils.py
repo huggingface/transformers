@@ -445,7 +445,7 @@ def make_list_of_audio_chat_template(
     return make_list_of_audio(audio)
 
 
-def make_audio_chat_template_content(audio_item: "str | np.ndarray", prompt: str | None = None) -> list[dict]:
+def make_audio_chat_template_content(audio_item: str | np.ndarray, prompt: str | None = None) -> list[dict]:
     """
     Build the chat-template `content` list for a single audio item, optionally followed by a text item.
 

@@ -406,7 +406,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         conv_lengths = (audio_lengths - 1) // 2 + 1
         # Each chunk rounds up to a whole number of merge groups independently (into its own
         # zero-padded tail) before summing. If done after concatenating chunks, a chunk's
-        # trailing framees would be lost (up to `self.audio_merge_size - 1`) to floor-division.
+        # trailing frames would be lost (up to `self.audio_merge_size - 1`) to floor-division.
         chunk_tokens = (conv_lengths + self.audio_merge_size - 1) // self.audio_merge_size
         per_sample_tokens = torch.zeros(num_samples, dtype=torch.long)
         per_sample_tokens.scatter_add_(0, audio_chunk_mapping, chunk_tokens)

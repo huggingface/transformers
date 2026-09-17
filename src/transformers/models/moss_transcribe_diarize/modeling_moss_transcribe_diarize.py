@@ -73,7 +73,6 @@ class MossTranscribeDiarizePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
-    config_class = MossTranscribeDiarizeConfig
 
 
 def eager_attention_forward(

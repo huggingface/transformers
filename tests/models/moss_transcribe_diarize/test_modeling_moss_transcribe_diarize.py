@@ -113,12 +113,13 @@ class MossTranscribeDiarizeForConditionalGenerationModelTest(ALMModelTest, unitt
 @require_torch
 class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.TestCase):
     @classmethod
-    def setUp(cls):
+    def setUpClass(cls):
         cleanup(torch_device, gc_collect=True)
         cls.checkpoint = "itazap/MOSS-Transcribe-Diarize-HF"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         cleanup(torch_device, gc_collect=True)
 
     @slow
