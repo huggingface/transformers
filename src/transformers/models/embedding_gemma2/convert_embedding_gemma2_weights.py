@@ -72,17 +72,10 @@ _TRANSFORMER_DECODER_BLOCK = f"{_TRANSFORMER_PARAMETER}/stacked_layers/attention
 _TRANSFORMER_DECODER_BLOCK_LEN = len(_TRANSFORMER_DECODER_BLOCK)
 _TRANSFORMER_EMBEDDER = f"{_TRANSFORMER_PARAMETER}/embedder"
 _TRANSFORMER_FINAL_NORM = "transformer/final_norm"
-_TRANSFORMER_POST_TRAINING_PREFIX = "rlx_networks/policy_network/"
-_TRANSFORMER_POST_TRAINING_PREFIX_LEN = len(_TRANSFORMER_POST_TRAINING_PREFIX)
-# Referenced by a branch of `convert_transformer_weights` that only the multi-token-prediction
-# drafter checkpoints reach. Unused for EmbeddingGemma 2, kept so the copied function is verbatim.
-_TRANSFORMER_NORM_MTP = "transformer/norm"
 
 _VISION_ENCODER_PARAMETER = "PatchInputVariablePoolingEncoder_0"
 _VISION_ENCODER_VIT_PARAMETER = f"{_VISION_ENCODER_PARAMETER}/_model/vit"
 _VISION_ENCODER_ENTRY = f"{_VISION_ENCODER_VIT_PARAMETER}/entry"
-_VISION_ENCODER_EXIT = f"{_VISION_ENCODER_VIT_PARAMETER}/exit"
-_VISION_ENCODER_STANDARDIZE = f"{_VISION_ENCODER_PARAMETER}/standardize"
 _VISION_ENCODER_TRANSFORMER = f"{_VISION_ENCODER_VIT_PARAMETER}/transformer/stacked_layers/block"
 
 # The embedding head, stored outside the transformer tree.
@@ -189,16 +182,6 @@ _AUDIO_CONFIG = Gemma4AudioConfig()
 
 _NUM_HIDDEN_LAYERS = 24
 
-# EmbeddingGemma 2 uses a different attention shape on global vs. sliding layers: sliding layers
-# have 2 KV heads at head_dim 256, global layers 1 KV head at head_dim 512. Passing
-# `per_layer_config` explicitly is what makes the global override include `num_key_value_heads` --
-# the inherited `__post_init__` only derives it when `attention_k_eq_v` is set, which it is not here.
-_PER_LAYER_CONFIG = {
-    layer_idx: {"head_dim": 512, "num_key_value_heads": 1}
-    for layer_idx in range(_NUM_HIDDEN_LAYERS)
-    if (layer_idx + 1) % _SLIDING_WINDOW_PATTERN == 0  # global attention layers, 5:1 pattern
-}
-
 _CONFIG = EmbeddingGemma2Config(
     text_config=EmbeddingGemma2TextConfig(
         vocab_size=262_144,
@@ -206,17 +189,17 @@ _CONFIG = EmbeddingGemma2Config(
         intermediate_size=2048,
         num_hidden_layers=_NUM_HIDDEN_LAYERS,
         num_attention_heads=4,
+        # Sliding layers: 2 KV heads at head_dim 256; global layers: 1 KV head at head_dim 512.
+        # The config expands the `global_*` values into `per_layer_config` overrides.
         num_key_value_heads=2,
         head_dim=256,
+        num_global_key_value_heads=1,
+        global_head_dim=512,
         max_position_embeddings=262_144,
         sliding_window=1024,
         hidden_size_per_layer_input=512,
-        use_bidirectional_attention="all",
-        num_kv_shared_layers=0,
-        attention_k_eq_v=False,
         rope_parameters=None,
         embedding_dim=768,
-        per_layer_config=_PER_LAYER_CONFIG,
     ),
     vision_config=_VISION_CONFIG,
     audio_config=_AUDIO_CONFIG,
@@ -298,10 +281,6 @@ def convert_audio_encoder_weights(
 ) -> Iterable[tuple[str, np.ndarray]]:
     converted_paths: list[str] = []
     converted_weights: list[Any] = []
-
-    # The conformer uses its own internal dimension (1024 by default via conf_hidden_size).
-    # Since we now use the default hidden_size=1024 (same as conf_hidden_size),
-    # we use config.conf_hidden_size for reshaping conformer weights.
 
     if path.startswith(_AUDIO_ENCODER_CONFORMER):
         assert weights.shape[0] == config.num_hidden_layers
@@ -472,8 +451,7 @@ def convert_vision_encoder_weights(
     converted_paths: list[str] = []
     converted_weights: list[Any] = []
 
-    # Patch Embedder - Entry
-    # TODO(philculliton): These do not appear to be used currently - they should be loaded by Gemma4VisionPatchEmbedder, by all appearances, but are not currently.
+    # Patch Embedder - Entry. Both keys are consumed by `Gemma4VisionPatchEmbedder`.
     if path == f"{_VISION_ENCODER_ENTRY}/input_projection":
         if param == "w":
             converted_paths.append("patch_embedder.input_proj.weight")
@@ -485,21 +463,6 @@ def convert_vision_encoder_weights(
             # Shape: (10240, 2, 768) -> transpose to (2, 10240, 768)
             converted_weights.append(weights.transpose(1, 0, 2))
 
-    # Pooler - Exit: convert the learnable scale parameter for vision output scaling
-    elif path == _VISION_ENCODER_EXIT:
-        if param == "scale":
-            converted_paths.append("pooler.scale")
-            # JAX shape is (1, 1, d_model), keep as-is for nn.Parameter
-            converted_weights.append(weights)
-
-    elif path == _VISION_ENCODER_STANDARDIZE:
-        if param == "bias":
-            converted_paths.append("std_bias")
-            converted_weights.append(weights)
-        else:
-            converted_paths.append("std_scale")
-            converted_weights.append(weights)
-
     # Transformer Layers (stacked format)
     elif path.startswith(_VISION_ENCODER_TRANSFORMER):
         # All vision transformer layers are stacked in dimension 0
@@ -508,61 +471,6 @@ def convert_vision_encoder_weights(
 
         for i, matrix in enumerate(weights):
             base_path = f"encoder.layers.{i}"
-
-            # Handle clipped einsum states (`ClippedEinsum_0` target paths).
-            if path.endswith("attn_vec_einsum/ClippedEinsum_0"):
-                converted_paths.append(f"{base_path}.self_attn.o_proj.{param.removeprefix('clip_')}")
-                converted_weights.append(matrix)
-            if path.endswith("kv_einsum/ClippedEinsum_0"):
-                # NOTE: In JAX reference implementations of Gemma, k_proj and v_proj are performed with a single einsum
-                # operation. We split this into two operations in Transformers, but they are passed the same input and
-                # share the same activation bounds for clipping, thus we re-use the same matrix for both.
-                converted_paths.append(f"{base_path}.self_attn.k_proj.{param.removeprefix('clip_')}")
-                converted_weights.append(matrix)
-                converted_paths.append(f"{base_path}.self_attn.v_proj.{param.removeprefix('clip_')}")
-                converted_weights.append(matrix)
-            if path.endswith("q_einsum/ClippedEinsum_0"):
-                converted_paths.append(f"{base_path}.self_attn.q_proj.{param.removeprefix('clip_')}")
-                converted_weights.append(matrix)
-            if path.endswith("gating_einsum/ClippedEinsum_0"):
-                # NOTE: In JAX reference implementations of Gemma, gate_proj and up_proj are performed with a single
-                # einsum operation. We split this into two operations in Transformers, but they are passed the same
-                # input and share the same activation bounds for clipping, thus we re-use the same matrix for both.
-                converted_paths.append(f"{base_path}.mlp.gate_proj.{param.removeprefix('clip_')}")
-                converted_weights.append(matrix)
-                converted_paths.append(f"{base_path}.mlp.up_proj.{param.removeprefix('clip_')}")
-                converted_weights.append(matrix)
-            if path.endswith("linear/ClippedEinsum_0"):
-                converted_paths.append(f"{base_path}.mlp.down_proj.{param.removeprefix('clip_')}")
-                converted_weights.append(matrix)
-
-            # Handle clipped einsum states (`compression_einsum` target paths).
-            # The target path specifies the activation direction (`input` or `output`),
-            # and the parameter holds `clip_min` or `clip_max`.
-            if "/compression_einsum/" in path:
-                direction = path.split("/")[-1].split("_")[0]  # Extracts "input" or "output"
-                hf_suffix = f"{direction}_{param.removeprefix('clip_')}"
-                einsum_type = path.split("/compression_einsum/")[0].split("/")[-1]
-
-                if einsum_type == "attn_vec_einsum":
-                    converted_paths.append(f"{base_path}.self_attn.o_proj.{hf_suffix}")
-                    converted_weights.append(matrix)
-                elif einsum_type == "kv_einsum":
-                    converted_paths.append(f"{base_path}.self_attn.k_proj.{hf_suffix}")
-                    converted_weights.append(matrix)
-                    converted_paths.append(f"{base_path}.self_attn.v_proj.{hf_suffix}")
-                    converted_weights.append(matrix)
-                elif einsum_type == "q_einsum":
-                    converted_paths.append(f"{base_path}.self_attn.q_proj.{hf_suffix}")
-                    converted_weights.append(matrix)
-                elif einsum_type == "gating_einsum":
-                    converted_paths.append(f"{base_path}.mlp.gate_proj.{hf_suffix}")
-                    converted_weights.append(matrix)
-                    converted_paths.append(f"{base_path}.mlp.up_proj.{hf_suffix}")
-                    converted_weights.append(matrix)
-                elif einsum_type == "linear":
-                    converted_paths.append(f"{base_path}.mlp.down_proj.{hf_suffix}")
-                    converted_weights.append(matrix)
 
             if path.endswith("attn/attn_vec_einsum"):
                 # Shape: (12, 64, 768) -> reshape to (768, 768) for o_proj
@@ -621,11 +529,8 @@ def convert_vision_encoder_weights(
                 converted_paths.append(f"{base_path}.pre_feedforward_layernorm.weight")
                 converted_weights.append(matrix)
             elif path.endswith("attn/query_norm/scale") or path.endswith("attn/query_norm"):
-                # Vision Q/K norms: JAX trained scale values (~-0.6) are not directly
-                # usable because the OSS modules expect different shapes and the HF
-                # RMSNorm uses scale_shift=1.0 (formula: weight + 1.0).
-                # We use zeros to get identity: (0 + 1.0) = 1.0, matching the blaze
-                # reference which also uses zeros(head_dim) -> (1+0) = 1.0 identity.
+                # The JAX scales are unusable here (different shapes); the checkpoint stores zeros,
+                # which is identity under HF RMSNorm's `weight + 1.0`, matching the blaze reference.
                 converted_paths.append(f"{base_path}.self_attn.q_norm.weight")
                 converted_weights.append(matrix)
             elif path.endswith("attn/key_norm/scale") or path.endswith("attn/key_norm"):
@@ -647,109 +552,11 @@ def convert_transformer_weights(
     param: str,
     weights: np.ndarray,
 ) -> Iterable[tuple[str, np.ndarray]]:
-    if path.startswith(_TRANSFORMER_POST_TRAINING_PREFIX):
-        path = path[_TRANSFORMER_POST_TRAINING_PREFIX_LEN:]
-
     converted_paths: list[str] = []
     converted_weights: list[Any] = []
-    first_kv_shared_layer_idx = config.num_hidden_layers - getattr(config, "num_kv_shared_layers", 0)
 
-    # Handle new checkpoint format: transformer/layer_N/...
-    # TODO(philculliton):Direct handling for unstacked checkpoint type, needs to be merged to allow for unified tensor handling
-    if path.startswith(f"{_TRANSFORMER_PARAMETER}/layer_"):
-        # Extract layer number from path like "transformer/layer_0/attn/q_einsum"
-        layer_str = path.split("/")[1]  # "layer_0"
-        layer_idx = int(layer_str.replace("layer_", ""))  # 0
-        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
-        base_path = f"layers.{layer_idx}"
-
-        # Determine head_dim from actual checkpoint weight dimensions
-        # For q_einsum/key_norm, the last dimension tells us the head_dim
-        # Otherwise fall back to config
-        if path.endswith("attn/key_norm") or path.endswith("attn/query_norm"):
-            head_dim = weights.shape[0]  # The norm dimension IS the head_dim
-        elif path.endswith("attn/q_einsum"):
-            head_dim = weights.shape[-1]  # Last dimension is head_dim
-        else:
-            # Fall back to config-based determination
-            head_dim = config.per_layer_config[layer_idx].head_dim
-        # Note: In new format, weights are per-layer (not batched), so no enumerate loop needed
-        matrix = weights
-
-        if path.endswith("attn/attn_vec_einsum"):
-            converted_paths.append(f"{base_path}.self_attn.o_proj.weight")
-            converted_weights.append(
-                matrix.transpose(2, 0, 1).reshape(config.hidden_size, config.num_attention_heads * head_dim)
-            )
-        elif path.endswith("attn/kv_einsum") and not is_kv_shared_layer:
-            converted_paths.extend(
-                [
-                    f"{base_path}.self_attn.k_proj.weight",
-                    f"{base_path}.self_attn.v_proj.weight",
-                ]
-            )
-            k_proj_weights, v_proj_weights = matrix.transpose(0, 2, 1, 3)
-            kv_proj_shape = (config.hidden_size, config.num_key_value_heads * head_dim)
-            converted_weights.extend(
-                [
-                    k_proj_weights.reshape(kv_proj_shape).transpose(),
-                    v_proj_weights.reshape(kv_proj_shape).transpose(),
-                ]
-            )
-        elif path.endswith("attn/k_einsum") and not is_kv_shared_layer:
-            converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
-            converted_weights.append(
-                matrix.transpose(1, 0, 2)
-                .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
-                .transpose()
-            )
-        elif path.endswith("attn/q_einsum"):
-            converted_paths.append(f"{base_path}.self_attn.q_proj.weight")
-            converted_weights.append(
-                matrix.transpose(1, 0, 2)
-                .reshape(config.hidden_size, config.num_attention_heads * head_dim)
-                .transpose()
-            )
-        elif path.endswith("attn/query_norm"):
-            converted_paths.append(f"{base_path}.self_attn.q_norm.weight")
-            converted_weights.append(matrix.squeeze())
-        elif path.endswith("attn/key_norm") and not is_kv_shared_layer:
-            converted_paths.append(f"{base_path}.self_attn.k_norm.weight")
-            converted_weights.append(matrix.squeeze())
-        elif path.endswith("mlp/gating_einsum"):
-            converted_paths.extend([f"{base_path}.mlp.gate_proj.weight", f"{base_path}.mlp.up_proj.weight"])
-            gate_proj_weight, up_proj_weight = matrix
-            converted_weights.extend([gate_proj_weight, up_proj_weight])
-        elif path.endswith("mlp/linear"):
-            converted_paths.append(f"{base_path}.mlp.down_proj.weight")
-            converted_weights.append(matrix.transpose())
-        elif path.endswith("per_layer_input_gate"):
-            converted_paths.append(f"{base_path}.per_layer_input_gate.weight")
-            converted_weights.append(matrix.transpose())
-        elif path.endswith("per_layer_projection"):
-            converted_paths.append(f"{base_path}.per_layer_projection.weight")
-            converted_weights.append(matrix.transpose())
-        elif path.endswith("post_attention_norm"):
-            converted_paths.append(f"{base_path}.post_attention_layernorm.weight")
-            converted_weights.append(matrix)
-        elif path.endswith("post_ffw_norm"):
-            converted_paths.append(f"{base_path}.post_feedforward_layernorm.weight")
-            converted_weights.append(matrix)
-        elif path.endswith("post_per_layer_input_norm"):
-            converted_paths.append(f"{base_path}.post_per_layer_input_norm.weight")
-            converted_weights.append(matrix)
-        elif path.endswith("pre_attention_norm"):
-            converted_paths.append(f"{base_path}.input_layernorm.weight")
-            converted_weights.append(matrix)
-        elif path.endswith("pre_ffw_norm"):
-            converted_paths.append(f"{base_path}.pre_feedforward_layernorm.weight")
-            converted_weights.append(matrix)
-        elif path.endswith(layer_str) and param == "skip_scale":
-            converted_paths.append(f"{base_path}.layer_scalar")
-            converted_weights.append(matrix)
-
-    # Handle old checkpoint format: transformer/stacked_layers/attention_type_N/...
-    elif path.startswith(_TRANSFORMER_DECODER_BLOCK):
+    # Text transformer layers are stacked by attention type: transformer/stacked_layers/attention_type_N/...
+    if path.startswith(_TRANSFORMER_DECODER_BLOCK):
         attention_type_index = int(path[_TRANSFORMER_DECODER_BLOCK_LEN])
         expected_layers_per_group = config.num_hidden_layers / _SLIDING_WINDOW_PATTERN
         observed_layers_per_group = weights.shape[0]
@@ -759,7 +566,6 @@ def convert_transformer_weights(
 
         for i, matrix in enumerate(weights):
             layer_idx = _SLIDING_WINDOW_PATTERN * i + attention_type_index
-            is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
             base_path = f"layers.{layer_idx}"
             head_dim = config.per_layer_config[layer_idx].head_dim
             if param == "skip_scale":
@@ -770,7 +576,7 @@ def convert_transformer_weights(
                 converted_weights.append(
                     matrix.transpose(2, 0, 1).reshape(config.hidden_size, config.num_attention_heads * head_dim)
                 )
-            elif path.endswith("attn/kv_einsum") and not is_kv_shared_layer:
+            elif path.endswith("attn/kv_einsum"):
                 converted_paths.extend(
                     [
                         f"{base_path}.self_attn.k_proj.weight",
@@ -786,13 +592,6 @@ def convert_transformer_weights(
                         v_proj_weights.reshape(kv_proj_shape).transpose(),
                     ]
                 )
-            elif path.endswith("attn/k_einsum") and not is_kv_shared_layer:
-                converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
-                converted_weights.append(
-                    matrix.transpose(1, 0, 2)
-                    .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
-                    .transpose()
-                )
             elif path.endswith("attn/q_einsum"):
                 converted_paths.append(f"{base_path}.self_attn.q_proj.weight")
                 converted_weights.append(
@@ -803,60 +602,15 @@ def convert_transformer_weights(
             elif path.endswith("attn/query_norm"):
                 converted_paths.append(f"{base_path}.self_attn.q_norm.weight")
                 converted_weights.append(matrix.squeeze())
-            elif path.endswith("attn/key_norm") and not is_kv_shared_layer:
+            elif path.endswith("attn/key_norm"):
                 converted_paths.append(f"{base_path}.self_attn.k_norm.weight")
                 converted_weights.append(matrix.squeeze())
             elif path.endswith("mlp/gating_einsum"):
-                # NOTE: The JAX implementations changes the type of the primary `mlp` for MOE models and adds a new
-                # `mlp2` that operates _before_ `mlp`. In Hugging Face Transformers we keep the type of `mlp` constant
-                # and add an `experts` that operates after `mlp`, so we need to invert this assignment when using MOE arch.
-                if config.enable_moe_block:
-                    # MoE expert weights: matrix shape [num_experts, 2, moe_intermediate_size, hidden_size]
-                    # -> experts.gate_up_proj (nn.Parameter, shape [E, 2*moe_inter, hidden])
-                    num_experts, _, expert_inter, hidden_size = matrix.shape
-                    gate_up_proj_weight = np.asarray(matrix).reshape(num_experts, 2 * expert_inter, hidden_size)
-                    converted_paths.append(f"{base_path}.experts.gate_up_proj")
-                    converted_weights.append(gate_up_proj_weight)
-                else:
-                    # Dense MLP: matrix shape [2, intermediate_size, hidden_size]
-                    gate_proj_weight, up_proj_weight = matrix
-                    converted_paths.extend([f"{base_path}.mlp.gate_proj.weight", f"{base_path}.mlp.up_proj.weight"])
-                    converted_weights.extend([gate_proj_weight, up_proj_weight])
-            elif path.endswith("mlp/linear"):
-                # NOTE: The JAX implementations changes the type of the primary `mlp` for MOE models and adds a new
-                # `mlp2` that operates _before_ `mlp`. In Hugging Face Transformers we keep the type of `mlp` constant
-                # and add an `experts` that operates after `mlp`, so we need to invert this assignment when using MOE arch.
-                if config.enable_moe_block:
-                    # MoE expert down_proj: matrix shape [num_experts, moe_inter, hidden]
-                    # -> experts.down_proj (nn.Parameter, shape [E, hidden, moe_inter])
-                    converted_paths.append(f"{base_path}.experts.down_proj")
-                    converted_weights.append(matrix.transpose(0, 2, 1))
-                else:
-                    # Dense MLP down_proj
-                    converted_paths.append(f"{base_path}.mlp.down_proj.weight")
-                    converted_weights.append(matrix.transpose())
-            elif path.endswith("mlp/router_logits"):
-                # MoE router: matrix shape [hidden_size, num_experts]
-                # -> router.proj.weight (nn.Linear, shape [num_experts, hidden_size])
-                converted_paths.append(f"{base_path}.router.proj.weight")
-                converted_weights.append(matrix.transpose())
-            elif param == "router_scale" and path.endswith("mlp"):
-                # MoE router scale: shape [hidden_size]
-                converted_paths.append(f"{base_path}.router.scale")
-                converted_weights.append(matrix)
-            elif param == "per_expert_scale" and path.endswith("mlp"):
-                # MoE per-expert scale: shape [num_experts]
-                converted_paths.append(f"{base_path}.router.per_expert_scale")
-                converted_weights.append(matrix)
-            elif path.endswith("mlp2/gating_einsum"):
-                # Shared expert: matrix shape [2, intermediate_size, hidden_size]
-                # -> mlp.gate_proj.weight + mlp.up_proj.weight (nn.Linear)
-                converted_paths.extend([f"{base_path}.mlp.gate_proj.weight", f"{base_path}.mlp.up_proj.weight"])
+                # Dense MLP: matrix shape [2, intermediate_size, hidden_size]
                 gate_proj_weight, up_proj_weight = matrix
+                converted_paths.extend([f"{base_path}.mlp.gate_proj.weight", f"{base_path}.mlp.up_proj.weight"])
                 converted_weights.extend([gate_proj_weight, up_proj_weight])
-            elif path.endswith("mlp2/linear"):
-                # Shared expert down_proj: matrix shape [intermediate_size, hidden_size]
-                # -> mlp.down_proj.weight (nn.Linear, needs transpose)
+            elif path.endswith("mlp/linear"):
                 converted_paths.append(f"{base_path}.mlp.down_proj.weight")
                 converted_weights.append(matrix.transpose())
             elif path.endswith("per_layer_input_gate"):
@@ -871,15 +625,6 @@ def convert_transformer_weights(
             elif path.endswith("post_ffw_norm"):
                 converted_paths.append(f"{base_path}.post_feedforward_layernorm.weight")
                 converted_weights.append(matrix)
-            elif path.endswith("post_ffw1_norm"):
-                converted_paths.append(f"{base_path}.post_feedforward_layernorm_2.weight")
-                converted_weights.append(matrix)
-            elif path.endswith("post_ffw2_norm"):
-                converted_paths.append(f"{base_path}.post_feedforward_layernorm_1.weight")
-                converted_weights.append(matrix)
-            elif path.endswith("pre_ffw2_norm"):
-                converted_paths.append(f"{base_path}.pre_feedforward_layernorm.weight")
-                converted_weights.append(matrix)
             elif path.endswith("post_per_layer_input_norm"):
                 converted_paths.append(f"{base_path}.post_per_layer_input_norm.weight")
                 converted_weights.append(matrix)
@@ -887,30 +632,12 @@ def convert_transformer_weights(
                 converted_paths.append(f"{base_path}.input_layernorm.weight")
                 converted_weights.append(matrix)
             elif path.endswith("pre_ffw_norm"):
-                # NOTE: The JAX implementations changes the type of the primary `mlp` for MOE models and adds a new
-                # `mlp2` that operates _before_ `mlp`. In Hugging Face Transformer we keep the type of `mlp` constant
-                # and add an `mlp2` that operates after `mlp`, so we need to invert this assignment when using MOE arch.
-                if config.enable_moe_block:
-                    # pre_ffw_norm is the pre-norm for ffw1 (MoE); in HF, MoE is mlp_2
-                    converted_paths.append(f"{base_path}.pre_feedforward_layernorm_2.weight")
-                else:
-                    converted_paths.append(f"{base_path}.pre_feedforward_layernorm.weight")
+                converted_paths.append(f"{base_path}.pre_feedforward_layernorm.weight")
                 converted_weights.append(matrix)
-    elif path == _TRANSFORMER_NORM_MTP:
-        converted_paths.append("final_norm.weight")
-        converted_weights.append(weights)
     elif path == _TRANSFORMER_EMBEDDER:
-        if param == "input_embedding_ordered" and getattr(config, "use_ordered_embeddings", False):
+        if param == "input_embedding":
             converted_paths.append("embed_tokens.weight")
             converted_weights.append(weights)
-        elif param == "input_embedding" and not getattr(config, "use_ordered_embeddings", False):
-            converted_paths.append("embed_tokens.weight")
-            converted_weights.append(weights)
-        elif param == "per_layer_embeddings":
-            converted_paths.append("embed_tokens_per_layer.weight")
-            # JAX uses an einsum, but Transformers uses a Linear, so reshapes are required here and in modeling file.
-            vocab_size, num_layers, hidden_dim = weights.shape
-            converted_weights.append(weights.reshape(vocab_size, num_layers * hidden_dim))
     elif path.startswith(_TRANSFORMER_EMBEDDER):
         if path.endswith("per_layer_model_projection"):
             converted_paths.append("per_layer_model_projection.weight")
@@ -1010,8 +737,7 @@ def _fuse_boundary_token_embeddings(
     for label, extra_key, projection_key, token_id in targets:
         extra = extras.get(extra_key)
         projection = projections.get(projection_key)
-        # A renamed Orbax key here would otherwise produce a model that loads and runs but returns
-        # quietly wrong embeddings for that modality, so this is a hard failure rather than a skip.
+        # Hard failure: a renamed Orbax key would otherwise yield silently wrong embeddings.
         if extra is None:
             raise ValueError(f"{label}: {extra_key!r} not found in the Orbax checkpoint.")
         if projection is None:
@@ -1064,13 +790,13 @@ def convert(checkpoint_path: str, config: EmbeddingGemma2Config) -> dict[str, to
             hf_tree[path] = t.to(target_dtype)
             del t, weights_f32  # free the float32 intermediate
         else:
-            hf_tree[path] = t
+            # Some source paths (e.g. the audio attention clip bounds) intentionally emit the same
+            # numpy array for several targets; `safetensors` rejects the resulting shared storage.
+            hf_tree[path] = t.clone()
         if _VERBOSE.value:
             logging.info("%s converted shape=%s with dtype=%s", path, hf_tree[path].shape, target_dtype)
 
-    # Collected during the walk and consumed by `_fuse_boundary_token_embeddings` afterwards, since
-    # the fusion needs both the extra embeddings and the projections, and the walk order is
-    # arbitrary.
+    # Collected during the walk (order is arbitrary) and consumed by `_fuse_boundary_token_embeddings`.
     extras: dict[str, np.ndarray] = {}
     projections: dict[str, np.ndarray] = {}
 

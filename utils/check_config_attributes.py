@@ -59,6 +59,15 @@ SPECIAL_CASES_TO_ALLOW = {
         "patch_size",
         "pooling_kernel_size",
     ],  # Used as meta data for other attributes/properties
+    "EmbeddingGemma2TextConfig": [
+        # Builder attrs consumed in `__post_init__` to derive `per_layer_config` for the
+        # full-attention layers; the modeling code reads them through `per_layer_config`.
+        "global_head_dim",
+        "num_global_key_value_heads",
+        # Builder attr consumed in `__post_init__` to derive `layer_types`, which is what the
+        # modeling code reads.
+        "sliding_window_pattern",
+    ],
     "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],

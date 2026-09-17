@@ -320,9 +320,8 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
             linspace_idx = np.linspace(0, len(sec_indices) - 1, num_frames, dtype=int)
             return np.array([sec_indices[i] for i in linspace_idx])
 
-        # Explicit parent call: rewritten to `super().sample_frames(...)` by the converter.
-        # `Gemma4VideoProcessor` does not define `sample_frames`, so a literal `super()` call
-        # here would make the converter fail looking for a parent body to splice.
+        # Explicit parent call: `Gemma4VideoProcessor` has no `sample_frames`, so a literal `super()`
+        # call would leave the converter with no parent body to splice.
         return super().sample_frames(metadata, num_frames=num_frames, fps=fps, **kwargs)
 
 

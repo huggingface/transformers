@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-14.*
+*This model was contributed to Hugging Face Transformers on 2026-09-16.*
 
 
 # EmbeddingGemma2
@@ -29,8 +29,8 @@ The key differences from Gemma 4 are:
 
 - **No language modeling head.** There is no `ForCausalLM` and no `ForConditionalGeneration` class. [`EmbeddingGemma2Model`] returns a `last_hidden_state` of shape `(batch_size, sequence_length, embedding_dim)`, already projected by the embedding head.
 - **An embedding head on the text backbone.** [`EmbeddingGemma2TextModel`] owns `embedding_projection`, a bias-free `nn.Linear(hidden_size, embedding_dim)` applied after the final norm. Because a linear map commutes with averaging, projecting per token is equivalent to projecting the mean-pooled sentence embedding.
-- **Bidirectional attention.** `use_bidirectional_attention="all"` makes the stack behave as an encoder, even though it reuses the Gemma 4 decoder layer.
-- **Projection-only Per-Layer Embeddings (PLE).** Gemma 4 sums a token-identity term (an `embed_tokens_per_layer` lookup table) with a context-aware projection of `inputs_embeds`. EmbeddingGemma 2 keeps only the context-aware half: `get_per_layer_inputs()` returns `None`, `project_per_layer_inputs(inputs_embeds)` takes a single argument, and `vocab_size_per_layer_input` does not exist on [`EmbeddingGemma2TextConfig`].
+- **Bidirectional attention.** The stack is an encoder: every layer attends bidirectionally, over the full sequence on `full_attention` layers and over a symmetric window on `sliding_attention` layers. There is no causal mask and no key-value cache.
+- **Projection-only Per-Layer Embeddings (PLE).** Gemma 4 sums a token-identity term (an `embed_tokens_per_layer` lookup table) with a context-aware projection of `inputs_embeds`. EmbeddingGemma 2 keeps only the context-aware half: `project_per_layer_inputs(inputs_embeds)` takes a single argument, and neither `vocab_size_per_layer_input` nor the lookup table exists.
 - **Reused Gemma 4 towers and processors.** `config.vision_config` is a [`Gemma4VisionConfig`] and `config.audio_config` is a [`Gemma4AudioConfig`]; the towers themselves are resolved through `AutoModel`, so they are a `Gemma4VisionModel` and a `Gemma4AudioModel`. The image processor ([`Gemma4ImageProcessor`]) and the audio feature extractor ([`Gemma4AudioFeatureExtractor`]) are reused as-is through the auto mappings. Only the video processor is specialized: [`EmbeddingGemma2VideoProcessor`] defaults to 1-FPS linspace frame sampling (`use_1fps_linear_sampling=True`) and drops frame timestamps from the prompt (`exclude_timestamps=True`), matching the visual-only training distribution.
 
 You can find all the original EmbeddingGemma checkpoints under the [EmbeddingGemma](https://huggingface.co/collections/google/embeddinggemma) collection. The examples below use the `google/embeddinggemma-2` identifier.

@@ -72,10 +72,6 @@ class EmbeddingGemma2TextModelTester:
         embedding_dim=24,
         pad_token_id=0,
         initializer_range=0.02,
-        enable_moe_block=True,
-        num_experts=8,
-        top_k_experts=2,
-        moe_intermediate_size=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -96,11 +92,6 @@ class EmbeddingGemma2TextModelTester:
         self.embedding_dim = embedding_dim
         self.pad_token_id = pad_token_id
         self.initializer_range = initializer_range
-        # Mirrors the Gemma 4 tester: MoE blocks are enabled so the expert kernels are exercised.
-        self.enable_moe_block = enable_moe_block
-        self.num_experts = num_experts
-        self.top_k_experts = top_k_experts
-        self.moe_intermediate_size = moe_intermediate_size
 
         # Both attention flavours are exercised; the last layer is always forced to `full_attention`.
         self.layer_types = ["sliding_attention", "full_attention"]
@@ -131,10 +122,6 @@ class EmbeddingGemma2TextModelTester:
             initializer_range=self.initializer_range,
             layer_types=self.layer_types,
             per_layer_config=self.per_layer_config,
-            enable_moe_block=self.enable_moe_block,
-            num_experts=self.num_experts,
-            top_k_experts=self.top_k_experts,
-            moe_intermediate_size=self.moe_intermediate_size,
         )
 
     def prepare_config_and_inputs(self):
@@ -198,8 +185,6 @@ class EmbeddingGemma2TextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertFalse(hasattr(model, "per_layer_input_scale"))
 
         inputs_embeds = model.embed_tokens(input_ids)
-        # The token-identity term does not exist, so `get_per_layer_inputs` is a no-op.
-        self.assertIsNone(model.get_per_layer_inputs(input_ids, inputs_embeds))
 
         # `project_per_layer_inputs` takes a *single* argument (Gemma 4 takes two).
         per_layer_inputs = model.project_per_layer_inputs(inputs_embeds)
@@ -334,15 +319,11 @@ class EmbeddingGemma2ModelTester:
             input_ids[input_ids == token_id] = self.pad_token_id
         input_ids[:, :5] = config.image_token_id
 
-        mm_token_type_ids = torch.zeros_like(input_ids)
-        mm_token_type_ids[input_ids == config.image_token_id] = 1
-
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_position_ids": pixel_position_ids,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -352,7 +333,7 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     # No generative classes: EmbeddingGemma 2 only ever produces embeddings.
     all_model_classes = (EmbeddingGemma2Model,) if is_torch_available() else ()
     all_generative_model_classes = ()
-    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
+    additional_model_inputs = ["image_position_ids"]
     model_split_percents = [0.85, 0.9]
 
     def setUp(self):
@@ -368,10 +349,7 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
         ]
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
-                self.skipTest(
-                    reason="The base test does not pass image_position_ids and mm_token_type_ids required by "
-                    "EmbeddingGemma 2"
-                )
+                self.skipTest(reason="The base test does not pass the image_position_ids required by EmbeddingGemma 2")
 
     # NOTE: no `test_config` here (unlike the text-model test): `ConfigTester.run_common_tests`
     # asserts a `vocab_size` attribute, which on a composite config only lives on `text_config`.
@@ -518,7 +496,7 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
         text_model = model.language_model
 
         inputs_embeds = text_model.embed_tokens(inputs_dict["input_ids"])
-        self.assertIsNone(text_model.get_per_layer_inputs(inputs_dict["input_ids"], inputs_embeds))
+        self.assertFalse(hasattr(text_model, "embed_tokens_per_layer"))
 
         per_layer_inputs = text_model.project_per_layer_inputs(inputs_embeds)
         self.assertEqual(

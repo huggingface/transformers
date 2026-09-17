@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -26,21 +25,10 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_experts_implementation
-from ...masking_utils import (
-    _preprocess_mask_arguments,
-    blockwise_overlay,
-    create_causal_mask,
-    create_masks_for_generate,
-    create_sliding_window_causal_mask,
-    maybe_pad_block_sequence_ids,
-    sliding_window_overlay,
-)
+from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -51,8 +39,8 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import capture_outputs
 from ..auto.modeling_auto import AutoModel
 from ..gemma4 import Gemma4AudioConfig, Gemma4VisionConfig
 from .configuration_embedding_gemma2 import EmbeddingGemma2Config, EmbeddingGemma2TextConfig
@@ -175,92 +163,12 @@ class EmbeddingGemma2TextScaledWordEmbedding(nn.Embedding):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
-class EmbeddingGemma2TextRouter(nn.Module):
-    def __init__(self, config: EmbeddingGemma2TextConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.scalar_root_size = self.hidden_size**-0.5
-        self.eps = config.rms_norm_eps
-
-        self.norm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=self.eps, with_scale=False)
-        self.proj = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.scale = nn.Parameter(torch.ones(self.hidden_size))
-        self.per_expert_scale = nn.Parameter(torch.ones(config.num_experts))
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        hidden_states = self.norm(hidden_states)
-        hidden_states = hidden_states * self.scale * self.scalar_root_size
-
-        expert_scores = self.proj(hidden_states)  # [B*S, E]
-        # fp32 for numerical stability
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
-
-        # topk returns both values (probabilities) and indices directly
-        top_k_weights, top_k_index = torch.topk(
-            router_probabilities,
-            k=self.config.top_k_experts,
-            dim=-1,
-        )  # both [B*S, K]
-
-        # Normalize the top-k weights so they sum to 1 per token
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-
-        # Apply per-expert scale directly to the weights
-        top_k_weights = top_k_weights * self.per_expert_scale[top_k_index]
-
-        return router_probabilities, top_k_weights, top_k_index
-
-
-@use_experts_implementation
-class EmbeddingGemma2TextExperts(nn.Module):
-    """Collection of expert weights stored as 3D tensors."""
-
-    def __init__(self, config: EmbeddingGemma2TextConfig):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_activation]
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-        return final_hidden_states
-
-
 class EmbeddingGemma2TextMLP(nn.Module):
-    def __init__(self, config: EmbeddingGemma2TextConfig, layer_idx: int):
+    def __init__(self, config: EmbeddingGemma2TextConfig):
         super().__init__()
-        first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
-        use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size * (2 if use_double_wide_mlp else 1)
+        self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -347,64 +255,49 @@ def eager_attention_forward(
 
 
 class EmbeddingGemma2TextAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Multi-headed attention from 'Attention Is All You Need' paper.
+
+    EmbeddingGemma 2 is an encoder: attention is bidirectional on every layer and no key-value
+    state is carried between calls.
+    """
 
     def __init__(self, config: EmbeddingGemma2TextConfig, layer_idx: int):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
+        self.layer_type = config.layer_types[layer_idx]
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
         layer_config = config.per_layer_config[layer_idx]
         self.head_dim = layer_config.head_dim
-        self.use_alternative_attention = config.attention_k_eq_v and not self.is_sliding
         self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
-        self.attention_dropout = self.config.attention_dropout
-        self.is_causal = config.use_bidirectional_attention != "all"
-
-        # Shared kv cache
-        first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
-        prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-        self.store_full_length_kv = not self.is_kv_shared_layer and layer_idx == len(prev_layers) - 1 - prev_layers[
-            ::-1
-        ].index(config.layer_types[layer_idx])
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.q_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-
-        # Layers sharing kv states don't need any weight matrices
-        if not self.is_kv_shared_layer:
-            self.k_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-            self.v_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
-
-            self.k_proj = nn.Linear(
-                config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-            )
-            self.v_proj = (
-                nn.Linear(
-                    config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-                )
-                if not self.use_alternative_attention
-                else None
-            )
-
+        self.k_proj = nn.Linear(
+            config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+
+        self.q_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
-        past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -417,29 +310,14 @@ class EmbeddingGemma2TextAttention(nn.Module):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer.
-        # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
-        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
-        if self.is_kv_shared_layer:
-            key_states, value_states = shared_kv_states[self.layer_type]
-            # Device of past layer may be different from current one
-            key_states = key_states.to(query_states.device)
-            value_states = value_states.to(query_states.device)
-        else:
-            key_states = self.k_proj(hidden_states).view(hidden_shape)
-            value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_norm(key_states)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+        key_states = key_states.transpose(1, 2)
 
-            key_states = self.k_norm(key_states)
-            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-            key_states = key_states.transpose(1, 2)
-
-            value_states = self.v_norm(value_states)
-            value_states = value_states.transpose(1, 2)
-
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        if self.store_full_length_kv:
-            shared_kv_states[self.layer_type] = key_states, value_states
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_norm(value_states)
+        value_states = value_states.transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -469,7 +347,7 @@ class EmbeddingGemma2TextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.self_attn = EmbeddingGemma2TextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = EmbeddingGemma2TextMLP(config, layer_idx)
+        self.mlp = EmbeddingGemma2TextMLP(config)
         self.input_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -477,29 +355,17 @@ class EmbeddingGemma2TextDecoderLayer(GradientCheckpointingLayer):
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
-        if self.hidden_size_per_layer_input:
-            self.act_fn = ACT2FN[config.hidden_activation]
-            self.per_layer_input_gate = nn.Linear(self.hidden_size, self.hidden_size_per_layer_input, bias=False)
-            self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
-            self.post_per_layer_input_norm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-
-        self.enable_moe_block = config.enable_moe_block
-        if self.enable_moe_block:
-            self.router = EmbeddingGemma2TextRouter(config)
-            self.experts = EmbeddingGemma2TextExperts(config)
-            self.post_feedforward_layernorm_1 = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-            self.post_feedforward_layernorm_2 = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-            self.pre_feedforward_layernorm_2 = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.act_fn = ACT2FN[config.hidden_activation]
+        self.per_layer_input_gate = nn.Linear(self.hidden_size, self.hidden_size_per_layer_input, bias=False)
+        self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
+        self.post_per_layer_input_norm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        per_layer_input: torch.Tensor = None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        per_layer_input: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -509,9 +375,6 @@ class EmbeddingGemma2TextDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            shared_kv_states=shared_kv_states,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -520,32 +383,16 @@ class EmbeddingGemma2TextDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-
-        if self.enable_moe_block:
-            hidden_states_1 = self.post_feedforward_layernorm_1(hidden_states)
-
-            # Take hidden states before MLP here
-            hidden_states_flat = residual.reshape(-1, residual.shape[-1])
-            _, top_k_weights, top_k_index = self.router(hidden_states_flat)
-            hidden_states_2 = self.pre_feedforward_layernorm_2(hidden_states_flat)
-            hidden_states_2 = self.experts(hidden_states_2, top_k_index, top_k_weights)
-            hidden_states_2 = hidden_states_2.reshape(residual.shape)
-            hidden_states_2 = self.post_feedforward_layernorm_2(hidden_states_2)
-
-            # Combine mlp and moe outputs
-            hidden_states = hidden_states_1 + hidden_states_2
-
         hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
-        if self.hidden_size_per_layer_input:
-            residual = hidden_states
-            hidden_states = self.per_layer_input_gate(hidden_states)
-            hidden_states = self.act_fn(hidden_states)
-            hidden_states = hidden_states * per_layer_input
-            hidden_states = self.per_layer_projection(hidden_states)
-            hidden_states = self.post_per_layer_input_norm(hidden_states)
-            hidden_states = residual + hidden_states
+        residual = hidden_states
+        hidden_states = self.per_layer_input_gate(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = hidden_states * per_layer_input
+        hidden_states = self.per_layer_projection(hidden_states)
+        hidden_states = self.post_per_layer_input_norm(hidden_states)
+        hidden_states = residual + hidden_states
 
         hidden_states *= self.layer_scalar
         return hidden_states
@@ -557,7 +404,6 @@ class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["EmbeddingGemma2TextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -569,9 +415,6 @@ class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        # Only text modules are initialized here. The vision and audio towers are separate
-        # `PreTrainedModel`s resolved through `AutoModel`, so `smart_apply` dispatches to their
-        # own `_init_weights` rather than this one.
         super()._init_weights(module)
         if isinstance(module, EmbeddingGemma2TextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
@@ -581,33 +424,8 @@ class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
         elif isinstance(module, EmbeddingGemma2TextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
-        elif isinstance(module, EmbeddingGemma2TextRouter):
-            init.ones_(module.scale)
-            init.ones_(module.per_expert_scale)
-        elif isinstance(module, EmbeddingGemma2TextExperts):
-            std = self.config.initializer_range
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, EmbeddingGemma2TextDecoderLayer):
             init.ones_(module.layer_scalar)
-
-    def set_per_layer_input_embeddings(self, value):
-        raise AttributeError("EmbeddingGemma 2 uses projection-only PLE and has no per-layer embedding table.")
-
-
-@auto_docstring
-@dataclass
-class EmbeddingGemma2TextModelOutputWithPast(BaseModelOutputWithPast):
-    """
-    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
-
-    Args:
-        shared_kv_states (`dict`, *optional*):
-            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
-            Used to pass shared KV states between layers during KV sharing.
-    """
-
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
 @auto_docstring(
@@ -620,15 +438,11 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
     config: EmbeddingGemma2TextConfig
     input_modalities = ("text",)
     _can_record_outputs = {
-        "router_logits": OutputRecorder(EmbeddingGemma2TextRouter, index=0),
         "hidden_states": EmbeddingGemma2TextDecoderLayer,
         "attentions": EmbeddingGemma2TextAttention,
     }
 
     def __init__(self, config: EmbeddingGemma2TextConfig):
-        # Explicit parent call: the converter rewrites this to `super().__init__(config)`. Calling
-        # `super()` directly here would instead splice in the whole of `Gemma4TextModel.__init__`,
-        # reintroducing the `embed_tokens_per_layer` lookup table we do not have.
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -644,9 +458,8 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
         self.gradient_checkpointing = False
         self.unique_layer_types = set(self.config.layer_types)
 
-        # Projection-only Per-Layer Embeddings: the per-layer residual signal is derived entirely
-        # from `inputs_embeds`. There is no `embed_tokens_per_layer` lookup table, so there is also
-        # no token-identity term to blend in (and hence no `per_layer_input_scale`).
+        # Projection-only PLE: the per-layer signal comes from `inputs_embeds` alone. With no
+        # `embed_tokens_per_layer` table there is no token-identity term, hence no scale to blend.
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
         self.per_layer_model_projection = nn.Linear(
             config.hidden_size,
@@ -658,23 +471,13 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
             config.hidden_size_per_layer_input, eps=config.rms_norm_eps
         )
 
-        # The embedding head. Applying it per-token here is equivalent to applying it after the
-        # mean pooling that SentenceTransformers performs downstream, since a linear map commutes
-        # with averaging.
+        # The embedding head. Applying it per-token is equivalent to applying it after the mean
+        # pooling SentenceTransformers performs downstream, since a linear map commutes with averaging.
         self.embedding_projection = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
-
-        # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
-        self._keys_to_ignore_on_load_unexpected = []
-        for i, layer in enumerate(self.layers):
-            if layer.self_attn.is_kv_shared_layer:
-                self._keys_to_ignore_on_load_unexpected.extend(
-                    [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
-                )
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -682,17 +485,9 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        per_layer_inputs: torch.Tensor | None = None,
-        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> EmbeddingGemma2TextModelOutputWithPast:
-        r"""
-        per_layer_inputs (`torch.Tensor`, *optional*):
-            Unused by EmbeddingGemma 2, which computes its per-layer inputs entirely from
-            `inputs_embeds`. Accepted for signature compatibility with Gemma 4.
-        """
+    ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -701,26 +496,19 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
 
         per_layer_inputs = self.project_per_layer_inputs(inputs_embeds)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
+        # It may already have been prepared as a mapping by the caller
+        if not isinstance(attention_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
             }
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+            attention_mask_mapping = {
+                "full_attention": create_bidirectional_mask(**mask_kwargs),
+                "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
             }
 
         # embed positions
@@ -729,40 +517,20 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
-
         # decoder layers
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            per_layer_input = per_layer_inputs[:, :, i, :]
-
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                per_layer_input,
-                shared_kv_states=shared_kv_states,
+                per_layer_inputs[:, :, i, :],
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
+                attention_mask=attention_mask_mapping[self.config.layer_types[i]],
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
         hidden_states = self.embedding_projection(hidden_states)
 
-        return EmbeddingGemma2TextModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            shared_kv_states=shared_kv_states if kwargs.get("return_shared_kv_states", False) else None,
-        )
-
-    def get_per_layer_inputs(self, input_ids: torch.Tensor | None, inputs_embeds: torch.Tensor | None) -> None:
-        """EmbeddingGemma 2 has no per-layer embedding table, so there is no token-identity term.
-
-        Returning `None` (rather than raising) lets the composite `EmbeddingGemma2Model.forward`
-        reuse Gemma 4's multimodal path unchanged: it simply leaves `per_layer_inputs` unset and
-        the projection-only signal is computed in `project_per_layer_inputs`.
-        """
-        return None
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
     def project_per_layer_inputs(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
         """Compute the per-layer residual signal from `inputs_embeds` alone."""
@@ -804,37 +572,6 @@ class EmbeddingGemma2MultimodalEmbedder(nn.Module):
         return self.embedding_projection(embs_normed)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for EmbeddingGemma2 outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class EmbeddingGemma2ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`dict`, *optional*):
-        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
-        Used to pass shared KV states between layers during KV sharing.
-    """
-
-    image_hidden_states: torch.FloatTensor | None = None
-
-    audio_hidden_states: torch.FloatTensor | None = None
-
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-
-
 @auto_docstring
 @dataclass
 class EmbeddingGemma2AudioModelOutput(BaseModelOutputWithPooling):
@@ -846,79 +583,25 @@ class EmbeddingGemma2AudioModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.BoolTensor | None = None
 
 
-def create_masks_for_vision_model(
-    config: PreTrainedConfig,
-    inputs_embeds: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
-    position_ids: torch.Tensor | None,
-    block_sequence_ids: torch.Tensor,
-) -> dict:
-    """Create full_attention and sliding_attention masks with correct composition.
-
-    For global (full attention) layers:  causal only (no bidirectional)
-    For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
-
-    Unlike Gemma 3 (which applies bidirectional attention on all layers), Gemma 4
-    explicitly disables bidirectional attention on global attention layers.
+@auto_docstring(
+    custom_intro="""
+    Base class for EmbeddingGemma2 outputs, with hidden states and attentions.
     """
-    mask_kwargs = {
-        "config": config,
-        "inputs_embeds": inputs_embeds,
-        "attention_mask": attention_mask,
-        "past_key_values": past_key_values,
-        "position_ids": position_ids,
-    }
+)
+@dataclass
+class EmbeddingGemma2ModelOutput(BaseModelOutput):
+    r"""
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+    """
 
-    # Full attention: causal only — no bidirectional blockwise overlay.
-    full_mask = create_causal_mask(**mask_kwargs)
+    image_hidden_states: torch.FloatTensor | None = None
 
-    # The sliding mask must be sized against a `sliding_attention` layer, but layer 0 may not be one
-    # and `create_causal_mask` defaults to the first `full_attention` layer, which has a different kv_length.
-    if getattr(past_key_values, "is_sliding", None) and True in past_key_values.is_sliding:
-        sliding_layer_idx = past_key_values.is_sliding.index(True)
-    else:
-        sliding_layer_idx = 0
-
-    # We need to manually pad the sequence IDs for the sliding mask
-    # as it's passed as an `or_mask_function` which bypasses internal padding.
-    early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
-        **mask_kwargs,
-        layer_idx=sliding_layer_idx,
-    )
-    if early_exit:
-        padded_block_sequence_ids = block_sequence_ids
-    else:
-        padded_block_sequence_ids = maybe_pad_block_sequence_ids(
-            block_sequence_ids, attention_mask, kv_length, kv_offset
-        )
-
-    # Sliding attention: AND(sliding_window, OR(causal, blockwise))
-    # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
-    # Pass sliding_window as and_mask_function (applied as step 3, after OR)
-    sliding_mask = create_causal_mask(
-        **mask_kwargs,
-        or_mask_function=blockwise_overlay(padded_block_sequence_ids),
-        and_mask_function=sliding_window_overlay(config.sliding_window),
-        layer_idx=sliding_layer_idx,
-    )
-
-    return {
-        "full_attention": full_mask,
-        "sliding_attention": sliding_mask,
-    }
-
-
-def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
-    mm_token_type_ids = mm_token_type_ids.to(device)
-
-    is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
-    is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
-    is_prev_vision[..., 0] = False
-    new_vision_starts = is_vision & ~is_prev_vision
-    vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
-    block_sequence_ids = torch.where(is_vision, vision_group_ids, -1)
-    return block_sequence_ids
+    audio_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -934,30 +617,20 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     config: EmbeddingGemma2Config
 
     def __init__(self, config: EmbeddingGemma2Config):
-        # Explicit parent call so the converter emits `super().__init__(config)` rather than splicing
-        # in `Gemma4Model.__init__`, which reads `config.text_config.vocab_size_per_layer_input` --
-        # an attribute EmbeddingGemma 2 deletes.
+        # Explicit parent call: splicing in `Gemma4Model.__init__` would build a per-layer token
+        # embedding table we do not have.
         super().__init__(config)
-        # CODEPATH: `vision_config` is set on the released multimodal EmbeddingGemma 2 checkpoints;
-        # it is None only for a text-only config built by hand.
         self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
         self.vocab_size = config.text_config.vocab_size
 
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
-        # CODEPATH: `audio_config` is set on the released multimodal EmbeddingGemma 2 checkpoints;
-        # it is None only for a text-only config built by hand.
+        self.language_model = AutoModel.from_config(config=config.text_config)
         self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
         self.embed_vision = (
-            # CODEPATH: paired with `vision_tower` above -- present on the released multimodal
-            # checkpoints, None for a hand-built text-only config.
             EmbeddingGemma2MultimodalEmbedder(config.vision_config, config.text_config)
             if config.vision_config is not None
             else None
         )
         self.embed_audio = (
-            # CODEPATH: paired with `audio_tower` above -- present on the released multimodal
-            # checkpoints, None for a hand-built text-only config.
             EmbeddingGemma2MultimodalEmbedder(config.audio_config, config.text_config)
             if config.audio_config is not None
             else None
@@ -1036,7 +709,6 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         return special_image_mask, special_video_mask, special_audio_mask
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1048,15 +720,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
-        per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> EmbeddingGemma2ModelOutputWithPast:
+    ) -> EmbeddingGemma2ModelOutput:
         r"""
         input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
@@ -1066,34 +734,17 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
-            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
-            via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
-            you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensive.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None and per_layer_inputs is not None:
-            raise ValueError("You cannot specify per_layer_inputs if input_ids is provided")
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
         multimodal_mask = image_mask | video_mask | audio_mask
 
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
-        llm_input_ids = None
         if inputs_embeds is None:
-            llm_input_ids = input_ids.clone()
-            llm_input_ids = torch.where(multimodal_mask, self.config.text_config.pad_token_id, llm_input_ids)
+            llm_input_ids = torch.where(multimodal_mask, self.config.text_config.pad_token_id, input_ids)
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
-
-        if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
-            pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
-            multimodal_mask = multimodal_mask.to(inputs_embeds.device)
-            llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
-            per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
 
         # Merge text and images
         if pixel_values is not None:
@@ -1138,9 +789,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             audio_features = audio_output.pooler_output
             audio_mask_from_encoder = audio_output.attention_mask  # True = valid
 
-            # Strip padding tokens: only keep real (non-padding) audio soft tokens.
-            # audio_mask_from_encoder is True for valid positions, False for padding tokens.
-            # This mirrors the vision encoder's padding stripping (see EmbeddingGemma2VisionEncoder.forward).
+            # Keep only real audio soft tokens, mirroring the vision encoder's padding stripping.
             audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
@@ -1155,58 +804,21 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
                 audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             )
 
-        # It may already have been prepared by, e.g., `generate`
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config.get_text_config(),
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-
-            text_config = self.config.get_text_config()
-            use_bidir = text_config.use_bidirectional_attention == "vision"
-
-            if use_bidir and mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
-                causal_mask_mapping = create_masks_for_vision_model(
-                    block_sequence_ids=block_sequence_ids,
-                    **mask_kwargs,
-                )
-            else:
-                # Smaller Gemma models (use_bidirectional_attention=None) or
-                # text-only inputs use standard causal masking
-                causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
-
         outputs = self.language_model(
-            per_layer_inputs=per_layer_inputs,
-            attention_mask=causal_mask_mapping,
+            attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
             return_dict=True,
             **kwargs,
         )
 
-        return EmbeddingGemma2ModelOutputWithPast(
+        return EmbeddingGemma2ModelOutput(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
             audio_hidden_states=audio_features if input_features is not None else None,
-            shared_kv_states=outputs.shared_kv_states,
         )
-
-    def set_per_layer_input_embeddings(self, value):
-        raise AttributeError("EmbeddingGemma 2 uses projection-only PLE and has no per-layer embedding table.")
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")

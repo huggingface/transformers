@@ -64,13 +64,11 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
 
 
 class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
-    # EmbeddingGemma 2 has no image processor of its own -- `Gemma4ImageProcessor` is reused via the
-    # auto mapping -- so the kwargs typed dict is reused too.
+    # `Gemma4ImageProcessor` is reused via the auto mapping, so its kwargs are reused too.
     images_kwargs: Gemma4ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
-            "return_mm_token_type_ids": True,
         },
         "images_kwargs": {
             "do_convert_rgb": True,
@@ -162,8 +160,6 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         if videos is not None:
             videos = make_batched_videos(videos)
 
-        # Embedding inputs are frequently a bare image / video / audio with no text at all,
-        # so synthesize the placeholder text for every modality.
         if images and not text:
             text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
         if audio and not text:
@@ -346,10 +342,6 @@ class EmbeddingGemma2Processor(ProcessorMixin):
 
         # Cap at the configured maximum
         return min(t, self.audio_seq_length)
-
-    @property
-    def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
 
     @property
     def unused_input_names(self) -> list[str]:

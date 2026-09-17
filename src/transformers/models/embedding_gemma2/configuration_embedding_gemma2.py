@@ -19,6 +19,8 @@
 # limitations under the License.
 from typing import Any, Literal
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import (
     auto_docstring,
@@ -31,42 +33,29 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/embeddinggemma-2")
+@strict
 class EmbeddingGemma2TextConfig(PreTrainedConfig):
     r"""
-    embedding_dim (`int`, *optional*, defaults to 768):
-        Dimensionality of the pooled sentence embedding produced by `embedding_projection`.
+    global_head_dim (`int`, *optional*, defaults to 512):
+        Attention head dimension of the `full_attention` layers, which are wider than the
+        `sliding_attention` layers described by `head_dim`. Only consulted when no explicit
+        `per_layer_config` is given.
+    num_global_key_value_heads (`int`, *optional*, defaults to 1):
+        Number of key-value heads of the `full_attention` layers. Only consulted when no
+        explicit `per_layer_config` is given.
+    sliding_window_pattern (`int`, *optional*, defaults to 6):
+        Period of the sliding/full attention alternation: every `sliding_window_pattern`-th layer
+        is `full_attention` and the rest are `sliding_attention`, i.e. the default 6 gives a 5:1
+        pattern. Only consulted when no explicit `layer_types` is given.
     hidden_size_per_layer_input (`int`, *optional*, defaults to 512):
         Dimensionality of the per-layer (PLE) residual signal. EmbeddingGemma 2 uses
         *projection-only* PLE: the signal is derived from `inputs_embeds` alone, with no
-        auxiliary token lookup table, hence `vocab_size_per_layer_input` does not exist.
-    use_bidirectional_attention (`str`, *optional*, defaults to `"all"`):
-        EmbeddingGemma 2 attends bidirectionally over the full sequence, so the stack behaves
-        as an encoder despite reusing the Gemma 4 decoder-layer implementation.
-    attention_k_eq_v (`bool`, defaults to `False`):
-        Whether keys and values share the same projection weights. When `True`, the key
-        projection output is reused as the value projection. Unused by the released
-        EmbeddingGemma 2 checkpoints.
-    num_kv_shared_layers (`int`, defaults to 0):
-        Number of consecutive decoder layers that share the same key-value projections.
-        A value of 0 means no sharing (each layer has independent KV projections). Unused by
-        the released EmbeddingGemma 2 checkpoints.
-    enable_moe_block (`bool`, defaults to `False`):
-        Whether to enable Mixture-of-Experts (MoE) blocks in the decoder layers. When
-        `True`, eligible layers will use a sparse MoE feed-forward network. Unused by the
-        released EmbeddingGemma 2 checkpoints.
-    use_double_wide_mlp (`bool`, defaults to `False`):
-        Whether to use a double-width MLP with fused gate and up projections. Unused by the
-        released EmbeddingGemma 2 checkpoints.
-    top_k_experts (`int`, *optional*):
-        Number of experts activated per token in MoE layers. Only used when
-        `enable_moe_block=True`.
-    moe_intermediate_size (`int`, *optional*):
-        Intermediate (hidden) size of each expert's feed-forward network in MoE layers.
-        Only used when `enable_moe_block=True`.
+        auxiliary token lookup table.
+    embedding_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the sentence embedding produced by `embedding_projection`.
     """
 
     model_type = "embedding_gemma2_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -77,19 +66,6 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.experts.gate_up_proj": "packed_colwise",
-        "layers.*.experts.down_proj": "rowwise",
-        "layers.*.experts": "moe_tp_experts",
-    }
-    base_model_ep_plan = {
-        # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.router": "ep_router",
-        "layers.*.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.experts.down_proj": "grouped_gemm",
-        "layers.*.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -104,48 +80,36 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
     num_attention_heads: int = 4
     num_key_value_heads: int = 2
     head_dim: int = 256
+    global_head_dim: int = 512
+    num_global_key_value_heads: int = 1
     hidden_activation: str = "gelu_pytorch_tanh"
     max_position_embeddings: int = 262_144
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6
-    use_cache: bool = True
     pad_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 1
     bos_token_id: int | None = 2
-    # There is no language modeling head, so there is nothing to tie the input embeddings to.
-    tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float | None = 0.0
     sliding_window: int = 1024
+    sliding_window_pattern: int = 6
     layer_types: list[str] | None = None
-    use_bidirectional_attention: Literal["all", "vision"] | None = "all"
     hidden_size_per_layer_input: int = 512
-    attention_k_eq_v: bool = False
-    num_kv_shared_layers: int = 0
-    enable_moe_block: bool = False
-    use_double_wide_mlp: bool = False
-    num_experts: int | None = None
-    top_k_experts: int | None = None
-    moe_intermediate_size: int | None = None
     embedding_dim: int = 768
 
     def __post_init__(self, **kwargs):
-        # Per-layer attention shapes come from the checkpoint, never from a constant baked in here.
-        # An explicit `per_layer_config` (which `convert_embedding_gemma2_weights.py` passes, giving
-        # the global layers `head_dim=512` and a single KV head) is used as-is. Without one, every
-        # layer falls back to the model-level `head_dim`/`num_key_value_heads`, whereas Gemma 4 would
-        # otherwise impose its own `global_head_dim` of 512 on the full-attention layers. The KV-head
-        # half of Gemma 4's override is already inert here, since it is gated on `attention_k_eq_v`.
-        kwargs.setdefault("global_head_dim", self.head_dim)
-        if self.use_bidirectional_attention == "all":
-            self.is_causal = False
-            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
+        # `sliding_window` is configured as the full window width, but the bidirectional mask
+        # takes a radius (it unmasks when `abs(q_idx - kv_idx) <= sliding_window`).
+        self.sliding_window = (self.sliding_window // 2) + 1
 
         if self.layer_types is None:
-            sliding_window_pattern = 6  # by default 5:1
+            if self.sliding_window_pattern < 1:
+                raise ValueError(
+                    f"`sliding_window_pattern` must be a positive integer, got {self.sliding_window_pattern}."
+                )
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                "sliding_attention" if bool((i + 1) % self.sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
 
@@ -162,17 +126,11 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
-        global_head_dim = kwargs.pop("global_head_dim", 512)
-        num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
+        # Full-attention layers are wider; derive their overrides from the `global_*` fields
+        # unless an explicit `per_layer_config` was given.
         if "per_layer_config" not in kwargs:
-            layer_overrides: dict[str, Any] = {"head_dim": global_head_dim}
-            # `attention_k_eq_v` gates the kv-head override for the models that declare it;
-            # models that drop the attribute entirely are ungated, hence the `True` fallback.
-            num_key_value_heads = num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
-            if num_key_value_heads is not None:
-                layer_overrides["num_key_value_heads"] = num_key_value_heads
             kwargs["per_layer_config"] = {
-                layer_idx: layer_overrides
+                layer_idx: {"head_dim": self.global_head_dim, "num_key_value_heads": self.num_global_key_value_heads}
                 for layer_idx, layer_type in enumerate(self.layer_types)
                 if layer_type == "full_attention"
             }
@@ -181,11 +139,8 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
 
     def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
-        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
-        # instead of halving the already-halved window. Configs that inherit this one without the
-        # flag never convert, hence the `None` fallback.
-        if getattr(self, "use_bidirectional_attention", None) == "all":
-            output["sliding_window"] = (self.sliding_window - 1) * 2
+        # Undo the radius conversion done in `__post_init__` so a save/load round-trip is stable.
+        output["sliding_window"] = (self.sliding_window - 1) * 2
         return output
 
     def convert_rope_params_to_dict(self, **kwargs):
@@ -194,6 +149,7 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/embeddinggemma-2")
+@strict
 class EmbeddingGemma2Config(PreTrainedConfig):
     r"""
     text_config (`EmbeddingGemma2TextConfig`, *optional*):
@@ -232,8 +188,6 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     eoa_token_index: int | None = 258_883
     audio_token_id: int | None = 258_881
     initializer_range: float | None = 0.02
-    # There is no language modeling head, so there is nothing to tie the input embeddings to.
-    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.text_config is None:

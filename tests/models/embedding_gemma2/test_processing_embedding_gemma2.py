@@ -118,16 +118,45 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_inputs.append([np.random.randint(255, size=(h, w, 3), dtype=np.uint8)])
 
         text = [f"This is an image {getattr(self, 'image_token', '')}"] * len(image_inputs)
-        inputs = processor(
-            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
-        )
+        inputs = processor(text=text, images=image_inputs, padding=True, return_tensors="pt")
 
-        if "mm_token_type_ids" not in inputs:
-            self.skipTest("Processor doesn't support `mm_token_type_ids`")
-
-        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        # EmbeddingGemma 2 does not return `mm_token_type_ids`, so count the image placeholders
+        # directly in `input_ids`.
+        num_image_tokens_from_call = (inputs.input_ids == processor.image_token_id).sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
+        """Tests the audio branch of the helper used internally in vLLM.
+
+        `_compute_audio_num_tokens` derives the count analytically from the mel-frame
+        and SSCP subsampling arithmetic, while the processor derives it from the audio
+        tower's mask. Those are two independent implementations of the same quantity,
+        and `_compute_audio_num_tokens` hardcodes the subsampling stack (2 layers,
+        kernel 3 / stride 2 / padding 1), so this guards them against drifting apart.
+        """
+
+        processor = self.get_processor()
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        sampling_rate = processor.feature_extractor.sampling_rate
+        # Sub-second through multi-second, so the mel/subsampling arithmetic is exercised
+        # at several lengths rather than a single round number.
+        audio_lengths = [sampling_rate // 4, sampling_rate // 2, sampling_rate, 2 * sampling_rate]
+        audio_inputs = [np.zeros(length, dtype=np.float32) for length in audio_lengths]
+
+        text = [f"This is audio {processor.audio_token}"] * len(audio_inputs)
+        inputs = processor(text=text, audio=audio_inputs, padding=True, return_tensors="pt")
+
+        # EmbeddingGemma 2 does not return `mm_token_type_ids`, so count the audio
+        # placeholders directly in `input_ids`.
+        num_audio_tokens_from_call = (inputs.input_ids == processor.audio_token_id).sum(-1).tolist()
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
 
     def test_video_processor_flag_defaults(self):
         """EmbeddingGemma 2 was trained on visual-only, 1-FPS-sampled video, so both flags default to True."""
