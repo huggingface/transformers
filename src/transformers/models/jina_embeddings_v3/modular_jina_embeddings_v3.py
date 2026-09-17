@@ -117,13 +117,7 @@ class JinaEmbeddingsV3Embeddings(XLMRobertaEmbeddings):
         device = embeddings.device
 
         if token_type_ids is None:
-            if hasattr(self, "token_type_ids"):
-                # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
-                buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
-                token_type_ids = buffered_token_type_ids.expand(*input_shape)
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 

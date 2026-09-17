@@ -103,11 +103,13 @@ class LagunaIntegrationTest(unittest.TestCase):
         expected_left = Expectations(
             {
                 ("cuda", 8): [[0.0033, 0.0581, -0.1718], [-0.0559, -0.1834, 0.0085], [-0.0235, -0.0824, -0.0569]],
+                ("xpu", 5): [[0.0033, 0.0581, -0.1718], [-0.0559, -0.1834, 0.0085], [-0.0235, -0.0824, -0.0569]],
             }
         )  # fmt: skip
         expected_right = Expectations(
             {
                 ("cuda", 8): [[0.0132, -0.0518, -0.1204], [-0.0231, -0.0547, 0.0684], [-0.1406, -0.2664, -0.1904]],
+                ("xpu", 5): [[0.0132, -0.0518, -0.1204], [-0.0231, -0.0547, 0.0684], [-0.1406, -0.2664, -0.1904]],
             }
         )  # fmt: skip
         expected_left = torch.tensor(expected_left.get_expectation(), device=torch_device)
@@ -115,6 +117,5 @@ class LagunaIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits.float()
-
         torch.testing.assert_close(logits[0, -3:, -3:], expected_left, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, -3:, -3:], expected_right, atol=1e-3, rtol=1e-3)

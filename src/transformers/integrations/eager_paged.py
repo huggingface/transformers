@@ -27,17 +27,22 @@ def eager_paged_attention_forward(
 ):
     # Add KV cache to the key and value tensors
     cache: PagedAttentionCache | None = kwargs.pop("cache", None)
-    if cache is not None:
-        # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
-        key, value = cache.update(
-            key_states=key,
-            value_states=value,
-            layer_idx=module.layer_idx,
-            read_index=kwargs["read_index"],
-            write_index=kwargs["write_index"],
+    if cache is None:
+        raise ValueError(
+            "`paged|eager` was called without a paged attention cache. This implementation expects the packed "
+            "inputs and the 4D mask that continuous batching prepares; on a standard forward it would attend "
+            "bidirectionally. Use `eager` for a standard forward."
         )
-        key = key.transpose(0, 1).unsqueeze(0)
-        value = value.transpose(0, 1).unsqueeze(0)
+    # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
+    key, value = cache.update(
+        key_states=key,
+        value_states=value,
+        layer_idx=module.layer_idx,
+        read_index=kwargs["read_index"],
+        write_index=kwargs["write_index"],
+    )
+    key = key.transpose(0, 1).unsqueeze(0)
+    value = value.transpose(0, 1).unsqueeze(0)
 
     # Repeat the key and value tensors for each group of key-value heads
     if hasattr(module, "num_key_value_groups"):

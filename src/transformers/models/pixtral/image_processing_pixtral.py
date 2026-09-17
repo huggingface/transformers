@@ -106,6 +106,7 @@ class PixtralImageProcessor(TorchvisionBackend):
     do_resize = True
     do_rescale = True
     do_normalize = True
+    do_pad = True
     do_convert_rgb = True
     valid_kwargs = PixtralImageProcessorKwargs
 
@@ -194,6 +195,7 @@ class PixtralImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        do_pad: bool,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         patch_size: dict[str, int] | SizeDict | None = None,
@@ -204,34 +206,35 @@ class PixtralImageProcessor(TorchvisionBackend):
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(
                     image=stacked_images, size=size, patch_size=patch_size_sd, resample=resample
                 )
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        batch_image_sizes = [grouped_images_index[i][0] for i in range(len(grouped_images_index))]
+        batch_image_sizes = [image.shape[-2:] for image in resized_images]
 
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        padded_images = self._pad_for_batching(
-            pixel_values=processed_images,
-            image_sizes=batch_image_sizes,
-        )
+        if do_pad:
+            processed_images = self._pad_for_batching(
+                pixel_values=processed_images,
+                image_sizes=batch_image_sizes,
+            )
 
         return BatchFeature(
-            data={"pixel_values": padded_images, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
         )
 
 

@@ -91,7 +91,7 @@ Automatic speech recognition (ASR) tasks require a processor that can handle tex
 ```py
 from datasets import load_dataset
 
-dataset = load_dataset("lj_speech", split="train")
+dataset = load_dataset("keithito/lj_speech", split="train")
 dataset = dataset.map(remove_columns=["file", "id", "normalized_text"])
 dataset[0]["audio"]
 {'array': array([-7.3242188e-04, -7.6293945e-04, -6.4086914e-04, ...,

@@ -1735,7 +1735,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
         sequence_output = decoder_outputs[0]
 
-        if self.config.tie_word_embeddings:
+        if self.config.scale_decoder_outputs:
             sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)

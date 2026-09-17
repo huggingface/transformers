@@ -66,7 +66,7 @@ if is_torch_available():
         LinearAttentionLayer,
         StaticLayer,
     )
-    from transformers.integrations.executorch import export_with_dynamic_cache
+    from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
 
 
 # FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
@@ -189,6 +189,31 @@ class CacheTest(unittest.TestCase):
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
+    def test_dynamic_layers_reset_drops_their_states(self):
+        """
+        Regression test: `reset` used to zero the dynamic layers' states in place, inherited from the static layers.
+        That is a no-op for them, as they grow by concatenation and read their length off `keys.shape[-2]`: the layer
+        kept its length and the next `update` appended to a run of stale zeros.
+        """
+        keys = torch.rand(2, 4, 5, 16, device=torch_device)
+        indexer_keys = torch.rand(2, 5, 8, device=torch_device)
+
+        for layer in (DynamicLayer(), DynamicSlidingWindowLayer(sliding_window=1024), DynamicIndexedLayer()):
+            layer.update(keys, keys.clone())
+            if isinstance(layer, DynamicIndexedLayer):
+                layer.update_indexer(indexer_keys)
+
+            layer.reset()
+            self.assertEqual(layer.get_seq_length(), 0)
+
+            # The next update must start from scratch, instead of appending to the pre-reset states.
+            new_keys, _ = layer.update(keys, keys.clone())
+            self.assertEqual(new_keys.shape[-2], 5)
+            if isinstance(layer, DynamicIndexedLayer):
+                # The indexer has to stay in step with the main states, else `topk` indices computed over it go out
+                # of bounds of the (shorter) key length downstream.
+                self.assertEqual(layer.update_indexer(indexer_keys).shape[1], 5)
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
@@ -242,6 +267,23 @@ class CacheIntegrationTest(unittest.TestCase):
         # Confirm that the output matches expectations
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+    def test_reset_dynamic_cache_matches_a_fresh_one(self):
+        """A reset cache must behave exactly like a newly built one, so that it can be reused across generations."""
+        first = self.tokenizer(["The capital of France is"], return_tensors="pt").to(self.model.device)
+        second = self.tokenizer(["A sequence: 1, 2, 3, 4, 5"], return_tensors="pt").to(self.model.device)
+
+        cache = DynamicCache(config=self.model.config)
+        self.model.generate(**first, past_key_values=cache, max_new_tokens=10, do_sample=False)
+
+        # Reuse the same cache for a different prompt, which is what `reset` is for.
+        cache.reset()
+        self.assertEqual(cache.get_seq_length(), 0)
+        reused = self.model.generate(**second, past_key_values=cache, max_new_tokens=10, do_sample=False)
+
+        # Before the fix, the reset kept the first prompt's states around, so this silently generated gibberish.
+        expected = self.model.generate(**second, max_new_tokens=10, do_sample=False)
+        self.assertEqual(self.tokenizer.decode(reused[0]), self.tokenizer.decode(expected[0]))
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_beam_search(self, cache_implementation):
@@ -685,6 +727,50 @@ class CacheHardIntegrationTest(unittest.TestCase):
         )[0]["generated_token_ids"][-10:]
         EXPECTED_OUTPUT = [879, 175, 39, 141, 1000, 975, 951, 991, 683, 441]
         self.assertListEqual(out, EXPECTED_OUTPUT)
+
+
+@require_torch
+class DynamicCacheExportPytreeTest(unittest.TestCase):
+    @pytest.mark.torch_export_test
+    def test_export_preserves_sliding_cache_behavior(self):
+        # Update both layer types so export must preserve their different cache behavior.
+        class CacheUpdateModule(torch.nn.Module):
+            def forward(self, new_states, past_key_values):
+                past_key_values.update(new_states, new_states, layer_idx=0)
+                past_key_values.update(new_states, new_states, layer_idx=1)
+                return past_key_values
+
+        # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
+        new_states = torch.arange(10.0).reshape(1, 1, 5, 2)
+        cache_config = LlamaConfig(
+            num_hidden_layers=2,
+            sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
+        )
+
+        register_dynamic_cache_export_support()
+
+        exported_program = torch.export.export(
+            CacheUpdateModule(),
+            (),
+            {"new_states": new_states, "past_key_values": DynamicCache(config=cache_config)},
+            strict=False,
+        )
+        exported_cache = exported_program.module()(
+            new_states=new_states, past_key_values=DynamicCache(config=cache_config)
+        )
+        eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
+
+        self.assertEqual(len(exported_cache.layers), 2)
+        self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
+        self.assertEqual(exported_cache.layers[0].sliding_window, 4)
+        self.assertEqual(exported_cache.layers[0].get_seq_length(), cache_config.sliding_window - 1)
+        torch.testing.assert_close(exported_cache.layers[0].keys, eager_cache.layers[0].keys)
+        torch.testing.assert_close(exported_cache.layers[0].values, eager_cache.layers[0].values)
+        self.assertIs(type(exported_cache.layers[1]), DynamicLayer)
+        self.assertEqual(exported_cache.layers[1].get_seq_length(), new_states.shape[-2])
+        torch.testing.assert_close(exported_cache.layers[1].keys, eager_cache.layers[1].keys)
+        torch.testing.assert_close(exported_cache.layers[1].values, eager_cache.layers[1].values)
 
 
 @require_torch

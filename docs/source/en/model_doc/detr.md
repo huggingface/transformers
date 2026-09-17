@@ -26,6 +26,8 @@ You can find all the original DETR checkpoints under the [AI at Meta](https://hu
 > This model was contributed by [nielsr](https://huggingface.co/nielsr).
 >
 > Click on the DETR models in the right sidebar for more examples of how to apply DETR to different object detection and segmentation tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to perform object detection with the [`Pipeline`] or the [`AutoModel`] class.
 
