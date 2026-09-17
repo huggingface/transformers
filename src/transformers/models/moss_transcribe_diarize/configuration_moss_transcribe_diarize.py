@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring
+@auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
 @strict
 class MossTranscribeDiarizeConfig(PreTrainedConfig):
     r"""
@@ -33,10 +33,31 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
         Number of consecutive Whisper encoder frames concatenated before the multi-modal projector.
     audio_chunk_size (`int`, *optional*, defaults to 480000):
         Whisper encoder window size in raw audio samples, used with `padding_mask` to recover `audio_chunk_mapping`.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import MossTranscribeDiarizeForConditionalGeneration, MossTranscribeDiarizeConfig
+
+    >>> # Initializing a MossTranscribeDiarize configuration
+    >>> configuration = MossTranscribeDiarizeConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = MossTranscribeDiarizeForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "moss_transcribe_diarize"
-    sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
+    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
+    audio_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+
+    audio_token_id: int = 151671
+    projector_hidden_act: str = "silu"
+    projector_bias: bool = True
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     _default_text_config_kwargs = {
         "hidden_size": 1024,
@@ -47,14 +68,6 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
         "max_position_embeddings": 131_072,
         "rope_theta": 1_000_000.0,
     }
-
-    audio_config: dict | PreTrainedConfig | None = None
-    text_config: dict | PreTrainedConfig | None = None
-
-    audio_token_id: int = 151671
-    projector_hidden_act: str = "silu"
-    tie_word_embeddings: bool = True
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     _default_audio_config_kwargs = {
         "num_mel_bins": 80,
@@ -71,8 +84,10 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
         "scale_embedding": False,
     }
     audio_merge_size: int = 4
-    projector_bias: bool = True
     audio_chunk_size: int = 480_000
+    # Not declared on `AudioFlamingo3Config`; needed so `PreTrainedModel.get_expanded_tied_weights_keys` actually
+    # ties `lm_head.weight` per `MossTranscribeDiarizeForConditionalGeneration._tied_weights_keys`.
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
