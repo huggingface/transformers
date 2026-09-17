@@ -652,8 +652,12 @@ def _fused_experts_forward(module, kernel_forward: str, hidden_states, top_k_ind
     """The kernels' fused MoE chain (gate_up with the fused GLU epilogue and intermediate requant
     where supported -> down -> the routing-weighted top-k reduce) over the module's tensors."""
     if module.activation_scheme == "static":
+        # the grouped static kernel takes ONE calibrated scalar for the whole matmul, while an
+        # experts module holds one per expert; a per-expert tensor would miss the static arm
+        # (it gates on `As.numel() == 1`) and be read as per-block activation scales instead
         raise NotImplementedError(
-            f"the {kernel_forward} experts dispatch does not support activation_scheme='static'; use "
+            f"the {kernel_forward} experts dispatch does not support activation_scheme='static': the "
+            "grouped static kernel takes a per-tensor scale and the experts hold one per expert; use "
             "experts_implementation='eager' or activation_scheme='dynamic'."
         )
     kernel = load_finegrained_kernel()

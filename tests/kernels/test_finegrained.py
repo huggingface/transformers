@@ -420,6 +420,31 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)
         self.assertIs(call.kwargs["down_proj_bias"], m.down_proj_bias)
 
+    def test_static_activation_scheme_is_refused_by_the_fused_chain(self):
+        """Mistral-3 ships `activation_scheme="static"`: a calibrated scale per activation, held
+        as a parameter and consumed by the eager loop. The fused chain refuses it, and the reason
+        is a shape mismatch rather than a missing kernel: `w8a8_block_static_fp8_matmul_grouped`
+        takes ONE calibrated scalar for the whole matmul, while an experts module holds one per
+        expert. Passing the per-expert tensor would miss the static arm entirely — the dispatch
+        gates on `As.numel() == 1` — and it would be read as per-block activation scales, which
+        computes silently wrong results. Lifting this needs the grouped kernel to accept `(E,)`.
+        """
+        static, dynamic = (
+            FineGrainedExperts(_Cfg(), block_size=(128, 128), activation_scheme=scheme)
+            for scheme in ("static", "dynamic")
+        )
+        held = getattr(static, "gate_up_proj_activation_scale", None)
+        self.assertIsNotNone(held, "the eager loop needs the scale it holds")
+        self.assertEqual(held.numel(), _Cfg.num_local_experts, "held PER EXPERT, which is the mismatch")
+        # a dynamic module holds no slot at all, rather than an unused one
+        self.assertIsNone(getattr(dynamic, "gate_up_proj_activation_scale", None))
+
+        hidden = torch.zeros(2, _Cfg.hidden_size)
+        index = torch.zeros(2, 1, dtype=torch.long)
+        weights = torch.ones(2, 1)
+        with self.assertRaises(NotImplementedError):
+            fg._fused_experts_forward(static, "moe_fused_grouped", hidden, index, weights)
+
     def test_unfusable_act_fn_is_passed_as_the_module_glu(self):
         kernel, rec = _fake_bundle()
         m = self._experts(has_gate=True, has_bias=True)
@@ -654,6 +679,65 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
             _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan),
             "moe_experts_packed_shard1",
         )
+
+    def test_a_multimodal_models_expert_plans_are_reached(self):
+        """A multimodal model keeps its experts' plans on a SUB-config; the config the quantizer
+        is handed carries a few projector entries and often no `base_model_ep_plan` at all.
+        Rewriting only what we were handed adds no companion anywhere, while the weights still
+        shard from the sub-config's own plan — so the scale stays whole against a sharded weight,
+        which is a wrong answer rather than a crash."""
+        from transformers import Glm4vMoeConfig
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        config = Glm4vMoeConfig()
+        self.assertFalse(
+            getattr(config, "base_model_ep_plan", None),
+            "this model no longer nests its plans, so it cannot guard the sub-config walk",
+        )
+        before = dict(getattr(config.text_config, "base_model_ep_plan", None) or {})
+        FineGrainedHfQuantizer(FineGrainedConfig()).update_tp_plan(config)
+        after = getattr(config.text_config, "base_model_ep_plan", None) or {}
+
+        companions = {
+            k
+            for k in after
+            if k.endswith(("_scale_inv", "_bias", "_weight_global_scale", "_input_global_scale", "_activation_scale"))
+        }
+        self.assertTrue(companions, "no companion reached the sub-config's plan")
+        self.assertEqual(set(before), set(after) - companions, "the model's own entries were disturbed")
+
+    def test_dequantize_folds_every_quantized_key_to_full_precision(self):
+        """`dequantize=True` is the escape hatch for hardware that cannot serve the format. It
+        must claim BOTH checkpoint key layouts — the `{proj}_blocks` + `{proj}_scales` pair
+        GPT-OSS ships and the `weight` + `weight_scale_inv` pair everything else does — and
+        land on the plain weight, since a module that was never swapped has no scale slot to
+        write into."""
+        import re
+
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        for method, sources in (
+            ("mxfp4", ("experts.gate_up_proj_blocks", "experts.gate_up_proj_scales")),
+            ("fp8", ("mlp.down_proj.weight", "mlp.down_proj.weight_scale_inv")),
+        ):
+            quantizer = FineGrainedHfQuantizer(FineGrainedConfig(quant_method=method, dequantize=True))
+            quantizer.pre_quantized = True
+            converters = quantizer.get_weight_conversions()
+            with self.subTest(quant_method=method):
+                self.assertTrue(converters, f"{method}: dequantize produced no converter")
+                for source in sources:
+                    self.assertTrue(
+                        any(
+                            re.search(str(pattern), source)
+                            for c in converters
+                            for pattern in (
+                                c.source_patterns if isinstance(c.source_patterns, list) else [c.source_patterns]
+                            )
+                        ),
+                        f"{method}: nothing dequantizes {source}",
+                    )
 
     def test_the_impl_rewrites_the_layer_kinds(self):
         megamoe = self._planned("deepgemm_megamoe")
@@ -1235,6 +1319,45 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
             claimed = [p for p in sources if re.search(p, fused) and re.search(p, per_expert)]
             self.assertEqual(claimed, [], f"one pattern claims BOTH layouts for {suffix}: {claimed}")
 
+    def test_a_checkpoint_key_is_claimed_by_exactly_one_converter(self):
+        """Two converters for one key is not additive — the later one WINS and silently drops
+        whatever ops the first carried. That is how a fused modelopt checkpoint lost its packed
+        uint8 -> int8 view (a catch-all duplicated the fused converter) and how the per-expert
+        patterns, which are REGEXES whose unescaped dots also match `_`, claimed the fused
+        globals and flattened the gate|up pair instead of folding it."""
+        import re
+
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        for quant_kwargs in (
+            {"quant_method": "fp8"},
+            {"quant_method": "mxfp4"},
+            {"quant_method": "modelopt", "quant_algo": "NVFP4"},
+        ):
+            quantizer = FineGrainedHfQuantizer(FineGrainedConfig(**quant_kwargs))
+            quantizer.pre_quantized = True
+            converters = quantizer.update_weight_conversions([])
+            for key in (
+                "model.layers.3.mlp.experts.gate_up_proj",
+                "model.layers.3.mlp.experts.down_proj",
+                "model.layers.3.mlp.experts.gate_up_proj_weight_scale_2",
+                "model.layers.3.mlp.experts.7.up_proj.weight_scale_2",
+            ):
+                claimed = [
+                    c
+                    for c in converters
+                    for pattern in (c.source_patterns if isinstance(c.source_patterns, list) else [c.source_patterns])
+                    if re.search(str(pattern), key)
+                ]
+                with self.subTest(quant=quant_kwargs["quant_method"], key=key.rsplit(".", 1)[1]):
+                    self.assertLessEqual(
+                        len(claimed),
+                        1,
+                        f"{len(claimed)} converters claim this key; the last one wins and drops "
+                        f"the others' ops: {[[type(o).__name__ for o in c.operations] for c in claimed]}",
+                    )
+
     def test_the_gate_up_fold_survives_the_loader_s_list_wrapping(self):
         """The loader hands a converter its tensors in a list. Unwrapped, a fused `(E, 2)` pair
         reads as `(1, 2E)`, the per-half fold does not fire, and the module gets `2E` globals
@@ -1696,34 +1819,49 @@ class FineGrainedRealKernelTest(unittest.TestCase):
             self.assertTrue(torch.equal(restored.view(torch.uint8), grid.view(torch.uint8)), proj)
 
 
-# Run inside each rank; rank 0 writes its logits out for the parent to compare against the
-# reference it computes in-process.
-_WORKER = """
-import os, sys
-import torch
-from transformers import AutoModelForCausalLM
+def _checkpoint_shapes(path):
+    """`{key: shape}` of a saved checkpoint, for comparing one save against another."""
+    import glob
+
+    from safetensors import safe_open
+
+    shapes = {}
+    for shard in sorted(glob.glob(os.path.join(path, "*.safetensors"))):
+        with safe_open(shard, framework="pt") as handle:
+            for key in handle.keys():
+                shapes[key] = tuple(handle.get_slice(key).get_shape())
+    return shapes
+
+
+_SHARDING_WORKER = """
+import importlib, os, sys, torch
 from transformers.distributed import DistributedConfig
 
-model_dir, out_dir = sys.argv[1], sys.argv[2]
+model_dir, out_dir, modes, cls_path = sys.argv[1], sys.argv[2], sys.argv[3].split(","), sys.argv[4]
+module_name, cls_name = cls_path.split(":")
+model_cls = getattr(importlib.import_module(module_name), cls_name)
 world = int(os.environ["WORLD_SIZE"])
 ids = torch.arange(16, dtype=torch.long).unsqueeze(0)
 
-# both modes in ONE launch: they share the tp_size=2 mesh, so the process group is created once
-# and only the plan differs — a second torchrun would pay another interpreter + CUDA start
-for mode, expert_parallel in (("ep", True), ("tp", False)):
-    model = AutoModelForCausalLM.from_pretrained(
+# both modes in ONE launch: they share the mesh, so the process group is created once and only
+# the plan differs -- a second torchrun would pay another interpreter + CUDA start
+for mode in modes:
+    model = model_cls.from_pretrained(
         model_dir,
         dtype="auto",
         attn_implementation="eager",
-        distributed_config=DistributedConfig(tp_size=world, enable_expert_parallel=expert_parallel),
+        distributed_config=DistributedConfig(tp_size=world, enable_expert_parallel=(mode == "ep")),
     ).eval()
+    experts = next(m for n, m in model.named_modules() if n.endswith("mlp.experts"))
+    weight = getattr(experts, "gate_up_proj", None)
+    if weight is None:
+        weight = experts.up_proj
+    local = weight.to_local() if hasattr(weight, "to_local") else weight
     with torch.no_grad():
         logits = model(ids.to(model.device)).logits.float().cpu()
     if int(os.environ["RANK"]) == 0:
-        # the local shard of a stacked expert weight: the witness that this leg sharded at all
-        gate_up = model.get_parameter("model.layers.0.mlp.experts.gate_up_proj")
-        local = gate_up.to_local() if hasattr(gate_up, "to_local") else gate_up
-        torch.save({"logits": logits, "expert_local": tuple(local.shape)}, os.path.join(out_dir, mode + ".pt"))
+        torch.save({"logits": logits, "expert_local": tuple(local.shape)},
+                   os.path.join(out_dir, mode + ".pt"))
     del model
     torch.cuda.empty_cache()
 """
@@ -1731,77 +1869,230 @@ for mode, expert_parallel in (("ep", True), ("tp", False)):
 
 @slow
 @require_torch_multi_accelerator
-class FineGrainedDistributedEquivalenceTest(TestCasePlus):
-    """Sharded output must match unsharded output. Catches wrong AXES, which shape checks cannot."""
+class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
+    """Expert parallelism and intra-expert tensor parallelism must both reproduce what
+    `device_map` gives, which is the baseline because it places modules across devices without
+    splitting a single tensor — no process group, no DTensor, no collectives. So it computes the
+    unsharded answer, on the multi-GPU path people actually deploy.
+
+    Each model is built in the format it actually ships, because the conversion path differs by
+    format and by checkpoint layout — a per-expert FP8 checkpoint and a fused NVFP4 one reach the
+    experts through different converters, and bugs have hidden in exactly that gap.
+
+    Three properties make this able to fail, all of which earlier versions lacked:
+      * the fixture is PRE-QUANTIZED. Quantizing on the fly derives each rank's scales from the
+        shard it already holds, so they come out correctly sized whatever the plan says and a
+        plan that shards no scale at all still produces the right answer.
+      * the model's plan must carry expert entries. A model whose `base_model_tp_plan` is empty
+        (GPT-OSS, DeepSeek-V4) shards nothing under TP, so that leg is skipped EXPLICITLY rather
+        than passing vacuously.
+      * every leg reports the local expert shard, so a leg that placed nothing fails loudly.
+    """
+
+    @staticmethod
+    def _model_table():
+        """`{label: (config_cls, model_cls, config_kwargs, quantization_config)}` — each model
+        in the format it actually ships, with the quantization config that format arrives under,
+        not just its name: block-FP8 carries a `weight_block_size`, and an NVFP4 checkpoint comes
+        from modelopt under `quant_algo`, which is remapped on construction. Dims are multiples
+        of the 128 block so a 2-way split stays block-aligned, and the expert count divides the
+        mesh."""
+        from transformers import (
+            DeepseekV3Config,
+            DeepseekV3ForCausalLM,
+            DeepseekV4Config,
+            DeepseekV4ForCausalLM,
+            Glm4vMoeConfig,
+            Glm4vMoeForConditionalGeneration,
+            Glm4vMoeTextConfig,
+            Glm4vMoeVisionConfig,
+            GptOssConfig,
+            GptOssForCausalLM,
+            MiniMaxM3SparseForConditionalGeneration,
+            MiniMaxM3VLConfig,
+        )
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        return {
+            "deepseek_v3-fp8": (
+                DeepseekV3Config,
+                DeepseekV3ForCausalLM,
+                {
+                    "vocab_size": 64,
+                    "hidden_size": 256,
+                    "intermediate_size": 256,
+                    "moe_intermediate_size": 256,
+                    "num_hidden_layers": 1,
+                    "num_attention_heads": 4,
+                    "num_key_value_heads": 4,
+                    "n_routed_experts": 4,
+                    "num_experts_per_tok": 2,
+                    "n_shared_experts": 1,
+                    "n_group": 1,
+                    "topk_group": 1,
+                    "first_k_dense_replace": 0,
+                    "max_position_embeddings": 32,
+                    "q_lora_rank": None,
+                    "kv_lora_rank": 32,
+                    "qk_nope_head_dim": 32,
+                    "qk_rope_head_dim": 16,
+                    "v_head_dim": 32,
+                },
+                # DeepSeek-V3 ships block-FP8: 128x128 weight blocks, activations quantized
+                # per token at run time
+                FineGrainedConfig(quant_method="fp8", weight_block_size=(128, 128)),
+            ),
+            # MULTIMODAL: the experts' plans live on `text_config`, not on the config the
+            # quantizer is handed — whose `base_model_ep_plan` is None. Reading only the outer
+            # one adds no companion while the weights still shard, which is how a real
+            # multimodal MoE ends up with whole scales against sharded weights.
+            "glm4v_moe-nvfp4": (
+                Glm4vMoeConfig,
+                Glm4vMoeForConditionalGeneration,
+                {
+                    "text_config": Glm4vMoeTextConfig(
+                        vocab_size=64,
+                        hidden_size=256,
+                        intermediate_size=256,
+                        moe_intermediate_size=256,
+                        num_hidden_layers=2,
+                        num_attention_heads=4,
+                        num_key_value_heads=2,
+                        max_position_embeddings=32,
+                        rope_parameters={"type": "default", "mrope_section": [16, 8, 8], "partial_rotary_factor": 1.0},
+                        rope_theta=10000,
+                        tie_word_embeddings=True,
+                        bos_token_id=0,
+                        eos_token_id=0,
+                        pad_token_id=0,
+                        n_routed_experts=4,
+                        n_shared_experts=1,
+                        n_group=1,
+                        topk_group=1,
+                        num_experts_per_tok=2,
+                        first_k_dense_replace=0,
+                    ),
+                    "vision_config": Glm4vMoeVisionConfig(
+                        depth=2,
+                        hidden_size=48,
+                        out_hidden_size=256,
+                        intermediate_size=22,
+                        patch_size=14,
+                        spatial_merge_size=1,
+                        temporal_patch_size=2,
+                    ),
+                },
+                # the GLM NVFP4 checkpoints are modelopt exports: `quant_algo` names the format
+                # and `FineGrainedConfig` remaps it to nvfp4 at construction
+                FineGrainedConfig(quant_method="modelopt", quant_algo="NVFP4"),
+            ),
+            # interleaved rows (`is_concatenated=False`), transposed, with expert biases — and
+            # an EP plan that already names those biases, so the companion rules meet entries
+            # the model wrote itself
+            "gpt_oss-mxfp4": (
+                GptOssConfig,
+                GptOssForCausalLM,
+                {
+                    "vocab_size": 64,
+                    "hidden_size": 256,
+                    "intermediate_size": 256,
+                    "num_hidden_layers": 1,
+                    "num_attention_heads": 4,
+                    "num_key_value_heads": 4,
+                    "num_local_experts": 4,
+                    "num_experts_per_tok": 2,
+                    "max_position_embeddings": 32,
+                },
+                # GPT-OSS ships weight-only: raw bf16 activations against packed fp4 weights
+                FineGrainedConfig(quant_method="mxfp4", activation_format="bf16"),
+            ),
+            # MIXED precision, and the only entry whose expert format is not the quantization
+            # config's: `expert_dtype` is a model-config side-channel that makes the EXPERTS
+            # mxfp4 while the dense and attention paths stay block-FP8 — with scales in UE8M0
+            # containers rather than fp32, the other `scale_fmt`
+            "deepseek_v4-fp4_experts+fp8_dense": (
+                DeepseekV4Config,
+                DeepseekV4ForCausalLM,
+                {
+                    "vocab_size": 64,
+                    "hidden_size": 256,
+                    "intermediate_size": 256,
+                    "moe_intermediate_size": 256,
+                    "num_hidden_layers": 1,
+                    "num_attention_heads": 4,
+                    "num_key_value_heads": 4,
+                    "n_routed_experts": 4,
+                    "num_experts_per_tok": 2,
+                    "n_shared_experts": 1,
+                    "first_k_dense_replace": 0,
+                    "max_position_embeddings": 32,
+                    "expert_dtype": "fp4",
+                },
+                FineGrainedConfig(quant_method="fp8", weight_block_size=(128, 128), scale_fmt="ue8m0"),
+            ),
+            # a second MULTIMODAL nesting, in the group-32 MX format. The sub-config shape
+            # follows this model's own tester; only the MoE dims are raised to a multiple of
+            # the 128 block so a 2-way split stays block-aligned.
+            "minimax_m3_vl-mxfp8": (
+                MiniMaxM3VLConfig,
+                MiniMaxM3SparseForConditionalGeneration,
+                {
+                    "text_config": {
+                        "hidden_size": 256,
+                        "intermediate_size": 256,
+                        "dense_intermediate_size": 256,
+                        "shared_intermediate_size": 256,
+                        "num_hidden_layers": 2,
+                        "num_attention_heads": 4,
+                        "num_key_value_heads": 4,
+                        "head_dim": 64,
+                        "rotary_dim": 32,
+                        "vocab_size": 64,
+                        "max_position_embeddings": 32,
+                        "bos_token_id": 0,
+                        "eos_token_id": 1,
+                        "pad_token_id": 2,
+                        "num_local_experts": 4,
+                        "num_experts_per_tok": 2,
+                        "n_shared_experts": 1,
+                        "moe_layer_freq": [0, 1],
+                        "layer_types": ["full_attention", "minimax_m3_sparse"],
+                        "tie_word_embeddings": False,
+                        "index_n_heads": 2,
+                        "index_head_dim": 16,
+                        "index_block_size": 8,
+                        "index_topk_blocks": 4,
+                        "index_local_blocks": 1,
+                    },
+                    "vision_config": {
+                        "hidden_size": 32,
+                        "intermediate_size": 64,
+                        "num_hidden_layers": 2,
+                        "num_attention_heads": 4,
+                        "num_channels": 3,
+                        "image_size": 14,
+                        "patch_size": 14,
+                        "temporal_patch_size": 2,
+                        "spatial_merge_size": 1,
+                    },
+                    "image_token_index": 4,
+                    "video_token_index": 5,
+                    "projector_hidden_size": 256,
+                    "pad_token_id": 2,
+                },
+                FineGrainedConfig(quant_method="mxfp8"),
+            ),
+        }
 
     @classmethod
     def setUpClass(cls):
-        import torch
-
-        from transformers.models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
-        from transformers.models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM
-
         cls._tmp = tempfile.TemporaryDirectory()
-        cls.model_dir = os.path.join(cls._tmp.name, "tiny_moe")
-        # The kernels autotune per shape from a cold cache, which dwarfs everything else here
-        # (8+ minutes at the stock 100-trial budget). This test only needs a CORRECT config, not
-        # a fast one, and the reference is tuned under the same budget — so cut the search and
-        # share one cache across the reference and the ranks.
+        # the kernels autotune per shape from a cold cache, which dwarfs everything else here
         cls._env = {
             "FINEGRAINED_AUTOTUNE_TRIALS": "1",
             "TRITON_CACHE_DIR": os.path.join(cls._tmp.name, "triton"),
         }
         os.environ.update(cls._env)
-        # V3, not V4: V4 ships an EMPTY `base_model_tp_plan`, so its TP leg sharded nothing.
-        # V3 carries `experts.gate_up_proj: packed_colwise` + `down_proj: rowwise` AND dense
-        # `shared_experts.*`, covering EP, intra-expert TP and the dense siblings the companion
-        # rules must leave alone. Dims are multiples of the 128 block so a 2-way split stays
-        # block-aligned and the on-the-fly scales are identical whole or sharded.
-        cfg = DeepseekV3Config(
-            vocab_size=64,
-            hidden_size=256,
-            intermediate_size=256,
-            moe_intermediate_size=256,
-            num_hidden_layers=1,
-            num_attention_heads=4,
-            # V3 defaults this to 128, which makes `num_key_value_groups` 0 and zeroes out the
-            # heads `repeat_kv` produces under the eager attention this test pins
-            num_key_value_heads=4,
-            n_routed_experts=4,
-            num_experts_per_tok=2,
-            n_shared_experts=1,
-            n_group=1,
-            topk_group=1,
-            first_k_dense_replace=0,
-            max_position_embeddings=32,
-            q_lora_rank=None,
-            kv_lora_rank=32,
-            qk_nope_head_dim=32,
-            qk_rope_head_dim=16,
-            v_head_dim=32,
-        )
-        torch.manual_seed(0)
-        bf16_dir = os.path.join(cls._tmp.name, "bf16")
-        DeepseekV3ForCausalLM(cfg).save_pretrained(bf16_dir, safe_serialization=True)
-
-        # Quantize ONCE and save, so every load below is `pre_quantized`. Quantizing on the fly
-        # instead would defeat the whole test: each rank derives its scales from the weight shard
-        # it already holds, so they come out correctly sized whatever the plan says, and a plan
-        # that shards no scale at all still produces the right answer. Only a checkpoint scale —
-        # which arrives whole and must be SPLIT — can catch a missing companion rule.
-        from transformers import AutoModelForCausalLM
-        from transformers.utils.quantization_config import FineGrainedFP8Config
-
-        quantized = AutoModelForCausalLM.from_pretrained(
-            bf16_dir,
-            dtype="auto",
-            attn_implementation="eager",
-            quantization_config=FineGrainedFP8Config(),
-            device_map="cuda:0",
-        )
-        quantized.save_pretrained(cls.model_dir, safe_serialization=True)
-        del quantized
-        torch.cuda.empty_cache()
 
     @classmethod
     def tearDownClass(cls):
@@ -1813,66 +2104,116 @@ class FineGrainedDistributedEquivalenceTest(TestCasePlus):
             sock.bind(("", 0))
             return sock.getsockname()[1]
 
-    def _sharded_logits(self):
-        """`{mode: logits}` from one 2-rank `torchrun`, through the real TP/EP load path."""
+    def _fixture(self, label):
+        """A PRE-QUANTIZED checkpoint of one tiny model, in the format that model ships."""
         import torch
 
-        script = os.path.join(self._tmp.name, "worker.py")
+        config_cls, model_cls, kwargs, quantization_config = self._model_table()[label]
+        config = config_cls(**kwargs)
+
+        bf16_dir = os.path.join(self._tmp.name, label, "bf16")
+        quant_dir = os.path.join(self._tmp.name, label, "quantized")
+        torch.manual_seed(0)
+        model_cls(config).save_pretrained(bf16_dir, safe_serialization=True)
+        quantized = model_cls.from_pretrained(
+            bf16_dir,
+            dtype="auto",
+            attn_implementation="eager",
+            quantization_config=quantization_config,
+            device_map="cuda:0",
+        )
+        quantized.save_pretrained(quant_dir, safe_serialization=True)
+        del quantized
+        torch.cuda.empty_cache()
+
+        # SAVE must restore the checkpoint's own layout: the layout ops (gate|up interleave,
+        # scale container, swizzle) each have a reverse, and a quantized model reloaded and
+        # written again has to land on the same keys and shapes. A broken reverse writes a
+        # corrupt checkpoint silently — the module still reads back whatever it wrote.
+        reloaded = model_cls.from_pretrained(quant_dir, dtype="auto", device_map="cuda:0")
+        round_trip = os.path.join(self._tmp.name, label, "round_trip")
+        reloaded.save_pretrained(round_trip, safe_serialization=True)
+        del reloaded
+        torch.cuda.empty_cache()
+        self.assertEqual(
+            _checkpoint_shapes(quant_dir), _checkpoint_shapes(round_trip), f"{label}: save did not round-trip"
+        )
+        return quant_dir, config, model_cls
+
+    def _logits(self, model_dir, model_cls, **load_kwargs):
+        import torch
+
+        model = model_cls.from_pretrained(model_dir, dtype="auto", attn_implementation="eager", **load_kwargs).eval()
+        ids = torch.arange(16, dtype=torch.long, device=model.device).unsqueeze(0)
+        with torch.no_grad():
+            logits = model(ids).logits.float().cpu()
+        del model
+        torch.cuda.empty_cache()
+        return logits
+
+    def _sharded(self, model_dir, model_cls, modes):
+        """`{mode: payload}` from one 2-rank `torchrun`, through the real EP / TP load path."""
+        import torch
+
+        script = os.path.join(self._tmp.name, "sharding_worker.py")
         with open(script, "w") as fh:
-            fh.write(_WORKER)
+            fh.write(_SHARDING_WORKER)
+        out = os.path.join(self._tmp.name, "out")
+        os.makedirs(out, exist_ok=True)
         subprocess.run(
             [
                 "torchrun",
                 "--nproc_per_node=2",
                 f"--master_port={self._free_port()}",
                 script,
-                self.model_dir,
-                self._tmp.name,
+                model_dir,
+                out,
+                ",".join(modes),
+                # the model's own class: `AutoModelForCausalLM` cannot resolve a multimodal
+                # `ForConditionalGeneration` from its config
+                f"{model_cls.__module__}:{model_cls.__name__}",
             ],
             check=True,
             env={**os.environ, **self._env, "TOKENIZERS_PARALLELISM": "false"},
         )
-        return {mode: torch.load(os.path.join(self._tmp.name, f"{mode}.pt")) for mode in ("ep", "tp")}
+        return {m: torch.load(os.path.join(out, m + ".pt")) for m in modes}
 
-    def test_ep_and_tp_match_the_unsharded_model(self):
+    def test_every_load_path_agrees(self):
         import torch
 
-        from transformers import AutoModelForCausalLM
+        for label in self._model_table():
+            with self.subTest(model=label):
+                model_dir, config, model_cls = self._fixture(label)
+                # the baseline, spread across both devices: `max_memory` forces a real split,
+                # since `auto` alone fits this whole model on one GPU and would quietly compare
+                # the sharded legs against a single-device load
+                reference = self._logits(model_dir, model_cls, device_map="auto", max_memory={0: "120MiB", 1: "40GiB"})
 
-        # the reference runs here rather than in a third subprocess — one less interpreter start.
-        # No `quantization_config`: the checkpoint carries it, so this loads pre-quantized.
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_dir,
-            dtype="auto",
-            attn_implementation="eager",
-            device_map="cuda:0",
-        ).eval()
-        ids = torch.arange(16, dtype=torch.long, device=model.device).unsqueeze(0)
-        with torch.no_grad():
-            reference = model(ids).logits.float().cpu()
-        del model
-        torch.cuda.empty_cache()
-
-        # global stacked shape: (experts, 2 * moe_intermediate, hidden)
-        whole = (4, 512, 256)
-        # EP splits the expert axis, intra-expert TP splits the output rows; either way the
-        # local shard must be SMALLER than the whole, or the leg proved nothing
-        expected_local = {"ep": (2, 512, 256), "tp": (4, 256, 256)}
-
-        for tag, payload in self._sharded_logits().items():
-            with self.subTest(mode=tag):
-                self.assertEqual(
-                    payload["expert_local"],
-                    expected_local[tag],
-                    f"{tag}: experts were not sharded ({payload['expert_local']} of {whole}) — this "
-                    "leg cannot catch a bad axis, check the model's plan carries expert entries",
-                )
-                sharded = payload["logits"]
-                self.assertEqual(sharded.shape, reference.shape)
-                # a mis-paired axis does not drift, it garbles: the tolerance only has to
-                # absorb reduction-order differences between one GEMM and two
-                torch.testing.assert_close(sharded, reference, rtol=2e-2, atol=2e-2)
-                self.assertTrue(
-                    torch.equal(sharded.argmax(-1), reference.argmax(-1)),
-                    f"{tag}: argmax diverged from the unsharded model",
-                )
+                # Only the modes this model's OWN plans shard experts under. A mode whose plan
+                # has no expert entry (GPT-OSS and DeepSeek-V4 ship no TP plan at all) places
+                # nothing, so running it would pass without being evidence of anything. A
+                # multimodal model keeps these on a sub-config.
+                owners = [config] + [
+                    c for name in getattr(type(config), "sub_configs", {}) if (c := getattr(config, name, None))
+                ]
+                modes = [
+                    mode
+                    for mode, attr in (("ep", "base_model_ep_plan"), ("tp", "base_model_tp_plan"))
+                    if any(".experts." in key for owner in owners for key in (getattr(owner, attr, None) or {}))
+                ]
+                self.assertTrue(modes, f"{label}: no plan shards experts, so nothing is under test")
+                whole = None
+                for mode, payload in self._sharded(model_dir, model_cls, modes).items():
+                    with self.subTest(model=label, mode=mode):
+                        local = payload["expert_local"]
+                        whole = whole or local
+                        self.assertLess(
+                            local[0] * local[1],
+                            whole[0] * whole[1] * 2,
+                            f"{label}/{mode}: experts were not sharded ({local}) — this leg cannot catch a bad axis",
+                        )
+                        torch.testing.assert_close(payload["logits"], reference, rtol=2e-2, atol=2e-2)
+                        self.assertTrue(
+                            torch.equal(payload["logits"].argmax(-1), reference.argmax(-1)),
+                            f"{label}/{mode}: argmax diverged from the unsharded model",
+                        )

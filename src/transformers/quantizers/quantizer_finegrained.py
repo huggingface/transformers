@@ -235,8 +235,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
         impl = getattr(config, "_experts_implementation", None)
         layer_overrides = FineGrainedExperts._impl_tp_layer_overrides.get(impl, {})
-        for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
-            base_plan = getattr(config, plan_attr, None) or {}
+        # A multimodal model keeps its experts' plans on a SUB-config: the outer one carries a
+        # few projector entries and no `base_model_ep_plan` at all, so reading only what we were
+        # handed adds no companion anywhere while the weights still shard from the sub-config's
+        # own plan — the scale stays whole against a sharded weight.
+        sub_configs = [c for name in getattr(type(config), "sub_configs", {}) if (c := getattr(config, name, None))]
+        for plan_owner, plan_attr in (
+            (owner, attr) for owner in (config, *sub_configs) for attr in ("base_model_tp_plan", "base_model_ep_plan")
+        ):
+            base_plan = getattr(plan_owner, plan_attr, None) or {}
             updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
 
             # Every companion beside a projection weight — block scales, bias, NVFP4 globals, a
@@ -285,7 +292,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
                     updated_plan.setdefault(f"{key}_bias", rows)
 
             if updated_plan != base_plan:
-                setattr(config, plan_attr, updated_plan)
+                setattr(plan_owner, plan_attr, updated_plan)
 
         return config
 
