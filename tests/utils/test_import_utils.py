@@ -128,6 +128,7 @@ def mock_flash_attn_env(
             patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", fake_distribution_mapping),
             patch("transformers.utils.import_utils.is_torch_cuda_available", return_value=cuda_available),
             patch("transformers.utils.import_utils.is_torch_mlu_available", return_value=False),
+            patch("transformers.utils.import_utils.is_torch_musa_available", return_value=False),
             patch("transformers.utils.import_utils.is_kernels_available", return_value=kernels_available),
             patch.dict(sys.modules, {"kernels": fake_kernels_module}),
         ):

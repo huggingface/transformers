@@ -24,6 +24,7 @@ from .reader import read_gguf_metadata
 # `general.architecture` -> the `model_type` whose `GGUF_TO_FAST_CONVERTERS` entry reads this vocabulary.
 GGUF_TOKENIZER_ARCHS = {
     "qwen35": "qwen3_5_text",
+    "qwen35moe": "qwen3_5_moe_text",
 }
 
 # The metadata arrays a tokenizer needs in full; everything else the reader can leave as a count.
