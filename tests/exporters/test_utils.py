@@ -223,6 +223,50 @@ class RegistrationTest(unittest.TestCase):
 
 @require_torch
 class SharedExecutorchHelpersTest(unittest.TestCase):
+    def test_mla_layout_validation_uses_every_effective_layer(self):
+        from transformers.integrations import executorch as shared
+
+        config = SimpleNamespace(
+            num_hidden_layers=2,
+            num_kv_shared_layers=1,
+            per_layer_attributes=("head_dim", "num_key_value_heads"),
+            per_layer_config=[
+                SimpleNamespace(hidden_size=8, num_attention_heads=2, num_key_value_heads=1, head_dim=4)
+                for _ in range(2)
+            ],
+            layer_types=["full_attention", "full_attention"],
+            # Effective layer settings, not unused global defaults, determine cache compatibility.
+            kv_lora_rank=4,
+            qk_rope_head_dim=2,
+        )
+        expected = shared._resolve_cache_layout(config)
+        self.assertEqual(expected.cache_ids, (0, 0))
+        for index in range(2):
+            with self.subTest(layer=index):
+                bad = copy.deepcopy(config)
+                bad.per_layer_config[index].kv_lora_rank = 4
+                bad.per_layer_config[index].qk_rope_head_dim = 2
+                with self.assertRaisesRegex(ValueError, f"decoder layer {index}.*MLA"):
+                    shared._resolve_cache_layout(bad)
+
+    def test_query_lora_and_partial_rope_do_not_imply_latent_kv_cache(self):
+        from transformers import LlamaConfig
+        from transformers.integrations import executorch as shared
+
+        config = LlamaConfig(hidden_size=8, num_hidden_layers=2, num_attention_heads=2, num_key_value_heads=1)
+        expected = shared._resolve_cache_layout(config)
+        for fields in (
+            {"q_lora_rank": 4},
+            {"qk_rope_head_dim": 2},
+            {"kv_lora_rank": None, "qk_rope_head_dim": 2},
+            {"kv_lora_rank": 4, "qk_rope_head_dim": None},
+        ):
+            with self.subTest(fields=fields):
+                candidate = copy.deepcopy(config)
+                for name, value in fields.items():
+                    setattr(candidate, name, value)
+                self.assertEqual(shared._resolve_cache_layout(candidate), expected)
+
     def test_capture_scope_is_gated_and_restores_nested_flags(self):
         from transformers.integrations import executorch as shared
 
@@ -1124,7 +1168,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "factory boom"):
             with patch_attributes(
                 [
-                    (a, "method", lambda original: (lambda: "a-patched")),
+                    (a, "method", lambda original: lambda: "a-patched"),
                     (b, "method", _bad_factory),
                 ]
             ):

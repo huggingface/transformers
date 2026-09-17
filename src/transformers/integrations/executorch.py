@@ -500,6 +500,12 @@ def _resolve_cache_layout(text_config):
     owner_count = count - shared
     per_layer = getattr(text_config, "per_layer_config", None)
     layer_configs = [per_layer[i] if per_layer is not None else text_config for i in range(count)]
+    for i, layer in enumerate(layer_configs):
+        if getattr(layer, "kv_lora_rank", None) is not None and getattr(layer, "qk_rope_head_dim", None) is not None:
+            raise ValueError(
+                f"Unsupported cache layout at decoder layer {i}: DeepSeek-style MLA stores compressed latent/rotary "
+                "states; cache-aware export requires conventional K/V head geometry."
+            )
     layer_types = getattr(text_config, "layer_types", None)
     if layer_types is None:
         layer_types = [
@@ -793,7 +799,7 @@ def _attention_mask(*args, **kwargs):
     return None
 
 
-def _check_attention_options(dropout, softcap, head_mask, *, s_aux=None):
+def _check_attention_options(dropout, softcap, head_mask, *, s_aux=None, is_causal=True):
     if dropout:
         raise ValueError("Cache-aware export attention does not support dropout")
     if softcap is not None:
@@ -802,6 +808,65 @@ def _check_attention_options(dropout, softcap, head_mask, *, s_aux=None):
         raise ValueError("Cache-aware export attention does not support head_mask")
     if s_aux is not None:
         raise ValueError("Cache-aware export attention does not support attention sinks (s_aux)")
+    if is_causal is not True:
+        raise ValueError("Cache-aware export attention does not support noncausal attention; is_causal must be True")
+
+
+def _check_attention_kwargs(module, kwargs, softcap, head_mask, *, attention_mask=None, cache_windows=None):
+    """Validate the closed cache-attention contract, including forwarded model plumbing."""
+    if attention_mask is not None:
+        raise ValueError("Cache-aware export attention does not support model-generated attention masks")
+    output_flags = ("output_attentions", "output_hidden_states", "output_router_logits", "return_shared_kv_states")
+    plumbing_flags = ("use_cache", "return_dict")
+    supported = {
+        "dropout",
+        "s_aux",
+        "is_causal",
+        "sliding_window",
+        "cache_position",
+        "labels",
+        *output_flags,
+        *plumbing_flags,
+    }
+    unknown = sorted(kwargs.keys() - supported)
+    if unknown:
+        raise ValueError(f"Cache-aware export attention does not support keyword arguments: {', '.join(unknown)}")
+
+    # Conditional-generation wrappers forward labels=None even during inference.
+    if kwargs.get("labels") is not None:
+        raise ValueError("Cache-aware export attention does not support non-None labels")
+    is_causal = kwargs.get("is_causal")
+    _check_attention_options(
+        kwargs.get("dropout"),
+        softcap,
+        head_mask,
+        s_aux=kwargs.get("s_aux"),
+        is_causal=getattr(module, "is_causal", True) if is_causal is None else is_causal,
+    )
+    for name in output_flags:
+        if kwargs.get(name) is not None and kwargs[name] is not False:
+            raise ValueError(f"Cache-aware export attention does not support {name}=True")
+    # These arguments have already been handled by the model/cache wrapper, not the attention kernel.
+    for name in plumbing_flags:
+        if kwargs.get(name) is not None and not isinstance(kwargs[name], bool):
+            raise ValueError(f"Cache-aware export attention requires {name} to be a Boolean or None")
+    if kwargs.get("cache_position") is not None and not isinstance(kwargs["cache_position"], torch.Tensor):
+        raise ValueError("Cache-aware export attention requires cache_position to be a tensor or None")
+
+    if "sliding_window" in kwargs:
+        if cache_windows is None:
+            config = module.config
+            if hasattr(config, "get_text_config"):
+                config = config.get_text_config()
+            cache_windows = _resolve_cache_layout(config).windows
+        expected = cache_windows[module.layer_idx]
+        supplied = kwargs["sliding_window"]
+        actual = 0 if supplied is None else _positive_int("sliding_window", supplied)
+        if actual != expected:
+            raise ValueError(
+                f"Attention sliding_window={supplied!r} does not match the resolved cache window {expected} "
+                f"at decoder layer {module.layer_idx}"
+            )
 
 
 def _off_graph_cache_id(module):
@@ -829,9 +894,12 @@ def _off_graph_attention_forward(
     softcap=None,
     head_mask=None,
     _cache_ids=None,
+    _cache_windows=None,
     **kwargs,
 ):
-    _check_attention_options(kwargs.get("dropout"), softcap, head_mask, s_aux=kwargs.get("s_aux"))
+    _check_attention_kwargs(
+        module, kwargs, softcap, head_mask, attention_mask=attention_mask, cache_windows=_cache_windows
+    )
     assert position_ids is not None
     assert position_ids is not None, "position_ids must be provided for off-graph cache placement"
     assert scaling is not None, "scaling must be provided by the attention module"

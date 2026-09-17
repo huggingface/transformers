@@ -267,6 +267,45 @@ class MLXPreparationTest(unittest.TestCase):
         self.assertTrue(model.training)
         self.assertFalse(model.generation_config.use_cache)
 
+    def test_mla_rejection_precedes_preparation_in_both_cache_modes(self):
+        from transformers import DeepseekV3Config
+
+        for cache_mode in ("in-graph", "off-graph"):
+            with self.subTest(cache_mode=cache_mode):
+                model, deps = _model(), _dependencies()
+                # Equal expanded K/V widths still hide incompatible compressed cache tensors.
+                model.config = DeepseekV3Config(
+                    vocab_size=17,
+                    hidden_size=8,
+                    intermediate_size=16,
+                    num_hidden_layers=2,
+                    num_attention_heads=2,
+                    num_key_value_heads=2,
+                    kv_lora_rank=4,
+                    q_lora_rank=None,
+                    qk_rope_head_dim=2,
+                    qk_nope_head_dim=2,
+                    v_head_dim=4,
+                    max_position_embeddings=16,
+                )
+                before = copy.deepcopy(vars(model.generation_config))
+                text_before = model.config.to_dict()
+                with (
+                    mock.patch.object(self.mlx, "_export_inputs") as inputs,
+                    mock.patch.object(self.mlx, "_load_mlx_dependencies", return_value=deps) as load,
+                    self.assertRaisesRegex(ValueError, "decoder layer 0.*MLA.*conventional K/V"),
+                ):
+                    self.mlx._prepare_mlx(model, {}, replace(self.config, cache_mode=cache_mode))
+                inputs.assert_not_called()
+                load.assert_not_called()
+                deps.replace_hf_cache_with_mlx_in_graph_cache.assert_not_called()
+                for writer in vars(deps.metadata).values():
+                    writer.assert_not_called()
+                self.assertTrue(model.training)
+                self.assertIsNone(model.last_kwargs)
+                self.assertEqual(vars(model.generation_config), before)
+                self.assertEqual(model.config.to_dict(), text_before)
+
     def test_off_graph_max_write_validation_precedes_model_mutation(self):
         int32_max = torch.iinfo(torch.int32).max
         for window, max_seq_len in ((4, 5), (None, int32_max + 1)):
@@ -313,11 +352,65 @@ class MLXPreparationTest(unittest.TestCase):
                 expected_kwargs = (
                     {"_cache_windows": layout.windows}
                     if cache_mode == "in-graph"
-                    else {"_cache_ids": layout.cache_ids}
+                    else {"_cache_ids": layout.cache_ids, "_cache_windows": layout.windows}
                 )
                 self.assertEqual(callback.keywords, expected_kwargs)
                 for key, value in expected_kwargs.items():
                     self.assertIs(callback.keywords[key], value)
+
+    def test_attention_callbacks_reject_noncausal_attention(self):
+        for cache_mode, window, seq_len in itertools.product(("in-graph", "off-graph"), (0, 4), (1, 3)):
+            with self.subTest(cache_mode=cache_mode, window=window, seq_len=seq_len):
+                module = SimpleNamespace(layer_idx=0, is_causal=False)
+                query = torch.zeros(1, 2, seq_len, 4)
+                key = torch.zeros(1, 1, 8 if cache_mode == "in-graph" else seq_len, 4)
+                positions = torch.arange(seq_len).unsqueeze(0)
+                callback = (
+                    partial(self.mlx._mlx_in_graph_attention_forward, _cache_windows=(window,))
+                    if cache_mode == "in-graph"
+                    else partial(self.shared._off_graph_attention_forward, _cache_ids=(0,))
+                )
+                op = mock.Mock(return_value=torch.zeros_like(query))
+                with (
+                    mock.patch.object(torch.ops, "mlx", SimpleNamespace(custom_sdpa=op)),
+                    mock.patch.object(torch.ops, "kvcache", SimpleNamespace(update_and_attend=op)),
+                    mock.patch.dict(
+                        sys.modules,
+                        {"executorch.backends.mlx.llm.cache": SimpleNamespace(sliding_window_mask=mock.Mock())},
+                    ),
+                ):
+                    with self.assertRaisesRegex(ValueError, "does not support noncausal attention"):
+                        callback(module, query, key, key, None, position_ids=positions, scaling=0.5)
+                    op.assert_not_called()
+
+    def test_attention_callbacks_reject_sinks(self):
+        for cache_mode in ("in-graph", "off-graph"):
+            with self.subTest(cache_mode=cache_mode):
+                module = SimpleNamespace(layer_idx=0, is_causal=True)
+                query = torch.zeros(1, 2, 1, 4)
+                key = torch.zeros(1, 1, 8 if cache_mode == "in-graph" else 1, 4)
+                callback = (
+                    partial(self.mlx._mlx_in_graph_attention_forward, _cache_windows=(0,))
+                    if cache_mode == "in-graph"
+                    else partial(self.shared._off_graph_attention_forward, _cache_ids=(0,))
+                )
+                op = mock.Mock(return_value=torch.zeros_like(query))
+                with (
+                    mock.patch.object(torch.ops, "mlx", SimpleNamespace(custom_sdpa=op)),
+                    mock.patch.object(torch.ops, "kvcache", SimpleNamespace(update_and_attend=op)),
+                ):
+                    with self.assertRaisesRegex(ValueError, "does not support attention sinks"):
+                        callback(
+                            module,
+                            query,
+                            key,
+                            key,
+                            None,
+                            position_ids=torch.tensor([[0]]),
+                            scaling=0.5,
+                            s_aux=torch.zeros(2),
+                        )
+                    op.assert_not_called()
 
     def test_adapter_preparation_does_not_require_lowering_apis(self):
         from transformers.exporters import exporter_executorch as et
@@ -417,6 +510,294 @@ class MLXPreparationTest(unittest.TestCase):
                 )
                 edge.to_executorch.assert_called_once_with(config=deps.ExecutorchBackendConfig.return_value)
                 self.assertIs(result, edge.to_executorch.return_value)
+
+
+@require_torch
+class CacheAttentionValidationTest(unittest.TestCase):
+    def setUp(self):
+        from transformers.exporters import exporter_executorch
+        from transformers.integrations import executorch
+
+        self.mlx, self.shared = exporter_executorch, executorch
+        self.op = mock.Mock(side_effect=lambda query, *args, **kwargs: torch.zeros_like(query))
+        self.enterContext(mock.patch.object(torch.ops, "mlx", SimpleNamespace(custom_sdpa=self.op)))
+        self.enterContext(mock.patch.object(torch.ops, "kvcache", SimpleNamespace(update_and_attend=self.op)))
+        self.mask = mock.Mock(side_effect=lambda start, seq, window, size, dtype: torch.zeros(seq, size, dtype=dtype))
+        self.enterContext(
+            mock.patch.dict(
+                sys.modules, {"executorch.backends.mlx.llm.cache": SimpleNamespace(sliding_window_mask=self.mask)}
+            )
+        )
+
+    def _call(self, cache_mode, window=0, module_causal=True, bind_layout=True, attention_mask=None, **kwargs):
+        config = _text_config()
+        config.sliding_window = window or None
+        module = SimpleNamespace(config=config, layer_idx=0, is_causal=module_causal)
+        query = torch.ones(1, 2, 2, 4)
+        key = torch.ones(1, 1, 8 if cache_mode == "in-graph" else 2, 4)
+        callback = (
+            self.mlx._mlx_in_graph_attention_forward
+            if cache_mode == "in-graph"
+            else self.shared._off_graph_attention_forward
+        )
+        private = {"_cache_windows": (window,)} if bind_layout else {}
+        if cache_mode == "off-graph" and bind_layout:
+            private["_cache_ids"] = (0,)
+        return callback(
+            module,
+            query,
+            key,
+            key,
+            attention_mask,
+            position_ids=torch.tensor([[0, 1]]),
+            scaling=0.5,
+            **private,
+            **kwargs,
+        )
+
+    def test_model_generated_masks_are_rejected_before_operators(self):
+        for cache_mode, window, dtype in itertools.product(
+            ("in-graph", "off-graph"), (0, 4), (torch.bool, torch.float32)
+        ):
+            with self.subTest(cache_mode=cache_mode, window=window, dtype=dtype):
+                self.op.reset_mock()
+                self.mask.reset_mock()
+                key_length = 8 if cache_mode == "in-graph" else 2
+                allowed = torch.ones(1, 2, 2, key_length, dtype=torch.bool)
+                allowed[..., 0] = False
+                attention_mask = (
+                    allowed
+                    if dtype == torch.bool
+                    else torch.zeros_like(allowed, dtype=dtype).masked_fill(~allowed, -torch.inf)
+                )
+                with self.assertRaisesRegex(ValueError, "attention.mask"):
+                    self._call(cache_mode, window=window, attention_mask=attention_mask)
+                self.op.assert_not_called()
+                self.mask.assert_not_called()
+
+    def test_doge_generated_mask_is_rejected_with_recipe_mask_builder_disabled(self):
+        from transformers import DogeConfig, DogeForCausalLM
+
+        config = DogeConfig(
+            vocab_size=17,
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            keep_window_size=1,
+            max_position_embeddings=16,
+        )
+        for cache_mode in ("in-graph", "off-graph"):
+            with self.subTest(cache_mode=cache_mode):
+                model = DogeForCausalLM(copy.deepcopy(config)).eval()
+                layout = self.shared._resolve_cache_layout(model.config)
+                state = self.mlx._MLXRecipeState(model, {}, {}, {}, model, cache_mode, layout)
+                attention = model.model.layers[0].self_attn
+                self.op.reset_mock()
+                with (
+                    mock.patch.object(
+                        attention, "prepare_dynamic_mask", wraps=attention.prepare_dynamic_mask
+                    ) as generate,
+                    self.mlx._mlx_attention_scope(state),
+                    torch.no_grad(),
+                ):
+                    with self.assertRaisesRegex(ValueError, "attention.mask"):
+                        model(
+                            input_ids=torch.tensor([[1, 2, 3]]),
+                            position_ids=torch.tensor([[0, 1, 2]]),
+                            cache_position=torch.tensor([0, 1, 2]),
+                            use_cache=cache_mode == "in-graph",
+                        )
+                generate.assert_called_once()
+                # The model builds its own mask even though the recipe supplies no base mask.
+                self.assertIsNone(generate.call_args.kwargs["attention_mask"])
+                self.op.assert_not_called()
+
+    def test_unknown_kwargs_are_rejected_even_when_none(self):
+        for cache_mode, name, value in itertools.product(
+            ("in-graph", "off-graph"), ("new_attention_option", "position_bias", "seq_idx"), (None, torch.ones(1))
+        ):
+            with self.subTest(cache_mode=cache_mode, name=name, value=value):
+                with self.assertRaisesRegex(ValueError, f"does not support keyword arguments: {name}"):
+                    self._call(cache_mode, **{name: value})
+        self.op.assert_not_called()
+        self.mask.assert_not_called()
+
+    def test_known_unsupported_values_are_rejected_before_operators(self):
+        cases = [
+            ({"dropout": 0.1}, "dropout"),
+            ({"softcap": 1.0}, "softcap"),
+            ({"head_mask": torch.ones(1)}, "head_mask"),
+            ({"s_aux": torch.ones(2)}, "attention sinks"),
+            ({"is_causal": False}, "noncausal"),
+            ({"is_causal": 1}, "is_causal must be True"),
+            ({"cache_position": [0, 1]}, "cache_position"),
+            ({"use_cache": 1}, "use_cache"),
+            ({"return_dict": "yes"}, "return_dict"),
+            ({"labels": torch.tensor([[1, 2]])}, "labels"),
+        ]
+        cases += [
+            ({name: True}, name)
+            for name in (
+                "output_attentions",
+                "output_hidden_states",
+                "output_router_logits",
+                "return_shared_kv_states",
+            )
+        ]
+        for cache_mode, (kwargs, message) in itertools.product(("in-graph", "off-graph"), cases):
+            with self.subTest(cache_mode=cache_mode, kwargs=kwargs):
+                with self.assertRaisesRegex(ValueError, message):
+                    self._call(cache_mode, **kwargs)
+        self.op.assert_not_called()
+        self.mask.assert_not_called()
+
+    def test_supported_plumbing_and_matching_windows(self):
+        for cache_mode, window, value, bind_layout in itertools.product(
+            ("in-graph", "off-graph"), (0, 4), (None, False, True), (False, True)
+        ):
+            with self.subTest(cache_mode=cache_mode, window=window, value=value, bind_layout=bind_layout):
+                self.op.reset_mock()
+                output, weights = self._call(
+                    cache_mode,
+                    window=window,
+                    bind_layout=bind_layout,
+                    dropout=0.0,
+                    s_aux=None,
+                    labels=None,
+                    is_causal=None,
+                    sliding_window=window or None,
+                    cache_position=torch.tensor([0, 1]),
+                    use_cache=value,
+                    return_dict=value,
+                    output_attentions=False,
+                    output_hidden_states=None,
+                    output_router_logits=False,
+                    return_shared_kv_states=None,
+                )
+                self.op.assert_called_once()
+                torch.testing.assert_close(output, torch.zeros(1, 2, 2, 4))
+                self.assertTrue(output.is_contiguous())
+                self.assertIsNone(weights)
+
+    def test_causal_override_precedence_and_fallback(self):
+        for cache_mode in ("in-graph", "off-graph"):
+            with self.subTest(cache_mode=cache_mode):
+                self.op.reset_mock()
+                self._call(cache_mode, module_causal=False, is_causal=True)
+                self.op.assert_called_once()
+                self.op.reset_mock()
+                with self.assertRaisesRegex(ValueError, "noncausal"):
+                    self._call(cache_mode, module_causal=False, is_causal=None)
+                self.op.assert_not_called()
+
+    def test_conflicting_or_invalid_sliding_windows_are_rejected(self):
+        for cache_mode, (window, supplied) in itertools.product(
+            ("in-graph", "off-graph"), ((0, 4), (4, None), (4, 8), (4, 0), (4, -1), (4, True), (4, 4.0))
+        ):
+            with self.subTest(cache_mode=cache_mode, window=window, supplied=supplied):
+                with self.assertRaisesRegex(ValueError, "sliding_window"):
+                    self._call(cache_mode, window=window, sliding_window=supplied)
+        self.op.assert_not_called()
+        self.mask.assert_not_called()
+
+    def test_keyword_validation_is_exportable(self):
+        check = self.shared._check_attention_kwargs
+
+        class CheckedAttention(torch.nn.Module):
+            is_causal = True
+            layer_idx = 0
+
+            def forward(self, positions):
+                check(
+                    self,
+                    {
+                        "cache_position": positions,
+                        "use_cache": True,
+                        "is_causal": None,
+                        "sliding_window": 4,
+                        "output_attentions": False,
+                        "labels": None,
+                    },
+                    None,
+                    None,
+                    cache_windows=(4,),
+                )
+                return positions + 1
+
+        for strict in (False, True):
+            with self.subTest(strict=strict):
+                exported = torch.export.export(
+                    CheckedAttention(),
+                    (torch.arange(3),),
+                    dynamic_shapes={"positions": {0: torch.export.Dim("tokens", min=1, max=4)}},
+                    strict=strict,
+                )
+                for length in (1, 4):
+                    positions = torch.arange(length)
+                    torch.testing.assert_close(exported.module()(positions), positions + 1)
+
+    def test_real_model_forwarded_kwargs_are_supported(self):
+        from transformers import (
+            Gemma3ForCausalLM,
+            Gemma3TextConfig,
+            Gemma4Config,
+            Gemma4ForConditionalGeneration,
+            Gemma4TextConfig,
+            LlamaForCausalLM,
+        )
+
+        gemma_config = Gemma3TextConfig(
+            vocab_size=17,
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
+            max_position_embeddings=16,
+        )
+        gemma4_config = Gemma4Config(
+            text_config=Gemma4TextConfig(
+                vocab_size=17,
+                hidden_size=8,
+                intermediate_size=16,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=1,
+                head_dim=4,
+                global_head_dim=8,
+                hidden_size_per_layer_input=4,
+                vocab_size_per_layer_input=17,
+                sliding_window=4,
+                layer_types=["sliding_attention", "full_attention"],
+                max_position_embeddings=16,
+            ),
+        )
+        for model_class, config in (
+            (LlamaForCausalLM, _text_config()),
+            (Gemma3ForCausalLM, gemma_config),
+            (Gemma4ForConditionalGeneration, gemma4_config),
+        ):
+            for cache_mode in ("in-graph", "off-graph"):
+                with self.subTest(model=model_class.__name__, cache_mode=cache_mode):
+                    model = model_class(copy.deepcopy(config)).eval()
+                    text_config = model.config.get_text_config()
+                    layout = self.shared._resolve_cache_layout(text_config)
+                    state = self.mlx._MLXRecipeState(model, {}, {}, {}, model, cache_mode, layout)
+                    self.op.reset_mock()
+                    with self.mlx._mlx_attention_scope(state), torch.no_grad():
+                        output = model(
+                            input_ids=torch.tensor([[1, 2]]),
+                            position_ids=torch.tensor([[0, 1]]),
+                            cache_position=torch.tensor([0, 1]),
+                            use_cache=cache_mode == "in-graph",
+                        )
+                    self.assertEqual(output.logits.shape, (1, 2, 17))
+                    self.assertEqual(self.op.call_count, text_config.num_hidden_layers)
 
 
 def _initialize_experts(experts, dtype):

@@ -78,7 +78,7 @@ if is_torch_available():
         _attention_mask,
         _attention_scope,
         _CacheLayout,
-        _check_attention_options,
+        _check_attention_kwargs,
         _export_inputs,
         _in_graph_cache_capture_scope,
         _InGraphCacheAndOutput,
@@ -568,7 +568,9 @@ def _mlx_in_graph_attention_forward(
     _cache_windows=None,
     **kwargs,
 ):
-    _check_attention_options(kwargs.get("dropout"), softcap, head_mask, s_aux=kwargs.get("s_aux"))
+    _check_attention_kwargs(
+        module, kwargs, softcap, head_mask, attention_mask=attention_mask, cache_windows=_cache_windows
+    )
     if _cache_windows is None:
         config = module.config
         if hasattr(config, "get_text_config"):
@@ -585,15 +587,11 @@ def _mlx_in_graph_attention_forward(
         # Slice the entire ring, with masking determined by static geometry.
         start_pos, is_causal = buffer_size - seq_len, False
     else:
-        is_causal = getattr(module, "is_causal", True)
-        if is_causal:
-            assert position_ids is not None, "position_ids must be provided for causal MLX attention"
-            start_pos = position_ids[0][0].item()
-            torch._check(start_pos >= 0)
-            torch._check(start_pos + query.shape[2] <= key.shape[2])
-            mask = None
-        else:
-            start_pos, mask = key.shape[2] - query.shape[2], attention_mask
+        assert position_ids is not None, "position_ids must be provided for causal MLX attention"
+        start_pos = position_ids[0][0].item()
+        torch._check(start_pos >= 0)
+        torch._check(start_pos + query.shape[2] <= key.shape[2])
+        mask, is_causal = None, True
     output = torch.ops.mlx.custom_sdpa(
         query,
         key,
@@ -739,7 +737,11 @@ def _mlx_attention_scope(mlx_state: _MLXRecipeState):
     """Select the recipe's callbacks for the shared attention scope."""
     off_graph = mlx_state.cache_mode == "off-graph"
     attention = (
-        partial(_off_graph_attention_forward, _cache_ids=mlx_state.cache_layout.cache_ids)
+        partial(
+            _off_graph_attention_forward,
+            _cache_ids=mlx_state.cache_layout.cache_ids,
+            _cache_windows=mlx_state.cache_layout.windows,
+        )
         if off_graph
         else partial(_mlx_in_graph_attention_forward, _cache_windows=mlx_state.cache_layout.windows)
     )
