@@ -1734,6 +1734,9 @@ class ProcessorTesterMixin:
         if getattr(processor, "video_processor", None) is None:
             self.skipTest("Processor has no video processor")
 
+        if "video_sizes" not in inspect.signature(processor._get_num_multimodal_tokens).parameters:
+            self.skipTest("Processor doesn't count video tokens yet")
+
         video_inputs = self.prepare_videos_inputs(batch_size=2)
         video_inputs = [video_inputs[0], video_inputs[1][:, :, :, :200]]
         video_sizes = [(len(video), *get_video_size(video)) for video in video_inputs]
@@ -1741,7 +1744,7 @@ class ProcessorTesterMixin:
         try:
             num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes)
         except AttributeError:
-            self.skipTest("Video processor doesn't support `get_number_of_video_patches` yet")
+            self.skipTest("Video processor doesn't support `get_num_of_video_patches` yet")
         if num_video_tokens_from_helper["num_video_tokens"] is None:
             self.skipTest("Processor doesn't count video tokens yet")
 
