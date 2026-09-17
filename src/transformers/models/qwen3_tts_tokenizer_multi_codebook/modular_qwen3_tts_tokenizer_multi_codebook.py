@@ -38,17 +38,12 @@ from ..mimi.modeling_mimi import (
     MimiVectorQuantization,
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
-from ..qwen3.modeling_qwen3 import Qwen3RotaryEmbedding
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCausalConvNet,
     Qwen3OmniMoeCausalTransConvNet,
-    Qwen3OmniMoeCode2WavAttention,
     Qwen3OmniMoeCode2WavDecoderBlock,
-    Qwen3OmniMoeCode2WavDecoderResidualUnit,
-    Qwen3OmniMoeCode2WavMlp,
-    Qwen3OmniMoeCode2WavRMSNorm,
-    Qwen3OmniMoeCode2WavTransformerLayer,
+    Qwen3OmniMoeCode2WavTransformerModel,
     Qwen3OmniMoeConvNeXtBlock,
 )
 
@@ -182,33 +177,6 @@ class Qwen3TTSTokenizerMultiCodebookConvNeXtBlock(Qwen3OmniMoeConvNeXtBlock):
     pass
 
 
-class Qwen3TTSTokenizerMultiCodebookRotaryEmbedding(Qwen3RotaryEmbedding):
-    pass
-
-
-class Qwen3TTSTokenizerMultiCodebookAttention(Qwen3OmniMoeCode2WavAttention):
-    def __init__(self, config, layer_idx):
-        super().__init__(config, layer_idx)
-        self.num_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-
-
-class Qwen3TTSTokenizerMultiCodebookRMSNorm(Qwen3OmniMoeCode2WavRMSNorm):
-    pass
-
-
-class Qwen3TTSTokenizerMultiCodebookMlp(Qwen3OmniMoeCode2WavMlp):
-    pass
-
-
-class Qwen3TTSTokenizerMultiCodebookResidualUnit(Qwen3OmniMoeCode2WavDecoderResidualUnit):
-    pass
-
-
-class Qwen3TTSTokenizerMultiCodebookBlock(Qwen3OmniMoeCode2WavTransformerLayer):
-    pass
-
-
 class Qwen3TTSTokenizerMultiCodebookEncoderOutput(MimiEncoderOutput):
     pass
 
@@ -226,35 +194,24 @@ class Qwen3TTSTokenizerMultiCodebookOutput(DacDecoderOutput):
 
 class Qwen3TTSTokenizerMultiCodebookPreTrainedModel(MimiPreTrainedModel):
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_attention_backend = True
     _can_compile_fullgraph = False
 
 
 @auto_docstring
 class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
-    _no_split_modules = ["Qwen3TTSTokenizerMultiCodebookBlock"]
+    _no_split_modules = ["Qwen3OmniMoeCode2WavTransformerLayer", "Qwen3TTSTokenizerMultiCodebookDecoderBlock"]
 
 
 #  Transformer model (decoder side)
 
 
 @auto_docstring
-class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3OmniMoeCode2WavTransformerModel):
+    config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
+
     def __init__(self, config: Qwen3TTSTokenizerMultiCodebookCode2WavConfig):
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [Qwen3TTSTokenizerMultiCodebookBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = Qwen3TTSTokenizerMultiCodebookRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Qwen3TTSTokenizerMultiCodebookRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
-        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
-        self.window_size = config.sliding_window
         self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
         self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
         self.post_init()
@@ -295,10 +252,10 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -398,6 +355,10 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
 
     @auto_docstring
     def forward(self, codes, **kwargs):
+        r"""
+        codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`):
+            Discrete audio codes to decode into waveform values.
+        """
         if codes.shape[1] != self.config.num_quantizers:
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
         hidden = self.quantizer.decode(codes)
