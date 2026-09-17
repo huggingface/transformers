@@ -65,7 +65,14 @@ _worker_stop = threading.Event()
 
 def _mlog(msg):
     t = time.monotonic() - _t0
-    print(f"[MEM t={t:8.2f}s] {msg}", flush=True)
+    line = f"[MEM t={t:8.2f}s] {msg}\n"
+    # sys.__stdout__ bypasses pytest's per-worker stdout capture so lines
+    # appear in the CI log even when the test passes.
+    try:
+        sys.__stdout__.write(line)
+        sys.__stdout__.flush()
+    except Exception:  # noqa: S110
+        pass
 
 
 # ── /proc helpers ─────────────────────────────────────────────────────────────
@@ -148,13 +155,23 @@ def _ctrl_monitor_loop():
     my_pid = os.getpid()
     while not _ctrl_stop.is_set():
         try:
+            # Pick up any worker PIDs written to /tmp that we haven't seen yet
+            for gw in ("gw0", "gw1", "gw2", "gw3"):
+                if gw not in _worker_pids:
+                    pid_file = f"/tmp/mem_worker_{gw}.pid"
+                    if os.path.exists(pid_file):
+                        try:
+                            with open(pid_file) as f:
+                                _worker_pids[gw] = int(f.read().strip())
+                        except Exception:  # noqa: S110
+                            pass
             sys_used, sys_total = _sys_mem()
             ctrl_rss, ctrl_pss = _tree(my_pid)
             parts = [
                 f"SYS={sys_used:.0f}/{sys_total:.0f}MB",
                 f"CTRL(pid={my_pid}) RSS={ctrl_rss:.0f} PSS={ctrl_pss:.0f}MB",
             ]
-            for wid, wpid in list(_worker_pids.items()):
+            for wid, wpid in sorted(_worker_pids.items()):
                 wr, wp = _tree(wpid)
                 nch = len(_children(wpid))
                 parts.append(f"{wid}(pid={wpid}) RSS={wr:.0f} PSS={wp:.0f}MB nch={nch}")
@@ -316,6 +333,12 @@ def pytest_configure(config):
     if hasattr(config, "workerinput"):
         _is_worker = True
         _worker_id = config.workerinput.get("workerid", "gw?")
+        # Publish PID so the controller monitor can read it
+        try:
+            with open(f"/tmp/mem_worker_{_worker_id}.pid", "w") as f:
+                f.write(str(os.getpid()))
+        except Exception:  # noqa: S110
+            pass
         _mlog(f"[{_worker_id}] Worker process started pid={os.getpid()}")
         threading.Thread(
             target=_worker_monitor_loop,
@@ -329,13 +352,21 @@ def pytest_configure(config):
 
 
 def pytest_testnodeready(node):
-    """Controller: grab each xdist worker PID as it connects."""
+    """Controller: read worker PID from /tmp file written by the worker."""
     if not _MEM_ENABLED:
         return
     try:
-        pid = node.workerproc.pid
-        _worker_pids[node.workerid] = pid
-        _mlog(f"[CTRL] Worker {node.workerid} ready pid={pid}")
+        wid = node.workerid
+        pid_file = f"/tmp/mem_worker_{wid}.pid"
+        # Wait briefly for the worker to write its PID file
+        for _ in range(20):
+            if os.path.exists(pid_file):
+                break
+            time.sleep(0.1)
+        with open(pid_file) as f:
+            pid = int(f.read().strip())
+        _worker_pids[wid] = pid
+        _mlog(f"[CTRL] Worker {wid} ready pid={pid}")
     except Exception as exc:
         _mlog(f"[CTRL] Could not get pid for {getattr(node, 'workerid', '?')}: {exc}")
 
@@ -374,12 +405,17 @@ def pytest_runtest_logstart(nodeid, location):
 
 
 def pytest_runtest_logreport(report):
-    """Controller: log system memory when a worker finishes a test."""
-    if not _MEM_ENABLED or _is_worker or report.when != "teardown":
+    """Controller: log system memory when a worker finishes a test phase."""
+    if not _MEM_ENABLED or _is_worker or report.when not in ("call", "setup"):
         return
+    if report.outcome == "passed":
+        return  # only log failures/errors for call/setup to reduce noise
     try:
         sys_used, _ = _sys_mem()
-        _mlog(f"[CTRL] DONE {report.nodeid} outcome={report.outcome} | SYS={sys_used:.0f}MB")
+        _mlog(
+            f"[CTRL] {report.when.upper()} {report.nodeid}"
+            f" outcome={report.outcome} | SYS={sys_used:.0f}MB"
+        )
     except Exception:  # noqa: S110
         pass
 
