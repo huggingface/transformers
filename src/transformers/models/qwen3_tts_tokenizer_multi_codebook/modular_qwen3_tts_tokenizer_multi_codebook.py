@@ -103,10 +103,6 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         Sampling rate, in hertz (Hz), of the encoder's input audio waveform.
     output_sampling_rate (`int`, *optional*, defaults to 24000):
         Sampling rate, in hertz (Hz), of the decoder's output audio waveform.
-    decode_upsample_rate (`int`, *optional*, defaults to 1920):
-        Upsampling rate applied during decoding.
-    encode_downsample_rate (`int`, *optional*, defaults to 1920):
-        Downsampling rate applied during encoding.
     """
 
     model_type = "qwen3_tts_tokenizer_multi_codebook"
@@ -119,8 +115,6 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     decoder_config: dict | PreTrainedConfig | None = None
     input_sampling_rate: int | None = 24000
     output_sampling_rate: int | None = 24000
-    decode_upsample_rate: int | None = 1920
-    encode_downsample_rate: int | None = 1920
 
     def __post_init__(self, **kwargs):
         if isinstance(self.encoder_config, dict):
@@ -400,8 +394,6 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
 
         self.input_sampling_rate = config.input_sampling_rate
         self.output_sampling_rate = config.output_sampling_rate
-        self.decode_upsample_rate = config.decode_upsample_rate
-        self.encode_downsample_rate = config.encode_downsample_rate
 
         self.encoder = Qwen3TTSTokenizerMultiCodebookEncoderModel._from_config(self.config.encoder_config)
         self.decoder = Qwen3TTSTokenizerMultiCodebookDecoder._from_config(self.config.decoder_config)
@@ -438,7 +430,7 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         )
         audio_codes = encoded_frames.audio_codes
         audio_codes = [
-            code[..., : -(-mask.sum() // self.encode_downsample_rate)].transpose(0, 1)
+            code[..., : -(-mask.sum() // self.encoder.config.frame_size)].transpose(0, 1)
             for code, mask in zip(audio_codes, padding_mask)
         ]
 
@@ -462,7 +454,7 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-        audio_lengths = (audio_codes[..., 0] > -1).sum(1) * self.decode_upsample_rate
+        audio_lengths = (audio_codes[..., 0] > -1).sum(1) * self.decoder.total_upsample
 
         audio_codes = torch.clamp(audio_codes, min=0)
         audio_values = self.decoder.chunked_decode(audio_codes.transpose(1, 2)).squeeze(1)
