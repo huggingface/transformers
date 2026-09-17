@@ -61,6 +61,7 @@ _worker_id = "ctrl"
 _worker_pids = {}  # {workerid: pid}  — controller only
 _ctrl_stop = threading.Event()
 _worker_stop = threading.Event()
+_pending_cleanups = {}  # {nodeid: cleanup_fn} — worker only, avoids item.addfinalizer
 
 
 def _mlog(msg):
@@ -319,7 +320,9 @@ def _patch_wav2vec2(item):
                 pass
         _checkpoint("wav2vec2 patches cleaned up")
 
-    item.addfinalizer(_cleanup)
+    # Store cleanup — called from pytest_runtest_teardown (item.addfinalizer raises
+    # AssertionError on unittest TestCaseFunction items when called from a plugin hook)
+    _pending_cleanups[item.nodeid] = _cleanup
     _checkpoint("wav2vec2 patches applied")
 
 
@@ -383,9 +386,12 @@ def pytest_runtest_setup(item):
 
 
 def pytest_runtest_teardown(item, nextitem):
-    """Worker: log memory after test completes."""
+    """Worker: run any pending cleanup, then log memory after test completes."""
     if not _MEM_ENABLED or not _is_worker:
         return
+    cleanup = _pending_cleanups.pop(item.nodeid, None)
+    if cleanup:
+        cleanup()
     rss, pss = _tree(os.getpid())
     sys_used, _ = _sys_mem()
     _mlog(
