@@ -2803,11 +2803,12 @@ class ModelTesterMixin(ExportTesterMixin):
         it to bridge base and head checkpoints, so any other value silently leaves every base weight random.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_model_name = MODEL_MAPPING_NAMES.get(config.model_type)
+        base_model_names = MODEL_MAPPING_NAMES.get(config.model_type, ())
+        base_model_names = (base_model_names,) if isinstance(base_model_names, str) else base_model_names
         for model_class in self.all_model_classes:
             model = model_class(config)
             for name, child in model.named_children():
-                if type(child).__name__ != base_model_name:
+                if type(child).__name__ not in base_model_names:
                     continue
                 self.assertEqual(model.base_model_prefix, name)
                 base_model, child_state_dict = type(child)(config), child.state_dict()
