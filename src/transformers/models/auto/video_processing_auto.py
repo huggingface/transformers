@@ -83,11 +83,15 @@ VIDEO_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, VIDEO_PROCESSOR
 
 def video_processor_class_from_name(class_name: str):
     for video_processors_dict in VIDEO_PROCESSOR_MAPPING._extra_content.values():
+        if video_processors_dict is None:
+            continue
         for extractor_class in video_processors_dict.values():
             if isinstance(extractor_class, type) and getattr(extractor_class, "__name__", None) == class_name:
                 return extractor_class
 
     for model_type, extractors_dict in VIDEO_PROCESSOR_MAPPING.items():
+        if extractors_dict is None:
+            continue
         if class_name in extractors_dict.values():
             module_name = model_type_to_module_name(model_type)
             module = importlib.import_module(f".{module_name}", "transformers.models")
@@ -404,9 +408,12 @@ class AutoVideoProcessor:
         explicit_local_code = False
         if has_remote_code:
             if has_local_code:
-                local_video_processor_class = video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)].get(
-                    backend
-                )
+                local_video_processor_class = video_processor_class
+                if not video_processor_class:
+                    video_processor_mapping = VIDEO_PROCESSOR_MAPPING[type(config)]
+                    local_video_processor_class = (
+                        video_processor_mapping.get(backend) if video_processor_mapping is not None else None
+                    )
                 explicit_local_code = (
                     local_video_processor_class is not None
                     and not local_video_processor_class.__module__.startswith("transformers.")
@@ -428,14 +435,22 @@ class AutoVideoProcessor:
             return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
-            video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)].get(backend)
+            video_processor_mapping = VIDEO_PROCESSOR_MAPPING[type(config)]
+            video_processor_class = (
+                video_processor_mapping.get(backend) if video_processor_mapping is not None else video_processor_class
+            )
             if video_processor_class is not None:
                 return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            raise ValueError(
-                f"Could not load any video processor class for {pretrained_model_name_or_path} with {backend} backend. "
-                "Please install the backend dependencies or select another backend that is available in your environment."
-            )
+            if backend == "torchvision" and not is_torchvision_available():
+                raise ValueError(
+                    f"{pretrained_model_name_or_path} requires `torchvision` to be installed. Please install `torchvision` and try again."
+                )
+            else:
+                raise ValueError(
+                    f"Could not load any video processor class for {pretrained_model_name_or_path} with {backend} backend. "
+                    "Please install the backend dependencies or select another backend that is available in your environment."
+                )
         # Raise a more informative error message if torchvision isn't found, otherwise just fallback to default
         if resolved_video_processor_class is not None and backend == "torchvision" and not is_torchvision_available():
             raise ValueError(
@@ -451,8 +466,10 @@ class AutoVideoProcessor:
     @staticmethod
     def register(
         config_class,
-        video_processor_class,
-        exist_ok=False,
+        video_processor_class: type | None = None,
+        video_processor_classes: dict[str, type] | None = None,
+        exist_ok: bool = False,
+        overrides_ok: bool = False,
     ):
         """
         Register a new video processor for this class.
@@ -463,7 +480,19 @@ class AutoVideoProcessor:
             video_processor_class ([`BaseVideoProcessor`]):
                 The video processor to register.
         """
-        VIDEO_PROCESSOR_MAPPING.register(config_class, video_processor_class, exist_ok=exist_ok)
+        if video_processor_classes is None:
+            # Legacy registering would pass a single torch-based class
+            video_processor_classes = {"torchvision": video_processor_class}
+
+        # Avoid resetting existing processors if we are passing partial updates
+        if config_class in VIDEO_PROCESSOR_MAPPING:
+            existing_mapping = VIDEO_PROCESSOR_MAPPING[config_class]
+            existing_mapping.update(video_processor_classes)
+            video_processor_classes = existing_mapping
+
+        VIDEO_PROCESSOR_MAPPING.register(
+            config_class, video_processor_classes, exist_ok=exist_ok, overrides_ok=overrides_ok
+        )
 
 
 __all__ = ["VIDEO_PROCESSOR_MAPPING", "AutoVideoProcessor"]

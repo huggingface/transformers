@@ -2973,7 +2973,7 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        if isinstance(value, dict) and placeholder == "image_processor_class":
+        if isinstance(value, dict) and placeholder in ["image_processor_class", "video_processor_class"]:
             value = value.get("torchvision", value.get("pil", None))
         if placeholder is not None:
             docstring = docstring.replace(f"{{{placeholder}}}", value)
