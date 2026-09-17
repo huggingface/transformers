@@ -109,7 +109,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(VibeVoiceAsrProcessorKwargs, **kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":
@@ -117,6 +117,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
 
         if audio is not None:
             _, text, _, audio = self.prepare_inputs_layout(text=text, audio=audio, **kwargs)
+            self.validate_inputs(text=text, audio=audio, **kwargs)
 
             # Replace audio duration placeholders in text
             audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
