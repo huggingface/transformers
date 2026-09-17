@@ -15,7 +15,10 @@
 # tests directory-specific settings - this file is run automatically
 # by pytest before any tests are run
 
+import os
 import sys
+import threading
+import time
 import warnings
 from os.path import abspath, dirname, join
 
@@ -50,15 +53,12 @@ def pytest_terminal_summary(terminalreporter):
 # Logs system, controller, worker, and subprocess memory to stdout (flushed
 # immediately) so the full picture appears in the GitHub Actions job log.
 # ──────────────────────────────────────────────────────────────────────────────
-import os
-import threading
-import time
 
 _MEM_ENABLED = sys.platform.startswith("linux")
 _t0 = time.monotonic()
 _is_worker = False
 _worker_id = "ctrl"
-_worker_pids = {}   # {workerid: pid}  — controller only
+_worker_pids = {}  # {workerid: pid}  — controller only
 _ctrl_stop = threading.Event()
 _worker_stop = threading.Event()
 
@@ -69,6 +69,7 @@ def _mlog(msg):
 
 
 # ── /proc helpers ─────────────────────────────────────────────────────────────
+
 
 def _sys_mem():
     """(used_mb, total_mb) from /proc/meminfo."""
@@ -93,7 +94,7 @@ def _rss(pid):
             for line in f:
                 if line.startswith("VmRSS:"):
                     return int(line.split()[1]) / 1024
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     return 0.0
 
@@ -104,7 +105,7 @@ def _pss(pid):
             for line in f:
                 if line.startswith("Pss:"):
                     return int(line.split()[1]) / 1024
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     return 0.0
 
@@ -122,9 +123,9 @@ def _children(ppid):
                             if int(line.split()[1]) == ppid:
                                 result.append(int(entry))
                             break
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     return result
 
@@ -141,6 +142,7 @@ def _tree(pid):
 
 
 # ── background monitor loops ──────────────────────────────────────────────────
+
 
 def _ctrl_monitor_loop():
     my_pid = os.getpid()
@@ -176,15 +178,13 @@ def _worker_monitor_loop(wid, pid):
 
 # ── wav2vec2 detailed checkpoints ─────────────────────────────────────────────
 
+
 def _checkpoint(label):
     try:
         rss, pss = _tree(os.getpid())
         sys_used, _ = _sys_mem()
-        _mlog(
-            f"[{_worker_id}] CKPT {label}"
-            f" | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB"
-        )
-    except Exception:
+        _mlog(f"[{_worker_id}] CKPT {label} | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB")
+    except Exception:  # noqa: S110
         pass
 
 
@@ -194,94 +194,111 @@ def _patch_wav2vec2(item):
 
     try:
         import datasets as _ds
+
         _orig = _ds.load_dataset
+
         def _p(*a, **kw):
             _checkpoint("load_dataset START")
             r = _orig(*a, **kw)
             _checkpoint("load_dataset END")
             return r
+
         _ds.load_dataset = _p
         restores.append(lambda o=_orig: setattr(_ds, "load_dataset", o))
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     try:
         from datasets import DatasetDict as _DD
+
         _orig_map = _DD.map
         _orig_filter = _DD.filter
+
         def _p_map(self, fn, *a, **kw):
             _checkpoint(f"DatasetDict.map START num_proc={kw.get('num_proc')}")
             r = _orig_map(self, fn, *a, **kw)
             _checkpoint(f"DatasetDict.map END num_proc={kw.get('num_proc')}")
             return r
+
         def _p_filter(self, fn, *a, **kw):
             _checkpoint(f"DatasetDict.filter START num_proc={kw.get('num_proc')}")
             r = _orig_filter(self, fn, *a, **kw)
             _checkpoint(f"DatasetDict.filter END num_proc={kw.get('num_proc')}")
             return r
+
         _DD.map = _p_map
         _DD.filter = _p_filter
         restores.append(lambda o=_orig_map: setattr(_DD, "map", o))
         restores.append(lambda o=_orig_filter: setattr(_DD, "filter", o))
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     try:
         from transformers import Wav2Vec2ForPreTraining as _W2V
+
         _orig_init = _W2V.__init__
+
         def _p_init(self, *a, **kw):
             _checkpoint("Wav2Vec2ForPreTraining.__init__ START")
             _orig_init(self, *a, **kw)
             _checkpoint("Wav2Vec2ForPreTraining.__init__ END")
+
         _W2V.__init__ = _p_init
         restores.append(lambda o=_orig_init: setattr(_W2V, "__init__", o))
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     try:
         from accelerate import Accelerator as _Acc
+
         _orig_prepare = _Acc.prepare
         _orig_backward = _Acc.backward
         _counters = [0, 0]  # [prepare_n, backward_n]
+
         def _p_prepare(self, *a, **kw):
             _counters[0] += 1
             _checkpoint(f"Accelerator.prepare #{_counters[0]} START")
             r = _orig_prepare(self, *a, **kw)
             _checkpoint(f"Accelerator.prepare #{_counters[0]} END")
             return r
+
         def _p_backward(self, loss, **kw):
             _counters[1] += 1
             _checkpoint(f"Accelerator.backward #{_counters[1]} START")
             r = _orig_backward(self, loss, **kw)
             _checkpoint(f"Accelerator.backward #{_counters[1]} END")
             return r
+
         _Acc.prepare = _p_prepare
         _Acc.backward = _p_backward
         restores.append(lambda o=_orig_prepare: setattr(_Acc, "prepare", o))
         restores.append(lambda o=_orig_backward: setattr(_Acc, "backward", o))
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     try:
         import torch
+
         _orig_step = torch.optim.AdamW.step
         _step_n = [0]
+
         def _p_step(self, *a, **kw):
             _step_n[0] += 1
             _checkpoint(f"AdamW.step #{_step_n[0]} START")
             r = _orig_step(self, *a, **kw)
             _checkpoint(f"AdamW.step #{_step_n[0]} END")
             return r
+
         torch.optim.AdamW.step = _p_step
         restores.append(lambda o=_orig_step: setattr(torch.optim.AdamW, "step", o))
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     def _cleanup():
         for fn in restores:
             try:
                 fn()
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         _checkpoint("wav2vec2 patches cleaned up")
 
@@ -290,6 +307,7 @@ def _patch_wav2vec2(item):
 
 
 # ── pytest hooks ──────────────────────────────────────────────────────────────
+
 
 def pytest_configure(config):
     global _is_worker, _worker_id
@@ -328,10 +346,7 @@ def pytest_runtest_setup(item):
         return
     rss, pss = _tree(os.getpid())
     sys_used, _ = _sys_mem()
-    _mlog(
-        f"[{_worker_id}] SETUP {item.nodeid}"
-        f" | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB"
-    )
+    _mlog(f"[{_worker_id}] SETUP {item.nodeid} | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB")
     if "wav2vec2_pretraining" in item.name:
         _patch_wav2vec2(item)
 
@@ -343,8 +358,7 @@ def pytest_runtest_teardown(item, nextitem):
     rss, pss = _tree(os.getpid())
     sys_used, _ = _sys_mem()
     _mlog(
-        f"[{_worker_id}] TEARDOWN {item.nodeid}"
-        f" | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB"
+        f"[{_worker_id}] TEARDOWN {item.nodeid} | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB"
     )
 
 
@@ -355,7 +369,7 @@ def pytest_runtest_logstart(nodeid, location):
     try:
         sys_used, _ = _sys_mem()
         _mlog(f"[CTRL] LOGSTART {nodeid} | SYS={sys_used:.0f}MB")
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
 
@@ -366,7 +380,7 @@ def pytest_runtest_logreport(report):
     try:
         sys_used, _ = _sys_mem()
         _mlog(f"[CTRL] DONE {report.nodeid} outcome={report.outcome} | SYS={sys_used:.0f}MB")
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
 
