@@ -105,10 +105,6 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         Sampling rate, in hertz (Hz), of the encoder's input audio waveform.
     output_sampling_rate (`int`, *optional*, defaults to 24000):
         Sampling rate, in hertz (Hz), of the decoder's output audio waveform.
-    decode_upsample_rate (`int`, *optional*, defaults to 1920):
-        Upsampling rate applied during decoding.
-    encode_downsample_rate (`int`, *optional*, defaults to 1920):
-        Downsampling rate applied during encoding.
     """
 
     model_type = "qwen3_tts_tokenizer_multi_codebook"
@@ -121,8 +117,6 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     decoder_config: dict | PreTrainedConfig | None = None
     input_sampling_rate: int | None = 24000
     output_sampling_rate: int | None = 24000
-    decode_upsample_rate: int | None = 1920
-    encode_downsample_rate: int | None = 1920
 
     def __post_init__(self, **kwargs):
         if isinstance(self.encoder_config, dict):
