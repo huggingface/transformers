@@ -259,12 +259,11 @@ class Qwen3TTSTokenizerMultiCodebookEncoderOutput(ModelOutput):
 @dataclass
 class Qwen3TTSTokenizerMultiCodebookOutput(ModelOutput):
     r"""
-    audio_values (`List[torch.FloatTensor]`):
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Qwen3TTSTokenizerMultiCodebook.
-        Each tensor has shape (segment_length_i).
     """
 
-    audio_values: list[torch.FloatTensor] = None
+    audio_values: torch.FloatTensor | None = None
 
 
 class Qwen3TTSTokenizerMultiCodebookConv1d(nn.Module):
@@ -2157,7 +2156,7 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         self,
         audio_codes: torch.Tensor,
         return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | Qwen3TTSTokenizerMultiCodebookOutput:
+    ) -> tuple[torch.Tensor] | Qwen3TTSTokenizerMultiCodebookOutput:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -2172,12 +2171,12 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
 
         audio_codes = torch.clamp(audio_codes, min=0)
         audio_values = self.decoder.chunked_decode(audio_codes.transpose(1, 2)).squeeze(1)
-        audio_values = [a[:length] for a, length in zip(audio_values, audio_lengths)]
+        audio_values = audio_values[..., : audio_lengths.max()]
 
         if not return_dict:
             return (audio_values,)
 
-        return Qwen3TTSTokenizerMultiCodebookOutput(audio_values)
+        return Qwen3TTSTokenizerMultiCodebookOutput(audio_values=audio_values)
 
 
 __all__ = ["Qwen3TTSTokenizerMultiCodebookModel", "Qwen3TTSTokenizerMultiCodebookPreTrainedModel"]

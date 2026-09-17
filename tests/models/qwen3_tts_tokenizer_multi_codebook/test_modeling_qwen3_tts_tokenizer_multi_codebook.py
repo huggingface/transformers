@@ -180,13 +180,13 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
         self.assertEqual(len(audio_codes), self.model_tester.batch_size)
 
     def test_decode_from_codes(self):
-        """Decode from synthetic codes (batch, seq, num_quantizers); output is a list of waveforms."""
+        """Decode from synthetic codes (batch, seq, num_quantizers); output is a batched waveform tensor."""
         set_seed(42)
         config, _, _, codes = self.model_tester.prepare_config_and_inputs()
         model = Qwen3TTSTokenizerMultiCodebookModel(config).eval().to(torch_device)
         with torch.no_grad():
             output = model.decode(codes.to(torch_device))
-        self.assertEqual(len(output.audio_values), self.model_tester.batch_size)
+        self.assertEqual(output.audio_values.shape[0], self.model_tester.batch_size)
 
     # The model exposes `encode`/`decode` and defines no `forward`, so anything the common tester
     # routes through `model(**inputs)` reaches `nn.Module._forward_unimplemented`.
