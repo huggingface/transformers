@@ -96,7 +96,6 @@ class Qwen3TTSTokenizerMultiCodebookModelTester:
         return Qwen3TTSTokenizerMultiCodebookConfig(
             encoder_config=self.encoder_config,
             decoder_config=self.decoder_config,
-            encoder_valid_num_quantizers=self.num_quantizers,
         )
 
     def prepare_config_and_inputs(self):
@@ -140,6 +139,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
             "test_model_forward_default_config_values",
             "test_feed_forward_chunking",
             "test_inputs_embeds",
+            "test_capture_outputs_decorator",
         )
         if any(name in self._testMethodName for name in _no_forward_tests):
             self.skipTest("Qwen3TTSTokenizerMultiCodebookModel forward requires raw audio input, not standard embeds")

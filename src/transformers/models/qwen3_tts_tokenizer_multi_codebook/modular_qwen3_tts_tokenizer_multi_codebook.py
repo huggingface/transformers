@@ -95,23 +95,18 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
 @strict
 class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     r"""
-    Configuration class for the Qwen3-TTS V2 tokenizer (encoder + decoder).
-
-    Args:
-        encoder_config (`dict`, *optional*):
-            Configuration for the Mimi-based encoder sub-model.
-        decoder_config (`dict`, *optional*):
-            Configuration for the Code2Wav decoder sub-model.
-        encoder_valid_num_quantizers (`int`, *optional*, defaults to 16):
-            Number of quantizer layers the encoder actually uses.
-        input_sample_rate (`int`, *optional*, defaults to 24000):
-            Sample rate of the input audio.
-        output_sample_rate (`int`, *optional*, defaults to 24000):
-            Sample rate of the decoded output audio.
-        decode_upsample_rate (`int`, *optional*, defaults to 1920):
-            Upsampling rate applied during decoding.
-        encode_downsample_rate (`int`, *optional*, defaults to 1920):
-            Downsampling rate applied during encoding.
+    encoder_config (`dict`, *optional*):
+        Configuration for the Mimi-based encoder sub-model.
+    decoder_config (`dict`, *optional*):
+        Configuration for the Code2Wav decoder sub-model.
+    input_sample_rate (`int`, *optional*, defaults to 24000):
+        Sample rate of the input audio.
+    output_sample_rate (`int`, *optional*, defaults to 24000):
+        Sample rate of the decoded output audio.
+    decode_upsample_rate (`int`, *optional*, defaults to 1920):
+        Upsampling rate applied during decoding.
+    encode_downsample_rate (`int`, *optional*, defaults to 1920):
+        Downsampling rate applied during encoding.
     """
 
     model_type = "qwen3_tts_tokenizer_multi_codebook"
@@ -120,40 +115,29 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         "decoder_config": Qwen3TTSTokenizerMultiCodebookCode2WavConfig,
     }
 
-    def __init__(
-        self,
-        encoder_config: dict | None = None,
-        decoder_config: dict | None = None,
-        encoder_valid_num_quantizers: int | None = 16,
-        input_sample_rate: int | None = 24000,
-        output_sample_rate: int | None = 24000,
-        decode_upsample_rate: int | None = 1920,
-        encode_downsample_rate: int | None = 1920,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    encoder_config: dict | PreTrainedConfig | None = None
+    decoder_config: dict | PreTrainedConfig | None = None
+    input_sample_rate: int | None = 24000
+    output_sample_rate: int | None = 24000
+    decode_upsample_rate: int | None = 1920
+    encode_downsample_rate: int | None = 1920
 
-        if encoder_config is None:
-            encoder_config = {}
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "mimi")
+            self.encoder_config["num_quantizers"] = self.encoder_config.get("num_quantizers", 16)
+            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
+        elif self.encoder_config is None:
             logger.info("encoder_config is None. Initializing V2 encoder with default values.")
-        if decoder_config is None:
-            decoder_config = {}
+            self.encoder_config = CONFIG_MAPPING["mimi"](num_quantizers=16)
+
+        if isinstance(self.decoder_config, dict):
+            self.decoder_config = Qwen3TTSTokenizerMultiCodebookCode2WavConfig(**self.decoder_config)
+        elif self.decoder_config is None:
             logger.info("decoder_config is None. Initializing V2 decoder with default values.")
+            self.decoder_config = Qwen3TTSTokenizerMultiCodebookCode2WavConfig()
 
-        self.encoder_config = (
-            CONFIG_MAPPING["mimi"](**encoder_config) if isinstance(encoder_config, dict) else encoder_config
-        )
-        self.decoder_config = (
-            Qwen3TTSTokenizerMultiCodebookCode2WavConfig(**decoder_config)
-            if isinstance(decoder_config, dict)
-            else decoder_config
-        )
-
-        self.encoder_valid_num_quantizers = encoder_valid_num_quantizers
-        self.input_sample_rate = input_sample_rate
-        self.output_sample_rate = output_sample_rate
-        self.decode_upsample_rate = decode_upsample_rate
-        self.encode_downsample_rate = encode_downsample_rate
+        super().__post_init__(**kwargs)
 
 class Qwen3TTSTokenizerMultiCodebookCausalConvNet(Qwen3OmniMoeCausalConvNet):
     pass
@@ -414,7 +398,6 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         super().__init__(config)
         self.config = config
 
-        self.encoder_valid_num_quantizers = config.encoder_valid_num_quantizers
         self.input_sample_rate = config.input_sample_rate
         self.output_sample_rate = config.output_sample_rate
         self.decode_upsample_rate = config.decode_upsample_rate
@@ -448,8 +431,12 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
-        encoded_frames = self.encoder.encode(input_values=input_values.unsqueeze(1), return_dict=True)
-        audio_codes = encoded_frames.audio_codes[:, : self.encoder_valid_num_quantizers]
+        encoded_frames = self.encoder.encode(
+            input_values=input_values.unsqueeze(1),
+            num_quantizers=self.config.encoder_config.num_quantizers,
+            return_dict=True,
+        )
+        audio_codes = encoded_frames.audio_codes
         audio_codes = [
             code[..., : -(-mask.sum() // self.encode_downsample_rate)].transpose(0, 1)
             for code, mask in zip(audio_codes, padding_mask)

@@ -2094,7 +2094,6 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         super().__init__(config)
         self.config = config
 
-        self.encoder_valid_num_quantizers = config.encoder_valid_num_quantizers
         self.input_sample_rate = config.input_sample_rate
         self.output_sample_rate = config.output_sample_rate
         self.decode_upsample_rate = config.decode_upsample_rate
@@ -2128,8 +2127,12 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
-        encoded_frames = self.encoder.encode(input_values=input_values.unsqueeze(1), return_dict=True)
-        audio_codes = encoded_frames.audio_codes[:, : self.encoder_valid_num_quantizers]
+        encoded_frames = self.encoder.encode(
+            input_values=input_values.unsqueeze(1),
+            num_quantizers=self.config.encoder_config.num_quantizers,
+            return_dict=True,
+        )
+        audio_codes = encoded_frames.audio_codes
         audio_codes = [
             code[..., : -(-mask.sum() // self.encode_downsample_rate)].transpose(0, 1)
             for code, mask in zip(audio_codes, padding_mask)
