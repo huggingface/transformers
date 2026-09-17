@@ -15,6 +15,7 @@
 
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import is_torch_available
@@ -29,6 +30,7 @@ if is_torch_available():
         LagunaForCausalLM,
         LagunaModel,
     )
+    from transformers.models.laguna.modeling_laguna import LagunaTopKRouter
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -64,6 +66,47 @@ class LagunaModelTest(CausalLMModelTest, unittest.TestCase):
         cfg_kwargs["moe_apply_router_weight_on_input"] = True
         with self.assertRaises(NotImplementedError):
             LagunaConfig(**cfg_kwargs)
+
+    def test_router_score_func_validation(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        self.assertEqual(config.moe_router_score_func, "sigmoid")
+        cfg_kwargs = config.to_dict()
+        cfg_kwargs["moe_router_score_func"] = "softmax"
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "moe_router_score_func"):
+            LagunaConfig(**cfg_kwargs)
+
+    @parameterized.expand([("sigmoid",), ("sqrtsoftplus",)])
+    def test_router_score_func(self, score_func):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.moe_router_score_func = score_func
+        router = LagunaTopKRouter(config)
+        hidden_states = torch.linspace(-1.0, 1.0, 2 * config.hidden_size).view(1, 2, config.hidden_size)
+
+        with torch.no_grad():
+            router.weight.copy_(
+                torch.linspace(-0.5, 0.5, config.num_experts * config.hidden_size).view_as(router.weight)
+            )
+            router.e_score_correction_bias.copy_(torch.linspace(0.4, -0.4, config.num_experts))
+
+        router_logits, routing_weights, selected_experts = router(hidden_states)
+        expected_scores = (
+            torch.sigmoid(router_logits)
+            if score_func == "sigmoid"
+            else torch.nn.functional.softplus(router_logits).sqrt()
+        )
+        expected_experts = torch.topk(
+            expected_scores + router.e_score_correction_bias, config.num_experts_per_tok, dim=-1
+        ).indices
+        expected_weights = expected_scores.gather(-1, expected_experts)
+        expected_weights /= expected_weights.sum(dim=-1, keepdim=True)
+
+        torch.testing.assert_close(selected_experts, expected_experts)
+        torch.testing.assert_close(routing_weights, expected_weights)
+
+        model = self.model_tester.base_model_class(config).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model(input_ids=inputs_dict["input_ids"].to(torch_device))
+        self.assertTrue(torch.isfinite(outputs.last_hidden_state).all())
 
     @parameterized.expand([(True,), ("per-head",), ("per-element",)])
     def test_gating_variations(self, gating):
