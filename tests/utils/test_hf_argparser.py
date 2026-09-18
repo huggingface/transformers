@@ -18,7 +18,7 @@ import os
 import sys
 import tempfile
 import unittest
-from argparse import Namespace
+from argparse import ArgumentTypeError, Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -360,6 +360,26 @@ class HfArgumentParserTest(unittest.TestCase):
                 parser.parse_args(["--foo_dict", "not_a_valid_json"])
             with self.assertRaises(SystemExit):
                 parser.parse_args(["--foo_dict", "[1, 2, 3]"])
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--foo_dict", '{"invalid_json": '])
+
+        with self.assertRaises(ArgumentTypeError):
+            string_to_dict(123)
+
+        with self.assertRaises(json.JSONDecodeError):
+            string_to_dict('{"unclosed": ')
+
+        with tempfile.NamedTemporaryFile("w", delete=False, suffix=".json") as f:
+            f.write("[1, 2, 3]")
+            tmp_list_json = f.name
+        try:
+            with self.assertRaises(ArgumentTypeError) as ctx:
+                string_to_dict(tmp_list_json)
+            self.assertIn("Expected a dict from file", str(ctx.exception))
+            self.assertNotIn("Failed to load JSON file", str(ctx.exception))
+        finally:
+            if os.path.exists(tmp_list_json):
+                os.remove(tmp_list_json)
 
     def test_06_with_optional(self):
         expected = argparse.ArgumentParser()

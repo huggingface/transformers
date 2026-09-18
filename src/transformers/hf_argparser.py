@@ -49,26 +49,24 @@ def string_to_bool(v):
 def string_to_dict(v):
     if isinstance(v, dict):
         return v
-    try:
+    if not isinstance(v, str):
+        raise ArgumentTypeError(f"Expected a string or dict, but got {type(v).__name__}: {v!r}")
+
+    if v.strip().startswith("{"):
         val = json.loads(v)
         if isinstance(val, dict):
             return val
         raise ArgumentTypeError(f"Expected a dict/JSON object, but got {type(val).__name__}: {v!r}")
-    except (json.JSONDecodeError, TypeError):
-        pass
 
-    try:
-        if os.path.isfile(v):
-            try:
-                with open(v, "r", encoding="utf-8") as f:
-                    val = json.load(f)
-                if isinstance(val, dict):
-                    return val
-                raise ArgumentTypeError(f"Expected a dict from file '{v}', but got {type(val).__name__}")
-            except Exception as e:
-                raise ArgumentTypeError(f"Failed to load JSON file '{v}': {e}")
-    except OSError:
-        pass
+    if os.path.isfile(v):
+        try:
+            with open(v, "r", encoding="utf-8") as f:
+                val = json.load(f)
+            if isinstance(val, dict):
+                return val
+            raise ArgumentTypeError(f"Expected a dict from file '{v}', but got {type(val).__name__}")
+        except (json.JSONDecodeError, OSError) as e:
+            raise ArgumentTypeError(f"Failed to load JSON file '{v}': {e}")
 
     raise ArgumentTypeError(f"Invalid dict value: {v!r}. Expected a valid JSON object string or path to a JSON file.")
 
