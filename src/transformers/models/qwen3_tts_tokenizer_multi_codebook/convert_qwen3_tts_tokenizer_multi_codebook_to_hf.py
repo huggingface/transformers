@@ -82,11 +82,11 @@ def remap_keys(state_dict: dict) -> dict:
         new_key = key
         new_key = new_key.replace(
             "decoder.quantizer.rvq_first.",
-            "decoder.quantizer.semantic_residual_vector_quantizer.",
+            "quantizer.semantic_residual_vector_quantizer.",
         )
         new_key = new_key.replace(
             "decoder.quantizer.rvq_rest.",
-            "decoder.quantizer.acoustic_residual_vector_quantizer.",
+            "quantizer.acoustic_residual_vector_quantizer.",
         )
         new_key = new_key.replace(".vq.layers.", ".layers.")
         new_key = new_key.replace("._codebook.", ".codebook.")
