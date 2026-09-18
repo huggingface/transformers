@@ -270,7 +270,7 @@ def lazy_import_flash_attention(
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn), _process_flash_kwargs_fn
 
 
-def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):
+def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):  # TODO: remove this
     """
     Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
     """
@@ -282,252 +282,70 @@ def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kern
     return flash_attn_varlen_func, flash_attn_with_kvcache_fn
 
 
-def _index_first_axis(tensor, indices):
+def _prepare_unpad_state(
+    state: torch.Tensor, attention_mask: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, torch.Tensor]:
     """
-    A local implementation of the PyTorch indexing operation `tensor[indices]` on the first axis,
-    after flattening the first two dimensions of the tensor. This is functionally equivalent to
-    FA2's `index_first_axis` and replaces the need to import it.
+    Given a state, with can be queries or keys, computes the variables needed to unpad it and run it through flash
+    attention.
     """
-    # The input tensor is expected to be of shape (batch, seq_len, ...). We flatten the first
-    # two dimensions to get (total_tokens, ...) before indexing.
-    reshaped_tensor = tensor.reshape(-1, *tensor.shape[2:])
-    return reshaped_tensor[indices]
+    unpadded_indices = attention_mask.nonzero()  # returns a tensor with shape (num_nonzero, 2) of [row, col] indices
+    unpadded_indices[:, 0] *= state.shape[1]  # converts the row index to a flattned global index
+    unpadded_indices = unpadded_indices.sum(dim=-1)
+
+    seqlens = attention_mask.sum(dim=-1, dtype=torch.int32)
+    cu_seqlens = F.pad(torch.cumsum(seqlens, dim=0, dtype=torch.int32), (1, 0))
+    max_seqlen = seqlens.max().item() # using .item() here is required to prevent a performance regression (#46693)
+    return unpadded_indices, cu_seqlens, max_seqlen
 
 
-def _unpad_input(hidden_states, attention_mask, unused_mask=None):
-    """
-    unpad_input function for flash attention variants that do not have them within their pkg themselves, e.g. fa3.
-
-    Arguments:
-        hidden_states: (batch, seqlen, ...)
-        attention_mask: (batch, seqlen), bool / int, 1 means valid and 0 means not valid.
-        unused_mask: (batch, seqlen), bool / int, 1 means the element is allocated but unused.
-
-    Return:
-        hidden_states: (total_nnz, ...), where total_nnz = number of tokens selected in attention_mask + unused_mask.
-        indices: (total_nnz), the indices of masked tokens from the flattened input sequence.
-        cu_seqlens: (batch + 1), the cumulative sequence lengths, used to index into hidden_states.
-        max_seqlen_in_batch: int
-        seqused: (batch), returns the number of tokens selected in attention_mask + unused_mask.
-    """
-    all_masks = (attention_mask + unused_mask) if unused_mask is not None else attention_mask
-    seqlens_in_batch = all_masks.sum(dim=-1, dtype=torch.int32)
-    used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
-    # using .item() here is required to prevent a performance regression (#46693)
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-
-    return (
-        _index_first_axis(hidden_states, indices),
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-        used_seqlens_in_batch,
-    )
-
-
-def _pad_input(hidden_states, indices, batch, seqlen):
-    """
-    pad_input function for flash attention variants that do not have them within their pkg themselves, e.g. fa3.
-
-    Arguments:
-        hidden_states: (total_nnz, ...), where total_nnz = number of tokens in selected in attention_mask.
-        indices: (total_nnz), the indices that represent the non-masked tokens of the original padded input sequence.
-        batch: int, batch size for the padded sequence.
-        seqlen: int, maximum sequence length for the padded sequence.
-
-    Return:
-        hidden_states: (batch, seqlen, ...)
-    """
-    dim = hidden_states.shape[1:]
-    output = torch.zeros((batch * seqlen), *dim, device=hidden_states.device, dtype=hidden_states.dtype)
-    output[indices] = hidden_states
-    return output.view(batch, seqlen, *dim)
-
-
-def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
-    """
-    Retrieves indexing data required to repad unpadded (ragged) tensors.
-
-    Arguments:
-        attention_mask (`torch.Tensor`):
-            Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
-
-    Return:
-        indices (`torch.Tensor`):
-            The indices of non-masked tokens from the flattened input sequence.
-        cu_seqlens (`torch.Tensor`):
-            The cumulative sequence lengths, used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
-        max_seqlen_in_batch (`int`):
-            Maximum sequence length in batch.
-    """
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    # using .item() here is required to prevent a performance regression (#46693)
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
-def _unpad_states(
+def prepare_fa_kwargs_from_attn_mask(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
-    value_states: torch.Tensor,
     attention_mask: torch.Tensor,
-    query_length: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], tuple[int, int]]:
+) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], tuple[int, int]]:
     """
-    Unpads query, key, and values tensors, using a single dimension for all tokens even though they belong to different
-    batches.
-
-    Arguments:
-        query_layer (`torch.Tensor`):
-            Query state with padding. Shape: (batch_size, query_length, num_heads, head_dim).
-        key_layer (`torch.Tensor`):
-            Key state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
-        value_layer (`torch.Tensor`):
-            Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
-        attention_mask (`torch.Tensor`):
-            Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
-        query_length (`int`):
-            Target length.
-        unpad_input_func:
-            The function to use for unpadding the input tensors.
-
-    Return:
-        query_layer (`torch.Tensor`):
-            Query state without padding. Shape: (total_target_length, num_heads, head_dim).
-        key_layer (`torch.Tensor`):
-            Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
-        value_layer (`torch.Tensor`):
-            Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
-        indices_q (`torch.Tensor`):
-            The indices of non-masked tokens from the flattened input target sequence.
-        (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
-            The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
-        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
-            Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
+    Prepares the variables needed to use flash attention with padded states. This returns the unpadding indices, the
+    cumulative sequence lengths, and the maximum sequence length for the query and key states.
+    The query_states and key_states are expected to already be flattened to shape [num__tokens, num_heads, head_dim] and
+    the attention mask is a boolean tensor of shape [batch_size, num_kv_tokens].
     """
-    indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-
-    # With static caches, the k/v states may be larger than the mask -> we need to slice them to avoid generating
-    # garbage. It's a bit of an anti-pattern, but otherwise we silently compute wrong attentions scores.
-    if key_states.shape[1] > (seq_len := attention_mask.shape[-1]):
-        key_states, value_states = key_states[:, :seq_len, :, :], value_states[:, :seq_len, :, :]
-
-    batch_size, kv_seq_len, num_key_value_heads, head_dim = key_states.shape
-
-    key_states = _index_first_axis(key_states, indices_k)
-    value_states = _index_first_axis(value_states, indices_k)
-    if query_length == kv_seq_len:
-        query_states = _index_first_axis(query_states, indices_k)
-        cu_seqlens_q = cu_seqlens_k
-        max_seqlen_in_batch_q = max_seqlen_in_batch_k
-        indices_q = indices_k
-    elif query_length == 1:
-        max_seqlen_in_batch_q = 1
+    batch_size, query_length = query_states.shape[:2]
+    indices_k, cu_seqlens_k, max_length_k = _prepare_unpad_state(key_states, attention_mask)
+    # For the queries, the kwargs are trivial if there is only one query token (decoding)
+    if query_length == 1:
+        max_length_q = 1
         cu_seqlens_q = torch.arange(batch_size + 1, dtype=torch.int32, device=query_states.device)
         indices_q = cu_seqlens_q[:-1]
-        query_states = query_states.squeeze(1)
+    # Otherwise, we perform the same operation as for the keys
     else:
-        # The -q_len: slice assumes left padding.
-        attention_mask = attention_mask[:, -query_length:]
-        query_states, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, *_ = _unpad_input(query_states, attention_mask)
-
-    return (
-        query_states,
-        key_states,
-        value_states,
-        indices_q,
-        (cu_seqlens_q, cu_seqlens_k),
-        (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-    )
+        indices_q, cu_seqlens_q, max_length_q = _prepare_unpad_state(query_states, attention_mask[:, -query_length:])
+    return (indices_q, indices_k), (cu_seqlens_q, cu_seqlens_k), (max_length_q, max_length_k)
 
 
-def prepare_fa_kwargs_from_position_ids(position_ids):
-    """
-    This function returns all the necessary kwargs to call `flash_attn_varlen_func` extracted from position_ids.
-
-    Arguments:
-        position_ids (`torch.Tensor`):
-            Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
-
-    Return:
-        (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
-            The cumulative sequence lengths for the target (query) and source (key, value), used to index into
-            ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
-        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
-            Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query,
-            `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
-    """
-    tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
-
+def prepare_fa_kwargs_from_position_ids(
+    position_ids: torch.Tensor
+) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[int, int]]:
+    """This function returns all the necessary kwargs to call `flash_attn_varlen_func` extracted from position_ids. The
+    attention mask is a boolean tensor of shape [batch_size, num_kv_tokens]."""
     position_ids = position_ids.reshape(-1)
     # Packed sequences all restart from the same first position id, but it is not always 0
     # (RoBERTa-like models start at padding_idx + 1)
     indices_q = (position_ids == position_ids.min()).nonzero().view(-1)
-
     cu_seq_lens_q = torch.cat(
         (
-            indices_q.to(**tensor_kwargs),
-            torch.tensor(position_ids.size(), **tensor_kwargs),
+            indices_q.to(dtype=torch.int32, device=position_ids.device),
+            torch.tensor(position_ids.size(), dtype=torch.int32, device=position_ids.device),
         )
     )
-    cu_seq_lens_k = cu_seq_lens_q
-
     # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
-    # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
-    # for some models (e.g. qwen2-vl).
+    # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always
+    # increasing for some models (e.g. qwen2-vl).
     max_length_q = cu_seq_lens_q.diff().max()
-    max_length_k = max_length_q
-
-    return (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k)
+    return (cu_seq_lens_q, cu_seq_lens_q), (max_length_q, max_length_q)
 
 
-def _prepare_from_posids(query, key, value, position_ids):
-    """
-    This function returns necessary arguments to call `flash_attn_varlen_func`.
-    All three query, key, value states will be flattened.
-    Cumulative lengths of each examples in the batch will be extracted from position_ids.
-    NOTE: ideally cumulative lengths should be prepared at the data collator stage
-
-    Arguments:
-        query (`torch.Tensor`):
-            Query state with padding. Shape: (batch_size, query_length, num_heads, head_dim).
-        key (`torch.Tensor`):
-            Key state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
-        value (`torch.Tensor`):
-            Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
-        position_ids (`torch.Tensor`):
-            Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
-
-    Return:
-        query (`torch.Tensor`):
-            Query state without padding. Shape: (total_target_length, num_heads, head_dim).
-        key (`torch.Tensor`):
-            Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
-        value (`torch.Tensor`):
-            Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
-        (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
-            The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
-        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
-            Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
-    """
-    query = query.contiguous().view(-1, query.size(-2), query.size(-1))
-    key = key.contiguous().view(-1, key.size(-2), key.size(-1))
-    value = value.contiguous().view(-1, value.size(-2), value.size(-1))
-
-    (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
-
-    return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
-
-
-def _is_packed_sequence(position_ids, batch_size):
+def _is_packed_sequence(position_ids: torch.Tensor | None, batch_size: int) -> bool:
     """
     Check the position ids whether packed sequences are indicated or not
         1. Position ids exist
@@ -541,7 +359,6 @@ def _is_packed_sequence(position_ids, batch_size):
         torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
     )
     return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
-
 
 
 def cast_to_flash_compatible_dtype(
@@ -739,39 +556,38 @@ def _flash_attention_forward(
 
     # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.
-    is_fa_with_attention_mask = attention_mask is not None
     is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=batch_size)
     is_fa_with_varlen_kwargs = None not in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
 
     # If there is no padding and it's a single sequence, we can just run flash and return
-    if not (is_fa_with_attention_mask or is_fa_with_varlen_kwargs or is_fa_with_position_ids):
+    if not (attention_mask is not None or is_fa_with_varlen_kwargs or is_fa_with_position_ids):
         out = flash_fn(query_states, key_states, value_states, **extract_flash_kwargs())
-        return out if isinstance(out, tuple) else out[0]
+        return out[0] if isinstance(out, tuple) else out
 
-    # If there is an attention mask, we can turn into a one batch concatenation of sequences
-    if is_fa_with_attention_mask:
-        q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _unpad_states(
-            query_states, key_states, value_states, attention_mask, query_length,
+    # Flattens the batch dimension, which does not exist in varlen
+    query_states, key_states, value_states = [x.view(-1, x.shape[2:]) for x in (query_states, key_states, value_states)]
+
+    # If they have not been provided, compute the sequence-defining attributes
+    if attention_mask is not None:
+        (indices_q, indices_k), (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = (
+            prepare_fa_kwargs_from_attn_mask(attention_mask, query_length, key_length)
         )
-    # If there is no attention mask, but the cu_seq_lens descriptors are missing, they need to be prepared
-    elif cu_seq_lens_q is None or cu_seq_lens_k is None:
-        q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
-            query_states, key_states, value_states, position_ids
-        )
-    # Otherwise, just flatten the query, key and value states to make the batch dimension disappear
-    else:
-        q, k, v = [x.flatten(start_dim=0, end_dim=1) for x in (query_states, key_states, value_states)]
+        query_states = query_states[indices_q]
+        key_states, value_states = key_states[indices_k], value_states[indices_k]
+    elif not is_fa_with_varlen_kwargs:
+        (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
 
     flash_kwargs = extract_flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
     flash_kwargs["cu_seqlens_q"] = cu_seq_lens_q
-    flash_kwargs["cu_seqlens_k"] = cu_seq_lens_k.clone()  # not cloning always crashes on MPS and sometimes on CUDA
+    flash_kwargs["cu_seqlens_k"] = cu_seq_lens_k.clone()  # type: ignore | not cloning crashes on MPS and on CUDA
 
-    out = flash_varlen_fn(q, k, v, **flash_kwargs)
+    out = flash_varlen_fn(query_states, key_states, value_states, **flash_kwargs)
     out = out[0] if isinstance(out, tuple) else out
 
-    # Restore the padding if there was an attention mask, otherwise just restore the batch dimension
-    if is_fa_with_attention_mask:
-        out = _pad_input(out, indices_q, batch_size, query_length)
-    else:
-        out = out.view(batch_size, -1, out.shape[-2], out.shape[-1])
-    return out
+    # If there was an attention mask, restore the padding
+    if attention_mask is not None:
+        padded_out = torch.zeros((batch_size * query_length, out.shape[1:]), device=out.device, dtype=out.dtype)
+        padded_out[indices_q] = out
+        return padded_out.view(batch_size, query_length, *out.shape[1:])
+
+    return out.view(batch_size, -1, *out.shape[1:])

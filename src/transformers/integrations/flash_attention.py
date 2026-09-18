@@ -27,7 +27,7 @@ def flash_attention_forward(
     s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    batch_size, num_heads, seq_len, q_head_dim = query.shape
+    _, _, seq_len, q_head_dim = query.shape
     v_head_dim = value.shape[-1]
 
     # Check for incompatible kwargs
@@ -36,9 +36,6 @@ def flash_attention_forward(
             "Flash Attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
-
-    # FA2 uses non-transposed inputs, with shape [batch_size, seq_len, num_heads, head_dim]
-    query, key, value = (x.transpose(1, 2) for x in (query, key, value))
 
     # FlashAttention requires the query and value have the same head dim; pad `value` up to the query head dim and crop
     # the output below. This happens for example in MLA, where `v_head_dim < qk_head_dim`.
@@ -52,6 +49,9 @@ def flash_attention_forward(
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else module.is_causal
 
+    # FA2 uses non-transposed inputs, with shape [batch_size, seq_len, num_heads, head_dim]
+    query, key, value = (x.transpose(1, 2) for x in (query, key, value))
+
     attn_output = _flash_attention_forward(
         query,
         key,
@@ -64,7 +64,7 @@ def flash_attention_forward(
         sliding_window=sliding_window,
         softcap=softcap,
         use_top_left_mask=_use_top_left_mask,
-        attn_implementation=module.config._attn_implementation,
+        attn_implementation=module.config._attn_implementation,  # type: ignore <- the config is cached on the module
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
         s_aux=s_aux,
         **kwargs,
