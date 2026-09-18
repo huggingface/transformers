@@ -527,7 +527,11 @@ def _test_eager_matches_sdpa_inference(
 
             # If 80% batch elements have matched results, it's fine
             if np.mean(results) < 0.8:
-                mean_relative_diff = ((logits_sdpa - logits_eager).abs() / (logits_eager.abs() + 1e-12)).mean()
+                # In float32: the `1e-12` guard underflows to zero in fp16, so any element that is
+                # exactly zero makes this 0/0 and the whole message reads `nan` instead of the
+                # difference that the failure is about.
+                sdpa_f32, eager_f32 = logits_sdpa.float(), logits_eager.float()
+                mean_relative_diff = ((sdpa_f32 - eager_f32).abs() / (eager_f32.abs() + 1e-12)).mean()
                 raise ValueError(
                     f"mean relative difference for {key}: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
                     f"{rtol}"
