@@ -709,11 +709,6 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
-        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            A `torch.BoolTensor` must have the same shape as the input (`(batch_size, sequence_length)`); logits are
-            then computed only for the positions marked `True`, flattened in `input_ids` order, which supports
-            non-contiguous spans (e.g. packed sequences).
-
         Example:
 
         ```python
@@ -1320,10 +1315,6 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            A `torch.BoolTensor` must have the same shape as the input (`(batch_size, sequence_length)`); logits are
-            then computed only for the positions marked `True`, flattened in `input_ids` order, which supports
-            non-contiguous spans (e.g. packed sequences).
         """
         outputs = self.model(
             input_ids=input_ids,

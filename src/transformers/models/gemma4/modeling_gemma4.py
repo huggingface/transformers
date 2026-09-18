@@ -2556,10 +2556,6 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            A `torch.BoolTensor` must have the same shape as the input (`(batch_size, sequence_length)`); logits are
-            then computed only for the positions marked `True`, flattened in `input_ids` order, which supports
-            non-contiguous spans (e.g. packed sequences).
         per_layer_inputs (`torch.Tensor`, *optional*):
             Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`

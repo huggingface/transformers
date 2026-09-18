@@ -694,15 +694,8 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
         backbone_hidden_states = backbone_outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        if isinstance(logits_to_keep, int):
-            slice_indices = slice(-logits_to_keep, None)
-            sliced_backbone_hidden_states = backbone_hidden_states[:, slice_indices, :]
-        elif logits_to_keep.dtype == torch.bool:
-            sliced_backbone_hidden_states = backbone_hidden_states[logits_to_keep]
-        else:
-            sliced_backbone_hidden_states = backbone_hidden_states[:, logits_to_keep, :]
-
-        backbone_logits = self.lm_head(sliced_backbone_hidden_states)
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        backbone_logits = self.lm_head(backbone_hidden_states[:, slice_indices, :])
 
         loss = None
         backbone_loss = None
