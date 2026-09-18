@@ -108,6 +108,7 @@ class DeepseekV2Config(PreTrainedConfig):
     q_lora_rank: int | None = 1536
     n_group: int | None = None
     n_routed_experts: int = 64
+    output_router_logits: bool = False
     n_shared_experts: int = 2
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64
