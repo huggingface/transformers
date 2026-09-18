@@ -23,7 +23,6 @@ from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     ColwiseParallel,
-    EpDispatchExpertsParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
