@@ -188,6 +188,13 @@ def _ctrl_monitor_loop():
                 f"CTRL(pid={my_pid}) RSS={ctrl_rss:.0f} PSS={ctrl_pss:.0f}MB",
             ]
             for wid, wpid in sorted(_worker_pids.items()):
+                # Refresh current test from worker-written file (same pattern as PID files)
+                try:
+                    with open(f"/tmp/current_test_{wid}.txt") as _f:
+                        _nodeid = _f.read().strip()
+                    _worker_current_test[wid] = _nodeid if _nodeid else ""
+                except Exception:  # noqa: S110
+                    pass
                 wr, wp = _tree(wpid)
                 _last_worker_pss[wid] = wp
                 nch = len(_children(wpid))
@@ -409,6 +416,12 @@ def pytest_runtest_setup(item):
     """Worker: log memory at test start; apply wav2vec2 patches if needed."""
     if not _MEM_ENABLED or not _is_worker:
         return
+    # Publish current test so controller monitor can read it
+    try:
+        with open(f"/tmp/current_test_{_worker_id}.txt", "w") as _f:
+            _f.write(item.nodeid)
+    except Exception:  # noqa: S110
+        pass
     rss, pss = _tree(os.getpid())
     sys_used, _ = _sys_mem()
     _mlog(f"[{_worker_id}] SETUP {item.nodeid} | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB")
@@ -420,6 +433,12 @@ def pytest_runtest_teardown(item, nextitem):
     """Worker: run any pending cleanup, then log memory after test completes."""
     if not _MEM_ENABLED or not _is_worker:
         return
+    # Clear current test file so controller shows idle between tests
+    try:
+        with open(f"/tmp/current_test_{_worker_id}.txt", "w") as _f:
+            _f.write("")
+    except Exception:  # noqa: S110
+        pass
     cleanup = _pending_cleanups.pop(item.nodeid, None)
     if cleanup:
         cleanup()
@@ -442,17 +461,9 @@ def pytest_runtest_logstart(nodeid, location):
 
 
 def pytest_runtest_logreport(report):
-    """Controller: track current test per worker; log failures."""
+    """Controller: log failures/errors."""
     if not _MEM_ENABLED or _is_worker:
         return
-    # Track which test each worker is currently running (for CTRL monitor line)
-    # xdist sets report.node = WorkerController; workerid lives on the node object
-    wid = getattr(report, "workerid", None) or getattr(getattr(report, "node", None), "workerid", None)
-    if wid:
-        if report.when == "setup" and report.passed:
-            _worker_current_test[wid] = report.nodeid
-        elif report.when == "teardown":
-            _worker_current_test.pop(wid, None)
     # Log failures/errors only
     if report.when not in ("call", "setup") or report.outcome == "passed":
         return
