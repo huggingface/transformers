@@ -18,9 +18,6 @@ from transformers.utils.import_utils import (
 )
 
 
-logger = logging.get_logger("transformers.utils.import_utils")
-
-
 @run_test_using_subprocess
 def test_clear_import_cache():
     """Test the clear_import_cache function."""
@@ -66,6 +63,7 @@ def test_is_package_available_edge_cases():
 
 
 def test_lazy_module_error_points_to_debug_log():
+    logger = logging.get_logger("transformers.utils.import_utils")
     lazy_module = _LazyModule(
         "transformers.test_lazy_module",
         __file__,
