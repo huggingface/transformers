@@ -6527,3 +6527,29 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     for sub_config in config.sub_configs.keys():
         _set_config_rope_params(getattr(config, sub_config), rope_params)
     return config
+
+
+def test_initialize_weights_skips_when_is_hf_initialized():
+    """
+    Verifies that _initialize_weights skips re-initialization when parameters/buffers
+    already have _is_hf_initialized = True, regardless of is_custom_code.
+    """
+    import torch
+
+    from transformers import BertConfig, BertModel
+
+    config = BertConfig(vocab_size=100, hidden_size=32, num_hidden_layers=1, num_attention_heads=1)
+    model = BertModel(config)
+
+    for param in model.parameters():
+        param._is_hf_initialized = True
+    for buffer in model.buffers():
+        if buffer is not None:
+            buffer._is_hf_initialized = True
+
+    first_param = next(model.parameters())
+    original_weight = first_param.clone()
+
+    model._initialize_weights(model, is_custom_code=False)
+
+    assert torch.equal(first_param, original_weight)
