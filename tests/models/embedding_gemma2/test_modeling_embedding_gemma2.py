@@ -24,10 +24,11 @@ from transformers import (
     set_seed,
 )
 from transformers.testing_utils import (
+    CaptureLogger,
     require_torch,
     torch_device,
 )
-from transformers.utils import ModelOutput
+from transformers.utils import ModelOutput, logging
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -354,6 +355,60 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     # NOTE: no `test_config` here (unlike the text-model test): `ConfigTester.run_common_tests`
     # asserts a `vocab_size` attribute, which on a composite config only lives on `text_config`.
     # Gemma 4's multimodal test leaves its config tester unused for the same reason.
+
+    def test_vision_axial_rope(self):
+        # Override: the inherited Gemma 4 vision rope takes position IDs with a batch dim, which the
+        # common test omits. Same override as `Gemma4Vision2TextModelTest`.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        rope_class = None
+        base_model = EmbeddingGemma2Model(config)
+        for _, module in base_model.named_modules():
+            if hasattr(module, "compute_axial_rope_parameters"):
+                rope_class = type(module)
+                vision_config = module.config
+                break
+
+        if rope_class is None:
+            self.skipTest("Couldn't infer RoPE layer for this model class.")
+
+        # First make sure that validation on default config raises no rope-related warnings
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("", cl.out)
+        logger.warning_once.cache_clear()
+
+        # Axial rope type expects only `rope_theta`, otherwise raises warning
+        vision_config.rope_parameters["factor"] = 0.25
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("Unrecognized keys in `rope_parameters` for 'rope_type'='axial': {'factor'}\n", cl.out)
+        del vision_config.rope_parameters["factor"]
+        logger.warning_once.cache_clear()
+
+        inv_freq, attention_scale = rope_class.compute_axial_rope_parameters(config=vision_config)
+        rope_module = rope_class(vision_config).to(device=torch_device)
+
+        self.assertTrue(hasattr(rope_module, "inv_freq"))
+        self.assertTrue(hasattr(rope_module, "attention_scaling"))
+        self.assertEqual(attention_scale, 1.0)  # attention scale is always 1
+        torch.testing.assert_close(inv_freq, rope_module.inv_freq.cpu())
+
+        # create 2D position IDs for a single grid of one row and 10 cols `size=(10, 2)`
+        position_ids = torch.stack(
+            [
+                torch.arange(10, dtype=torch.long, device=torch_device),
+                torch.zeros(10, dtype=torch.long, device=torch_device),
+            ]
+        ).transpose(0, 1)
+        position_ids = position_ids[None, ...].repeat(3, 1, 1)  # batch size of `3`
+        # and an empty hidden states used only to infer device/dtype
+        hidden_states = torch.empty(1, dtype=torch.float32, device=torch_device)
+        cos, sin = rope_module(hidden_states, position_ids)
+        self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
+        self.assertEqual(cos.shape[0], 3)  # angles preserve batch
 
     @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_hidden_states(self):
