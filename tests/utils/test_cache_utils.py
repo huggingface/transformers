@@ -52,6 +52,7 @@ if is_torch_available():
         Gemma2Config,
         GenerationConfig,
         LlamaConfig,
+        PreTrainedConfig,
         QuantizedCache,
         StaticCache,
         convert_and_export_with_cache,
@@ -67,6 +68,7 @@ if is_torch_available():
         StaticLayer,
         StaticSlidingWindowLayer,
     )
+    from transformers.generation.utils import GenerationMixin
     from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
 
 
@@ -153,6 +155,37 @@ class CacheTest(unittest.TestCase):
         # The cache-level `is_initialized` must also tolerate linear attention layers (which don't expose the flag);
         # before the fix this raised `AttributeError`. It reflects the attention layer's state.
         self.assertTrue(cache.is_initialized)
+
+    @parameterized.expand(
+        [
+            ("unsharded", 1, ([4, 2], [8, 16])),
+            ("tensor_parallel", 2, ([2, 1], [8, 16])),
+            ("uneven_tensor_parallel", 4, None),
+        ]
+    )
+    def test_static_cache_init_shapes(self, _, tp_size, expected):
+        model = GenerationMixin()
+        model._tp_size = tp_size
+        model.config = PreTrainedConfig(
+            hidden_size=32,
+            num_hidden_layers=3,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            head_dim=8,
+            num_kv_shared_layers=1,
+            per_layer_config={1: {"num_key_value_heads": 2, "head_dim": 16}, 2: {"num_key_value_heads": 1}},
+        )
+        self.assertEqual(model._get_static_cache_init_shape(), expected)
+
+    def test_static_cache_init_shapes_inferred_per_layer(self):
+        model = GenerationMixin()
+        model.config = PreTrainedConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            per_layer_config={1: {"num_attention_heads": 2}},
+        )
+        self.assertEqual(model._get_static_cache_init_shape(), ([4, 2], [8, 16]))
 
     def test_max_cache_len_ignores_linear_attention_layers(self):
         """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
@@ -733,7 +766,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         tp_init.assert_called_once()
-        self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
+        self.assertEqual(tp_init.call_args.kwargs["num_heads"], [1] * tc.num_hidden_layers)
         model._tp_size = None
 
         # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
@@ -1552,6 +1585,13 @@ class CacheCroppingTests(unittest.TestCase):
     attention_shape = (2, 32, 45, 32)
     conv_state_shape = (2, 32, 45)
     indexer_shape = (2, 45, 32)
+
+    @parameterized.expand([("full", DynamicLayer), ("sliding", DynamicSlidingWindowLayer)])
+    def test_crop_with_empty_layer(self, _, layer_cls):
+        layer = layer_cls(sliding_window=self.sliding_window)
+        layer.crop(0)
+        layer.crop(-2)
+        self.assertEqual(layer.get_seq_length(), 0)
 
     def test_crop_with_past(self):
         """Test that `crop` works correctly for all general layer classes, even with past recording activated"""
