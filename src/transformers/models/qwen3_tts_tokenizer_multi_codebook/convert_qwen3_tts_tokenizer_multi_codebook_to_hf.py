@@ -91,6 +91,8 @@ def remap_keys(state_dict: dict) -> dict:
         new_key = new_key.replace(".vq.layers.", ".layers.")
         new_key = new_key.replace("._codebook.", ".codebook.")
         new_key = new_key.replace(".embedding_sum", ".embed_sum")
+        new_key = new_key.replace("decoder.pre_transformer.input_proj.", "decoder.input_proj.")
+        new_key = new_key.replace("decoder.pre_transformer.output_proj.", "decoder.output_proj.")
         new_state_dict[new_key] = value
     return new_state_dict
 
