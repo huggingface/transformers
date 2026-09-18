@@ -1215,6 +1215,10 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
     base_model_prefix = "talker.code_predictor"
 
     def __init__(self, config: Qwen3TTSTalkerCodePredictorConfig, talker_config: Qwen3TTSTalkerConfig):
+        r"""
+        talker_config (`Qwen3TTSTalkerConfig`):
+            Configuration of the talker model whose hidden size is used by the code predictor projection.
+        """
         super().__init__(config)
         self.model = Qwen3TTSTalkerCodePredictorModel(config, talker_config.hidden_size)
         self.vocab_size = config.vocab_size
@@ -1260,6 +1264,10 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         generation_steps: int | None = None,
         **kwargs,
     ) -> CausalLMOutputWithPast:
+        r"""
+        generation_steps (`int`, *optional*):
+            Current code group generation step used to select the step-specific code predictor embedding and logits.
+        """
         # Prefill stage: derive generation_steps from sequence length
         if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
             generation_steps = inputs_embeds.shape[1] - 2
@@ -1449,6 +1457,24 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         subtalker_temperature: float | None = None,
         **kwargs,
     ) -> CausalLMOutputWithPast:
+        r"""
+        past_hidden (`torch.FloatTensor`, *optional*):
+            Hidden state from the previous talker decoding step, used as context for the code predictor.
+        trailing_text_hidden (`torch.FloatTensor`, *optional*):
+            Text-conditioned hidden states added to generated codec embeddings while text context remains.
+        tts_pad_embed (`torch.FloatTensor`, *optional*):
+            Padding embedding added after the trailing text hidden states have been consumed.
+        generation_step (`int`, *optional*):
+            Current codec generation step used to index `trailing_text_hidden`.
+        subtalker_dosample (`bool`, *optional*):
+            Whether the code predictor should sample non-primary codebooks.
+        subtalker_top_p (`float`, *optional*):
+            Top-p sampling value passed to the code predictor.
+        subtalker_top_k (`int`, *optional*):
+            Top-k sampling value passed to the code predictor.
+        subtalker_temperature (`float`, *optional*):
+            Sampling temperature passed to the code predictor.
+        """
         # Prefill stage
         if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
             generation_step = -1
