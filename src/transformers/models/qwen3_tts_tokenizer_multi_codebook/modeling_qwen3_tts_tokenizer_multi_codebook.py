@@ -1172,7 +1172,6 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
         self.pre_transformer = Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(config)
         self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
         self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
-        self.quantizer = Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(config.quantizer_config)
 
         self.pre_conv = Qwen3TTSTokenizerMultiCodebookCausalConvNet(
             config.codebook_dim, config.latent_dim, kernel_size=3
@@ -1204,15 +1203,12 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
         self.post_init()
 
     @auto_docstring
-    def forward(self, codes, **kwargs):
+    def forward(self, quantized_representation, **kwargs):
         r"""
-        codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`):
-            Discrete audio codes to decode into waveform values.
+        quantized_representation (`torch.FloatTensor` of shape `(batch_size, codebook_dim, sequence_length)`):
+            Quantized continuous representation to decode into waveform values.
         """
-        if codes.shape[1] != self.config.num_quantizers:
-            raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
-        hidden = self.quantizer.decode(codes)
-        hidden = self.pre_conv(hidden).transpose(1, 2)
+        hidden = self.pre_conv(quantized_representation).transpose(1, 2)
         hidden = self.input_proj(hidden)
         hidden = self.pre_transformer(inputs_embeds=hidden).last_hidden_state
         hidden = self.output_proj(hidden)
@@ -1225,14 +1221,14 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
             wav = block(wav)
         return wav.clamp(min=-1, max=1)
 
-    def chunked_decode(self, codes, chunk_size=300, left_context_size=25):
+    def chunked_decode(self, quantized_representation, chunk_size=300, left_context_size=25):
         wavs = []
         start_index = 0
-        while start_index < codes.shape[-1]:
-            end_index = min(start_index + chunk_size, codes.shape[-1])
+        while start_index < quantized_representation.shape[-1]:
+            end_index = min(start_index + chunk_size, quantized_representation.shape[-1])
             context_size = left_context_size if start_index - left_context_size > 0 else start_index
-            codes_chunk = codes[..., start_index - context_size : end_index]
-            wav_chunk = self(codes_chunk)
+            hidden_states_chunk = quantized_representation[..., start_index - context_size : end_index]
+            wav_chunk = self(hidden_states_chunk)
             wavs.append(wav_chunk[..., context_size * self.total_upsample :])
             start_index = end_index
         return torch.cat(wavs, dim=-1)
@@ -2101,6 +2097,7 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         self.output_sampling_rate = config.output_sampling_rate
 
         self.encoder = Qwen3TTSTokenizerMultiCodebookEncoderModel(self.config.encoder_config)
+        self.quantizer = Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(self.config.quantizer_config)
         self.decoder = Qwen3TTSTokenizerMultiCodebookDecoder(self.config.decoder_config)
 
         self.post_init()
@@ -2162,7 +2159,8 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         audio_lengths = (audio_codes[..., 0] > -1).sum(1) * self.decoder.total_upsample
 
         audio_codes = torch.clamp(audio_codes, min=0)
-        audio_values = self.decoder.chunked_decode(audio_codes.transpose(1, 2)).squeeze(1)
+        quantized_representation = self.quantizer.decode(audio_codes.transpose(1, 2))
+        audio_values = self.decoder.chunked_decode(quantized_representation).squeeze(1)
         audio_values = audio_values[..., : audio_lengths.max()]
 
         if not return_dict:

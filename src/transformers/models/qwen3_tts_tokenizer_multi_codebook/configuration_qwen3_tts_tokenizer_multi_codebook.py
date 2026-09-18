@@ -75,8 +75,6 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
         Latent dimension used between pre-conv and transformer.
     vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
         Hidden dimension for the vector quantization projection.
-    quantizer_config (`dict`, *optional*):
-        Configuration for the split residual vector quantizer.
     use_causal_conv (`bool`, *optional*, defaults to `True`):
         Whether to use causal convolutions in the decoder.
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
@@ -84,8 +82,6 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_tts_tokenizer_multi_codebook_code2wav"
-    sub_configs = {"quantizer_config": Qwen3TTSTokenizerMultiCodebookQuantizerConfig}
-
     codebook_size: int = 2048
     hidden_size: int = 512
     max_position_embeddings: int = 8000
@@ -113,22 +109,6 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
     vector_quantization_hidden_dimension: int = 512
     use_causal_conv: bool = True
     trim_right_ratio: float = 1.0
-    quantizer_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.quantizer_config is None:
-            self.quantizer_config = Qwen3TTSTokenizerMultiCodebookQuantizerConfig(
-                codebook_size=self.codebook_size,
-                codebook_dim=self.codebook_dim // 2,
-                num_quantizers=self.num_quantizers,
-                num_semantic_quantizers=self.num_semantic_quantizers,
-                vector_quantization_hidden_dimension=self.codebook_dim // 2,
-                hidden_size=self.codebook_dim,
-            )
-        elif isinstance(self.quantizer_config, dict):
-            self.quantizer_config = Qwen3TTSTokenizerMultiCodebookQuantizerConfig(**self.quantizer_config)
-
-        super().__post_init__(**kwargs)
 
     @property
     def layer_types(self):
@@ -141,6 +121,8 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     r"""
     encoder_config (`dict`, *optional*):
         Configuration for the Mimi-based encoder sub-model.
+    quantizer_config (`dict`, *optional*):
+        Configuration for the split residual vector quantizer.
     decoder_config (`dict`, *optional*):
         Configuration for the Code2Wav decoder sub-model.
     input_sampling_rate (`int`, *optional*, defaults to 24000):
@@ -152,10 +134,12 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     model_type = "qwen3_tts_tokenizer_multi_codebook"
     sub_configs = {
         "encoder_config": AutoConfig,
+        "quantizer_config": Qwen3TTSTokenizerMultiCodebookQuantizerConfig,
         "decoder_config": AutoConfig,
     }
 
     encoder_config: dict | PreTrainedConfig | None = None
+    quantizer_config: dict | PreTrainedConfig | None = None
     decoder_config: dict | PreTrainedConfig | None = None
     input_sampling_rate: int | None = 24000
     output_sampling_rate: int | None = 24000
@@ -177,6 +161,18 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         elif self.decoder_config is None:
             logger.info("decoder_config is None. Initializing V2 decoder with default values.")
             self.decoder_config = CONFIG_MAPPING["qwen3_tts_tokenizer_multi_codebook_code2wav"]()
+
+        if self.quantizer_config is None:
+            self.quantizer_config = Qwen3TTSTokenizerMultiCodebookQuantizerConfig(
+                codebook_size=self.decoder_config.codebook_size,
+                codebook_dim=self.decoder_config.codebook_dim // 2,
+                num_quantizers=self.decoder_config.num_quantizers,
+                num_semantic_quantizers=self.decoder_config.num_semantic_quantizers,
+                vector_quantization_hidden_dimension=self.decoder_config.codebook_dim // 2,
+                hidden_size=self.decoder_config.codebook_dim,
+            )
+        elif isinstance(self.quantizer_config, dict):
+            self.quantizer_config = Qwen3TTSTokenizerMultiCodebookQuantizerConfig(**self.quantizer_config)
 
         super().__post_init__(**kwargs)
 
