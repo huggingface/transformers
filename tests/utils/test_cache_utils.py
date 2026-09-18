@@ -81,18 +81,6 @@ TEST_CACHE_IMPLEMENTATIONS = [
 ]
 
 
-def _quantized_layer_and_states(batch_size=4, num_heads=2, head_dim=8, residual_length=4):
-    """A quantized layer, and a helper building states whose batch rows each hold a distinct constant."""
-    layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=residual_length)
-    row_values = torch.arange(1, batch_size + 1, dtype=torch.float32).view(batch_size, 1, 1, 1)
-
-    def states(order, seq_len):
-        # Row `i` is filled with the constant of the original row `order[i]`, as the model would produce it
-        return row_values.index_select(0, order).expand(batch_size, num_heads, seq_len, head_dim).clone()
-
-    return layer, row_values, states
-
-
 @require_torch
 class CacheTest(unittest.TestCase):
     """Cache tests that don't require loading models"""
@@ -182,7 +170,13 @@ class CacheTest(unittest.TestCase):
         (emptied) residual cache while guarding on the total sequence length, so it either raised or silently left
         the quantized states in the previous beam order.
         """
-        layer, row_values, states = _quantized_layer_and_states()
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+        # Row `i` of the states holds the constant `i + 1`, so the beam order can be read back off the cache
+        row_values = torch.arange(1, 5, dtype=torch.float32).view(4, 1, 1, 1)
+
+        def states(order, seq_len):
+            # Row `i` is filled with the constant of the original row `order[i]`, as the model would produce it
+            return row_values.index_select(0, order).expand(4, 2, seq_len, 8).clone()
 
         order = torch.arange(4)
         layer.update(states(order, 5), states(order, 5))
@@ -202,15 +196,16 @@ class CacheTest(unittest.TestCase):
     @require_optimum_quanto
     def test_quantized_layer_reset(self):
         """`reset` must also drop the quantized states, which hold most of the cache."""
-        layer, _, states = _quantized_layer_and_states()
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
 
-        order = torch.arange(4)
-        layer.update(states(order, 5), states(order, 5))
+        # 5 tokens for a residual length of 4: the first flush has happened, so most of the cache is quantized
+        layer.update(torch.rand(4, 2, 5, 8), torch.rand(4, 2, 5, 8))
         layer.reset()
 
         self.assertEqual(layer.get_seq_length(), 0)
-        keys, _ = layer.update(states(order, 3), states(order, 3))
+        keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
         self.assertEqual(keys.shape[-2], 3)
+        self.assertEqual(layer.get_seq_length(), 3)
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
