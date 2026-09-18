@@ -154,10 +154,11 @@ class MegatronBertSelfAttention(nn.Module):
             key_layer = curr_past_key_values.layers[self.layer_idx].keys
             value_layer = curr_past_key_values.layers[self.layer_idx].values
         else:
+            kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
             key_layer = self.key(current_states)
-            key_layer = key_layer.view(hidden_shape).transpose(1, 2)
+            key_layer = key_layer.view(kv_shape).transpose(1, 2)
             value_layer = self.value(current_states)
-            value_layer = value_layer.view(hidden_shape).transpose(1, 2)
+            value_layer = value_layer.view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
