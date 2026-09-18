@@ -38,7 +38,7 @@ if is_torch_available():
 class MiniCPMV4_7ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniCPMV4_7Processor
     # Use tiny repos to avoid loading the full 248k-vocab tokenizer (~308 MB)
-    # Tiny processor created with make_tiny_processor.py from "openbmb/MiniCPM-V-4_6"
+    # Tiny processor created with make_tiny_processor.py from "openbmb/MiniCPM-V-4_7"
     tiny_model_id = "hf-internal-testing/tiny-processor-minicpmv4_7"
 
     videos_text_kwargs_max_length = 600

@@ -40,7 +40,7 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import MiniCPMV4_7ForConditionalGeneration, MiniCPMV4_7Model
+    from transformers import DynamicCache, MiniCPMV4_7ForConditionalGeneration, MiniCPMV4_7Model
     from transformers.models.minicpmv4_7.modeling_minicpmv4_7 import MiniCPMV4_7ViTWindowAttentionMerger
     from transformers.models.qwen3_5.configuration_qwen3_5 import Qwen3_5TextConfig
 
@@ -359,9 +359,17 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
             )
 
     # Canvas M-RoPE. `get_rope_index` is cheap and pure, so it is covered here with the same tiny
-    # model the rest of the suite uses. Token 100 is the visual placeholder; 10/11 wrap an image,
-    # 12/13 wrap a slice. `target_sizes_mrope` carries one `(h, w)` patch grid per visual crop --
-    # images, slices and video frames all go through this single list.
+    # model the rest of the suite uses. Tokens 100/101 are the image/video placeholders; 10/11 wrap
+    # an image, 12/13 wrap a slice. `target_sizes_mrope` carries one `(h, w)` patch grid per visual
+    # crop -- images, slices and video frames all go through this single list.
+    @staticmethod
+    def _mm_token_type_ids(input_ids):
+        """What the processor emits: 0 for text, 1 for image tokens, 2 for video tokens."""
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == 100] = 1
+        mm_token_type_ids[input_ids == 101] = 2
+        return mm_token_type_ids
+
     def _mrope_model(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.image_start_id = 10
@@ -376,12 +384,17 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         input_ids = torch.tensor(input_ids, device=torch_device)
         attention_mask = torch.ones_like(input_ids)
         grids = None if grids is None else [torch.tensor(grids, dtype=torch.int32, device=torch_device)]
-        return model.get_rope_index(input_ids, attention_mask=attention_mask, target_sizes_mrope=grids)
+        return model.get_rope_index(
+            input_ids,
+            attention_mask=attention_mask,
+            target_sizes_mrope=grids,
+            mm_token_type_ids=self._mm_token_type_ids(input_ids),
+        )
 
     def test_get_rope_index_image_lays_out_canvas(self):
         """A single 2x2 image: time is frozen over the span while H/W walk the patch grid."""
         # [bos, im_start, 4 visual patches, im_end, eos]
-        position_ids, rope_deltas = self._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[2, 2]])
+        position_ids, rope_deltas = self._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[8, 8]])
 
         self.assertEqual(tuple(position_ids.shape), (3, 1, 8))
         temporal, height, width = position_ids[:, 0]
@@ -397,8 +410,8 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         """Slices belong to the same picture, so they reuse its timestep and restart H/W."""
         # [bos, im_start, 4 patches, im_end, slice_start, 4 patches, slice_end, eos]
         input_ids = [[1, 10, 100, 100, 100, 100, 11, 12, 100, 100, 100, 100, 13, 2]]
-        sliced, _ = self._get_rope_index(input_ids, grids=[[2, 2], [2, 2]])
-        unsliced, _ = self._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[2, 2]])
+        sliced, _ = self._get_rope_index(input_ids, grids=[[8, 8], [8, 8]])
+        unsliced, _ = self._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[8, 8]])
 
         self.assertEqual(tuple(sliced.shape), (3, 1, 14))
         temporal, height, width = sliced[:, 0]
@@ -410,7 +423,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_get_rope_index_separate_images_advance_time(self):
         """Two crops in their own im_start/im_end spans are different timesteps, unlike slices."""
         input_ids = [[1, 10, 100, 100, 100, 100, 11, 10, 100, 100, 100, 100, 11, 2]]
-        position_ids, _ = self._get_rope_index(input_ids, grids=[[2, 2], [2, 2]])
+        position_ids, _ = self._get_rope_index(input_ids, grids=[[8, 8], [8, 8]])
 
         temporal = position_ids[0, 0]
         self.assertEqual(temporal[2:6].unique().numel(), 1)
@@ -420,19 +433,161 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_get_rope_index_left_padding_matches_unpadded(self):
         """Left padding must shift nothing: the canvas is built on the unpadded tokens."""
         model = self._mrope_model()
-        grids = [torch.tensor([[2, 2]], dtype=torch.int32, device=torch_device)]
+        grids = [torch.tensor([[8, 8]], dtype=torch.int32, device=torch_device)]
 
         unpadded = torch.tensor([[1, 10, 100, 100, 100, 100, 11, 2]], device=torch_device)
         baseline, _ = model.get_rope_index(
-            unpadded, attention_mask=torch.ones_like(unpadded), target_sizes_mrope=grids
+            unpadded,
+            attention_mask=torch.ones_like(unpadded),
+            target_sizes_mrope=grids,
+            mm_token_type_ids=self._mm_token_type_ids(unpadded),
         )
 
         padded = torch.tensor([[0, 0, 1, 10, 100, 100, 100, 100, 11, 2]], device=torch_device)
         padded_mask = torch.tensor([[0, 0, 1, 1, 1, 1, 1, 1, 1, 1]], device=torch_device)
-        padded_positions, _ = model.get_rope_index(padded, attention_mask=padded_mask, target_sizes_mrope=grids)
+        padded_positions, _ = model.get_rope_index(
+            padded,
+            attention_mask=padded_mask,
+            target_sizes_mrope=grids,
+            mm_token_type_ids=self._mm_token_type_ids(padded),
+        )
 
         self.assertTrue(torch.equal(padded_positions[:, 0, 2:], baseline[:, 0]))
-        self.assertTrue(torch.equal(padded_positions[:, 0, :2], torch.zeros(3, 2, device=torch_device, dtype=torch.long)))
+        self.assertTrue(
+            torch.equal(padded_positions[:, 0, :2], torch.zeros(3, 2, device=torch_device, dtype=torch.long))
+        )
+
+    def test_compute_3d_position_ids_keeps_decoding_on_the_canvas(self):
+        """Every decoding step must get the cached-delta positions back, not `None`."""
+        model = self._mrope_model()
+        model.rope_deltas = torch.tensor([[-3]], device=torch_device)
+
+        past_key_values = DynamicCache()
+        num_kv_heads = model.config.text_config.num_key_value_heads
+        head_dim = model.config.text_config.head_dim
+        prefilled = torch.zeros(1, num_kv_heads, 8, head_dim, device=torch_device)
+        past_key_values.update(prefilled, prefilled, 0)
+
+        inputs_embeds = torch.zeros(1, 1, model.config.text_config.hidden_size, device=torch_device)
+        position_ids = model.compute_3d_position_ids(
+            input_ids=None, inputs_embeds=inputs_embeds, past_key_values=past_key_values
+        )
+
+        self.assertIsNotNone(position_ids)
+        self.assertEqual(tuple(position_ids.shape), (3, 1, 1))
+        # The 9th token sits at 1-D position 8, shifted onto the canvas by the cached delta.
+        self.assertEqual(position_ids.unique().tolist(), [5])
+
+    def test_text_only_generation_keeps_1d_positions(self):
+        """A text-only batch still carries `mm_token_type_ids`, but there is no canvas to build."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = self.model_tester.conditional_generation_class(config).to(torch_device).eval()
+
+        input_ids = torch.tensor([[1, 2, 3, 2]], device=torch_device)
+        model_kwargs = {
+            "attention_mask": torch.ones_like(input_ids),
+            "mm_token_type_ids": torch.zeros_like(input_ids),
+        }
+        position_ids = model._prepare_position_ids_for_generation(input_ids, model_kwargs)
+
+        self.assertEqual(position_ids.tolist(), [[0, 1, 2, 3]])
+
+    # Golden canvas layouts, one entry per shape the processor can emit. The tests above assert
+    # canvas *properties*; these pin the exact `(3, batch, seq)` coordinates so the canvas internals
+    # stay refactorable without silently moving a single position. Ids: 1 bos, 2/3 text, 10/11 wrap
+    # an image, 12/13 wrap a slice, 14 is the "\n" between slice rows, 100 is an image token and 101
+    # a video token. `grids` are patch grids -- the default 16x downsample merges 4x4 patches into
+    # one LLM token, so an 8x8 patch grid is a 2x2 LLM grid worth 4 visual tokens.
+    GOLDEN_CANVAS_LAYOUTS = {
+        "single image, no slices": {
+            "input_ids": [[1, 10, 100, 100, 100, 100, 11, 2]],
+            "grids": [[[8, 8]]],
+            "positions": [
+                [[0, 1, 1, 1, 1, 1, 1, 4]],
+                [[0, 0, 1, 1, 2, 2, 3, 4]],
+                [[0, 0, 1, 2, 1, 2, 3, 4]],
+            ],
+            "deltas": [[-3]],
+        },
+        "image with a 2x2 slice grid, rows split by a newline": {
+            "input_ids": [[1, 10, 100, 100, 100, 100, 11, 12, 100, 13, 12, 100, 13, 14, 12, 100, 13, 12, 100, 13, 2]],
+            "grids": [[[8, 8], [4, 4], [4, 4], [4, 4], [4, 4]]],
+            "positions": [
+                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4]],
+                [[0, 0, 1, 1, 2, 2, 3, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 4]],
+                [[0, 0, 1, 2, 1, 2, 3, 1, 1, 1, 2, 2, 2, 3, 1, 1, 1, 2, 2, 2, 4]],
+            ],
+            "deltas": [[-16]],
+        },
+        "two images separated by text": {
+            "input_ids": [[1, 10, 100, 100, 100, 100, 11, 2, 10, 100, 100, 100, 100, 11, 3]],
+            "grids": [[[8, 8], [8, 8]]],
+            "positions": [
+                [[0, 1, 1, 1, 1, 1, 1, 4, 5, 5, 5, 5, 5, 5, 8]],
+                [[0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 8]],
+                [[0, 0, 1, 2, 1, 2, 3, 4, 4, 5, 6, 5, 6, 7, 8]],
+            ],
+            "deltas": [[-6]],
+        },
+        "one video, two frames, no separator between them": {
+            "input_ids": [[1, 10, 101, 101, 101, 101, 11, 10, 101, 101, 101, 101, 11, 2]],
+            "grids": [[[8, 8], [8, 8]]],
+            "positions": [
+                [[0, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 7]],
+                [[0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7]],
+                [[0, 0, 1, 2, 1, 2, 3, 3, 4, 5, 4, 5, 6, 7]],
+            ],
+            "deltas": [[-6]],
+        },
+        "an image followed by a two-frame video": {
+            "input_ids": [
+                [1, 10, 100, 100, 100, 100, 11, 2, 10, 101, 101, 101, 101, 11, 10, 101, 101, 101, 101, 11, 3]
+            ],
+            "grids": [[[8, 8], [8, 8], [8, 8]]],
+            "positions": [
+                [[0, 1, 1, 1, 1, 1, 1, 4, 5, 5, 5, 5, 5, 5, 8, 8, 8, 8, 8, 8, 11]],
+                [[0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 11]],
+                [[0, 0, 1, 2, 1, 2, 3, 4, 4, 5, 6, 5, 6, 7, 7, 8, 9, 8, 9, 10, 11]],
+            ],
+            "deltas": [[-9]],
+        },
+        "left-padded batch, mixed layouts": {
+            "input_ids": [
+                [0, 0, 0, 1, 10, 100, 100, 100, 100, 11, 2],
+                [1, 10, 100, 100, 100, 100, 11, 12, 100, 13, 2],
+            ],
+            "attention_mask": [[0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            "grids": [[[8, 8]], [[8, 8], [4, 4]]],
+            "positions": [
+                [[0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 4], [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3]],
+                [[0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 4], [0, 0, 1, 1, 1, 1, 2, 1, 1, 1, 3]],
+                [[0, 0, 0, 0, 0, 1, 2, 1, 2, 3, 4], [0, 0, 1, 1, 1, 1, 2, 1, 1, 1, 3]],
+            ],
+            "deltas": [[-3], [-7]],
+        },
+    }
+
+    def test_get_rope_index_golden_canvas_layouts(self):
+        """Exact canvas coordinates for every layout the processor can emit."""
+        model = self._mrope_model()
+        for layout, case in self.GOLDEN_CANVAS_LAYOUTS.items():
+            with self.subTest(layout=layout):
+                input_ids = torch.tensor(case["input_ids"], device=torch_device)
+                if "attention_mask" in case:
+                    attention_mask = torch.tensor(case["attention_mask"], device=torch_device)
+                else:
+                    attention_mask = torch.ones_like(input_ids)
+                grids = [torch.tensor(grid, dtype=torch.int32, device=torch_device) for grid in case["grids"]]
+
+                position_ids, rope_deltas = model.get_rope_index(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    target_sizes_mrope=grids,
+                    mm_token_type_ids=self._mm_token_type_ids(input_ids),
+                )
+
+                self.assertEqual(position_ids.tolist(), case["positions"])
+                self.assertEqual(rope_deltas.tolist(), case["deltas"])
 
 
 @require_torch
