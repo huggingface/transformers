@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helix-lm"
+version = "0.1.0"
+description = "HELIX: a linear-scaling sequence architecture that keeps exact long-range recall"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Nathan" }]
+maintainers = [{ name = "Nathan" }]
+keywords = [
+    "transformer",
+    "attention",
+    "linear-attention",
+    "long-context",
+    "state-space-model",
+    "delta-rule",
+    "sparse-attention",
+    "associative-recall",
+    "pytorch",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = ["torch>=2.5"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/Wisk-inc/transformers/tree/main/helix-lm"
+Source = "https://github.com/Wisk-inc/transformers/tree/main/helix-lm"
+Issues = "https://github.com/Wisk-inc/transformers/issues"
+
+[project.scripts]
+helix = "helix_lm.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/helix_lm"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/helix_lm", "tests", "README.md", "LICENSE", "NOTICE", "pyproject.toml"]
+
+[tool.ruff]
+line-length = 119
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["B008", "E741"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

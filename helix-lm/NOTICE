@@ -1,0 +1,23 @@
+helix-lm
+Copyright 2026 Nathan
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+these files except in compliance with the License. A copy of the License is in
+the LICENSE file.
+
+--------------------------------------------------------------------------------
+
+This product includes software developed at Hugging Face, Inc.
+
+Portions of `helix_lm/model.py` are derived from HuggingFace Transformers
+(https://github.com/huggingface/transformers), which is licensed under the
+Apache License, Version 2.0. In particular, the chunkwise-parallel and
+single-step gated delta-rule routines (`torch_chunk_gated_delta_rule`,
+`torch_recurrent_gated_delta_rule`), the depthwise causal convolution helper
+(`causal_conv1d_fn`), the rotary-embedding helpers (`rotate_half`,
+`apply_rotary_pos_emb`), `repeat_kv`, and the RMS normalization layers follow
+that project's reference implementations.
+
+The HELIX architecture itself -- the three-strand braid, the hierarchical
+landmark index and its causal beam descent, the multi-scale local staircase,
+surprise-gated writes, and the strand fusion -- is original to this project.
