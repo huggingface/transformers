@@ -20,7 +20,7 @@ from parameterized import parameterized
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+from transformers.distributed.tensor_parallel import _get_parameter_plan
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,
@@ -182,7 +182,7 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
             # Verify sharding is correct
             for dim in range(param.ndim):
                 if param.size(dim) != param_full.size(dim):
-                    param_plan = _get_parameter_tp_plan(name, model_tp._tp_plan, is_weight=True)
+                    param_plan = _get_parameter_plan(name, model_tp._tp_plan, is_weight=True)
                     if param_plan in ("packed_colwise", "packed_rowwise"):
                         expected_size = param_full.size(dim) // world_size
                         assert param.size(dim) == expected_size, (
@@ -268,7 +268,7 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
             if grad.shape != grad_tp.shape:
                 for dim in range(grad.ndim):
                     if grad.size(dim) != grad_tp.size(dim):
-                        param_plan = _get_parameter_tp_plan(name, model_tp._tp_plan, is_weight=True)
+                        param_plan = _get_parameter_plan(name, model_tp._tp_plan, is_weight=True)
                         if param_plan in ("packed_colwise", "packed_rowwise"):
                             # interleaved slicing
                             grad = get_packed_grad_shard(grad, world_size, rank, dim)
@@ -392,6 +392,7 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
 
 def _load_ep_and_reference_models(model_path, model_class):
     """Load EP model and non-EP reference model for comparison."""
+    # All-reduce EP: every rank sees the same tokens, so TP and EP span the same ranks.
     model_ep = model_class.from_pretrained(
         model_path,
         distributed_config=DistributedConfig(tp_size=dist.get_world_size(), ep_size=dist.get_world_size()),
