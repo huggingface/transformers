@@ -627,11 +627,13 @@ def _moe_operands(kernel, module) -> dict:
         "gate_up_proj_scale_inv": getattr(module, f"{up}_scale_inv"),
         "gate_up_proj_weight_global_scale": getattr(module, f"{up}_weight_global_scale"),
         "gate_up_proj_input_global_scale": getattr(module, f"{up}_input_global_scale"),
+        "gate_up_proj_activation_scale": getattr(module, f"{up}_activation_scale"),
         "gate_up_proj_bias": getattr(module, f"{up}_bias"),
         "down_proj": module.down_proj,
         "down_proj_scale_inv": module.down_proj_scale_inv,
         "down_proj_weight_global_scale": module.down_proj_weight_global_scale,
         "down_proj_input_global_scale": module.down_proj_input_global_scale,
+        "down_proj_activation_scale": module.down_proj_activation_scale,
         "down_proj_bias": module.down_proj_bias,
         # a supported activation NAME is fused into the gate_up epilogue; any other callable
         # leaves that GEMM plain and runs on the host between the two
@@ -651,15 +653,6 @@ def _moe_operands(kernel, module) -> dict:
 def _fused_experts_forward(module, kernel_forward: str, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
     """The kernels' fused MoE chain (gate_up with the fused GLU epilogue and intermediate requant
     where supported -> down -> the routing-weighted top-k reduce) over the module's tensors."""
-    if module.activation_scheme == "static":
-        # the grouped static kernel takes ONE calibrated scalar for the whole matmul, while an
-        # experts module holds one per expert; a per-expert tensor would miss the static arm
-        # (it gates on `As.numel() == 1`) and be read as per-block activation scales instead
-        raise NotImplementedError(
-            f"the {kernel_forward} experts dispatch does not support activation_scheme='static': the "
-            "grouped static kernel takes a per-tensor scale and the experts hold one per expert; use "
-            "experts_implementation='eager' or activation_scheme='dynamic'."
-        )
     kernel = load_finegrained_kernel()
     return getattr(kernel, kernel_forward)(hidden_states, top_k_index, top_k_weights, **_moe_operands(kernel, module))
 
@@ -770,10 +763,12 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
                 f"{proj}_input_global_scale",
                 torch.ones(1 if proj == up_name else self.num_experts, dtype=torch.float32) if calibrated else None,
             )
-
-        if self.activation_scheme == "static":
-            self.gate_up_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
-            self.down_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
+            static = self.activation_scheme == "static"
+            _set_optional_parameter(
+                self,
+                f"{proj}_activation_scale",
+                torch.ones(self.num_experts, dtype=torch.float32) if static else None,
+            )
 
         # The model's per-expert output norm, carried over by the swap. A submodule slot, not a
         # class attribute: a class attribute of the same name shadows what

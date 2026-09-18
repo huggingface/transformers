@@ -420,30 +420,33 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)
         self.assertIs(call.kwargs["down_proj_bias"], m.down_proj_bias)
 
-    def test_static_activation_scheme_is_refused_by_the_fused_chain(self):
-        """Mistral-3 ships `activation_scheme="static"`: a calibrated scale per activation, held
-        as a parameter and consumed by the eager loop. The fused chain refuses it, and the reason
-        is a shape mismatch rather than a missing kernel: `w8a8_block_static_fp8_matmul_grouped`
-        takes ONE calibrated scalar for the whole matmul, while an experts module holds one per
-        expert. Passing the per-expert tensor would miss the static arm entirely — the dispatch
-        gates on `As.numel() == 1` — and it would be read as per-block activation scales, which
-        computes silently wrong results. Lifting this needs the grouped kernel to accept `(E,)`.
-        """
+    def test_static_activation_scheme_reaches_the_fused_chain(self):
+        """Mistral-3 ships `activation_scheme="static"`: a calibrated scale per activation, and a
+        MoE calibrates each expert separately, so the module holds one per expert. Both fused
+        chains take them per projection and the kernels apply each tile's own expert scale in
+        register — a host pre-quant could not, since top-k routes one row to several experts
+        whose scales differ. A dynamic module holds no such slot and passes `None`."""
         static, dynamic = (
             FineGrainedExperts(_Cfg(), block_size=(128, 128), activation_scheme=scheme)
             for scheme in ("static", "dynamic")
         )
-        held = getattr(static, "gate_up_proj_activation_scale", None)
-        self.assertIsNotNone(held, "the eager loop needs the scale it holds")
-        self.assertEqual(held.numel(), _Cfg.num_local_experts, "held PER EXPERT, which is the mismatch")
-        # a dynamic module holds no slot at all, rather than an unused one
-        self.assertIsNone(getattr(dynamic, "gate_up_proj_activation_scale", None))
+        held = static.gate_up_proj_activation_scale
+        self.assertIsNotNone(held, "the calibrated scale the chain needs")
+        self.assertEqual(held.numel(), _Cfg.num_local_experts, "one per expert, which the kernels index")
+        # a dynamic module holds the slot empty, like every other optional parameter
+        self.assertIsNone(dynamic.gate_up_proj_activation_scale)
 
-        hidden = torch.zeros(2, _Cfg.hidden_size)
-        index = torch.zeros(2, 1, dtype=torch.long)
-        weights = torch.ones(2, 1)
-        with self.assertRaises(NotImplementedError):
-            fg._fused_experts_forward(static, "moe_fused_grouped", hidden, index, weights)
+        kernel = mock.Mock()
+        kernel.get_supported_act_fns.return_value = ("silu",)
+        kernel.get_supported_norms.return_value = ()
+        for module, calibrated in ((static, True), (dynamic, False)):
+            operands = fg._moe_operands(kernel, module)
+            for projection in ("gate_up_proj", "down_proj"):
+                with self.subTest(scheme=module.activation_scheme, projection=projection):
+                    scale = operands[f"{projection}_activation_scale"]
+                    self.assertEqual(scale is not None, calibrated)
+                    if calibrated:
+                        self.assertEqual(scale.numel(), _Cfg.num_local_experts)
 
     def test_unfusable_act_fn_is_passed_as_the_module_glu(self):
         kernel, rec = _fake_bundle()
