@@ -321,7 +321,7 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import get_model_state_dict
 
-    # DCP describes each DTensor as one rectangular chunk, which cannot represent packed shards.
+    # DCP describes each DTensor as one rectangular chunk, which cannot represent strided shards.
     # We redistribute any strided shards to contiguous shards so DCP can write them out.
     # Sub-optimal compared to a future DCP that can write strided shards directly, but works for now.
     state_dict = _prepare_state_dict_for_dcp(get_model_state_dict(model))
