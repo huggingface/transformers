@@ -1193,6 +1193,7 @@ TYPE_TO_FILE_TYPE = {
     "VideosKwargs": "processing",
     "ImagesKwargs": "processing",
     "TextKwargs": "processing",
+    "NestedList": "processing",
 }
 
 
