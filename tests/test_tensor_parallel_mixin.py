@@ -21,6 +21,7 @@ from parameterized import parameterized
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,
@@ -123,8 +124,14 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
     dist.destroy_process_group()
 
 
-def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
-    """Decorator to initialize distributed environment and spawn processes."""
+def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None):
+    """Decorator to initialize distributed environment and spawn processes.
+
+    `backend` defaults to the one the current accelerator needs: "gloo" cannot carry tensors of
+    every accelerator, so hardcoding it made these tests unrunnable on those backends.
+    """
+    if backend is None:
+        backend = get_distributed_backend(torch._C._get_accelerator().type) or "gloo"
 
     def _init_distributed_inner(func):
         def wrapper(*args, **kwargs):
