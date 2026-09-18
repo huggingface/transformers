@@ -17,11 +17,14 @@ import json
 import logging
 import os
 import sys
+import tempfile
 from unittest.mock import patch
+
+import torch
 
 from test_memory_cleanup_mixin import MemoryCleanupMixin
 
-from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
+from transformers import AutoTokenizer, BertConfig, BertForMultipleChoice, ViTMAEForPreTraining, Wav2Vec2ForPreTraining
 from transformers.testing_utils import (
     CaptureLogger,
     TestCasePlus,
@@ -239,12 +242,12 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_qa.py
-            --model_name_or_path google-bert/bert-base-uncased
+            --model_name_or_path hf-internal-testing/tiny-random-bert
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
-            --max_steps=10
+            --max_steps=30
             --warmup_steps=2
             --do_train
             --do_eval
@@ -289,25 +292,40 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
 
     def test_run_swag(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
-        testargs = f"""
-            run_swag.py
-            --model_name_or_path google-bert/bert-base-uncased
-            --train_file tests/fixtures/tests_samples/swag/sample.json
-            --validation_file tests/fixtures/tests_samples/swag/sample.json
-            --output_dir {tmp_dir}
-            --max_steps=20
-            --warmup_steps=2
-            --do_train
-            --do_eval
-            --learning_rate=2e-4
-            --per_device_train_batch_size=2
-            --per_device_eval_batch_size=1
-        """.split()
+        # Create a tiny BertForMultipleChoice from config to avoid downloading a large model
+        # and to ensure the classifier head has the correct shape ([1, hidden_size]).
+        # Fixed seed guarantees reproducible weight init so accuracy is deterministic.
+        with tempfile.TemporaryDirectory() as model_dir:
+            torch.manual_seed(42)
+            config = BertConfig(
+                vocab_size=1000,
+                hidden_size=32,
+                num_hidden_layers=5,
+                num_attention_heads=4,
+                intermediate_size=37,
+            )
+            BertForMultipleChoice(config).save_pretrained(model_dir)
+            AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert").save_pretrained(model_dir)
 
-        with patch.object(sys, "argv", testargs):
-            run_swag.main()
-            result = get_results(tmp_dir)
-            self.assertGreaterEqual(result["eval_accuracy"], 0.8)
+            testargs = f"""
+                run_swag.py
+                --model_name_or_path {model_dir}
+                --train_file tests/fixtures/tests_samples/swag/sample.json
+                --validation_file tests/fixtures/tests_samples/swag/sample.json
+                --output_dir {tmp_dir}
+                --max_steps=30
+                --warmup_steps=2
+                --do_train
+                --do_eval
+                --learning_rate=5e-3
+                --per_device_train_batch_size=2
+                --per_device_eval_batch_size=1
+            """.split()
+
+            with patch.object(sys, "argv", testargs):
+                run_swag.main()
+                result = get_results(tmp_dir)
+                self.assertGreaterEqual(result["eval_accuracy"], 0.8)
 
     def test_generation(self):
         testargs = ["run_generation.py", "--prompt=Hello", "--length=10", "--seed=42"]
