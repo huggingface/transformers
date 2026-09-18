@@ -339,25 +339,23 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate
 
 
 def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
-    """Load local safetensors weights into an initialized model, preserving its current mesh and placements."""
+    """Load local safetensors weights into an initialized model, preserving its current mesh and placements.
+
+    Pass the directory containing the rank-local safetensors files, or the retained `sharded/` directory after
+    consolidation.
+    """
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
     import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader
     from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
 
-    has_torch_metadata = os.path.isfile(os.path.join(checkpoint_dir, ".metadata"))
     has_safetensors = any(name.endswith(".safetensors") for name in os.listdir(checkpoint_dir))
-    if has_torch_metadata and has_safetensors:
-        raise ValueError("Checkpoint directory contains both Torch DCP metadata and safetensors files.")
-    if has_torch_metadata:
-        reader = dcp.FileSystemReader(checkpoint_dir)
-    elif has_safetensors:
-        from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader
+    if not has_safetensors:
+        raise ValueError(f"No safetensors files found in {checkpoint_dir}.")
 
-        reader = HuggingFaceStorageReader(checkpoint_dir)
-    else:
-        raise ValueError(f"No Torch DCP metadata or safetensors files found in {checkpoint_dir}.")
+    reader = HuggingFaceStorageReader(str(checkpoint_dir))
 
     original_state = get_model_state_dict(model)
     if any(value.is_meta for value in original_state.values() if isinstance(value, torch.Tensor)):
@@ -396,7 +394,7 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consoli
         _distributed_barrier()
 
 
-def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
+def load_optimizer_distributed(model, optimizer, checkpoint_dir_or_file: str) -> None:
     """Load optimizer state from a DCP directory or a consolidated `optimizer.pt` file.
 
     Passing a directory uses the retained DCP shards. Passing the file loads the
@@ -419,10 +417,10 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
     checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
-    if os.path.isfile(checkpoint_dir):
+    if os.path.isfile(checkpoint_dir_or_file):
         from torch.distributed.tensor import distribute_tensor
 
-        loaded_state = torch.load(checkpoint_dir, map_location="cpu", weights_only=True)["optimizer"]
+        loaded_state = torch.load(checkpoint_dir_or_file, map_location="cpu", weights_only=True)["optimizer"]
         missing_keys = checkpoint_state_dict.keys() - loaded_state.keys()
         if missing_keys:
             raise ValueError(f"Missing keys in optimizer checkpoint: {sorted(missing_keys)}")
@@ -440,7 +438,7 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
                 value = value.to(target.device)
             checkpoint_state_dict[key] = value
     else:
-        dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
+        dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir_or_file)
     optimizer_state_dict = tree_map(
         lambda loaded, original: loaded.redistribute(placements=original.placements)
         if is_dtensor(original) and loaded.placements != original.placements
