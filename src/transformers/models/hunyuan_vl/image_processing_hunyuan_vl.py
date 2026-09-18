@@ -104,7 +104,10 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
     def __init__(self, **kwargs: Unpack[HunYuanVLImageProcessorKwargs]):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        if size is None:
+            size = self.size.copy()
+        elif isinstance(size, dict):
+            size = dict(size)
         if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
             size["shortest_edge"] = min_pixels
             size.pop("min_pixels", None)
@@ -120,8 +123,13 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
+        if min_pixels is not None or max_pixels is not None:
+            size_dict = dict(size) if isinstance(size, dict | SizeDict) else dict(self.size)
+            if min_pixels is not None:
+                size_dict["shortest_edge"] = min_pixels
+            if max_pixels is not None:
+                size_dict["longest_edge"] = max_pixels
+            size = SizeDict(**size_dict)
         return super()._standardize_kwargs(size=size, **kwargs)
 
     @auto_docstring

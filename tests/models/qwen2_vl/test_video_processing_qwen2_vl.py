@@ -481,3 +481,20 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             logger.warning_once.cache_clear()
             with self.assertNoLogs(logger.name, level="WARNING"):
                 self._process_frames(video_processing_class, 2, size, cap_pixels_per_frame=False)
+
+    def test_min_pixels_does_not_mutate_class_size_defaults(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48917
+        for video_processing_class in self.video_processor_list:
+            class_size_before = dict(video_processing_class.size)
+            processor = video_processing_class(min_pixels=123)
+            self.assertEqual(processor.size["shortest_edge"], 123)
+            self.assertEqual(dict(video_processing_class.size), class_size_before)
+            self.assertEqual(video_processing_class().size["shortest_edge"], class_size_before["shortest_edge"])
+
+    def test_standardize_kwargs_keeps_min_pixels_without_max_pixels(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48917
+        for video_processing_class in self.video_processor_list:
+            processor = video_processing_class()
+            kwargs = processor._standardize_kwargs(min_pixels=123)
+            self.assertEqual(kwargs["size"].shortest_edge, 123)
+            self.assertEqual(kwargs["size"].longest_edge, processor.size["longest_edge"])

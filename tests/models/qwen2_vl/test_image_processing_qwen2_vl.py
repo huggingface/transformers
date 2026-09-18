@@ -360,3 +360,23 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 height=100, width=100, images_kwargs={"patch_size": 28}
             )
             self.assertEqual(num_patches, 16)
+
+    def test_min_pixels_does_not_mutate_class_size_defaults(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48917
+        from transformers import MiniMaxM3VLImageProcessor
+
+        processor_classes = [*self.image_processing_classes.values(), MiniMaxM3VLImageProcessor]
+        for image_processing_class in processor_classes:
+            class_size_before = dict(image_processing_class.size)
+            processor = image_processing_class(min_pixels=123)
+            self.assertEqual(processor.size["shortest_edge"], 123)
+            self.assertEqual(dict(image_processing_class.size), class_size_before)
+            self.assertEqual(image_processing_class().size["shortest_edge"], class_size_before["shortest_edge"])
+
+    def test_standardize_kwargs_keeps_min_pixels_without_max_pixels(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48917
+        for image_processing_class in self.image_processing_classes.values():
+            processor = image_processing_class()
+            kwargs = processor._standardize_kwargs(min_pixels=123)
+            self.assertEqual(kwargs["size"].shortest_edge, 123)
+            self.assertEqual(kwargs["size"].longest_edge, processor.size["longest_edge"])
