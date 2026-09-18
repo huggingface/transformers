@@ -220,18 +220,3 @@ If you already have the rendered prompt string, you can call `processor(text=...
 
 [[autodoc]] MiniCPMV4_7Processor
     - __call__
-
-## MiniCPMV4_7ImageProcessor
-
-[[autodoc]] MiniCPMV4_7ImageProcessor
-    - preprocess
-
-## MiniCPMV4_7ImageProcessorPil
-
-[[autodoc]] MiniCPMV4_7ImageProcessorPil
-    - preprocess
-
-## MiniCPMV4_7VideoProcessor
-
-[[autodoc]] MiniCPMV4_7VideoProcessor
-    - preprocess

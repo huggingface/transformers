@@ -21,11 +21,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_minicpmv4_7 import *
-    from .image_processing_minicpmv4_7 import *
-    from .image_processing_pil_minicpmv4_7 import *
     from .modeling_minicpmv4_7 import *
     from .processing_minicpmv4_7 import *
-    from .video_processing_minicpmv4_7 import *
 else:
     import sys
 

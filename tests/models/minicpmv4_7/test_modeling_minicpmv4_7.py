@@ -46,11 +46,11 @@ if is_torch_available():
 
 
 class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
-    base_model_class = MiniCPMV4_7Model if is_torch_available() else None
+    base_model_class = MiniCPMV4_7Model
     config_class = MiniCPMV4_7Config
-    text_config_class = Qwen3_5TextConfig if is_torch_available() else None
+    text_config_class = Qwen3_5TextConfig
     vision_config_class = MiniCPMV4_7VisionConfig
-    conditional_generation_class = MiniCPMV4_7ForConditionalGeneration if is_torch_available() else None
+    conditional_generation_class = MiniCPMV4_7ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
