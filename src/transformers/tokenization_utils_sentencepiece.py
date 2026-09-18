@@ -16,6 +16,7 @@ SentencePiece-based tokenization class for loading from sentencepiece.model file
 """
 
 import os
+import re
 from shutil import copyfile
 
 
@@ -39,6 +40,9 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 SPIECE_UNDERLINE = "▁"
+
+# Pattern for byte-fallback tokens added by SentencePiece (e.g. <0x0A>, <0xF0>)
+_BYTE_FALLBACK_PATTERN = re.compile(r"<0x([0-9A-Fa-f]{2})>")
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
@@ -230,9 +234,16 @@ class SentencePieceBackend(PreTrainedTokenizer):
         return token
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
-        """Converts a sequence of tokens (string) in a single string."""
+        """Converts a sequence of tokens (string) in a single string.
+
+        Handles byte-fallback tokens (e.g. ``<0x0A>``) by passing the
+        joined string through :func:`re.sub` to decode them to actual
+        bytes, matching the behaviour of the native ``SentencePiece``
+        decoder for tokens that ``" ".join`` would leave as literal
+        strings.
+        """
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
+        return _BYTE_FALLBACK_PATTERN.sub(lambda m: chr(int(m.group(1), 16)), out_string)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
