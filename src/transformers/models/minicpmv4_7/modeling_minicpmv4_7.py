@@ -282,22 +282,6 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
         return torch.concat(all_patches, dim=0).unsqueeze(0)
 
 
-@auto_docstring
-class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_7Config
-    base_model_prefix = "model"
-    input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _no_split_modules = [
-        "MiniCPMV4_7VisionEmbeddings",
-        "MiniCPMV4_7VisionEncoderLayer",
-        "MiniCPMV4_7ViTWindowAttentionMerger",
-    ]
-    _is_stateful = True
-
-
 class MiniCPMV4_7VisionEmbeddings(nn.Module):
     """
     This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
@@ -596,6 +580,21 @@ class MiniCPMV4_7Merger(nn.Module):
             processed_features.append(hidden_state)
 
         return processed_features
+
+
+class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
+    config_class = MiniCPMV4_7Config
+    base_model_prefix = "model"
+    input_modalities = ("image", "video", "text")
+    supports_gradient_checkpointing = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _no_split_modules = [
+        "MiniCPMV4_7VisionEmbeddings",
+        "MiniCPMV4_7VisionEncoderLayer",
+        "MiniCPMV4_7ViTWindowAttentionMerger",
+    ]
+    _is_stateful = True
 
 
 def _crop_end(crop, input_ids: torch.LongTensor, structural_ids: set, limit: int) -> int:

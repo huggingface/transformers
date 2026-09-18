@@ -67,14 +67,8 @@ class MiniCPMV4_7Config(PreTrainedConfig):
     r"""
     insert_layer_id (`int`, *optional*, defaults to 6):
         Vision encoder layer index after which the window-attention merger is applied.
-    image_size (`int`, *optional*, defaults to 448):
-        Base resolution for image preprocessing.
     drop_vision_last_layer (`bool`, *optional*, defaults to `False`):
         Whether to drop the last layer of the vision encoder.
-    image_token_id (`int`, *optional*):
-        Token id used as the image placeholder.
-    video_token_id (`int`, *optional*):
-        Token id used as the video placeholder.
     downsample_mode (`str`, *optional*, defaults to `"16x"`):
         Visual token downsampling ratio. `"4x"` keeps 4× more tokens.
     merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):

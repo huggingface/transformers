@@ -385,7 +385,9 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         attention_mask = torch.ones_like(input_ids)
         grids = None if grids is None else torch.tensor(grids, dtype=torch.int32, device=torch_device).view(-1, 2)
         grids_videos = (
-            None if grids_videos is None else torch.tensor(grids_videos, dtype=torch.int32, device=torch_device).view(-1, 2)
+            None
+            if grids_videos is None
+            else torch.tensor(grids_videos, dtype=torch.int32, device=torch_device).view(-1, 2)
         )
         return model.get_rope_index(
             input_ids,

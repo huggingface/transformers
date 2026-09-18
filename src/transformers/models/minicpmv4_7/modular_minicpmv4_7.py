@@ -24,19 +24,18 @@ from torch import nn
 
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ...video_utils import VideoInput
-from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor
 from ..minicpmv4_6.image_processing_pil_minicpmv4_6 import MiniCPMV4_6ImageProcessorPil
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     MiniCPMV4_6Model,
-    MiniCPMV4_6PreTrainedModel,
     MiniCPMV4_6ViTWindowAttentionMerger,
 )
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
@@ -44,6 +43,48 @@ from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@strict
+class MiniCPMV4_7VisionConfig(MiniCPMV4_6VisionConfig):
+    pass
+
+
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@strict
+class MiniCPMV4_7Config(MiniCPMV4_6Config):
+    r"""
+    insert_layer_id (`int`, *optional*, defaults to 6):
+        Vision encoder layer index after which the window-attention merger is applied.
+    drop_vision_last_layer (`bool`, *optional*, defaults to `False`):
+        Whether to drop the last layer of the vision encoder.
+    downsample_mode (`str`, *optional*, defaults to `"16x"`):
+        Visual token downsampling ratio. `"4x"` keeps 4× more tokens.
+    merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
+        Kernel size `(h, w)` for merging adjacent visual patches in the Merger.
+    merger_times (`int`, *optional*, defaults to 1):
+        Number of iterative merge rounds in the Merger.
+    image_start_id (`int`, *optional*):
+        Token id of the image-start marker (`<image>`) used by canvas M-RoPE. Resolved from the
+        tokenizer by the conversion script and stored in `config.json`. Required for any
+        checkpoint that is used with images or videos.
+    image_end_id (`int`, *optional*):
+        Token id of the image-end marker (`</image>`) used by canvas M-RoPE. See `image_start_id`.
+    slice_start_id (`int`, *optional*):
+        Token id of the slice-start marker (`<slice>`) used by canvas M-RoPE. See `image_start_id`.
+    slice_end_id (`int`, *optional*):
+        Token id of the slice-end marker (`</slice>`) used by canvas M-RoPE. See `image_start_id`.
+    newline_id (`int`, *optional*):
+        Token id of the newline (`"\n"`) separating slice rows for canvas M-RoPE. See
+        `image_start_id`.
+    """
+
+    image_start_id: int | None = None
+    image_end_id: int | None = None
+    slice_start_id: int | None = None
+    slice_end_id: int | None = None
+    newline_id: int | None = None
 
 
 def _crop_end(crop, input_ids: torch.LongTensor, structural_ids: set, limit: int) -> int:
@@ -102,19 +143,6 @@ def _group_visual_frames(
     return groups
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
-@strict
-class MiniCPMV4_7VisionConfig(MiniCPMV4_6VisionConfig):
-    r"""
-    insert_layer_id (`int`, *optional*, defaults to 6):
-        Vision encoder layer index after which the window-attention merger is applied.
-    window_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
-        Window size `(h, w)` for the intermediate window-attention merger.
-    """
-
-    model_type = "minicpmv4_7_vision"
-
-
 class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
     def forward(
         self,
@@ -163,56 +191,6 @@ class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
             all_patches.append(hidden_state + patch_residual)
 
         return torch.concat(all_patches, dim=0).unsqueeze(0)
-
-
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
-@strict
-class MiniCPMV4_7Config(MiniCPMV4_6Config):
-    r"""
-    insert_layer_id (`int`, *optional*, defaults to 6):
-        Vision encoder layer index after which the window-attention merger is applied.
-    image_size (`int`, *optional*, defaults to 448):
-        Base resolution for image preprocessing.
-    drop_vision_last_layer (`bool`, *optional*, defaults to `False`):
-        Whether to drop the last layer of the vision encoder.
-    image_token_id (`int`, *optional*):
-        Token id used as the image placeholder.
-    video_token_id (`int`, *optional*):
-        Token id used as the video placeholder.
-    downsample_mode (`str`, *optional*, defaults to `"16x"`):
-        Visual token downsampling ratio. `"4x"` keeps 4× more tokens.
-    merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
-        Kernel size `(h, w)` for merging adjacent visual patches in the Merger.
-    merger_times (`int`, *optional*, defaults to 1):
-        Number of iterative merge rounds in the Merger.
-    image_start_id (`int`, *optional*):
-        Token id of the image-start marker (`<image>`) used by canvas M-RoPE. Resolved from the
-        tokenizer by the conversion script and stored in `config.json`. Required for any
-        checkpoint that is used with images or videos.
-    image_end_id (`int`, *optional*):
-        Token id of the image-end marker (`</image>`) used by canvas M-RoPE. See `image_start_id`.
-    slice_start_id (`int`, *optional*):
-        Token id of the slice-start marker (`<slice>`) used by canvas M-RoPE. See `image_start_id`.
-    slice_end_id (`int`, *optional*):
-        Token id of the slice-end marker (`</slice>`) used by canvas M-RoPE. See `image_start_id`.
-    newline_id (`int`, *optional*):
-        Token id of the newline (`"\n"`) separating slice rows for canvas M-RoPE. See
-        `image_start_id`.
-    """
-
-    model_type = "minicpmv4_7"
-    sub_configs = {"text_config": AutoConfig, "vision_config": MiniCPMV4_7VisionConfig}
-
-    image_start_id: int | None = None
-    image_end_id: int | None = None
-    slice_start_id: int | None = None
-    slice_end_id: int | None = None
-    newline_id: int | None = None
-
-
-@auto_docstring
-class MiniCPMV4_7PreTrainedModel(MiniCPMV4_6PreTrainedModel):
-    config_class = MiniCPMV4_7Config
 
 
 class MiniCPMV4_7Model(MiniCPMV4_6Model):
@@ -574,7 +552,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
     def __init__(self, config: MiniCPMV4_7Config):
         # Parent would build a MiniCPMV4_6Model; bypass it to build the 4.7 model instead.
-        MiniCPMV4_7PreTrainedModel.__init__(self, config)
+        PreTrainedModel.__init__(self, config)
         self.model = MiniCPMV4_7Model(config)
         self.vocab_size = config.text_config.vocab_size
         self.lm_head = nn.Linear(config.text_config.hidden_size, self.vocab_size, bias=False)
@@ -849,7 +827,7 @@ class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
 __all__ = [
     "MiniCPMV4_7Config",
     "MiniCPMV4_7VisionConfig",
-    "MiniCPMV4_7PreTrainedModel",
+    "MiniCPMV4_7PreTrainedModel",  # noqa
     "MiniCPMV4_7Model",
     "MiniCPMV4_7ForConditionalGeneration",
     "MiniCPMV4_7ImageProcessor",
