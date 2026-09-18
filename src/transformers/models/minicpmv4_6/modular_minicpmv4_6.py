@@ -704,6 +704,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         return output
 
 
+@auto_docstring
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

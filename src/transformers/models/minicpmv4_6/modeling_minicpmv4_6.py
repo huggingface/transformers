@@ -758,6 +758,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
 
 
+@auto_docstring
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
