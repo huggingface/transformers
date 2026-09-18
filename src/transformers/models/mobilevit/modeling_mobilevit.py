@@ -19,10 +19,10 @@ import math
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -31,7 +31,10 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, torch_int
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mobilevit import MobileViTConfig
 
 
@@ -569,21 +572,11 @@ class MobileViTEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> tuple | BaseModelOutputWithNoAttention:
-        all_hidden_states = () if output_hidden_states else None
-
-        for i, layer_module in enumerate(self.layer):
+    ) -> BaseModelOutputWithNoAttention:
+        for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
 
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -611,6 +604,13 @@ class MobileViTPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class MobileViTModel(MobileViTPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": [
+            OutputRecorder(MobileViTMobileNetLayer, layer_name="encoder.layer", capture_initial_hidden_state=False),
+            OutputRecorder(MobileViTLayer, layer_name="encoder.layer", capture_initial_hidden_state=False),
+        ]
+    }
+
     def __init__(self, config: MobileViTConfig, expand_output: bool = True):
         r"""
         expand_output (`bool`, *optional*, defaults to `True`):
@@ -642,47 +642,31 @@ class MobileViTModel(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.conv_stem(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        encoder_outputs = self.encoder(embedding_output)
 
         if self.expand_output:
-            last_hidden_state = self.conv_1x1_exp(encoder_outputs[0])
+            last_hidden_state = self.conv_1x1_exp(encoder_outputs.last_hidden_state)
 
             # global average pooling: (batch_size, channels, height, width) -> (batch_size, channels)
             pooled_output = torch.mean(last_hidden_state, dim=[-2, -1], keepdim=False)
         else:
-            last_hidden_state = encoder_outputs[0]
+            last_hidden_state = encoder_outputs.last_hidden_state
             pooled_output = None
-
-        if not return_dict:
-            output = (last_hidden_state, pooled_output) if pooled_output is not None else (last_hidden_state,)
-            return output + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -693,6 +677,8 @@ class MobileViTModel(MobileViTPreTrainedModel):
     """
 )
 class MobileViTForImageClassification(MobileViTPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: MobileViTConfig) -> None:
         super().__init__(config)
 
@@ -708,30 +694,21 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | ImageClassifierOutputWithNoAttention:
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        outputs = self.mobilevit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutputWithNoAttention:
+        outputs = self.mobilevit(pixel_values, **kwargs)
+        pooled_output = outputs.pooler_output
         logits = self.classifier(self.dropout(pooled_output))
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
@@ -857,6 +834,8 @@ class MobileViTDeepLabV3(nn.Module):
     """
 )
 class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
+    _can_record_outputs = {"hidden_states": OutputRecorder(MobileViTLayer, capture_initial_hidden_state=False)}
+
     def __init__(self, config: MobileViTConfig) -> None:
         super().__init__(config)
 
@@ -867,14 +846,14 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SemanticSegmenterOutput:
         r"""
         Examples:
@@ -901,44 +880,27 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs = self.mobilevit(
-            pixel_values,
-            output_hidden_states=True,  # we need the intermediate hidden states
-            return_dict=return_dict,
-        )
+        outputs = self.mobilevit(pixel_values, **kwargs)
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        encoder_hidden_states = outputs.hidden_states
 
         logits = self.segmentation_head(encoder_hidden_states)
 
         loss = None
         if labels is not None:
-            # upsample logits to the images' original size
-            upsampled_logits = nn.functional.interpolate(
-                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            loss = self.loss_function(
+                logits,
+                labels,
+                ignore_index=self.config.semantic_loss_ignore_index,
             )
-            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-            loss = loss_fct(upsampled_logits, labels)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
-                output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=None,
         )
 
