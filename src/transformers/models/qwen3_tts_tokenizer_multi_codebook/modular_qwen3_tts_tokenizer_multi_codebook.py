@@ -393,15 +393,11 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
     ):
-        """
-        Encodes the input audio waveform into discrete codes.
-
-        Args:
-            input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                Float values of the input audio waveform.
-            padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked*
-                or 0 for *masked*.
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Input audio waveform.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Padding mask for `input_values`.
         """
 
         if padding_mask is None:
@@ -426,12 +422,9 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         self,
         audio_codes: torch.Tensor,
     ):
-        """
-        Decodes the given frames into an output audio waveform.
-
-        Args:
-            audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`, *optional*):
-                Discret code embeddings computed using `model.encode`.
+        r"""
+        audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
+            Discrete code embeddings computed using [`~Qwen3TTSTokenizerMultiCodebookModel.encode`].
         """
         audio_lengths = (audio_codes[..., 0] > -1).sum(1) * self.decoder.total_upsample
 
