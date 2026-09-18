@@ -541,7 +541,7 @@ def _flash_attention_forward(
         attn_implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
-    (flash_fn, flash_varlen_fn, _), process_flash_kwargs_fn = lazy_import_flash_attention(attn_implementation)
+    (flash_fn, flash_varlen_fn, flash_kv_fn), process_flash_kwargs_fn = lazy_import_flash_attention(attn_implementation)
     batch_size, key_length = key_states.shape[:2]
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)

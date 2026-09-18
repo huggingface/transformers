@@ -49,7 +49,7 @@ def flash_attention_forward(
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else module.is_causal
 
-    # FA2 uses non-transposed inputs, with shape [batch_size, seq_len, num_heads, head_dim]
+    # _flash_attention_forward needs non-transposed inputs, with shape [batch_size, seq_len, num_heads, head_dim]
     query, key, value = (x.transpose(1, 2) for x in (query, key, value))
 
     attn_output = _flash_attention_forward(
