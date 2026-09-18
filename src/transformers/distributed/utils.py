@@ -370,6 +370,7 @@ def _prepare_state_dict_for_dcp(state_dict):
             return value.redistribute(placements=placements)
         return value
 
+    # tree_map allows to map a function on arbitrarily nested structures.
     return tree_map(prepare, state_dict)
 
 
@@ -570,6 +571,8 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir_or_file: str) ->
             checkpoint_state_dict[key] = value
     else:
         dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir_or_file)
+
+    # tree_map allows to map a function on arbitrarily nested structures.
     optimizer_state_dict = tree_map(
         lambda loaded, original: loaded.redistribute(placements=original.placements)
         if is_dtensor(original) and loaded.placements != original.placements
