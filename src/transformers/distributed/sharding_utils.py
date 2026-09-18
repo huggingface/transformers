@@ -88,8 +88,10 @@ class DtensorShardOperation:
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
-        self._axis0_offset = offsets[0]
-        self._axis0_local_size = local_shape[0]
+        # a 0-dim (per-tensor) parameter is replicated whole — see `shard_tensor` — so it has no
+        # axis 0 to take an offset on
+        self._axis0_offset = offsets[0] if offsets else 0
+        self._axis0_local_size = local_shape[0] if local_shape else 1
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None

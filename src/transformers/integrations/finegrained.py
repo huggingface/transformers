@@ -1079,7 +1079,16 @@ class FineGrainedInterleaveGateUp(ConversionOps):
         if experts is None or not (experts.is_concatenated and experts.holds_interleaved_gate_up):
             return input_dict
         interleave = Interleave(dim=1, inverse=not self.inverse)  # inverse=True is stacked -> interleaved
-        return {key: interleave.convert({key: value}, None, [key])[key] for key, value in input_dict.items()}
+        out = {}
+        for key, value in input_dict.items():
+            probe = value[0] if isinstance(value, list) and len(value) == 1 else value
+            # a per-tensor scale is ONE value covering the whole gate|up stack — no row axis to
+            # reorder, and reshaping its length-1 axis into pairs is what would fail
+            if getattr(probe, "ndim", 0) < 2 or probe.shape[1] < 2:
+                out[key] = value
+            else:
+                out[key] = interleave.convert({key: value}, None, [key])[key]
+        return out
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -1279,12 +1288,15 @@ def _stack_globals(sources: dict) -> torch.Tensor:
     return torch.cat(columns, dim=1)
 
 
-class FineGrainedInputGlobals(ConversionOps):
-    """modelopt's calibrated ``input_scale`` in the layout the module holds: one value for the
-    gate_up (its rows are the hidden states, quantized once BEFORE routing, so the halves and
-    experts reduce to their max — the global is a split of the block scale, exact for any value
-    the accumulator multiplies back), and one per expert for the down, whose rows are per expert
-    by construction."""
+class FineGrainedInputScales(ConversionOps):
+    """A calibrated checkpoint's ``input_scale`` in the layout the module holds. One value per
+    quantized module, so a MoE brings one per expert, the gate|up pair reducing to their max —
+    both halves read the same rows.
+
+    The NVFP4 gate_up global collapses further, to ONE value: its rows are the hidden states,
+    quantized once BEFORE routing, and the global is a split of the block scale, exact for any
+    value the accumulator multiplies back. A static activation scale IS the quantization scale,
+    with no block level to absorb an inflated one, so it keeps its per-expert form."""
 
     def __init__(self, hf_quantizer=None):
         self.hf_quantizer = hf_quantizer
@@ -1296,7 +1308,7 @@ class FineGrainedInputGlobals(ConversionOps):
             values.append(value.float())
         stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
         per_expert = stacked.reshape(stacked.shape[0], -1).amax(dim=1)
-        one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")
+        one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")  # the NVFP4 global only
         return {full_layer_name: (per_expert.amax().reshape(1) if one_value else per_expert).contiguous()}
 
 
@@ -1375,12 +1387,20 @@ class FineGrainedQuantize(ConversionOps):
             scale = load_finegrained_kernel().swizzle_mx_scales(scale)
         out = {key: weight, f"{prefix}_scale_inv": scale}
         if global_scale is not None:
-            out[f"{prefix}_weight_global_scale"] = global_scale
+            # the experts name their global `<proj>_weight_global_scale`, a dense linear just
+            # `weight_global_scale` — both sit beside a `<stem>_scale_inv`, so ask for the slot
+            stem = holder[1].removesuffix("_scale_inv")
+            suffix = "_global_scale" if hasattr(module, f"{stem}_global_scale") else "_weight_global_scale"
+            out[f"{prefix}{suffix}"] = global_scale
         # activations are quantized dynamically against the block scales alone here — there is no
         # calibration pass — so the module's activation globals are the identity
         held_input = getattr(module, holder[1].replace("_scale_inv", "_input_global_scale"), None)
         if held_input is not None:
-            out[f"{prefix}_input_global_scale"] = torch.ones_like(held_input)
+            # on the weight's device, not the slot's: the module is still on meta here, and
+            # `ones_like` would inherit that and leave the parameter unmaterialized
+            out[f"{prefix}_input_global_scale"] = torch.ones(
+                held_input.shape, dtype=held_input.dtype, device=value.device
+            )
         return out
 
     @staticmethod

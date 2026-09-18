@@ -40,7 +40,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
     require_torch_multi_accelerator,
-    slow,
 )
 
 
@@ -1361,6 +1360,71 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
                         f"the others' ops: {[[type(o).__name__ for o in c.operations] for c in claimed]}",
                     )
 
+    def test_a_calibrated_checkpoint_s_input_scale_reaches_the_module_s_slot(self):
+        """A static checkpoint calibrates one `input_scale` per quantized module. Nothing routed
+        those keys for plain FP8 — only NVFP4 read them, as its second-level global — so the two
+        shipped static models (Ministral-3 dense, Mistral-4 MoE) loaded with the registered
+        default of 1.0: every activation quantized against the wrong scale, silently.
+
+        Each key must reach the slot its module holds, in that module's shape: one value on a
+        dense linear, one per expert on the stacked experts, and the gate|up pair reduced to one
+        per expert rather than flattened to 2E."""
+        import re
+
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        quantizer = FineGrainedHfQuantizer(FineGrainedConfig(quant_method="fp8", activation_scheme="static"))
+        quantizer.pre_quantized = True
+        converters = quantizer.update_weight_conversions([])
+
+        def claim(key):
+            return [
+                c
+                for c in converters
+                for pattern in (c.source_patterns if isinstance(c.source_patterns, list) else [c.source_patterns])
+                if re.search(str(pattern), key)
+            ]
+
+        for key, expected in (
+            ("model.layers.3.self_attn.q_proj.input_scale", "model.layers.3.self_attn.q_proj.activation_scale"),
+            ("model.layers.3.mlp.experts.7.gate_proj.input_scale", "mlp.experts.gate_up_proj_activation_scale"),
+            ("model.layers.3.mlp.experts.7.up_proj.input_scale", "mlp.experts.gate_up_proj_activation_scale"),
+            ("model.layers.3.mlp.experts.7.down_proj.input_scale", "mlp.experts.down_proj_activation_scale"),
+            ("model.layers.3.mlp.experts.gate_up_proj_input_scale", "experts.gate_up_proj_activation_scale"),
+            ("model.layers.3.mlp.experts.down_proj_input_scale", "experts.down_proj_activation_scale"),
+        ):
+            with self.subTest(key=key.rsplit(".", 2)[-2]):
+                claimed = claim(key)
+                self.assertEqual(len(claimed), 1, f"{len(claimed)} converters claim {key}")
+                # a renaming's target carries a backreference; resolve it against the key
+                targets = [
+                    re.sub(str(claimed[0].source_patterns[0]), str(t), key) if "\\1" in str(t) else str(t)
+                    for t in claimed[0]._original_target_patterns
+                ]
+                self.assertTrue(any(expected in t for t in targets), f"{key} -> {targets}")
+        # a dynamic checkpoint has no such key to route, and a weight-only one ignores it
+        dynamic = FineGrainedHfQuantizer(FineGrainedConfig(quant_method="fp8"))
+        dynamic.pre_quantized = True
+        self.assertEqual(dynamic.get_weight_conversions(), [])
+
+    def test_the_calibrated_expert_scales_reduce_per_expert_not_per_tensor(self):
+        """`FineGrainedInputScales` collapses the gate_up to ONE value for the NVFP4 global — the
+        global is a split of the block scale, so an inflated one is exact. A static scale IS the
+        quantization scale, with no block level to absorb it, so collapsing it would quantize
+        every expert against the largest one's range. It stays per expert."""
+        import torch
+
+        from transformers.integrations.finegrained import FineGrainedInputScales
+
+        sources = {
+            "mlp.experts.*.gate_proj.input_scale": torch.tensor([1.0, 3.0]),
+            "mlp.experts.*.up_proj.input_scale": torch.tensor([2.0, 1.0]),
+        }
+        target = "mlp.experts.gate_up_proj_activation_scale"
+        scale = FineGrainedInputScales().convert(dict(sources), full_layer_name=target)[target]
+        torch.testing.assert_close(scale, torch.tensor([2.0, 3.0]))  # per expert, over the pair
+
     def test_the_gate_up_fold_survives_the_loader_s_list_wrapping(self):
         """The loader hands a converter its tensors in a list. Unwrapped, a fused `(E, 2)` pair
         reads as `(1, 2E)`, the per-half fold does not fire, and the module gets `2E` globals
@@ -1465,9 +1529,9 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         """The gate_up quantizes the hidden states once, BEFORE routing, so its calibrated
         `input_scale` reduces to one value; the down's rows are per expert, so its stays per
         expert — the requant epilogue normalizes each row by its own expert's value."""
-        from transformers.integrations.finegrained import FineGrainedInputGlobals
+        from transformers.integrations.finegrained import FineGrainedInputScales
 
-        up = FineGrainedInputGlobals().convert(
+        up = FineGrainedInputScales().convert(
             {
                 "mlp.experts.*.gate_proj.input_scale": torch.tensor([1.0, 3.0]),
                 "mlp.experts.*.up_proj.input_scale": torch.tensor([2.0, 1.0]),
@@ -1475,7 +1539,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
             full_layer_name="mlp.experts.gate_up_proj_input_global_scale",
         )["mlp.experts.gate_up_proj_input_global_scale"]
         torch.testing.assert_close(up, torch.tensor([3.0]))
-        down = FineGrainedInputGlobals().convert(
+        down = FineGrainedInputScales().convert(
             {"mlp.experts.*.down_proj.input_scale": torch.tensor([1.0, 4.0])},
             full_layer_name="mlp.experts.down_proj_input_global_scale",
         )["mlp.experts.down_proj_input_global_scale"]
@@ -1870,7 +1934,6 @@ for mode in modes:
 """
 
 
-@slow
 @require_torch_multi_accelerator
 class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
     """Expert parallelism and intra-expert tensor parallelism must both reproduce what
@@ -1913,6 +1976,8 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
             GptOssForCausalLM,
             MiniMaxM3SparseForConditionalGeneration,
             MiniMaxM3VLConfig,
+            Mistral4Config,
+            Mistral4ForCausalLM,
         )
         from transformers.utils.quantization_config import FineGrainedConfig
 
@@ -1944,6 +2009,28 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
                 # DeepSeek-V3 ships block-FP8: 128x128 weight blocks, activations quantized
                 # per token at run time
                 FineGrainedConfig(quant_method="fp8", weight_block_size=(128, 128)),
+            ),
+            # the only shipped STATIC scheme: per-TENSOR weights (no `weight_block_size`) and a
+            # calibrated activation scale per quantized module, which for a MoE is one per expert.
+            # Its conversion script asserts `qscheme_act == "TENSOR"`; Ministral-3 is the dense
+            # counterpart of the same export.
+            "mistral4-fp8_tensor_static": (
+                Mistral4Config,
+                Mistral4ForCausalLM,
+                {
+                    "vocab_size": 64,
+                    "hidden_size": 256,
+                    "intermediate_size": 256,
+                    "moe_intermediate_size": 256,
+                    "num_hidden_layers": 1,
+                    "num_attention_heads": 4,
+                    "num_key_value_heads": 4,
+                    "n_routed_experts": 4,
+                    "num_experts_per_tok": 2,
+                    "first_k_dense_replace": 0,
+                    "max_position_embeddings": 32,
+                },
+                FineGrainedConfig(quant_method="fp8", weight_block_size=None, activation_scheme="static"),
             ),
             # MULTIMODAL: the experts' plans live on `text_config`, not on the config the
             # quantizer is handed — whose `base_model_ep_plan` is None. Reading only the outer
@@ -1977,9 +2064,10 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
                     ),
                     "vision_config": Glm4vMoeVisionConfig(
                         depth=2,
-                        hidden_size=48,
+                        num_heads=4,
+                        hidden_size=64,
                         out_hidden_size=256,
-                        intermediate_size=22,
+                        intermediate_size=64,
                         patch_size=14,
                         spatial_merge_size=1,
                         temporal_patch_size=2,
