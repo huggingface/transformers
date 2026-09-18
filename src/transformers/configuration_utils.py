@@ -99,14 +99,13 @@ _LEGACY_LAYER_TYPE_REMAP = {
 def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
     """Apply legacy → current layer-type name mapping.
 
-    This function converts deprecated layer type names to their current equivalents.
-    For example, 'mamba' is mapped to 'linear_attention' and 'attention' is mapped to 'full_attention'.
+    Converts names in `_LEGACY_LAYER_TYPE_REMAP` to their current equivalents like `attention` → `full_attention`. Names not in that dict are returned unchanged.
 
     Args:
-        layer_types (list[str]): List of layer type names that may contain legacy names.
+        layer_types (list[str]): Layer type names that may include legacy values.
 
     Returns:
-        list[str]: List of layer type names with legacy names converted to current equivalents.
+        list[str]: Remapped names in the same order.
     """
     return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
 
