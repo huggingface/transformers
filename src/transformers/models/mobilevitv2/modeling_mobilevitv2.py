@@ -675,12 +675,6 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.mobilevitv2(pixel_values, **kwargs)
         pooled_output = outputs.pooler_output
         logits = self.classifier(pooled_output)
@@ -835,10 +829,6 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python
