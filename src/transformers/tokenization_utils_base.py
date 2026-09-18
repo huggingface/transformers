@@ -3653,6 +3653,12 @@ if PreTrainedTokenizerBase.push_to_hub.__doc__ is not None:
     )
 
 
+# Metaspace only prepends `▁` when the text does not already start with one.
+# If the text did start with a space, `Strip(content=" ", left=1)` would remove it. 
+# `\A` and not `^` because `^` is multiline.
+PREFIX_SPACE_PATTERN = r"\A (?! )"
+
+
 def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     if add_prefix_space:
         prepend_scheme = "always"
