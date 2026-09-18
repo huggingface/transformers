@@ -21,7 +21,6 @@ import tempfile
 from unittest.mock import patch
 
 import torch
-
 from test_memory_cleanup_mixin import MemoryCleanupMixin
 
 from transformers import (
