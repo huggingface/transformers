@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import timeout_decorator  # noqa
 
@@ -44,6 +45,7 @@ if is_torch_available():
         OPTForSequenceClassification,
         OPTModel,
     )
+    from transformers.masking_utils import create_causal_mask
 
 
 def prepare_opt_inputs_dict(
@@ -260,6 +262,20 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_none_attention_mask_stays_none_for_causal_mask(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = OPTModel(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"].to(torch_device)
+
+        with patch(
+            "transformers.models.opt.modeling_opt.create_causal_mask", wraps=create_causal_mask
+        ) as mock_create_causal_mask:
+            with torch.no_grad():
+                model(input_ids, attention_mask=None)
+
+        self.assertTrue(mock_create_causal_mask.called)
+        self.assertIsNone(mock_create_causal_mask.call_args.kwargs["attention_mask"])
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
