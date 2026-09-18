@@ -3247,6 +3247,7 @@ class PreTrainedModel(
         save_peft_format: bool = True,
         save_original_format: bool = True,
         distributed_checkpoint: bool = False,
+        consolidate_distributed_checkpoint: bool = True,
         **kwargs,
     ):
         """
@@ -3293,13 +3294,20 @@ class PreTrainedModel(
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
-                When saving an FSDP-wrapped model, use the distributed checkpoint (DCP) path instead of gathering weights
-                to CPU first. Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
+                When saving an FSDP-wrapped model, write safetensors with distributed checkpointing (DCP) instead of
+                gathering weights to CPU first. Every rank must call this method.
                 When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
                 Native FSDP requires `torch>=2.7`.
+            consolidate_distributed_checkpoint (`bool`, *optional*, defaults to `True`):
+                Consolidate rank-local safetensors files into complete model weights loadable with `from_pretrained()`.
+                Intermediate files are retained under `sharded/`. When `False`, only rank-local safetensors files are
+                written in `save_directory`; load these with `load_distributed_checkpoint()`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        if not distributed_checkpoint and not consolidate_distributed_checkpoint:
+            raise ValueError("Distributed checkpoint options require `distributed_checkpoint=True`.")
+
         if token is not None:
             kwargs["token"] = token
 
@@ -3406,6 +3414,7 @@ class PreTrainedModel(
             self.save_distributed_checkpoint(
                 model_to_save,
                 save_directory,
+                consolidate=consolidate_distributed_checkpoint,
                 push_to_hub=push_to_hub,
                 save_on_this_rank=save_on_this_rank,
                 token=token,

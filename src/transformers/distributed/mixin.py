@@ -204,6 +204,7 @@ class DistributedMixin:
         model_to_save,
         save_directory: str | os.PathLike,
         *,
+        consolidate: bool = True,
         push_to_hub: bool = False,
         save_on_this_rank: bool = True,
         repo_id: str | None = None,
@@ -212,7 +213,7 @@ class DistributedMixin:
         token: str | bool | None = None,
         create_pr: bool = False,
     ) -> None:
-        """Save an FSDP-wrapped model via DCP and optionally push to the Hub."""
+        """Save an FSDP-wrapped model as safetensors via DCP and optionally push to the Hub."""
         if not is_torch_greater_or_equal("2.7"):
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
         if not is_fsdp_managed_module(model_to_save):
@@ -224,7 +225,7 @@ class DistributedMixin:
                 "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
                 "initialized with a distributed_config (_device_mesh is None)."
             )
-        save_model_checkpoint_distributed(model_to_save, save_directory)
+        save_model_checkpoint_distributed(model_to_save, save_directory, consolidate=consolidate)
 
         if push_to_hub and save_on_this_rank:
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
