@@ -296,8 +296,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
 
-    @pytest.mark.generate
-    def test_generate_batched_matches_single(self):
+    def _check_batched_matches_single(self, use_cache):
         """
         Each decoded audio chunk must be attributed to the sequence that produced it, see
         https://github.com/huggingface/transformers/pull/48902.
@@ -325,6 +324,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             "return_dict_in_generate": True,
             "guidance_scale": 1.3,
             "num_diffusion_steps": 10,
+            "use_cache": use_cache,
         }
 
         # Initialize diffusion with same input for comparable outputs
@@ -354,6 +354,16 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                     single.audio[0],
                     msg=lambda m, i=i: f"Sequence {i} differs between batched and single-sample generation:\n{m}",
                 )
+
+    @pytest.mark.generate
+    def test_batched_equivalence_with_cache(self):
+        """Verifies that batched generation matches individual generation."""
+        self._check_batched_matches_single(use_cache=True)
+
+    @pytest.mark.generate
+    def test_batched_equivalence_without_cache(self):
+        """Verifies that batched generation matches individual generation, without cache."""
+        self._check_batched_matches_single(use_cache=False)
 
     @unittest.skip(reason="Vibevoice has a special cache format so skipping for now")
     def test_cached_decode_matches_cacheless(self):
