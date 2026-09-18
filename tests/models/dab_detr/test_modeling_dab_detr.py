@@ -254,7 +254,9 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                         torch.testing.assert_close(
                             v,
                             reloaded_state[k],
-                            msg=lambda x: f"DabDetrModel: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
+                            msg=lambda x: (
+                                f"DabDetrModel: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key"
+                            ),
                         )
 
             # Checking there was no complain of missing weights
