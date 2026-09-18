@@ -31,56 +31,18 @@ if is_vision_available():
 
 
 class PerceptionLMImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        tile_size=16,
-        do_normalize=True,
-        image_mean=IMAGENET_STANDARD_MEAN,
-        image_std=IMAGENET_STANDARD_STD,
-        do_convert_rgb=True,
-        max_num_tiles=4,
-        vision_input_type="thumb+tile",
-        resample=Image.Resampling.BICUBIC,  # dummy value
-        size={"shortest_edge": 20},  # dummy value
-    ):
-        super().__init__()
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.tile_size = tile_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.max_num_tiles = max_num_tiles
-        self.vision_input_type = vision_input_type
-        self.resample = resample
-        self.size = size
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "tile_size": self.tile_size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "max_num_tiles": self.max_num_tiles,
-            "vision_input_type": self.vision_input_type,
-            "resample": self.resample,
-            "size": self.size,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("tile_size", 16)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN)
+        kwargs.setdefault("image_std", IMAGENET_STANDARD_STD)
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("max_num_tiles", 4)
+        kwargs.setdefault("vision_input_type", "thumb+tile")
+        kwargs.setdefault("resample", Image.Resampling.BICUBIC)  # dummy value
+        kwargs.setdefault("size", {"shortest_edge": 20})  # dummy value
+        super().__init__(parent, **kwargs)
 
 
 @require_torch

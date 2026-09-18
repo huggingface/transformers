@@ -32,54 +32,19 @@ if is_torch_available():
 
 
 class AriaImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        min_resolution=30,
-        max_resolution=40,
-        size=None,
-        max_image_size=980,
-        min_image_size=336,
-        split_resolutions=None,
-        split_image=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-        resample=PILImageResampling.BICUBIC,
-    ):
-        self.size = size if size is not None else {"longest_edge": max_resolution}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
+    def __init__(self, parent, max_resolution=40, num_images=1, size=None, **kwargs):
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("max_image_size", 980)
+        kwargs.setdefault("min_image_size", 336)
+        kwargs.setdefault("split_resolutions", [[980, 980]])
+        kwargs.setdefault("split_image", True)
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("resample", PILImageResampling.BICUBIC)
+        super().__init__(parent, max_resolution=max_resolution, **kwargs)
         self.num_images = num_images
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.resample = resample
-        self.max_image_size = max_image_size
-        self.min_image_size = min_image_size
-        self.split_resolutions = split_resolutions if split_resolutions is not None else [[980, 980]]
-        self.split_image = split_image
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "max_image_size": self.max_image_size,
-            "min_image_size": self.min_image_size,
-            "split_resolutions": self.split_resolutions,
-            "split_image": self.split_image,
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_normalize": self.do_normalize,
-            "resample": self.resample,
-        }
+        self.size = size if size is not None else {"longest_edge": max_resolution}
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.max_image_size, self.max_image_size

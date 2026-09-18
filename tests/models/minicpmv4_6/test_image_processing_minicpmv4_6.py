@@ -32,56 +32,22 @@ if is_vision_available():
 
 
 class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        num_channels=3,
-        min_resolution=64,
-        max_resolution=128,
-        do_resize=True,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        max_slice_nums=9,
-        scale_resolution=448,
-        patch_size=14,
-        slice_mode=True,
-        downsample_mode="16x",
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.max_slice_nums = max_slice_nums
-        self.scale_resolution = scale_resolution
-        self.patch_size = patch_size
-        self.slice_mode = slice_mode
-        self.downsample_mode = downsample_mode
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "max_slice_nums": self.max_slice_nums,
-            "scale_resolution": self.scale_resolution,
-            "patch_size": self.patch_size,
-            "slice_mode": self.slice_mode,
-            "downsample_mode": self.downsample_mode,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("min_resolution", 64)
+        kwargs.setdefault("max_resolution", 128)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("max_slice_nums", 9)
+        kwargs.setdefault("scale_resolution", 448)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("slice_mode", True)
+        kwargs.setdefault("downsample_mode", "16x")
+        super().__init__(parent, **kwargs)
 
     def expected_output_image_shape(self, image_inputs):
         """Return the expected NaViT-packed shape [C, P, total_L] for pixel_values[0]."""

@@ -31,53 +31,17 @@ if is_torch_available():
 
 
 class BeitImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_center_crop=True,
-        crop_size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_reduce_labels=False,
-        num_labels=5,
-    ):
-        size = size if size is not None else {"height": 20, "width": 20}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_reduce_labels = do_reduce_labels
+    def __init__(self, parent, num_labels=5, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_reduce_labels", False)
+        super().__init__(parent, **kwargs)
         self.num_labels = num_labels
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_reduce_labels": self.do_reduce_labels,
-        }
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {

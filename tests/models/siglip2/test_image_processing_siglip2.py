@@ -26,56 +26,18 @@ if is_vision_available():
 
 
 class Siglip2ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        resample=None,
-        patch_size=16,
-        max_num_patches=256,
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        resample = resample if resample is not None else Image.Resampling.BILINEAR
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.resample = resample
-        self.patch_size = patch_size
-        self.max_num_patches = max_num_patches
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "resample": self.resample,
-            "patch_size": self.patch_size,
-            "max_num_patches": self.max_num_patches,
-        }
+    def __init__(self, parent, size=None, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("resample", Image.Resampling.BILINEAR)
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("max_num_patches", 256)
+        super().__init__(parent, **kwargs)
+        self.size = size if size is not None else {"height": 18, "width": 18}
 
     def expected_output_image_shape(self, images):
         return self.max_num_patches, self.patch_size * self.patch_size * self.num_channels

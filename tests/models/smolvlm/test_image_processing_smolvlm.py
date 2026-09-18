@@ -34,62 +34,21 @@ if is_torch_available():
 
 
 class SmolVLMImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=40,
-        do_resize=True,
-        size=None,
-        max_image_size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-        do_pad=True,
-        do_image_splitting=True,
-        resample=PILImageResampling.LANCZOS,
-    ):
-        self.size = size if size is not None else {"longest_edge": max_resolution}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
+    def __init__(self, parent, max_resolution=40, num_images=1, resample=PILImageResampling.LANCZOS, **kwargs):
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"longest_edge": max_resolution})
+        kwargs.setdefault("max_image_size", {"longest_edge": 20})
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_pad", True)
+        kwargs.setdefault("do_image_splitting", True)
+        super().__init__(parent, max_resolution=max_resolution, **kwargs)
         self.num_images = num_images
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
         self.resample = resample
-        self.do_image_splitting = do_image_splitting
-        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 20}
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.do_pad = do_pad
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "max_image_size": self.max_image_size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_pad": self.do_pad,
-            "do_image_splitting": self.do_image_splitting,
-        }
 
     def expected_output_image_shape(self, images):
         effective_nb_images = (

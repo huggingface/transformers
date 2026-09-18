@@ -41,55 +41,22 @@ if is_vision_available():
 
 
 class MaskFormerImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        size=None,
-        do_resize=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        num_labels=10,
-        do_reduce_labels=True,
-        ignore_index=255,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = {"shortest_edge": 32, "longest_edge": 1333} if size is None else size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.size_divisor = 0
-        # for the post_process_functions
-        self.batch_size = 2
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("size_divisor", 0)
+        kwargs.setdefault("num_labels", 10)
+        kwargs.setdefault("do_reduce_labels", True)
+        kwargs.setdefault("ignore_index", 255)
+        super().__init__(parent, **kwargs)
         self.num_queries = 3
         self.num_classes = 2
         self.height = 3
         self.width = 4
-        self.num_labels = num_labels
-        self.do_reduce_labels = do_reduce_labels
-        self.ignore_index = ignore_index
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "size_divisor": self.size_divisor,
-            "num_labels": self.num_labels,
-            "do_reduce_labels": self.do_reduce_labels,
-            "ignore_index": self.ignore_index,
-        }
 
     def get_fake_maskformer_outputs(self):
         return MaskFormerForInstanceSegmentationOutput(

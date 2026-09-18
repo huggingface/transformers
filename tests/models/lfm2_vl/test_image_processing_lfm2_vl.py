@@ -37,56 +37,21 @@ if is_torch_available():
 
 
 class Lfm2VlImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        min_resolution=256,
-        max_resolution=1024,
-        downsample_factor=2,
-        do_image_splitting=False,
-        min_tiles=2,
-        max_tiles=10,
-        use_thumbnail=True,
-        min_image_tokens=64,
-        max_image_tokens=256,
-        encoder_patch_size=16,
-        tile_size=512,
-        max_pixels_tolerance=2.0,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
+    def __init__(self, parent, num_images=1, **kwargs):
+        kwargs.setdefault("min_resolution", 256)
+        kwargs.setdefault("max_resolution", 1024)
+        kwargs.setdefault("downsample_factor", 2)
+        kwargs.setdefault("do_image_splitting", False)
+        kwargs.setdefault("min_tiles", 2)
+        kwargs.setdefault("max_tiles", 10)
+        kwargs.setdefault("use_thumbnail", True)
+        kwargs.setdefault("min_image_tokens", 64)
+        kwargs.setdefault("max_image_tokens", 256)
+        kwargs.setdefault("encoder_patch_size", 16)
+        kwargs.setdefault("tile_size", 512)
+        kwargs.setdefault("max_pixels_tolerance", 2.0)
+        super().__init__(parent, **kwargs)
         self.num_images = num_images
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-
-        self.downsample_factor = downsample_factor
-        self.do_image_splitting = do_image_splitting
-        self.min_tiles = min_tiles
-        self.max_tiles = max_tiles
-        self.use_thumbnail = use_thumbnail
-        self.min_image_tokens = min_image_tokens
-        self.max_image_tokens = max_image_tokens
-        self.encoder_patch_size = encoder_patch_size
-        self.tile_size = tile_size
-        self.max_pixels_tolerance = max_pixels_tolerance
-
-    def prepare_image_processor_dict(self):
-        return {
-            "downsample_factor": self.downsample_factor,
-            "do_image_splitting": self.do_image_splitting,
-            "min_tiles": self.min_tiles,
-            "max_tiles": self.max_tiles,
-            "use_thumbnail": self.use_thumbnail,
-            "min_image_tokens": self.min_image_tokens,
-            "max_image_tokens": self.max_image_tokens,
-            "encoder_patch_size": self.encoder_patch_size,
-            "tile_size": self.tile_size,
-            "max_pixels_tolerance": self.max_pixels_tolerance,
-        }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

@@ -31,57 +31,18 @@ if is_vision_available():
 
 
 class Gemma3ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=IMAGENET_STANDARD_MEAN,
-        image_std=IMAGENET_STANDARD_STD,
-        do_convert_rgb=True,
-        do_pan_and_scan=True,
-        pan_and_scan_min_crop_size=10,
-        pan_and_scan_max_num_crops=2,
-        pan_and_scan_min_ratio_to_activate=1.2,
-    ):
-        super().__init__()
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.do_pan_and_scan = do_pan_and_scan
-        self.pan_and_scan_min_crop_size = pan_and_scan_min_crop_size
-        self.pan_and_scan_max_num_crops = pan_and_scan_max_num_crops
-        self.pan_and_scan_min_ratio_to_activate = pan_and_scan_min_ratio_to_activate
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_pan_and_scan": self.do_pan_and_scan,
-            "pan_and_scan_min_crop_size": self.pan_and_scan_min_crop_size,
-            "pan_and_scan_max_num_crops": self.pan_and_scan_max_num_crops,
-            "pan_and_scan_min_ratio_to_activate": self.pan_and_scan_min_ratio_to_activate,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN)
+        kwargs.setdefault("image_std", IMAGENET_STANDARD_STD)
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("do_pan_and_scan", True)
+        kwargs.setdefault("pan_and_scan_min_crop_size", 10)
+        kwargs.setdefault("pan_and_scan_max_num_crops", 2)
+        kwargs.setdefault("pan_and_scan_min_ratio_to_activate", 1.2)
+        super().__init__(parent, **kwargs)
 
 
 @require_torch

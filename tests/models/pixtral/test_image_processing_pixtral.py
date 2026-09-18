@@ -37,51 +37,16 @@ if is_vision_available():
 
 
 class PixtralImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        max_num_images_per_sample=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        patch_size=None,
-        do_normalize=True,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-        do_convert_rgb=True,
-    ):
-        super().__init__()
-        size = size if size is not None else {"longest_edge": 24}
-        patch_size = patch_size if patch_size is not None else {"height": 8, "width": 8}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
+    def __init__(self, parent, max_num_images_per_sample=3, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"longest_edge": 24})
+        kwargs.setdefault("patch_size", {"height": 8, "width": 8})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
+        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
+        kwargs.setdefault("do_convert_rgb", True)
+        super().__init__(parent, **kwargs)
         self.max_num_images_per_sample = max_num_images_per_sample
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.patch_size = patch_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "patch_size": self.patch_size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
 
     def expected_output_image_shape(self, images):
         if not isinstance(images, (list, tuple)):

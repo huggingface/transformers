@@ -34,55 +34,19 @@ if is_vision_available():
 
 
 class NougatImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_crop_margin=True,
-        do_resize=True,
-        size=None,
-        do_thumbnail=True,
-        do_align_long_axis: bool = False,
-        do_pad=True,
-        do_normalize: bool = True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"height": 20, "width": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_crop_margin = do_crop_margin
-        self.do_resize = do_resize
-        self.size = size
-        self.do_thumbnail = do_thumbnail
-        self.do_align_long_axis = do_align_long_axis
-        self.do_pad = do_pad
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("do_crop_margin", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        kwargs.setdefault("do_thumbnail", True)
+        kwargs.setdefault("do_align_long_axis", False)
+        kwargs.setdefault("do_pad", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        super().__init__(parent, **kwargs)
         self.data_format = "channels_first"
         self.input_data_format = "channels_first"
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_crop_margin": self.do_crop_margin,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_thumbnail": self.do_thumbnail,
-            "do_align_long_axis": self.do_align_long_axis,
-            "do_pad": self.do_pad,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-        }
 
     def prepare_dummy_image(self):
         revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"

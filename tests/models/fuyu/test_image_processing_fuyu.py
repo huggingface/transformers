@@ -25,54 +25,19 @@ if is_vision_available():
 
 
 class FuyuImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_pad=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        patch_size=None,
-    ):
-        size = size if size is not None else {"height": 180, "width": 360}
-        patch_size = patch_size if patch_size is not None else {"height": 30, "width": 30}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = 30
-        self.max_resolution = 360
-        self.do_resize = do_resize
-        self.size = size
-        self.do_pad = do_pad
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.patch_size = patch_size
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_pad": self.do_pad,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "patch_size": self.patch_size,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("max_resolution", 360)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 180, "width": 360})
+        kwargs.setdefault("do_pad", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("patch_size", {"height": 30, "width": 30})
+        super().__init__(parent, **kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Prepares a batch of images for testing"""

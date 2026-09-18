@@ -31,48 +31,17 @@ if is_torch_available():
 
 
 class SLANeXtImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=10,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.485, 0.456, 0.406],
-        image_std=[0.229, 0.224, 0.225],
-        do_pad=True,
-    ):
-        size = size if size is not None else {"height": 512, "width": 512}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
+    def __init__(self, parent, do_rescale=True, rescale_factor=1 / 255, **kwargs):
+        kwargs.setdefault("min_resolution", 10)
+        kwargs.setdefault("image_mean", [0.485, 0.456, 0.406])
+        kwargs.setdefault("image_std", [0.229, 0.224, 0.225])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("do_pad", True)
+        super().__init__(parent, **kwargs)
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_pad = do_pad
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_pad": self.do_pad,
-        }
 
     def get_expected_value(self, image_inputs):
         image = image_inputs[0]

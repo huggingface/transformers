@@ -48,42 +48,20 @@ if is_vision_available():
 
 
 class ImageGPTImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-
-    def prepare_image_processor_dict(self):
-        return {
-            # here we create 2 clusters for the sake of simplicity
-            "clusters": np.asarray(
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault(
+            "clusters",
+            np.asarray(
                 [
                     [0.8866443634033203, 0.6618829369544983, 0.3891746401786804],
                     [-0.6042559146881104, -0.02295008860528469, 0.5423797369003296],
                 ]
             ),
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-        }
+        )
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_normalize", True)
+        super().__init__(parent, **kwargs)
 
     def expected_output_image_shape(self, images):
         return (self.size["height"] * self.size["width"],)

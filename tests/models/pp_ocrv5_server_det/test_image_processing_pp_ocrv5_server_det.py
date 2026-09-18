@@ -34,50 +34,27 @@ class PPOCRV5ServerDetImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=10,
-        max_resolution=400,
         limit_side_len=960,
         limit_type="max",
         max_side_limit=4000,
-        do_resize=True,
-        size=None,
         do_rescale=True,
         rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.485, 0.456, 0.406],
-        image_std=[0.229, 0.224, 0.225],
+        **kwargs,
     ):
-        size = size if size is not None else {"height": 512, "width": 512}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
+        kwargs.setdefault("min_resolution", 10)
+        kwargs.setdefault("image_mean", [0.485, 0.456, 0.406])
+        kwargs.setdefault("image_std", [0.229, 0.224, 0.225])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("keep_aspect_ratio", False)
+        kwargs.setdefault("do_pad", False)
+        super().__init__(parent, **kwargs)
         self.limit_side_len = limit_side_len
         self.limit_type = limit_type
         self.max_side_limit = max_side_limit
-        self.do_resize = do_resize
-        self.size = size
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "keep_aspect_ratio": False,
-            "do_pad": False,
-        }
 
     def get_expected_value(self, image_inputs):
         image = image_inputs[0]

@@ -26,56 +26,17 @@ if is_torch_available():
 
 
 class SamImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_pad=True,
-        pad_size=None,
-        mask_size=None,
-        mask_pad_size=None,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"longest_edge": 20}
-        pad_size = pad_size if pad_size is not None else {"height": 20, "width": 20}
-        mask_size = mask_size if mask_size is not None else {"longest_edge": 12}
-        mask_pad_size = mask_pad_size if mask_pad_size is not None else {"height": 12, "width": 12}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_pad = do_pad
-        self.pad_size = pad_size
-        self.mask_size = mask_size
-        self.mask_pad_size = mask_pad_size
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_pad": self.do_pad,
-            "pad_size": self.pad_size,
-            "mask_size": self.mask_size,
-            "mask_pad_size": self.mask_pad_size,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"longest_edge": 20})
+        kwargs.setdefault("do_pad", True)
+        kwargs.setdefault("pad_size", {"height": 20, "width": 20})
+        kwargs.setdefault("mask_size", {"longest_edge": 12})
+        kwargs.setdefault("mask_pad_size", {"height": 12, "width": 12})
+        super().__init__(parent, **kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.pad_size["height"], self.pad_size["width"]

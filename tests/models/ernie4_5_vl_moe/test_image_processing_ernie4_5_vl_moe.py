@@ -35,47 +35,18 @@ if is_vision_available():
 
 
 class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=56,
-        max_resolution=1024,
-        size=None,
-        do_resize=True,
-        do_normalize=True,
-        do_convert_rgb=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        patch_size=14,
-        merge_size=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        if size is None:
-            size = {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28}
-        self.size = size
-        self.do_resize = do_resize
+    def __init__(self, parent, do_normalize=True, do_convert_rgb=True, **kwargs):
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
+        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
+        kwargs.setdefault("size", {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28})
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        super().__init__(parent, **kwargs)
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "size": self.size,
-            "patch_size": self.patch_size,
-            "merge_size": self.merge_size,
-        }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

@@ -31,54 +31,18 @@ if is_vision_available():
 
 
 class ChameleonImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=200,
-        do_resize=True,
-        size=None,
-        do_center_crop=True,
-        crop_size=None,
-        do_normalize=True,
-        image_mean=[1.0, 1.0, 1.0],
-        image_std=[1.0, 1.0, 1.0],
-        do_convert_rgb=True,
-        resample=PILImageResampling.BILINEAR,
-    ):
-        size = size if size is not None else {"shortest_edge": 18}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.resample = resample
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "resample": self.resample,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("max_resolution", 200)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 18})
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [1.0, 1.0, 1.0])
+        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("resample", PILImageResampling.BILINEAR)
+        super().__init__(parent, **kwargs)
 
 
 @require_torch

@@ -35,51 +35,17 @@ if is_vision_available():
 
 
 class Phi4MultimodalImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=100,
-        min_resolution=30,
-        max_resolution=400,
-        dynamic_hd=36,
-        do_resize=True,
-        size=None,
-        patch_size=14,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-    ):
-        super().__init__()
-        size = size if size is not None else {"height": 100, "width": 100}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.dynamic_hd = dynamic_hd
-        self.do_resize = do_resize
-        self.size = size
-        self.patch_size = patch_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "patch_size": self.patch_size,
-            "dynamic_hd": self.dynamic_hd,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_size", 100)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 100, "width": 100})
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("dynamic_hd", 36)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_convert_rgb", True)
+        super().__init__(parent, **kwargs)
 
     def expected_output_image_shape(self, images):
         max_num_patches = 0

@@ -41,55 +41,21 @@ if is_vision_available():
 
 
 class Qwen2VLImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_frames=10,
-        min_resolution=56,
-        max_resolution=1024,
-        min_pixels=56 * 56,
-        max_pixels=28 * 28 * 1280,
-        do_normalize=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        do_resize=True,
-        patch_size=14,
-        temporal_patch_size=2,
-        merge_size=2,
-        do_convert_rgb=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.num_channels = num_channels
+    def __init__(self, parent, num_frames=10, do_normalize=True, do_convert_rgb=True, **kwargs):
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
+        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
+        kwargs.setdefault("min_pixels", 56 * 56)
+        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("merge_size", 2)
+        super().__init__(parent, **kwargs)
         self.num_frames = num_frames
-        self.image_mean = OPENAI_CLIP_MEAN
-        self.image_std = OPENAI_CLIP_STD
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-        self.do_resize = do_resize
         self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
         self.do_convert_rgb = do_convert_rgb
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "min_pixels": self.min_pixels,
-            "max_pixels": self.max_pixels,
-            "patch_size": self.patch_size,
-            "temporal_patch_size": self.temporal_patch_size,
-            "merge_size": self.merge_size,
-        }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
