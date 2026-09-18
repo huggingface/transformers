@@ -77,115 +77,40 @@ class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
 @strict
 class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3TTSTalkerCodePredictorModel`].
-    It is used to instantiate a Qwen3-TTS code predictor model according to the specified arguments,
-    defining the model architecture.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 2048):
-            Vocabulary size of the Qwen3-TTS code predictor model.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 5):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            The number of key_value heads for Grouped Query Attention (GQA).
-        head_dim (`int`, *optional*, defaults to 128):
-            The attention head dimension.
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie word embedding weights with output projection weights.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention window size.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers using full attention.
-        layer_types (`list[str]`, *optional*):
-            List of attention layer types for each hidden layer. Defaults to alternating between `"full_attention"`
-            and `"sliding_attention"` based on `max_window_layers`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_code_groups (`int`, *optional*, defaults to 32):
-            Number of code groups (codebooks).
-        pad_token_id (`int`, *optional*):
-            Padding token ID.
+    num_code_groups (`int`, *optional*, defaults to 32):
+        Number of code groups (codebooks).
     """
 
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size: int | None = 2048,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 3072,
-        num_hidden_layers: int | None = 5,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 8,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        use_sliding_window: bool | None = False,
-        sliding_window: int | None = 4096,
-        max_window_layers: int | None = 28,
-        layer_types: list[str] | None = None,
-        attention_dropout: float | None = 0.0,
-        num_code_groups: int | None = 32,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+    vocab_size: int | None = 2048
+    hidden_size: int | None = 1024
+    intermediate_size: int | None = 3072
+    num_hidden_layers: int | None = 5
+    num_attention_heads: int | None = 16
+    num_key_value_heads: int | None = 8
+    head_dim: int | None = 128
+    hidden_act: str | None = "silu"
+    max_position_embeddings: int | None = 32768
+    initializer_range: float | None = 0.02
+    rms_norm_eps: float | None = 1e-6
+    use_cache: bool | None = True
+    tie_word_embeddings: bool | None = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool | None = False
+    use_sliding_window: bool | None = False
+    sliding_window: int | None = 4096
+    max_window_layers: int | None = 28
+    layer_types: list[str] | None = None
+    attention_dropout: float | None = 0.0
+    num_code_groups: int | None = 32
+    pad_token_id: int | None = None
 
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = max_window_layers
-
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_parameters = (
-            rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 500000.0}
-        )
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
+        self.sliding_window = self.sliding_window if self.use_sliding_window else None
+        self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 500000.0}
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
@@ -193,87 +118,41 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        self.num_code_groups = num_code_groups
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring
 @strict
 class Qwen3TTSTalkerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3TTSTalkerModel`].
-    It is used to instantiate a Qwen3-TTS talker model according to the specified arguments,
-    defining the model architecture.
-
-    Args:
-        code_predictor_config (`Qwen3TTSTalkerCodePredictorConfig`, *optional*):
-            Configuration for the code predictor sub-model.
-        vocab_size (`int`, *optional*, defaults to 3072):
-            Vocabulary size of the Qwen3-TTS talker model.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 20):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
-            The number of key_value heads for Grouped Query Attention (GQA).
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie word embedding weights with output projection weights.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention window size.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers using full attention.
-        layer_types (`list[str]`, *optional*):
-            List of attention layer types for each hidden layer. Defaults to `"full_attention"` for every layer
-            unless sliding window attention is enabled.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_code_groups (`int`, *optional*, defaults to 32):
-            Number of code groups (codebooks).
-        text_hidden_size (`int`, *optional*, defaults to 2048):
-            The dimension of the text embedding in the talker.
-        codec_eos_token_id (`int`, *optional*, defaults to 2150):
-            The end-of-sequence token ID for codec tokens.
-        codec_think_id (`int`, *optional*, defaults to 4202):
-            Token ID used to signal thinking mode in codec generation.
-        codec_nothink_id (`int`, *optional*, defaults to 4203):
-            Token ID used to signal non-thinking mode in codec generation.
-        codec_think_bos_id (`int`, *optional*, defaults to 4204):
-            Beginning-of-sequence token ID for codec thinking mode.
-        codec_think_eos_id (`int`, *optional*, defaults to 4205):
-            End-of-sequence token ID for codec thinking mode.
-        codec_pad_id (`int`, *optional*, defaults to 2148):
-            The padding token ID for codec tokens.
-        codec_bos_id (`int`, *optional*, defaults to 2149):
-            The beginning-of-sequence token ID for codec tokens.
-        spk_id (`int`, *optional*):
-            Speaker ID for built-in voice presets.
-        spk_is_dialect (`bool`, *optional*):
-            Whether the speaker uses a dialect variant.
-        codec_language_id (`int`, *optional*):
-            Language ID for codec generation.
-        text_vocab_size (`int`, *optional*, defaults to 152064):
-            Vocabulary size of the text tokenizer.
-        pad_token_id (`int`, *optional*):
-            Padding token ID.
+    code_predictor_config (`Union[Qwen3TTSTalkerCodePredictorConfig, dict]`, *optional*):
+        Configuration for the code predictor sub-model.
+    num_code_groups (`int`, *optional*, defaults to 32):
+        Number of code groups (codebooks).
+    text_hidden_size (`int`, *optional*, defaults to 2048):
+        The dimension of the text embedding in the talker.
+    codec_eos_token_id (`int`, *optional*, defaults to 2150):
+        The end-of-sequence token ID for codec tokens.
+    codec_think_id (`int`, *optional*, defaults to 4202):
+        Token ID used to signal thinking mode in codec generation.
+    codec_nothink_id (`int`, *optional*, defaults to 4203):
+        Token ID used to signal non-thinking mode in codec generation.
+    codec_think_bos_id (`int`, *optional*, defaults to 4204):
+        Beginning-of-sequence token ID for codec thinking mode.
+    codec_think_eos_id (`int`, *optional*, defaults to 4205):
+        End-of-sequence token ID for codec thinking mode.
+    codec_pad_id (`int`, *optional*, defaults to 2148):
+        The padding token ID for codec tokens.
+    codec_bos_id (`int`, *optional*, defaults to 2149):
+        The beginning-of-sequence token ID for codec tokens.
+    spk_id (`int`, *optional*):
+        Speaker ID for built-in voice presets.
+    spk_is_dialect (`bool`, *optional*):
+        Whether the speaker uses a dialect variant.
+    codec_language_id (`int`, *optional*):
+        Language ID for codec generation.
+    text_vocab_size (`int`, *optional*, defaults to 152064):
+        Vocabulary size of the text tokenizer.
     """
 
     base_config_key = "talker_config"
@@ -283,74 +162,52 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
     # in `rope_parameters` without being part of the `default` rope schema. Same handling as Qwen2-VL.
     ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        code_predictor_config: dict | None = None,
-        vocab_size: int | None = 3072,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 2048,
-        num_hidden_layers: int | None = 20,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        use_sliding_window: bool | None = False,
-        sliding_window: int | None = 4096,
-        max_window_layers: int | None = 28,
-        layer_types: list[str] | None = None,
-        attention_dropout: float | None = 0.0,
-        num_code_groups: int | None = 32,
-        text_hidden_size: int | None = 2048,
-        codec_eos_token_id: int | None = 2150,
-        codec_think_id: int | None = 4202,
-        codec_nothink_id: int | None = 4203,
-        codec_think_bos_id: int | None = 4204,
-        codec_think_eos_id: int | None = 4205,
-        codec_pad_id: int | None = 2148,
-        codec_bos_id: int | None = 2149,
-        spk_id: int | None = None,
-        spk_is_dialect: bool | None = None,
-        codec_language_id: int | None = None,
-        text_vocab_size: int | None = 152064,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.text_vocab_size = text_vocab_size
+    code_predictor_config: dict | PreTrainedConfig | None = None
+    vocab_size: int | None = 3072
+    hidden_size: int | None = 1024
+    intermediate_size: int | None = 2048
+    num_hidden_layers: int | None = 20
+    num_attention_heads: int | None = 16
+    num_key_value_heads: int | None = 2
+    hidden_act: str | None = "silu"
+    max_position_embeddings: int | None = 32768
+    initializer_range: float | None = 0.02
+    rms_norm_eps: float | None = 1e-6
+    use_cache: bool | None = True
+    tie_word_embeddings: bool | None = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool | None = False
+    use_sliding_window: bool | None = False
+    sliding_window: int | None = 4096
+    max_window_layers: int | None = 28
+    layer_types: list[str] | None = None
+    attention_dropout: float | None = 0.0
+    num_code_groups: int | None = 32
+    text_hidden_size: int | None = 2048
+    codec_eos_token_id: int | None = 2150
+    codec_think_id: int | None = 4202
+    codec_nothink_id: int | None = 4203
+    codec_think_bos_id: int | None = 4204
+    codec_think_eos_id: int | None = 4205
+    codec_pad_id: int | None = 2148
+    codec_bos_id: int | None = 2149
+    spk_id: int | None = None
+    spk_is_dialect: bool | None = None
+    codec_language_id: int | None = None
+    text_vocab_size: int | None = 152064
+    pad_token_id: int | None = None
 
-        # Build sub-config BEFORE super().__init__() so that the _attn_implementation
-        # setter (triggered by super()) can propagate to it via sub_configs.
-        if code_predictor_config is None:
+    def __post_init__(self, **kwargs):
+        if self.code_predictor_config is None:
             self.code_predictor_config = Qwen3TTSTalkerCodePredictorConfig()
             logger.info("code_predictor_config is None. Initializing code_predictor model with default values")
-        elif isinstance(code_predictor_config, Qwen3TTSTalkerCodePredictorConfig):
-            self.code_predictor_config = code_predictor_config
-        else:
-            self.code_predictor_config = Qwen3TTSTalkerCodePredictorConfig(**code_predictor_config)
+        elif isinstance(self.code_predictor_config, dict):
+            self.code_predictor_config = Qwen3TTSTalkerCodePredictorConfig(**self.code_predictor_config)
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
-
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
-        self.max_window_layers = max_window_layers
-
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-
-        self.layer_types = layer_types
+        self.sliding_window = self.sliding_window if self.use_sliding_window else None
+        self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 500000.0}
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
@@ -358,97 +215,60 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_parameters = (
-            rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 500000.0}
-        )
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
-        self.num_code_groups = num_code_groups
-        self.text_hidden_size = text_hidden_size
-        self.codec_eos_token_id = codec_eos_token_id
-        self.codec_think_id = codec_think_id
-        self.codec_language_id = codec_language_id
-        self.codec_nothink_id = codec_nothink_id
-        self.codec_think_bos_id = codec_think_bos_id
-        self.codec_think_eos_id = codec_think_eos_id
-        self.codec_pad_id = codec_pad_id
-        self.codec_bos_id = codec_bos_id
-        self.spk_id = spk_id
-        self.spk_is_dialect = spk_is_dialect
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-12Hz-0.6B-Base")
 @strict
 class Qwen3TTSConfig(PreTrainedConfig):
+    r"""
+    talker_config (`Union[Qwen3TTSTalkerConfig, dict]`, *optional*):
+        Configuration for the talker sub-model (text-to-acoustic backbone).
+    speaker_encoder_config (`Union[Qwen3TTSSpeakerEncoderConfig, dict]`, *optional*):
+        Configuration for the speaker encoder sub-model (extracts speaker embeddings).
+    tokenizer_type (`str`, *optional*):
+        Type of audio tokenizer to use (e.g., "12hz", "25hz").
+    tts_model_size (`str`, *optional*):
+        Size of the TTS model.
+    im_start_token_id (`int`, *optional*, defaults to 151644):
+        The beginning-of-image token ID (used as special marker in input).
+    im_end_token_id (`int`, *optional*, defaults to 151645):
+        The end-of-image token ID (used as special marker in input).
+    tts_pad_token_id (`int`, *optional*, defaults to 151671):
+        The padding token ID for TTS generation.
+    tts_bos_token_id (`int`, *optional*, defaults to 151672):
+        The beginning-of-sequence token ID for TTS generation.
+    tts_eos_token_id (`int`, *optional*, defaults to 151673):
+        The end-of-sequence token ID for TTS generation.
+    """
+
     model_type = "qwen3_tts"
     sub_configs = {
         "talker_config": Qwen3TTSTalkerConfig,
         "speaker_encoder_config": Qwen3TTSSpeakerEncoderConfig,
     }
 
-    def __init__(
-        self,
-        talker_config: dict | None = None,
-        speaker_encoder_config: dict | None = None,
-        tokenizer_type: str | None = None,
-        tts_model_size: str | None = None,
-        im_start_token_id: int | None = 151644,
-        im_end_token_id: int | None = 151645,
-        tts_pad_token_id: int | None = 151671,
-        tts_bos_token_id: int | None = 151672,
-        tts_eos_token_id: int | None = 151673,
-        **kwargs,
-    ):
-        r"""
-        This is the configuration class to store the configuration of a [`Qwen3TTSForConditionalGeneration`].
-        It is used to instantiate a Qwen3-TTS model according to the specified arguments, defining the model architecture.
+    talker_config: dict | PreTrainedConfig | None = None
+    speaker_encoder_config: dict | PreTrainedConfig | None = None
+    tokenizer_type: str | None = None
+    tts_model_size: str | None = None
+    im_start_token_id: int | None = 151644
+    im_end_token_id: int | None = 151645
+    tts_pad_token_id: int | None = 151671
+    tts_bos_token_id: int | None = 151672
+    tts_eos_token_id: int | None = 151673
 
-        Args:
-            talker_config (`Qwen3TTSTalkerConfig`, *optional*):
-                Configuration for the talker sub-model (text-to-acoustic backbone).
-            speaker_encoder_config (`Qwen3TTSSpeakerEncoderConfig`, *optional*):
-                Configuration for the speaker encoder sub-model (extracts speaker embeddings).
-            tokenizer_type (`str`, *optional*):
-                Type of audio tokenizer to use (e.g., "12hz", "25hz").
-            tts_model_size (`str`, *optional*):
-                Size of the TTS model.
-            im_start_token_id (`int`, *optional*, defaults to 151644):
-                The beginning-of-image token ID (used as special marker in input).
-            im_end_token_id (`int`, *optional*, defaults to 151645):
-                The end-of-image token ID (used as special marker in input).
-            tts_pad_token_id (`int`, *optional*, defaults to 151671):
-                The padding token ID for TTS generation.
-            tts_bos_token_id (`int`, *optional*, defaults to 151672):
-                The beginning-of-sequence token ID for TTS generation.
-            tts_eos_token_id (`int`, *optional*, defaults to 151673):
-                The end-of-sequence token ID for TTS generation.
-        """
-        super().__init__(**kwargs)
-
-        if talker_config is None:
-            talker_config = {}
+    def __post_init__(self, **kwargs):
+        if self.talker_config is None:
+            self.talker_config = Qwen3TTSTalkerConfig()
             logger.info("talker_config is None. Initializing talker model with default values")
+        elif isinstance(self.talker_config, dict):
+            self.talker_config = Qwen3TTSTalkerConfig(**self.talker_config)
 
-        self.talker_config = Qwen3TTSTalkerConfig(**talker_config)
         # A speaker encoder is only present for voice-cloning ("base") checkpoints; leave it None otherwise.
-        self.speaker_encoder_config = (
-            Qwen3TTSSpeakerEncoderConfig(**speaker_encoder_config) if speaker_encoder_config is not None else None
-        )
-
-        self.tokenizer_type = tokenizer_type
-        self.tts_model_size = tts_model_size
-
-        self.im_start_token_id = im_start_token_id
-        self.im_end_token_id = im_end_token_id
-        self.tts_pad_token_id = tts_pad_token_id
-        self.tts_bos_token_id = tts_bos_token_id
-        self.tts_eos_token_id = tts_eos_token_id
+        if isinstance(self.speaker_encoder_config, dict):
+            self.speaker_encoder_config = Qwen3TTSSpeakerEncoderConfig(**self.speaker_encoder_config)
+        super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """Defaulting to the talker config: it is the decoder that generates codec tokens and owns the cache."""
