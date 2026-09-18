@@ -26,6 +26,10 @@ Exit code is 0 when every probe passes, i.e. when there is nothing left to work 
 
 Probes run in a subprocess on purpose: the backend answers some of these by aborting the process
 rather than raising, which a parent cannot catch.
+
+A gap only belongs here once it reproduces standalone. Execution is deferred, so the Python frame
+on top when the process aborts is whatever forced materialisation and not necessarily the operator
+at fault -- a traceback alone is not enough to name one.
 """
 
 import argparse
@@ -47,18 +51,25 @@ covariance = torch.eye(4, device=DEVICE) * 2.0
 torch.linalg.cholesky_ex(covariance)
 """,
     ),
-    "interpolate": (
-        "torch.nn.functional.interpolate aborts the process instead of raising. Any model whose "
-        "forward interpolates -- relative position embeddings, for one -- takes the whole pytest "
-        "run down with it, so every other result for that model is lost too.",
+    "ctc_loss": (
+        "torch.nn.functional.ctc_loss aborts the process instead of raising, so a CTC model takes "
+        "the whole pytest run down with it and its other results are lost too.",
         """
-x = torch.randn(1, 4, 8, device=DEVICE)
-torch.nn.functional.interpolate(x, size=16, mode="linear")
+logits = torch.randn(2, 8, 5, device=DEVICE)
+# Flattened 1-D targets and an explicit blank, which is how the real callers reach it.
+log_probs = torch.nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+targets = torch.randint(1, 5, (6,), dtype=torch.long, device=DEVICE)
+input_lengths = torch.full((2,), 8, dtype=torch.long, device=DEVICE)
+target_lengths = torch.full((2,), 3, dtype=torch.long, device=DEVICE)
+torch.nn.functional.ctc_loss(
+    log_probs, targets, input_lengths, target_lengths, blank=0, reduction="sum", zero_infinity=False
+)
 """,
     ),
     "compile": (
-        "torch.compile fails in inductor with a bare NotImplementedError out of dtype_to_str, so "
-        "every compiled-forward test fails.",
+        "torch.compile does not work, so every compiled-forward test fails. The error moves "
+        "around between inductor internals, so the probe reports whatever it hits rather than "
+        "matching on one message.",
         """
 def f(x):
     return x + 1
@@ -105,9 +116,13 @@ def run_probe(name: str) -> bool:
     if result.returncode == 0:
         print(f"  {name}: fixed")
         return True
-    # The last non-empty line is the exception, or the runtime's complaint when it aborted.
-    detail = next((line for line in reversed(result.stderr.splitlines()) if line.strip()), "")
-    print(f"  {name}: still present (exit {result.returncode}) {detail[:120]}")
+    # The runtime keeps logging after it fails, so take its first complaint rather than the last line.
+    interesting = ("Error", "error:", "Check failed", "not implemented", "NotImplemented", "Aborted")
+    detail = next(
+        (line.strip() for line in result.stderr.splitlines() if any(k in line for k in interesting)),
+        result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "",
+    )
+    print(f"  {name}: still present (exit {result.returncode}) -- {detail[:150]}")
     return False
 
 
