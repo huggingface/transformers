@@ -76,6 +76,7 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
 
     def test_integration_no_task(self):
+        # Test that the tokenizer can be used without a task, and that it does not add entity markers.
         tokenizer = self.get_tokenizer()
 
         encoding = tokenizer("Beyonce lives in Los Angeles.")

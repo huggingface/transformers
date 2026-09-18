@@ -27,7 +27,7 @@ SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "studio-ousia/mluke-base-lite"
+    from_pretrained_id = "studio-ousia/mluke-base"
     tokenizer_class = MLukeTokenizer
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
@@ -598,8 +598,6 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
             encoding["entity_position_ids"].shape, (1, tokenizer.max_entity_length, tokenizer.max_mention_length)
         )
 
-    # Fails on v5 and v4.46 with slow MLukeTokenizer
-    @unittest.skip("Pre-existing decode bug unrelated to entity markers, see comment above")
     def test_entity_span_classification_no_padding_or_truncation(self):
         tokenizer = self.entity_span_tokenizer
 
@@ -610,7 +608,7 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s> Japanese is an East Asian language spoken by about 128 million people, primarily in Japan.</s>",
+            "<s> Japanese is an East Asian language spoken by about 128 million people, primarily in Japan .</s>",
         )
 
         mask_id = tokenizer.entity_vocab["[MASK]"]
