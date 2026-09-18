@@ -162,6 +162,7 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
+    is_torch_flex_attn_available,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -1424,6 +1425,23 @@ def require_torch_fp16(test_case):
     """Decorator marking a test that requires a device that supports fp16"""
     return unittest.skipUnless(
         is_torch_fp16_available_on_device(torch_device), "test requires device with fp16 support"
+    )(test_case)
+
+
+# Devices `torch.nn.attention.flex_attention` accepts. It validates against a private local and
+# raises for anything else, so this has to be kept in step with it by hand.
+FLEX_ATTENTION_DEVICES = ("cuda", "cpu", "xpu", "hpu")
+
+
+def require_flex_attention(test_case):
+    """Decorator marking a test that requires a device FlexAttention runs on.
+
+    Without it the test reports that `torch` refuses the device, which says nothing about the model
+    under test.
+    """
+    supported = torch_device is not None and torch_device.split(":")[0] in FLEX_ATTENTION_DEVICES
+    return unittest.skipUnless(
+        is_torch_flex_attn_available() and supported, "test requires a device FlexAttention supports"
     )(test_case)
 
 
