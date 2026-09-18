@@ -16,9 +16,12 @@
 import math
 import unittest
 
+import pytest
+
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
+    require_torch_greater_or_equal,
     slow,
     torch_device,
 )
@@ -516,3 +519,36 @@ class ZambaModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)
+
+    @require_torch_greater_or_equal("2.9.0")
+    @pytest.mark.torch_compile_test
+    @slow
+    def test_associative_scan_matches_sequential(self):
+        """Compiled generate with use_associative_scan=False vs =True produces the same text."""
+        if torch_device == "cpu":
+            self.skipTest("Associative scan compile test requires a torch accelerator.")
+
+        input_ids = self.tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
+
+        # Opt-out: use_associative_scan=False → compiled sequential loop
+        model = ZambaForCausalLM.from_pretrained(
+            "Zyphra/Zamba-7B-v1", dtype=torch.bfloat16, use_associative_scan=False
+        ).to(torch_device)
+        model.eval()
+        model.forward = torch.compile(model.forward)
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        expected_text = self.tokenizer.decode(output[0].tolist())
+
+        del model
+        torch._dynamo.reset()
+
+        # Opt-in: use_associative_scan=True → compiled associative scan
+        model = ZambaForCausalLM.from_pretrained(
+            "Zyphra/Zamba-7B-v1", dtype=torch.bfloat16, use_associative_scan=True
+        ).to(torch_device)
+        model.eval()
+        model.forward = torch.compile(model.forward)
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        output_text = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_text, expected_text)
