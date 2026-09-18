@@ -6,7 +6,8 @@ from unittest.mock import DEFAULT, MagicMock, patch
 from packaging.version import parse as parse_version
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, run_test_using_subprocess
+from transformers import logging
+from transformers.testing_utils import CaptureLogger, LoggingLevel, require_torch, run_test_using_subprocess
 from transformers.utils.import_utils import (
     _candidate_distribution_names,
     _is_package_available,
@@ -15,6 +16,9 @@ from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
 )
+
+
+logger = logging.get_logger("transformers.utils.import_utils")
 
 
 @run_test_using_subprocess
@@ -61,7 +65,7 @@ def test_is_package_available_edge_cases():
             assert _is_package_available(pkg_name, return_version=True) == expected
 
 
-def test_lazy_module_error_points_to_debug_log(caplog):
+def test_lazy_module_error_points_to_debug_log():
     lazy_module = _LazyModule(
         "transformers.test_lazy_module",
         __file__,
@@ -70,19 +74,19 @@ def test_lazy_module_error_points_to_debug_log(caplog):
 
     original_error = RuntimeError("simulated broken dependency")
 
-    with (
-        patch.object(lazy_module, "_get_module", side_effect=original_error),
-        caplog.at_level("DEBUG", logger="transformers.utils.import_utils"),
-    ):
-        try:
-            lazy_module.BrokenObject
-        except ModuleNotFoundError as error:
-            assert "Could not import module 'BrokenObject'" in str(error)
-            assert "Set the logging verbosity to DEBUG for the original import error." in str(error)
-            assert "simulated broken dependency" not in str(error)
-            assert "Original import error for 'BrokenObject': simulated broken dependency" in caplog.text
-        else:
-            raise AssertionError("Expected ModuleNotFoundError")
+    with LoggingLevel(logging.DEBUG):
+        with CaptureLogger(logger) as captured_logs, patch.object(
+            lazy_module, "_get_module", side_effect=original_error
+        ):
+            try:
+                lazy_module.BrokenObject
+            except ModuleNotFoundError as error:
+                assert "Could not import module 'BrokenObject'" in str(error)
+                assert "Set the logging verbosity to DEBUG for the original import error." in str(error)
+                assert "simulated broken dependency" not in str(error)
+                assert "Original import error for 'BrokenObject': simulated broken dependency" in captured_logs.out
+            else:
+                raise AssertionError("Expected ModuleNotFoundError")
 
 
 def test_is_package_available_unmapped_distribution_does_not_import():
