@@ -61,7 +61,7 @@ def test_is_package_available_edge_cases():
             assert _is_package_available(pkg_name, return_version=True) == expected
 
 
-def test_lazy_module_error_includes_original_error():
+def test_lazy_module_error_points_to_debug_log(caplog):
     lazy_module = _LazyModule(
         "transformers.test_lazy_module",
         __file__,
@@ -70,12 +70,17 @@ def test_lazy_module_error_includes_original_error():
 
     original_error = RuntimeError("simulated broken dependency")
 
-    with patch.object(lazy_module, "_get_module", side_effect=original_error):
+    with (
+        patch.object(lazy_module, "_get_module", side_effect=original_error),
+        caplog.at_level("DEBUG", logger="transformers.utils.import_utils"),
+    ):
         try:
             lazy_module.BrokenObject
         except ModuleNotFoundError as error:
             assert "Could not import module 'BrokenObject'" in str(error)
-            assert "Original error: simulated broken dependency" in str(error)
+            assert "Set the logging verbosity to DEBUG for the original import error." in str(error)
+            assert "simulated broken dependency" not in str(error)
+            assert "Original import error for 'BrokenObject': simulated broken dependency" in caplog.text
         else:
             raise AssertionError("Expected ModuleNotFoundError")
 
