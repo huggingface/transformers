@@ -257,7 +257,7 @@ def _ignore_causal_mask_sdpa(
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
     # `ignore_causal_mask = True` if we are not tracing
-    if is_tracing(padding_mask):
+    if padding_mask is not None and is_tracing(padding_mask):
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
