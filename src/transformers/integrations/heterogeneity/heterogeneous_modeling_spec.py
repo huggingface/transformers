@@ -27,36 +27,21 @@ if TYPE_CHECKING:
 
     from transformers.modeling_utils import PreTrainedModel
 
-SkipReplacements: TypeAlias = "dict[str | tuple[str, type], Callable[[], nn.Module]]"
 
-
-@dataclass(frozen=True)
-class SkipDescriptor:
-    """Describes the module replacements and cache effect of a heterogeneous skip type.
-
-    Args:
-        replacements: Factories for the modules that replace layer members, keyed by one of two forms:
-            - `"member_name"`: always replaces that member (e.g. `"self_attn"`).
-            - `("member_name", member_class)`: replaces the member only when it is an instance of `member_class`,
-            taking precedence over a plain member-name key (e.g. `("mixer", NemotronHAttention)`).
-        replaces_kv_cache_updater: Whether this skip replaces the member that updates the layer's KV cache,
-        leaving the layer without KV-cache state.
-    """
-
-    replacements: SkipReplacements
-    replaces_kv_cache_updater: bool
+# Class-specific (member name, member class) keys take precedence over plain member names.
+SkipDescriptors: TypeAlias = dict[str | tuple[str, type], Callable[[], "nn.Module"]]
 
 
 @dataclass(frozen=True)
 class HeterogeneousModelingSpec:
     layer_cls: type[nn.Module]
     layer_idx_resolver: LayerIdxResolver
-    skip_descriptors: dict[str, SkipDescriptor] | None = None
+    skip_descriptors: dict[str, SkipDescriptors] | None = None
 
 
 def nest_skip_descriptor_paths(
-    skip_descriptors: dict[str, SkipDescriptor] | None, parent_path: str
-) -> dict[str, SkipDescriptor] | None:
+    skip_descriptors: dict[str, SkipDescriptors] | None, parent_path: str
+) -> dict[str, SkipDescriptors] | None:
     """Return new skip descriptors whose replacement paths are nested under a parent attribute path.
 
     Args:
@@ -70,20 +55,17 @@ def nest_skip_descriptor_paths(
         return None
 
     nested_descriptors = {}
-    for skip_type, descriptor in skip_descriptors.items():
-        replacements = {}
-        for key, replacement in descriptor.replacements.items():
+    for skip_type, targets in skip_descriptors.items():
+        nested_targets = {}
+        for key, replacement_factory in targets.items():
             if isinstance(key, tuple):
                 member_path, member_cls = key
                 nested_key = (f"{parent_path}.{member_path}", member_cls)
             else:
                 nested_key = f"{parent_path}.{key}"
-            replacements[nested_key] = replacement
+            nested_targets[nested_key] = replacement_factory
 
-        nested_descriptors[skip_type] = SkipDescriptor(
-            replacements=replacements,
-            replaces_kv_cache_updater=descriptor.replaces_kv_cache_updater,
-        )
+        nested_descriptors[skip_type] = nested_targets
 
     return nested_descriptors
 

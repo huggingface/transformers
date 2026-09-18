@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from contextlib import contextmanager
-from unittest.mock import patch
-
 from transformers import LlamaConfig
 from transformers.models.gpt_oss.configuration_gpt_oss import GptOssConfig
 from transformers.models.llama4.configuration_llama4 import Llama4TextConfig
@@ -98,17 +95,6 @@ def tiny_nemotron_h_config(per_layer_config=None, **overrides):
         **overrides,
     }
     return NemotronHConfig(per_layer_config=per_layer_config, **defaults)
-
-
-@contextmanager
-def hetero_context(model_key):
-    """Temporarily set the production heterogeneous modeling spec on a model class."""
-    from tests.heterogeneity.model_fixtures import MODEL_FIXTURES
-
-    fixture = MODEL_FIXTURES[model_key]
-    modeling_spec = fixture.spec_factory()
-    with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True):
-        yield modeling_spec
 
 
 def build_model(config, model_cls, seed=42):

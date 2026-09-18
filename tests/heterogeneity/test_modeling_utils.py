@@ -29,21 +29,31 @@ if is_torch_available():
         build_model,
         dummy_input_ids,
         forward_logits,
-        hetero_context,
+        tiny_gpt_oss_config,
+        tiny_llama4_config,
         tiny_llama_config,
+        tiny_nemotron_h_config,
     )
-    from transformers import DynamicCache, LlamaConfig, LlamaForCausalLM, PreTrainedModel
+    from transformers import (
+        DynamicCache,
+        GptOssForCausalLM,
+        Llama4ForCausalLM,
+        LlamaConfig,
+        LlamaForCausalLM,
+        NemotronHForCausalLM,
+        PreTrainedModel,
+        StaticCache,
+    )
     from transformers.integrations.heterogeneity import (
         HeterogeneousModelingSpec,
         LayerIdxFromArgument,
-        SkipDescriptor,
     )
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.modeling_layers import MtpModel
 
 
 if is_torch_available():
-    # Toy composite models for testing the nested model construction paths.
+
     class _ToyAttention(torch.nn.Module):
         def forward(self, hidden_states):
             return hidden_states
@@ -52,10 +62,7 @@ if is_torch_available():
         def forward(self, hidden_states):
             return hidden_states
 
-    class _CompositeNoOpAttention(_ToyNoOpAttention):
-        pass
-
-    class _BackboneNoOpAttention(_ToyNoOpAttention):
+    class _ClassSpecificNoOpAttention(_ToyNoOpAttention):
         pass
 
     class _ToyDecoderLayer(torch.nn.Module):
@@ -69,12 +76,7 @@ if is_torch_available():
         return HeterogeneousModelingSpec(
             layer_cls=layer_cls,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-            skip_descriptors={
-                "attention": SkipDescriptor(
-                    replacements={"self_attn": attention_replacement_cls},
-                    replaces_kv_cache_updater=True,
-                )
-            },
+            skip_descriptors={"attention": {"self_attn": attention_replacement_cls}},
         )
 
     def _toy_config(intermediate_size, skip_attention=False):
@@ -86,23 +88,21 @@ if is_torch_available():
     class _ToyPreTrainedModel(PreTrainedModel):
         config_class = LlamaConfig
 
-        def __init__(self, config):
-            super().__init__(config)
+        def forward(self, hidden_states, past_key_values=None, use_cache=False):
+            return hidden_states
 
-    class _NestedSameLayerToyModel(_ToyPreTrainedModel):
+    class _SingleLayerToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = _toy_modeling_spec(_ToyDecoderLayer, _ToyNoOpAttention)
 
-        def __init__(self, config, inner_config=None):
+        def __init__(self, config):
             super().__init__(config)
-            if inner_config is not None:
-                self.inner_model = _NestedSameLayerToyModel(inner_config)
             self.layer = _ToyDecoderLayer(config, layer_idx=0)
 
     class _MaskSelectingToyLayer(torch.nn.Module):
         def __init__(self, config, layer_idx):
             super().__init__()
 
-        def forward(self, hidden_states, attention_mask=None):
+        def forward(self, hidden_states, position_ids=None, attention_mask=None):
             return attention_mask
 
     class _MaskSelectingToyModel(_ToyPreTrainedModel):
@@ -114,25 +114,6 @@ if is_torch_available():
         def __init__(self, config, layer_idx=0):
             super().__init__(config)
             self.layer = _MaskSelectingToyLayer(config, layer_idx=layer_idx)
-
-    class _CompositeToyModel(_ToyPreTrainedModel):
-        _heterogeneous_modeling_spec = _toy_modeling_spec(_ToyDecoderLayer, _CompositeNoOpAttention)
-
-        def __init__(self, config, backbone_config):
-            super().__init__(config)
-            self.backbone = _ToyBackboneModel(
-                backbone_config,
-                parent_layer_factory=lambda: _ToyDecoderLayer(config, layer_idx=0),
-            )
-
-    class _ToyBackboneModel(_ToyPreTrainedModel):
-        _heterogeneous_modeling_spec = _toy_modeling_spec(_ToyDecoderLayer, _BackboneNoOpAttention)
-
-        def __init__(self, config, parent_layer_factory):
-            super().__init__(config)
-            # Build a parent-owned layer while the backbone model context is active.
-            self.parent_layer = parent_layer_factory()
-            self.layer = _ToyDecoderLayer(config, layer_idx=0)
 
 
 @require_torch
@@ -146,14 +127,11 @@ class TestHeterogeneousModeling(unittest.TestCase):
     def test_layer_configs_reflect_model_init_attention_implementation(self):
         config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
         self.assertIsNone(config._attn_implementation)
-        self.assertFalse(config._heterogeneity_spec.generic_modeling_applied)
 
-        with hetero_context("llama"):
-            model = build_model(config, LlamaForCausalLM)
+        model = build_model(config, LlamaForCausalLM)
 
         expected_attn_implementation = model.config._attn_implementation
         self.assertIsNotNone(expected_attn_implementation)
-        self.assertTrue(model.config._heterogeneity_spec.generic_modeling_applied)
         for layer in model.model.layers:
             self.assertEqual(layer.self_attn.config._attn_implementation, expected_attn_implementation)
 
@@ -161,41 +139,26 @@ class TestHeterogeneousModeling(unittest.TestCase):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
         config = tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
         fixture = MODEL_FIXTURES["llama"]
-        modeling_spec = fixture.spec_factory()
+        base_spec = fixture.spec_factory()
         modeling_spec = HeterogeneousModelingSpec(
-            layer_cls=modeling_spec.layer_cls,
-            layer_idx_resolver=modeling_spec.layer_idx_resolver,
+            layer_cls=base_spec.layer_cls,
+            layer_idx_resolver=base_spec.layer_idx_resolver,
             skip_descriptors={},
         )
         with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True):
             with self.assertRaisesRegex(ValueError, "No-op descriptors are missing"):
                 build_model(config, LlamaForCausalLM)
 
-    def test_model_and_submodel_initialize_shared_layer_class_independently(self):
-        """A model containing a same-layer-class submodel should initialize each model's layers correctly."""
-        model = _NestedSameLayerToyModel(
-            _toy_config(intermediate_size=32),
-            inner_config=_toy_config(intermediate_size=64, skip_attention=True),
-        )
+    def test_class_specific_skip_replacement_takes_precedence(self):
+        spec = _toy_modeling_spec(_ToyDecoderLayer, _ToyNoOpAttention)
+        spec.skip_descriptors["attention"] = {
+            "self_attn": _ToyNoOpAttention,
+            ("self_attn", _ToyAttention): _ClassSpecificNoOpAttention,
+        }
+        with patch.object(_SingleLayerToyModel, "_heterogeneous_modeling_spec", spec):
+            model = _SingleLayerToyModel(_toy_config(intermediate_size=32, skip_attention=True))
 
-        self.assertEqual(model.layer.intermediate_size, 32)
-        self.assertIsInstance(model.layer.self_attn, _ToyAttention)
-        self.assertEqual(model.inner_model.layer.intermediate_size, 64)
-        self.assertIsInstance(model.inner_model.layer.self_attn, _ToyNoOpAttention)
-
-    def test_nested_model_layers_use_their_own_config(self):
-        model = _CompositeToyModel(
-            _toy_config(intermediate_size=32, skip_attention=True),
-            backbone_config=_toy_config(intermediate_size=64, skip_attention=True),
-        )
-
-        parent_layer = model.backbone.parent_layer
-        backbone_layer = model.backbone.layer
-
-        self.assertEqual(parent_layer.intermediate_size, 32)
-        self.assertIsInstance(parent_layer.self_attn, _CompositeNoOpAttention)
-        self.assertEqual(backbone_layer.intermediate_size, 64)
-        self.assertIsInstance(backbone_layer.self_attn, _BackboneNoOpAttention)
+        self.assertIsInstance(model.layer.self_attn, _ClassSpecificNoOpAttention)
 
     def test_mtp_model_applies_per_layer_config_and_skips(self):
         config = tiny_llama_config(num_hidden_layers=2)
@@ -212,11 +175,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertEqual(mtp_model.layers[0].mtp_block.mlp.gate_proj.out_features, 64)
         self.assertEqual(mtp_model.layers[1].mtp_block.mlp.gate_proj.out_features, 96)
         self.assertEqual(mtp_model.layers[0].enorm.variance_epsilon, 1e-5)
-        self.assertIsNot(
-            type(mtp_model.layers[1].mtp_block.self_attn),
-            type(main_model.model.layers[1].self_attn),
-        )
-        self.assertEqual(mtp_model.config.get_disabled_kv_layer_indices(), (1,))
+        self.assertEqual(list(mtp_model.layers[1].mtp_block.self_attn.parameters()), [])
 
     def test_mtp_mask_creation_uses_per_layer_config(self):
         config = tiny_llama_config(num_hidden_layers=2)
@@ -236,23 +195,14 @@ class TestHeterogeneousModeling(unittest.TestCase):
         bidirectional_mask = mtp_model.create_masks_for_mtp_layer(1, inputs_embeds, mtp_cache, position_ids)[
             "attention_mask"
         ]
-        self.assertIsNotNone(causal_mask)
+        expected_causal_mask = torch.tensor([[[[0.0, torch.finfo(inputs_embeds.dtype).min], [0.0, 0.0]]]])
+        torch.testing.assert_close(causal_mask, expected_causal_mask)
         self.assertIsNone(bidirectional_mask)
 
     @parameterized.expand(
         [
-            (
-                "bool",
-                True,
-                TypeError,
-                "Layer index `layer_idx` must be an integer.*LayerIdxFromArgument.*got True",
-            ),
-            (
-                "negative",
-                -1,
-                IndexError,
-                "Layer index `layer_idx` is out of range for a model with 4 layers.*LayerIdxFromArgument.*got -1",
-            ),
+            ("bool", True, TypeError, "must be an integer.*True"),
+            ("negative", -1, IndexError, "out of range.*-1"),
         ]
     )
     def test_invalid_resolved_layer_idx_fails_clearly(self, _, layer_idx, error_type, message):
@@ -264,19 +214,83 @@ class TestHeterogeneousModeling(unittest.TestCase):
         masks = AttentionMasksByLayerIdx({0: "layer-zero-mask", 2: "layer-two-mask"})
 
         self.assertEqual(model.layer(torch.zeros(1), attention_mask=masks), "layer-two-mask")
+        self.assertEqual(model.layer(torch.zeros(1), None, masks), "layer-two-mask")
 
     def test_sequential_heterogeneous_models_no_interference(self):
         """Two heterogeneous models built sequentially should each have correct per-layer weights."""
         per_layer_a = {0: {"intermediate_size": 64}}
         per_layer_b = {0: {"intermediate_size": 96}}
 
-        with hetero_context("llama"):
-            model_a = build_model(tiny_llama_config(per_layer_config=per_layer_a), LlamaForCausalLM)
-            model_b = build_model(tiny_llama_config(per_layer_config=per_layer_b), LlamaForCausalLM, seed=123)
+        model_a = build_model(tiny_llama_config(per_layer_config=per_layer_a), LlamaForCausalLM)
+        input_ids = dummy_input_ids()
+        expected_logits = forward_logits(model_a, input_ids)
+        model_b = build_model(tiny_llama_config(per_layer_config=per_layer_b), LlamaForCausalLM, seed=123)
 
         self.assertEqual(model_a.model.layers[0].mlp.gate_proj.weight.shape[0], 64)
         self.assertEqual(model_b.model.layers[0].mlp.gate_proj.weight.shape[0], 96)
 
-        input_ids = dummy_input_ids()
-        forward_logits(model_a, input_ids)
+        torch.testing.assert_close(forward_logits(model_a, input_ids), expected_logits)
         forward_logits(model_b, input_ids)
+
+
+@require_torch
+class TestHeterogeneousCache(unittest.TestCase):
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @parameterized.expand(
+        [
+            ("llama", {0: {"num_key_value_heads": 2}, 1: {"skip": ["attention"]}, 2: {"num_key_value_heads": 1}}),
+            ("gpt_oss", {0: {"sliding_window": 3}, 1: {"skip": ["attention"]}, 2: {"sliding_window": 4}}),
+            ("llama4", {0: {"attention_chunk_size": 2}, 1: {"attention_chunk_size": 3}, 2: {"skip": ["attention"]}}),
+            ("nemotron_h", {1: {"skip": ["mixer"]}, 3: {"skip": ["mixer"]}}),
+        ]
+    )
+    def test_cached_decoding_matches_uncached(self, name, overrides):
+        factory, model_class = {
+            "llama": (tiny_llama_config, LlamaForCausalLM),
+            "gpt_oss": (tiny_gpt_oss_config, GptOssForCausalLM),
+            "llama4": (tiny_llama4_config, Llama4ForCausalLM),
+            "nemotron_h": (tiny_nemotron_h_config, NemotronHForCausalLM),
+        }[name]
+        config = factory(per_layer_config=overrides)
+        model = build_model(config, model_class)
+        input_ids = torch.tensor([[0, 0, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6]])
+        attention_mask = torch.tensor([[0, 0, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1]])
+        caches = (DynamicCache(config=config), StaticCache(config=config, max_cache_len=input_ids.shape[1]))
+
+        with torch.no_grad():
+            expected_logits = model(input_ids, attention_mask=attention_mask, use_cache=False).logits[:, -2:]
+            for cache in caches:
+                with self.subTest(cache_type=type(cache).__name__):
+                    model(
+                        input_ids[:, :-2], attention_mask=attention_mask[:, :-2], past_key_values=cache, use_cache=True
+                    )
+                    actual_logits = model(
+                        input_ids[:, -2:], attention_mask=attention_mask, past_key_values=cache, use_cache=True
+                    ).logits
+                    torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
+
+    def test_static_cache_generation_with_skipped_attention(self):
+        config = tiny_gpt_oss_config(
+            per_layer_config={0: {"sliding_window": 3}, 1: {"skip": ["attention"]}, 2: {"sliding_window": 4}},
+            pad_token_id=0,
+            eos_token_id=None,
+        )
+        config._attn_implementation = "eager"
+        model = build_model(config, GptOssForCausalLM)
+        input_ids = torch.tensor([[1, 3, 4, 5]])
+        generation_kwargs = {
+            "max_new_tokens": 3,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        with torch.no_grad():
+            expected = model.generate(input_ids, use_cache=False, **generation_kwargs)
+            actual = model.generate(
+                input_ids, cache_implementation="static", disable_compile=True, **generation_kwargs
+            )
+
+        torch.testing.assert_close(actual.sequences, expected.sequences)
+        torch.testing.assert_close(actual.logits, expected.logits)

@@ -55,18 +55,13 @@ if is_torch_available():
 
     @dataclass(frozen=True)
     class HeteroCase:
-        """A single heterogeneous modeling test scenario.
-
-        Fields describe the model under test AND how to build a manually-constructed
-        reference model (ground truth) that does not use any heterogeneity code.
-        """
+        """Per-layer overrides and expected structure for a supported model."""
 
         name: str
         model_key: str  # key into MODEL_FIXTURES
         config_factory: Callable
         model_cls: type
         per_layer_config: dict
-        expected_disabled_kv_layer_indices: tuple[int, ...] = ()
         # --- Structure verification fields ---
         structure_weight_checks: list[WeightCheck] = field(default_factory=list)
 
@@ -98,7 +93,6 @@ if is_torch_available():
             config_factory=tiny_llama_config,
             model_cls=LlamaForCausalLM,
             per_layer_config={1: {"skip": ["attention"]}},
-            expected_disabled_kv_layer_indices=(1,),
         ),
         HeteroCase(
             name="llama_skip_mlp",
@@ -113,7 +107,6 @@ if is_torch_available():
             config_factory=tiny_llama_config,
             model_cls=LlamaForCausalLM,
             per_layer_config={1: {"skip": ["attention", "mlp"]}},
-            expected_disabled_kv_layer_indices=(1,),
         ),
         # ── GPT-OSS ──
         HeteroCase(
@@ -135,7 +128,6 @@ if is_torch_available():
             config_factory=tiny_gpt_oss_config,
             model_cls=GptOssForCausalLM,
             per_layer_config={1: {"skip": ["attention"]}},
-            expected_disabled_kv_layer_indices=(1,),
         ),
         HeteroCase(
             name="gpt_oss_skip_mlp",
@@ -150,7 +142,6 @@ if is_torch_available():
             config_factory=tiny_gpt_oss_config,
             model_cls=GptOssForCausalLM,
             per_layer_config={1: {"skip": ["attention", "mlp"]}},
-            expected_disabled_kv_layer_indices=(1,),
         ),
         # ── Llama4 ──
         HeteroCase(
@@ -169,8 +160,7 @@ if is_torch_available():
             model_key="llama4",
             config_factory=tiny_llama4_config,
             model_cls=Llama4ForCausalLM,
-            per_layer_config={0: {"skip": ["attention"]}},
-            expected_disabled_kv_layer_indices=(0,),
+            per_layer_config={2: {"skip": ["attention"]}},
         ),
         HeteroCase(
             name="llama4_skip_mlp",
@@ -191,8 +181,7 @@ if is_torch_available():
             model_key="llama4",
             config_factory=tiny_llama4_config,
             model_cls=Llama4ForCausalLM,
-            per_layer_config={0: {"skip": ["attention", "mlp"]}},
-            expected_disabled_kv_layer_indices=(0,),
+            per_layer_config={2: {"skip": ["attention", "mlp"]}},
         ),
         HeteroCase(
             name="llama4_skip_moe_both",
@@ -200,7 +189,6 @@ if is_torch_available():
             config_factory=tiny_llama4_config,
             model_cls=Llama4ForCausalLM,
             per_layer_config={1: {"skip": ["attention", "mlp"]}},
-            expected_disabled_kv_layer_indices=(1,),
         ),
         # ── NemotronH (layers: attention, mamba, moe, attention) ──
         HeteroCase(
@@ -219,8 +207,7 @@ if is_torch_available():
             model_key="nemotron_h",
             config_factory=tiny_nemotron_h_config,
             model_cls=NemotronHForCausalLM,
-            per_layer_config={0: {"skip": ["mixer"]}},
-            expected_disabled_kv_layer_indices=(0,),
+            per_layer_config={3: {"skip": ["mixer"]}},
         ),
         HeteroCase(
             name="nemotron_h_skip_mamba",
@@ -228,7 +215,6 @@ if is_torch_available():
             config_factory=tiny_nemotron_h_config,
             model_cls=NemotronHForCausalLM,
             per_layer_config={1: {"skip": ["mixer"]}},
-            expected_disabled_kv_layer_indices=(1,),
         ),
         HeteroCase(
             name="nemotron_h_skip_moe",
@@ -236,7 +222,6 @@ if is_torch_available():
             config_factory=tiny_nemotron_h_config,
             model_cls=NemotronHForCausalLM,
             per_layer_config={2: {"skip": ["mixer"]}},
-            expected_disabled_kv_layer_indices=(2,),
         ),
     ]
 
@@ -293,13 +278,8 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
         replacement_types = tuple(
             type(replacement_factory())
             for skip_descriptor in (modeling_spec.skip_descriptors or {}).values()
-            for replacement_factory in skip_descriptor.replacements.values()
+            for replacement_factory in skip_descriptor.values()
         )
-        self.assertEqual(
-            model.config._heterogeneity_spec.disabled_kv_layer_indices,
-            case.expected_disabled_kv_layer_indices,
-        )
-
         ref_layer_cls = MODEL_FIXTURES[case.model_key].ref_layer_cls
         for i in range(config.num_hidden_layers):
             ref_layer = ref_layer_cls(config, layer_idx=i)
@@ -313,10 +293,8 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
 
         # Check weight shapes on all specified layers
         for layer_idx, attr_path, shape_dim, expected in case.structure_weight_checks:
-            obj = model.model.layers[layer_idx]
-            for part in attr_path.split("."):
-                obj = getattr(obj, part)
-            self.assertEqual(obj.shape[shape_dim], expected, f"Layer {layer_idx} {attr_path} shape mismatch")
+            weight = model.model.layers[layer_idx].get_parameter(attr_path)
+            self.assertEqual(weight.shape[shape_dim], expected, f"Layer {layer_idx} {attr_path} shape mismatch")
 
     @parameterized.expand(HETERO_CASES, name_func=_case_name)
     def test_forward(self, case):
@@ -331,16 +309,18 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
         hetero, ref = _build_hetero_and_ref(case)
         input_ids = dummy_input_ids()
         gen_kwargs = {"max_new_tokens": 4, "do_sample": False}
-        self.assertTrue(
-            torch.equal(
-                hetero.generate(input_ids, **gen_kwargs),
-                ref.generate(input_ids, **gen_kwargs),
-            )
-        )
+        actual_ids = hetero.generate(input_ids, **gen_kwargs)
+        # Use an uncached reference so a shared cache bug cannot make both outputs agree.
+        expected_ids = ref.generate(input_ids, use_cache=False, **gen_kwargs)
+        torch.testing.assert_close(actual_ids, expected_ids)
 
     def test_save_pretrained_model_round_trip(self):
-        """Full model save/load: config, weight shapes, and forward output should survive."""
-        per_layer = {0: {"intermediate_size": 64}, 2: {"intermediate_size": 96}}
+        """Full model save/load: skips, weight shapes, and forward output should survive."""
+        per_layer = {
+            0: {"intermediate_size": 64},
+            1: {"skip": ["attention"]},
+            2: {"intermediate_size": 96},
+        }
         hetero_config = tiny_llama_config(per_layer_config=per_layer)
         hetero_model = build_model(hetero_config, LlamaForCausalLM)
 
@@ -352,7 +332,8 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
             loaded_model = LlamaForCausalLM.from_pretrained(tmpdir)
 
         loaded_model.eval()
-        for layer_idx in range(4):
+        self.assertEqual(list(loaded_model.model.layers[1].self_attn.parameters()), [])
+        for layer_idx in range(hetero_config.num_hidden_layers):
             orig_shape = hetero_model.model.layers[layer_idx].mlp.gate_proj.weight.shape
             loaded_shape = loaded_model.model.layers[layer_idx].mlp.gate_proj.weight.shape
             self.assertEqual(orig_shape, loaded_shape, f"Layer {layer_idx} weight shape mismatch")

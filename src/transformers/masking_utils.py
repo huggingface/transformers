@@ -863,6 +863,7 @@ def _preprocess_mask_arguments(
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
 
 
+@support_per_layer_mask_creation()
 def create_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,

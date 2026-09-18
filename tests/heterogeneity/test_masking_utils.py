@@ -23,15 +23,12 @@ from transformers.testing_utils import cleanup, is_torch_available, require_torc
 if is_torch_available():
     import torch
 
-    from tests.heterogeneity.testing_utils import tiny_gpt_oss_config, tiny_llama4_config, tiny_llama_config
+    from tests.heterogeneity.testing_utils import tiny_llama4_config, tiny_llama_config
     from transformers import DynamicCache
-    from transformers.integrations.heterogeneity.masking_utils import (
-        AttentionMasksByLayerIdx,
-        support_per_layer_mask_creation,
-    )
+    from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.masking_utils import (
+        create_causal_mask,
         create_chunked_causal_mask,
-        create_masks_for_generate,
         create_sliding_window_causal_mask,
     )
 
@@ -56,7 +53,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         config._attn_implementation = "sdpa"
         config._heterogeneity_spec.generic_modeling_applied = True
 
-        inputs_embeds = torch.randn(1, 4, 64)
+        inputs_embeds = torch.randn(1, 4, config.hidden_size)
         cache = DynamicCache(config=config)
 
         mask = create_sliding_window_causal_mask(config, inputs_embeds, attention_mask=None, past_key_values=cache)
@@ -80,9 +77,8 @@ class TestHeterogeneousMasking(unittest.TestCase):
             ),
         }
         self.assertEqual(set(mask), {0, 1, 2})
-        self.assertIs(mask[0], mask[1])
-        for layer_idx, expected_mask in expected_masks.items():
-            torch.testing.assert_close(mask[layer_idx], expected_mask[None, None])
+        for layer_idx, expected_mask_idx in enumerate((0, 0, 2)):
+            torch.testing.assert_close(mask[layer_idx], expected_masks[expected_mask_idx][None, None])
 
     @parameterized.expand([("causal", True), ("bidirectional", False)])
     def test_sliding_masks_use_each_layer_cache_geometry(self, _name, is_causal):
@@ -125,7 +121,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         config._attn_implementation = "sdpa"
         config._heterogeneity_spec.generic_modeling_applied = True
 
-        inputs_embeds = torch.randn(1, 4, 64)
+        inputs_embeds = torch.randn(1, 4, config.hidden_size)
         cache = DynamicCache(config=config)
 
         mask = create_chunked_causal_mask(config, inputs_embeds, attention_mask=None, past_key_values=cache)
@@ -148,66 +144,26 @@ class TestHeterogeneousMasking(unittest.TestCase):
                 ]
             ),
         }
-        self.assertEqual(set(mask), {0, 1, 2, 3})
-        for layer_idx, expected_mask_idx in enumerate((0, 1, 0, 1)):
+        self.assertEqual(set(mask), {0, 1, 2})
+        for layer_idx, expected_mask_idx in enumerate((0, 1, 0)):
             torch.testing.assert_close(mask[layer_idx], expected_masks[expected_mask_idx][None, None])
 
-    def test_disabled_attention_layer_does_not_create_or_query_a_mask(self):
+    def test_causal_masks_respect_per_layer_attention_implementation(self):
         config = tiny_llama_config(
             num_hidden_layers=2,
-            sliding_window=None,
-            per_layer_config={
-                0: {"sliding_window": 2, "skip": ["attention"]},
-                1: {"sliding_window": 2},
-            },
+            attn_implementation="eager",
+            per_layer_config={1: {"_attn_implementation": "sdpa"}},
         )
-        config._attn_implementation = "eager"
         config._heterogeneity_spec.generic_modeling_applied = True
-        config._heterogeneity_spec.disabled_kv_layer_indices = (0,)
-
-        factory_calls = []
-
-        @support_per_layer_mask_creation("sliding_window")
-        def create_mask(config, inputs_embeds, attention_mask, past_key_values, layer_idx=None):
-            factory_calls.append(layer_idx)
-            return object()
-
-        class CacheWithDisabledFirstLayer:
-            def get_query_offset(self, layer_idx):
-                if layer_idx == 0:
-                    raise AssertionError("Disabled cache layer geometry was queried")
-                return 0
-
-            def get_mask_sizes(self, query_length, layer_idx):
-                if layer_idx == 0:
-                    raise AssertionError("Disabled cache layer geometry was queried")
-                return query_length, 0
-
-        cache = CacheWithDisabledFirstLayer()
-        mask = create_mask(config, torch.randn(1, 2, config.hidden_size), None, cache)
-
-        self.assertEqual(set(mask), {0, 1})
-        self.assertIsNone(mask[0])
-        self.assertEqual(factory_calls, [1])
-
-    def test_masks_for_generate_keys_layer_idx_masks_by_pattern(self):
-        config = tiny_gpt_oss_config(
-            layer_types=["sliding_attention"] * 4,
-            per_layer_config={0: {"sliding_window": 16}, 1: {"sliding_window": 8}},
-        )
-        config._attn_implementation = "sdpa"
-        config._heterogeneity_spec.generic_modeling_applied = True
-
-        inputs_embeds = torch.randn(1, 8, 64)
-        attention_masks = create_masks_for_generate(
+        masks = create_causal_mask(
             config,
-            inputs_embeds,
-            attention_mask=torch.ones(1, 8),
-            past_key_values=DynamicCache(config=config),
+            torch.randn(1, 2, config.hidden_size),
+            attention_mask=None,
+            past_key_values=None,
+            allow_is_causal_skip=False,
         )
 
-        # Model code selects a layer's mask from the result by pattern name, then the layer resolves its own index.
-        self.assertEqual(set(attention_masks), {"sliding_attention"})
-        sliding_masks = attention_masks["sliding_attention"]
-        self.assertIsInstance(sliding_masks, AttentionMasksByLayerIdx)
-        self.assertEqual(set(sliding_masks), {0, 1, 2, 3})
+        allowed = torch.tensor([[[[True, False], [True, True]]]])
+        expected_eager = torch.zeros(1, 1, 2, 2).masked_fill(~allowed, torch.finfo(torch.float32).min)
+        torch.testing.assert_close(masks[0], expected_eager)
+        torch.testing.assert_close(masks[1], allowed)

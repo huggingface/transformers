@@ -148,10 +148,11 @@ if is_torch_available():
             return tuple(outputs) if self._return_tuple else outputs[0]
 
 
-def get_skip_replacement(
+def get_skip_replacement_factory(
     cls: type[nn.Module],
     to_return: ReturnEntry | list[ReturnEntry | None] | None,
 ) -> Callable[[], nn.Module]:
+    """Return a factory for no-op modules with the specified forward outputs."""
     if to_return is None:
         return_entries = None
         return_tuple = False

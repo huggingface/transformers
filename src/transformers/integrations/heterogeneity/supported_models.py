@@ -17,10 +17,9 @@ from collections.abc import Callable
 
 from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import (
     HeterogeneousModelingSpec,
-    SkipDescriptor,
 )
 from transformers.integrations.heterogeneity.layer_idx_resolvers import LayerIdxFromArgument
-from transformers.integrations.heterogeneity.skip_utils import ReturnEntry, get_skip_replacement
+from transformers.integrations.heterogeneity.skip_utils import ReturnEntry, get_skip_replacement_factory
 
 
 MODEL_TYPE_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
@@ -49,28 +48,22 @@ def gpt_oss() -> HeterogeneousModelingSpec:
         layer_cls=GptOssDecoderLayer,
         layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         skip_descriptors={
-            "attention": SkipDescriptor(
-                replacements={
-                    "input_layernorm": get_skip_replacement(
-                        GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
-                    ),
-                    "self_attn": get_skip_replacement(
-                        GptOssAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    ),
-                },
-                replaces_kv_cache_updater=True,
-            ),
-            "mlp": SkipDescriptor(
-                replacements={
-                    "post_attention_layernorm": get_skip_replacement(
-                        GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
-                    ),
-                    "mlp": get_skip_replacement(
-                        GptOssMLP, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    ),
-                },
-                replaces_kv_cache_updater=False,
-            ),
+            "attention": {
+                "input_layernorm": get_skip_replacement_factory(
+                    GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
+                ),
+                "self_attn": get_skip_replacement_factory(
+                    GptOssAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                ),
+            },
+            "mlp": {
+                "post_attention_layernorm": get_skip_replacement_factory(
+                    GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
+                ),
+                "mlp": get_skip_replacement_factory(
+                    GptOssMLP, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                ),
+            },
         },
     )
 
@@ -89,27 +82,21 @@ def llama() -> HeterogeneousModelingSpec:
         layer_cls=LlamaDecoderLayer,
         layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         skip_descriptors={
-            "attention": SkipDescriptor(
-                replacements={
-                    "input_layernorm": get_skip_replacement(
-                        LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
-                    ),
-                    "self_attn": get_skip_replacement(
-                        LlamaAttention,
-                        [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None],
-                    ),
-                },
-                replaces_kv_cache_updater=True,
-            ),
-            "mlp": SkipDescriptor(
-                replacements={
-                    "post_attention_layernorm": get_skip_replacement(
-                        LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
-                    ),
-                    "mlp": get_skip_replacement(LlamaMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)),
-                },
-                replaces_kv_cache_updater=False,
-            ),
+            "attention": {
+                "input_layernorm": get_skip_replacement_factory(
+                    LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
+                ),
+                "self_attn": get_skip_replacement_factory(
+                    LlamaAttention,
+                    [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None],
+                ),
+            },
+            "mlp": {
+                "post_attention_layernorm": get_skip_replacement_factory(
+                    LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
+                ),
+                "mlp": get_skip_replacement_factory(LlamaMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)),
+            },
         },
     )
 
@@ -129,31 +116,26 @@ def llama4() -> HeterogeneousModelingSpec:
         layer_cls=Llama4TextDecoderLayer,
         layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         skip_descriptors={
-            "attention": SkipDescriptor(
-                replacements={
-                    "input_layernorm": get_skip_replacement(
-                        Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=_identity)
-                    ),
-                    "self_attn": get_skip_replacement(
-                        Llama4TextAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    ),
-                },
-                replaces_kv_cache_updater=True,
-            ),
-            "mlp": SkipDescriptor(
-                replacements={
-                    "post_attention_layernorm": get_skip_replacement(
-                        Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=_identity)
-                    ),
-                    "feed_forward": get_skip_replacement(
-                        Llama4TextMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
-                    ),
-                    ("feed_forward", Llama4TextMoe): get_skip_replacement(
-                        Llama4TextMoe, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    ),
-                },
-                replaces_kv_cache_updater=False,
-            ),
+            "attention": {
+                "input_layernorm": get_skip_replacement_factory(
+                    Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=_identity)
+                ),
+                "self_attn": get_skip_replacement_factory(
+                    Llama4TextAttention,
+                    [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None],
+                ),
+            },
+            "mlp": {
+                "post_attention_layernorm": get_skip_replacement_factory(
+                    Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=_identity)
+                ),
+                ("feed_forward", Llama4TextMLP): get_skip_replacement_factory(
+                    Llama4TextMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
+                ),
+                ("feed_forward", Llama4TextMoe): get_skip_replacement_factory(
+                    Llama4TextMoe, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                ),
+            },
         },
     )
 
@@ -165,6 +147,7 @@ def nemotron_h() -> HeterogeneousModelingSpec:
         NemotronHAttention,
         NemotronHBlock,
         NemotronHMamba2Mixer,
+        NemotronHMLP,
         NemotronHMoE,
         NemotronHRMSNorm,
     )
@@ -173,22 +156,23 @@ def nemotron_h() -> HeterogeneousModelingSpec:
         layer_cls=NemotronHBlock,
         layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         skip_descriptors={
-            "mixer": SkipDescriptor(
-                replacements={
-                    "norm": get_skip_replacement(
-                        NemotronHRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
-                    ),
-                    ("mixer", NemotronHAttention): get_skip_replacement(
-                        NemotronHAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    ),
-                    ("mixer", NemotronHMoE): get_skip_replacement(
-                        NemotronHMoE, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
-                    ),
-                    ("mixer", NemotronHMamba2Mixer): get_skip_replacement(
-                        NemotronHMamba2Mixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
-                    ),
-                },
-                replaces_kv_cache_updater=True,
-            ),
+            "mixer": {
+                "norm": get_skip_replacement_factory(
+                    NemotronHRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
+                ),
+                ("mixer", NemotronHAttention): get_skip_replacement_factory(
+                    NemotronHAttention,
+                    [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None],
+                ),
+                ("mixer", NemotronHMoE): get_skip_replacement_factory(
+                    NemotronHMoE, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+                ),
+                ("mixer", NemotronHMamba2Mixer): get_skip_replacement_factory(
+                    NemotronHMamba2Mixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+                ),
+                ("mixer", NemotronHMLP): get_skip_replacement_factory(
+                    NemotronHMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
+                ),
+            },
         },
     )

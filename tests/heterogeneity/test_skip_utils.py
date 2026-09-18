@@ -21,18 +21,18 @@ from transformers.testing_utils import is_torch_available, require_torch
 if is_torch_available():
     import torch
 
-    from transformers.integrations.heterogeneity import ReturnEntry, get_skip_replacement
+    from transformers.integrations.heterogeneity import ReturnEntry, get_skip_replacement_factory
 
 
 @require_torch
 class TestSkipReplacement(unittest.TestCase):
-    def test_get_skip_replacement_returns_none(self):
-        replacement_factory = get_skip_replacement(torch.nn.Linear, None)
+    def test_get_skip_replacement_factory_returns_none(self):
+        replacement_factory = get_skip_replacement_factory(torch.nn.Linear, None)
 
         self.assertIsNone(replacement_factory()(torch.randn(2, 4)))
 
-    def test_get_skip_replacement_transforms_configured_argument(self):
-        replacement_factory = get_skip_replacement(
+    def test_get_skip_replacement_factory_transforms_configured_argument(self):
+        replacement_factory = get_skip_replacement_factory(
             torch.nn.Linear, ReturnEntry(arg_name="input", transform=lambda x: x * 2)
         )
         module = replacement_factory()
@@ -41,8 +41,8 @@ class TestSkipReplacement(unittest.TestCase):
         torch.testing.assert_close(module(inputs), inputs * 2)
         torch.testing.assert_close(module(input=inputs), inputs * 2)
 
-    def test_get_skip_replacement_returns_tuple_with_placeholder(self):
-        replacement_factory = get_skip_replacement(
+    def test_get_skip_replacement_factory_returns_tuple_with_placeholder(self):
+        replacement_factory = get_skip_replacement_factory(
             torch.nn.Linear,
             [ReturnEntry(arg_name="input", transform=lambda x: x * 2), None],
         )
@@ -54,25 +54,23 @@ class TestSkipReplacement(unittest.TestCase):
         torch.testing.assert_close(transformed_inputs, inputs * 2)
         self.assertIsNone(placeholder)
 
-    def test_get_skip_replacement_raises_for_unknown_return_argument(self):
+    def test_get_skip_replacement_factory_raises_for_unknown_return_argument(self):
         with self.assertRaisesRegex(ValueError, "return entry arg names.*missing"):
-            get_skip_replacement(torch.nn.Linear, ReturnEntry(arg_name="missing", transform=lambda x: x))
+            get_skip_replacement_factory(torch.nn.Linear, ReturnEntry(arg_name="missing", transform=lambda x: x))
 
-    def test_get_skip_replacement_raises_for_missing_return_argument(self):
-        replacement_factory = get_skip_replacement(
+    def test_get_skip_replacement_factory_raises_for_missing_return_argument(self):
+        replacement_factory = get_skip_replacement_factory(
             torch.nn.Linear, ReturnEntry(arg_name="input", transform=lambda x: x)
         )
 
-        with self.assertRaisesRegex(
-            TypeError, "In the skip replacement for Linear, required argument 'input' was not provided"
-        ):
+        with self.assertRaisesRegex(TypeError, "Linear.*required argument 'input'"):
             replacement_factory()()
 
-    def test_get_skip_replacement_adds_context_to_transform_error(self):
+    def test_get_skip_replacement_factory_adds_context_to_transform_error(self):
         def fail_transform(_):
             raise RuntimeError("transform failed")
 
-        replacement_factory = get_skip_replacement(
+        replacement_factory = get_skip_replacement_factory(
             torch.nn.Linear, ReturnEntry(arg_name="input", transform=fail_transform)
         )
 

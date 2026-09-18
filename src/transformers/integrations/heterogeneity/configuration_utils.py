@@ -44,11 +44,6 @@ class _HeterogeneitySpec:
 
     generic_modeling_applied: bool = False
 
-    # Layers that never update their KV cache because a skip replaced the submodule responsible for it.
-    # Resolved from the modeling spec by `apply_generic_heterogeneous_modeling_if_applicable`; `None` until a model has been
-    # constructed from this config.
-    disabled_kv_layer_indices: tuple[int, ...] | None = None
-
 
 def _normalize_layer_overrides(layer_overrides: dict[str, Any]) -> dict[str, Any]:
     normalized = copy.deepcopy(layer_overrides)
@@ -343,30 +338,6 @@ class HeterogeneousConfigMixin:
         if not self.is_heterogeneous:
             return None
         return self._heterogeneity_spec.per_layer_attributes
-
-    def get_disabled_kv_layer_indices(self) -> tuple[int, ...]:
-        """Return the indices of layers that never update their KV cache because a skip replaced the submodule
-        responsible for it (e.g. layers that skip attention). Empty for homogeneous configs.
-
-        Raises:
-            ValueError: If some layers skip submodules and no model has been constructed from this config yet.
-                Whether a skip disables a layer's KV-cache update is defined by the architecture's
-                `HeterogeneousModelingSpec`, which `apply_generic_heterogeneous_modeling_if_applicable` resolves during
-                model initialization.
-        """
-        if not self.is_heterogeneous:
-            return ()
-
-        disabled_kv_layer_indices = self._heterogeneity_spec.disabled_kv_layer_indices
-        if disabled_kv_layer_indices is None:
-            if any(layer_config.skip for layer_config in self.per_layer_config):
-                raise ValueError(
-                    "Some layers in this heterogeneous config skip submodules, and whether a skip disables a "
-                    "layer's KV-cache update is only resolved during model initialization. Initialize a model from "
-                    "this config first."
-                )
-            return ()
-        return disabled_kv_layer_indices
 
     @property
     def allow_global_per_layer_attribute_access(self) -> bool:

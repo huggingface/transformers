@@ -16,7 +16,7 @@
 from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, HeterogeneousConfigMixin
 from .heterogeneous_modeling_spec import (
     HeterogeneousModelingSpec,
-    SkipDescriptor,
+    SkipDescriptors,
     get_heterogeneous_modeling_spec,
     nest_skip_descriptor_paths,
 )
@@ -25,7 +25,7 @@ from .modeling_utils import (
     apply_generic_heterogeneous_modeling_if_applicable,
     support_generic_heterogeneous_modeling,
 )
-from .skip_utils import ReturnEntry, get_skip_replacement
+from .skip_utils import ReturnEntry, get_skip_replacement_factory
 
 
 __all__ = [
@@ -36,10 +36,10 @@ __all__ = [
     "LayerIdxFromModelInitStack",
     "LayerIdxResolver",
     "ReturnEntry",
-    "SkipDescriptor",
+    "SkipDescriptors",
     "apply_generic_heterogeneous_modeling_if_applicable",
     "get_heterogeneous_modeling_spec",
-    "get_skip_replacement",
+    "get_skip_replacement_factory",
     "nest_skip_descriptor_paths",
     "support_generic_heterogeneous_modeling",
 ]
