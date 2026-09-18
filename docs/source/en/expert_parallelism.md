@@ -160,8 +160,7 @@ These configurations each use eight GPUs:
 | `DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4)` | Dispatch with a TP pair per batch, each pair slicing its batch in two; two batches per expert group. |
 | `DistributedConfig(tp_size=8, ep_size=8)` | Dispatch with every rank sharing one batch, sliced in eight, or masking and all-reduce for a masked plan. |
 
-> [!WARNING]
-> The [`Trainer`] does not account for token dispatch yet: batch and token counting assume the all-reduce layout, where the ranks of a TP group share a batch and `fsdp_size` data-parallel shards exist. Trainer support for dispatch comes in a follow-up.
+The [`Trainer`] trains these layouts as loaded: it leaves the placement and gradient reduction to the model's own FSDP2 and expert-parallel wrappers instead of wrapping it again, gives each device mesh its own optimizer param group and gradient-norm term, and counts tokens once per TP group. The effective global batch size is `per_device_train_batch_size * fsdp_size * gradient_accumulation_steps`, whichever the layout. [`~Trainer.save_model`] gathers the sharded weights into a regular checkpoint.
 
 ## Combining with FSDP2
 
