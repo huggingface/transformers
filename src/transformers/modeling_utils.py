@@ -4147,7 +4147,7 @@ class PreTrainedModel(
 
         if distributed_config is not None:
             distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
-                distributed_config, device_mesh=device_mesh, device_map=device_map
+                distributed_config, device_map=device_map
             )
 
         if gguf_file is not None and not is_accelerate_available():
@@ -4286,7 +4286,8 @@ class PreTrainedModel(
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
+        if distributed_config is not None:
+            model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
         if device_map is not None:
@@ -4610,6 +4611,14 @@ class PreTrainedModel(
         """
         # if None, the model didn't undergo tensor parallel sharding
         return self._tp_size
+
+    @property
+    def fsdp_size(self):
+        """
+        Returns the model's FSDP sharding degree.
+        """
+        # if None, the model didn't undergo FSDP sharding
+        return self._fsdp_size
 
     @property
     def supports_pp_plan(self):
@@ -5021,7 +5030,16 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         if device.type in ["cuda", "xpu"]:
             accelerator_module = getattr(torch, device.type)
             index = device.index if device.index is not None else accelerator_module.current_device()
-            free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            try:
+                free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            except (RuntimeError, NotImplementedError, AttributeError) as e:
+                # Some backends cannot report free memory (e.g. Intel XPU under WSL2, where the Level Zero Sysman
+                # interface is not exposed). Warmup is a best-effort optimization, so skip it for this device
+                # instead of failing the whole model load.
+                logger.warning_once(
+                    f"Skipping caching allocator warmup for {device}: could not query device memory ({e})"
+                )
+                continue
             unused_memory = accelerator_module.memory_reserved(index) - accelerator_module.memory_allocated(index)
             # If we have reserved but unused memory, we can lower the allocation we want to make, but only if it's still
             # higher than the unused memory. This is because otherwise torch will use that unused memory when performing
