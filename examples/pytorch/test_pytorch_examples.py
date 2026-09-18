@@ -20,6 +20,7 @@ import sys
 from unittest.mock import patch
 
 from test_memory_cleanup_mixin import MemoryCleanupMixin
+
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
 from transformers.testing_utils import (
     CaptureLogger,
@@ -101,6 +102,7 @@ logger.addHandler(stream_handler)
 class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
     # Tests do training — gradients are required.
     run_under_no_grad = False
+
     def test_run_glue(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
