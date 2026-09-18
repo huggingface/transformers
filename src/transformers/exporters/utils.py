@@ -40,8 +40,8 @@ import contextlib
 import copy
 import enum
 import functools
+import importlib
 import inspect
-import sys
 from collections.abc import MutableMapping
 from typing import Any
 
@@ -337,22 +337,22 @@ def module_dtype(model: PreTrainedModel | torch.nn.Module) -> torch.dtype | None
         return None
 
 
-# Output flags that should be set on `model.config`, not passed as forward() kwargs.
+# Output flags that should be set on `config`, not passed as forward() kwargs.
 _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
 
 def prepare_for_export(
     model: PreTrainedModel | torch.nn.Module, inputs: MutableMapping[str, Any]
 ) -> tuple[PreTrainedModel | torch.nn.Module, MutableMapping[str, Any], dict[str, Any]]:
-    """Configure model and inputs for export. Mutates both `model` and `inputs` in place,
-    returning `(model, inputs, output_flags)` where `output_flags` holds the values popped
-    from `inputs` for `use_cache`, `return_dict`, etc. (to be applied reversibly onto
-    `model.config` by `patch_model_config` during the trace).
+    """Configure model and inputs for export. Mutates `inputs` in place, returning
+    `(model, inputs, output_flags)` where `output_flags` holds the values popped from `inputs` for
+    `use_cache`, `return_dict`, etc. (to be applied reversibly onto `config` by `patch_model_config`
+    during the trace).
 
     - Strips label inputs (`labels`, `future_values`) — loss computation is unsupported.
     - Pops output flags (`use_cache`, `return_dict`, …) from `inputs` so they don't appear
       as traced kwargs; the values are returned for the trace block to apply onto
-      `model.config`.
+      `config`.
     - Pre-computes data-dependent vision/audio kwargs registered via
       `@register_export_input_preparer` and writes them into `inputs`.
     - Casts input tensors to match the model's `dtype` / `device`.
@@ -383,8 +383,10 @@ def prepare_for_export(
     # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
     # repeat_interleave, or itertools.groupby — untraceable by dynamo.
     # TODO: use the collator API once it covers these cases.
+    # Input preparation itself needs only the config, so it stays callable without a model. A decomposed
+    # component can be a plain module (a `Linear`, a projector) with no config and nothing to precompute.
     with torch.no_grad():
-        precompute_export_inputs(model, inputs)
+        precompute_export_inputs(getattr(model, "config", None), inputs)
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
@@ -397,25 +399,100 @@ def prepare_for_export(
 
 
 # ── Export input preparers ────────────────────────────────────────────────────
-# Registry of `model_type -> (model, inputs) -> None` callables that precompute the
+# Registry of `model_type -> (config, inputs) -> None` callables that precompute the
 # data-dependent tensors (cu_seqlens, position_ids, padded audio chunks, …) the model
 # would otherwise compute in its forward via `.tolist()` / `nonzero()` / etc. Inject
 # the results into `inputs` so the forward skips the untraceable branch.
 
 
-def _find_submodule_attr(model: torch.nn.Module, name: str) -> Any | None:
-    """Return the first non-None value of `name` found on `model` or any of its submodules."""
-    for module in model.modules():
-        if (value := getattr(module, name, None)) is not None:
+def _config_attr(config, name: str) -> Any | None:
+    """First non-`None` value of `name` on `config` or any of its sub-configs.
+
+    Input preparation reads a model's shape knobs — merge sizes, patch size, interpolation settings — and
+    reads them off the *config* so it can run with no model instance: a collator, or the exporters rebuilding
+    inputs for an already-exported graph, hold a config and nothing else.
+    """
+    if (value := getattr(config, name, None)) is not None:
+        return value
+    for sub_config_name in getattr(config, "sub_configs", {}) or {}:
+        sub_config = getattr(config, sub_config_name, None)
+        if sub_config is None:
+            continue
+        if (value := _config_attr(sub_config, name)) is not None:
             return value
     return None
+
+
+def _window_size(config) -> int | None:
+    """The attention window in pixels, however this encoder states it.
+
+    Most windowed configs carry `window_size` directly. muse_glimmer states it as the side of its position
+    grid instead, so the window is that many patches — the same product its vision module takes. Whether
+    the encoder windows at all is the caller's question, not this one's.
+    """
+    if (size := _config_attr(config, "window_size")) is not None:
+        return size
+    pos_emb_height, patch_size = _config_attr(config, "pos_emb_height"), _config_attr(config, "patch_size")
+    if pos_emb_height is None or patch_size is None:
+        return None
+    return pos_emb_height * patch_size
+
+
+def _spatial_merge_size(config) -> int | None:
+    """The spatial merge factor, however this encoder spells it.
+
+    Most vision configs call it `spatial_merge_size`. kimi_k25 carries a square `merge_kernel_size` tuple
+    and muse_glimmer a scalar `merge_size`; both mean the same factor, so they are read here rather than
+    aliased on the config, where the value would have to be either a serialized field users could change
+    or a property shadowing the field it derives from.
+    """
+    if (size := _config_attr(config, "spatial_merge_size")) is not None:
+        return size
+    if (kernel := _config_attr(config, "merge_kernel_size")) is not None:
+        return kernel[0]
+    return _config_attr(config, "merge_size")
+
+
+def _grid_side(config) -> int | None:
+    """Side of the square learned position-embedding grid, however this encoder spells it.
+
+    Three spellings across the families that resample such a grid, and each config carries exactly one:
+    a count to take the root of (`num_position_embeddings`, the qwen3_vl / qwen3_5 / cohere_compass
+    families), the side itself (`pos_emb_height`, kimi_k25 / muse_glimmer), or the patch count implied by
+    the input (`image_size // patch_size`, paddleocr_vl). Only reached for an encoder that declares
+    `interpolation_mode`, so the last spelling cannot catch a config that merely has an image size.
+    """
+    if (count := _config_attr(config, "num_position_embeddings")) is not None:
+        return int(count**0.5)
+    if (side := _config_attr(config, "pos_emb_height")) is not None:
+        return side
+    image_size, patch_size = _config_attr(config, "image_size"), _config_attr(config, "patch_size")
+    if image_size is not None and isinstance(patch_size, int):
+        return image_size // patch_size
+    return None
+
+
+def _modeling_module(config):
+    """The `modeling_*` module of `config`'s architecture, for the per-model precompute helpers that live
+    beside the model (`get_mrope_position_ids`, `get_vision_frame_index`, `chunk_and_pad_features`, …).
+
+    Taken from the config class itself, which is defined next to the modeling file it belongs to — a
+    sub-config resolves to its family's module for the same reason. No model instance and no `model_type`
+    lookup; `None` when the module cannot be imported."""
+    module_name = type(config).__module__
+    if ".configuration_" not in module_name:
+        return None
+    try:
+        return importlib.import_module(module_name.replace(".configuration_", ".modeling_"))
+    except ModuleNotFoundError:
+        return None
 
 
 _EXPORT_INPUT_PREPARERS: dict[tuple[str, ...], callable] = {}
 
 
 def register_export_input_preparer(*markers: str):
-    """Register `fn(model, inputs) -> None`. Dispatched when every `marker` is a key in
+    """Register `fn(config, inputs) -> None`. Dispatched when every `marker` is a key in
     `inputs` with a non-`None` value — no model_type list to maintain. Use multiple
     markers to narrow the match when a single kwarg is too ambiguous (e.g.
     `("input_features", "feature_lens")` for omni audio encoders)."""
@@ -428,18 +505,18 @@ def register_export_input_preparer(*markers: str):
 
 
 @register_export_input_preparer("grid_thw")
-def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+def _prepare_grid_thw_vision_inputs(config, inputs: dict[str, Any]) -> None:
     """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `max_seqlen`, `position_ids`, plus optional
     `window_index`/`cu_window_seqlens`/`max_window_seqlen` (XNet-style window attn) and
     `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
 
     Optional helpers are gated by a submodule attribute (`window_size`+`patch_size` for window
-    attention, `num_grid_per_side` for bilinear) or, for model-specific ones, by the encoder's
+    attention, `interpolation_mode` for a resampled grid) or, for model-specific ones, by the encoder's
     modeling module defining the helper (`get_vision_frame_index` / `get_vision_temporal_merge_index`
     for kimi_k25) — so a model that doesn't use a feature won't get its kwarg injected.
     """
     grid_thw = inputs["grid_thw"]
-    spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
+    spatial_merge_size = _spatial_merge_size(config)
     if spatial_merge_size is None:
         # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has
         # none (its encoder hard-codes `1` because spatial merging happens in the projector).
@@ -448,35 +525,38 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
     # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
     # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
-    module = sys.modules[type(model).__module__]
+    module = _modeling_module(config)
     temporal_encoder = hasattr(module, "get_vision_frame_index")
     inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
-        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
+        grid_thw, config, merge_temporal=temporal_encoder, kwargs=inputs
     )
-    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
-    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
-    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
+    # 3-axis (t, h, w) rotary encoders declare `include_temporal_position_ids` (minimax_m3_vl); the
+    # 2-axis (h, w) default covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
+    include_temporal = _config_attr(config, "include_temporal_position_ids") is True
     inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
-    window_size = _find_submodule_attr(model, "window_size")
-    patch_size = _find_submodule_attr(model, "patch_size")
+    # Windowed encoders only: the module that builds the window index is the one that consumes these, and a
+    # config can carry the fields the size is derived from while attending globally (kimi_k25).
+    patch_size = _config_attr(config, "patch_size")
+    windows = hasattr(module, "get_vision_window_index")
+    window_size = _window_size(config) if windows else None
     if window_size is not None and patch_size is not None:
         inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
             grid_thw, spatial_merge_size, window_size, patch_size
         )
         inputs["max_window_seqlen"] = get_max_seqlen(
-            inputs["cu_window_seqlens"], model.config, kwargs=inputs, kwarg_name="max_window_seqlen"
+            inputs["cu_window_seqlens"], config, kwargs=inputs, kwarg_name="max_window_seqlen"
         )
 
-    num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
+    # `interpolation_mode` marks an encoder that resamples a learned grid, and says how (kimi_k25
+    # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families bilinear, muse_glimmer grid_sample-style
+    # zeros padding). The flags are read rather than inferred, so the precomputed tensors match exactly
+    # what the model computes.
+    mode = _config_attr(config, "interpolation_mode")
+    num_grid_per_side = _grid_side(config) if mode is not None else None
     if num_grid_per_side is not None:
-        # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
-        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear, muse_glimmer uses a
-        # grid_sample-style zeros padding); read the flags rather than inferring, so the precomputed
-        # tensors match exactly what the model computes.
-        mode = _find_submodule_attr(model, "interpolation_mode") or "bilinear"
-        padding = _find_submodule_attr(model, "interpolation_padding") or "border"
-        align_corners = _find_submodule_attr(model, "interpolation_align_corners") is True
+        padding = _config_attr(config, "interpolation_padding") or "border"
+        align_corners = _config_attr(config, "interpolation_align_corners") is True
         inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
             grid_thw,
             num_grid_per_side,
@@ -492,7 +572,7 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     # Temporal-pooling spatial merger (kimi_k25): one gather index replaces its per-clip merge loop.
     if hasattr(module, "get_vision_temporal_merge_index"):
-        merge_kernel_size = _find_submodule_attr(model, "merge_kernel_size")
+        merge_kernel_size = _config_attr(config, "merge_kernel_size")
         kernel_height, kernel_width = (
             merge_kernel_size if not isinstance(merge_kernel_size, int) else (merge_kernel_size, merge_kernel_size)
         )
@@ -500,21 +580,23 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     # Pixel-shuffle spatial merger (muse_glimmer): one gather index replaces its per-image merge loop.
     if hasattr(module, "get_vision_pixel_shuffle_index"):
-        merge_size = _find_submodule_attr(model, "merge_size")
+        merge_size = _config_attr(config, "merge_size")
         inputs["pixel_shuffle_index"] = module.get_vision_pixel_shuffle_index(grid_thw, merge_size)
 
 
 @register_export_input_preparer("target_sizes")
-def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+def _prepare_navit_vision_inputs(config, inputs: dict[str, Any]) -> None:
     """NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
     Synthesise `grid_thw = [1, h, w]` and run the nearest-position-id / window-index /
     merged-shape / maximum-sequence-length helpers outside the traced graph."""
     target_sizes = inputs["target_sizes"]
-    num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
+    # The encoder derives this in `__init__` (`image_size // patch_size`); do the same from the config.
+    image_size, patch_size = _config_attr(config, "image_size"), _config_attr(config, "patch_size")
+    num_patches_per_side = image_size // patch_size if image_size and patch_size else None
     if num_patches_per_side is not None:
         inputs["position_ids"] = get_vision_nearest_position_ids(target_sizes, num_patches_per_side)
 
-    window_kernel_size = _find_submodule_attr(model, "window_kernel_size")
+    window_kernel_size = _config_attr(config, "window_kernel_size")
     if window_kernel_size is not None:
         grid_thw = torch.nn.functional.pad(target_sizes, (1, 0), value=1)
         inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
@@ -524,52 +606,56 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
         cu_seqlens = torch.nn.functional.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
         )
-        inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
+        inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "feature_lens")
-def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+def _prepare_omni_audio_inputs(config, inputs: dict[str, Any]) -> None:
     """Replace `input_features`/`feature_lens` with precomputed `padded_feature`, `chunk_lengths`,
     `cu_seqlens`, `max_seqlen`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni-style encoders) so the
     encoder's `.split(.tolist(), dim=0)` and related data-dependent ops happen outside the
     traced graph.
 
     The helpers (`chunk_and_pad_features`, `get_audio_cu_seqlens`, …) all live in the model's
-    own ``modeling_*.py`` module, so we resolve them via ``type(model).__module__`` rather than
-    hard-coding one Omni variant. ``n_window_infer`` selects the Qwen3-Omni-style four-arg
+    own ``modeling_*.py`` module, so we resolve them from the config's own class (`_modeling_module`) rather
+    than hard-coding one Omni variant. ``n_window_infer`` selects the Qwen3-Omni-style four-arg
     ``get_audio_cu_seqlens`` over the Qwen2.5-Omni-style single-arg form.
     """
     feature_lens = inputs["feature_lens"]
     input_features = inputs["input_features"]
-    module = sys.modules[type(model).__module__]
+    module = _modeling_module(config)
 
     chunk_and_pad_features = getattr(module, "chunk_and_pad_features")
     get_audio_cu_seqlens = getattr(module, "get_audio_cu_seqlens")
     get_valid_indices = getattr(module, "get_valid_indices")
 
-    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
+    padded_feature, chunk_lengths = chunk_and_pad_features(
+        input_features, feature_lens, _config_attr(config, "n_window")
+    )
     inputs["padded_feature"] = padded_feature
     inputs["chunk_lengths"] = chunk_lengths
-    if hasattr(model, "n_window_infer"):
-        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
-        inputs["valid_indices"] = get_valid_indices(chunk_lengths, model.n_window)
+    if _config_attr(config, "n_window_infer") is not None:
+        inputs["cu_seqlens"] = get_audio_cu_seqlens(
+            chunk_lengths, feature_lens, _config_attr(config, "n_window_infer"), _config_attr(config, "n_window")
+        )
+        inputs["valid_indices"] = get_valid_indices(chunk_lengths, _config_attr(config, "n_window"))
     else:
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths)
         inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
-    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "input_features_mask")
-def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+def _prepare_qwen3_asr_audio_inputs(config, inputs: dict[str, Any]) -> None:
     """Precompute `cu_seqlens` and `max_seqlen` for Qwen3-ASR so the encoder pops them from
     ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
     ``Qwen3ASREncoder.forward``.
     """
     from ..models.qwen3_asr.modeling_qwen3_asr import get_audio_cu_seqlens
 
-    n_window = _find_submodule_attr(model, "n_window")
-    n_window_infer = _find_submodule_attr(model, "n_window_infer")
+    n_window = _config_attr(config, "n_window")
+    n_window_infer = _config_attr(config, "n_window_infer")
     if n_window is None or n_window_infer is None:
         return
 
@@ -579,35 +665,49 @@ def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, An
     feature_lens = input_features_mask.sum(-1).to(torch.long)
     chunk_lengths = input_features_mask.view(batch_size, num_chunks, -1).sum(dim=-1).reshape(-1).to(torch.long)
     inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
-    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], config, kwargs=inputs)
 
 
-def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+def precompute_export_inputs(config, inputs: dict[str, Any]) -> None:
     """Inject precomputed tensors for data-dependent ops the model would otherwise hit during tracing.
 
     Two layers:
-    - Outer LLM rope index (`get_rope_index`) — generic `hasattr` probe; covers Qwen-VL / GLM-4V etc.
+    - Outer LLM M-RoPE positions (`get_mrope_position_ids`) — generic `hasattr` probe; covers Qwen-VL / GLM-4V etc.
     - Per-encoder preparer dispatched by marker kwargs present in `inputs` (e.g. `grid_thw`,
       `target_sizes`, `(input_features, feature_lens)`) — see `register_export_input_preparer`.
       A preparer fires only when every one of its markers is present in `inputs`.
     """
-    # Outer-model: LLM rope index. Self-detecting via `hasattr` since model_type at this level
-    # varies (qwen2_vl vs qwen2_5_omni_thinker vs ...) and the get_rope_index signature is stable.
-    if inputs.get("position_ids") is None and hasattr(model, "get_rope_index"):
+    # Outer-model: M-RoPE decoder positions. Every family that lays them out defines `get_mrope_position_ids` as a
+    # module-level function in its own `modeling_*.py`, pure in `(config, inputs)` — so this takes it from
+    # there rather than off the model, and needs nothing but the config to run. Absent means the model has no
+    # M-RoPE (`exaone4_5`, `video_llama_3` only carry a method that raises), so there is nothing to prepare.
+    if config is None:
+        return
+
+    rope_index = getattr(_modeling_module(config), "get_mrope_position_ids", None)
+    if inputs.get("position_ids") is None and rope_index is not None:
+        parameters = inspect.signature(rope_index).parameters
+        # The module is the whole family's, so it carries `get_mrope_position_ids` even while a *component* is being
+        # prepared (a vision tower gets `pixel_values`, no `input_ids`). Run only when the inputs actually
+        # carry everything the layout requires.
+        required = [
+            name
+            for name, parameter in parameters.items()
+            if parameter.default is inspect.Parameter.empty and name != "config"
+        ]
         input_ids = inputs.get("input_ids")
         attn_mask = inputs.get("attention_mask")
         is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
-        if is_prefill:
-            rope_params = set(inspect.signature(model.get_rope_index).parameters)
-            rope_inputs = {k: inputs[k] for k in rope_params if k in inputs}
-            position_ids, _ = model.get_rope_index(**rope_inputs)
+        if is_prefill and all(name in inputs for name in required):
+            rope_inputs = {name: inputs[name] for name in parameters if name in inputs}
+            position_ids, _ = rope_index(config, **rope_inputs)
             inputs["position_ids"] = position_ids
 
     # Encoder-level: dispatch by marker kwargs (preparer fires when every marker is in `inputs`
     # with a non-`None` value).
     for markers, preparer in _EXPORT_INPUT_PREPARERS.items():
         if all(inputs.get(m) is not None for m in markers):
-            preparer(model, inputs)
+            preparer(config, inputs)
 
 
 # ── Decomposition ─────────────────────────────────────────────────────────────
