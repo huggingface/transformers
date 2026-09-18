@@ -13,17 +13,12 @@
 # limitations under the License.
 """PyTorch Qwen3TTS Multi-Codebook Tokenizer model."""
 
-from types import SimpleNamespace
-
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...cache_utils import DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -38,7 +33,6 @@ from ..mimi.modeling_mimi import (
     MimiVectorQuantization,
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
-from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCausalConvNet,
     Qwen3OmniMoeCausalTransConvNet,
@@ -51,9 +45,37 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
+@strict
+class Qwen3TTSTokenizerMultiCodebookQuantizerConfig(PreTrainedConfig):
+    r"""
+    codebook_dim (`int`, *optional*, defaults to 256):
+        Dimension of each codebook vector.
+    frame_rate (`int`, *optional*, defaults to 0):
+        Frame rate used by the vector quantizers.
+    num_quantizers (`int`, *optional*, defaults to 16):
+        Total number of residual vector quantizers.
+    num_semantic_quantizers (`int`, *optional*, defaults to 1):
+        Number of quantizers assigned to semantic codes.
+    vector_quantization_hidden_dimension (`int`, *optional*, defaults to 256):
+        Dimension used within the vector quantizers.
+    """
+
+    model_type = "qwen3_tts_tokenizer_multi_codebook_quantizer"
+    base_config_key = "quantizer_config"
+
+    codebook_size: int = 2048
+    codebook_dim: int = 256
+    frame_rate: int = 0
+    num_quantizers: int = 16
+    num_semantic_quantizers: int = 1
+    vector_quantization_hidden_dimension: int = 256
+    hidden_size: int = 512
+
+
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
-class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
+class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 16):
         Number of residual vector quantizers used in the vocoder for fine-grained audio reconstruction.
@@ -71,6 +93,8 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
         Latent dimension used between pre-conv and transformer.
     vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
         Hidden dimension for the vector quantization projection.
+    quantizer_config (`dict`, *optional*):
+        Configuration for the split residual vector quantizer.
     use_causal_conv (`bool`, *optional*, defaults to `True`):
         Whether to use causal convolutions in the decoder.
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
@@ -78,9 +102,27 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
     """
 
     model_type = "qwen3_tts_tokenizer_multi_codebook_code2wav"
+    sub_configs = {"quantizer_config": Qwen3TTSTokenizerMultiCodebookQuantizerConfig}
 
+    codebook_size: int = 2048
     hidden_size: int = 512
+    max_position_embeddings: int = 8000
+    rope_parameters: dict | None = None
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    attention_bias: bool = False
+    sliding_window: int = 72
     intermediate_size: int = 1024
+    hidden_act: str = "silu"
+    layer_scale_initial_scale: float = 0.01
+    rms_norm_eps: float = 1e-5
+    num_hidden_layers: int = 8
+    num_quantizers: int = 16
+    upsample_rates: list[int] | tuple[int, ...] = (8, 5, 4, 3)
+    upsampling_ratios: list[int] | tuple[int, ...] = (2, 2)
+    decoder_dim: int = 1536
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
     head_dim: int = 64
     codebook_dim: int = 512
     num_semantic_quantizers: int = 1
@@ -89,6 +131,26 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
     vector_quantization_hidden_dimension: int = 512
     use_causal_conv: bool = True
     trim_right_ratio: float = 1.0
+    quantizer_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.quantizer_config is None:
+            self.quantizer_config = Qwen3TTSTokenizerMultiCodebookQuantizerConfig(
+                codebook_size=self.codebook_size,
+                codebook_dim=self.codebook_dim // 2,
+                num_quantizers=self.num_quantizers,
+                num_semantic_quantizers=self.num_semantic_quantizers,
+                vector_quantization_hidden_dimension=self.codebook_dim // 2,
+                hidden_size=self.codebook_dim,
+            )
+        elif isinstance(self.quantizer_config, dict):
+            self.quantizer_config = Qwen3TTSTokenizerMultiCodebookQuantizerConfig(**self.quantizer_config)
+
+        super().__post_init__(**kwargs)
+
+    @property
+    def layer_types(self):
+        return ["sliding_attention"] * self.num_hidden_layers
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
@@ -178,74 +240,6 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMul
     _no_split_modules = ["Qwen3OmniMoeCode2WavTransformerLayer", "Qwen3TTSTokenizerMultiCodebookDecoderBlock"]
 
 
-#  Transformer model (decoder side)
-
-
-@auto_docstring
-class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3OmniMoeCode2WavTransformerModel):
-    config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
-
-    def __init__(self, config: Qwen3TTSTokenizerMultiCodebookCode2WavConfig):
-        super().__init__(config)
-        self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
-        self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
-        self.post_init()
-
-    @auto_docstring
-    def forward(
-        self,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        **kwargs,
-    ) -> BaseModelOutputWithPast:
-        if inputs_embeds is not None:
-            inputs_embeds = self.input_proj(inputs_embeds)
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        hidden_states = self.output_proj(hidden_states)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
-        )
-
-
 #  Decoder block
 
 
@@ -276,6 +270,10 @@ class Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(MimiSplitResidu
     pass
 
 
+class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3OmniMoeCode2WavTransformerModel):
+    pass
+
+
 #  Decoder
 
 
@@ -285,19 +283,10 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
     def __init__(self, config: config_class):
         super().__init__(config)
         self.total_upsample = int(np.prod(list(config.upsample_rates) + list(config.upsampling_ratios)))
-        self.pre_transformer = Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel._from_config(config)
-
-        # Bridge our decoder config into the attribute names MimiSplitResidualVectorQuantizer expects.
-        quantizer_config = SimpleNamespace(
-            codebook_size=config.codebook_size,
-            codebook_dim=config.codebook_dim // 2,
-            frame_rate=0,
-            num_quantizers=config.num_quantizers,
-            num_semantic_quantizers=1,
-            vector_quantization_hidden_dimension=config.codebook_dim // 2,
-            hidden_size=config.codebook_dim,
-        )
-        self.quantizer = Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(quantizer_config)
+        self.pre_transformer = Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(config)
+        self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
+        self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
+        self.quantizer = Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(config.quantizer_config)
 
         self.pre_conv = Qwen3TTSTokenizerMultiCodebookCausalConvNet(
             config.codebook_dim, config.latent_dim, kernel_size=3
@@ -338,7 +327,9 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
         hidden = self.quantizer.decode(codes)
         hidden = self.pre_conv(hidden).transpose(1, 2)
+        hidden = self.input_proj(hidden)
         hidden = self.pre_transformer(inputs_embeds=hidden).last_hidden_state
+        hidden = self.output_proj(hidden)
         hidden = hidden.permute(0, 2, 1)
         for blocks in self.upsample:
             for block in blocks:
@@ -398,8 +389,8 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         self.input_sampling_rate = config.input_sampling_rate
         self.output_sampling_rate = config.output_sampling_rate
 
-        self.encoder = Qwen3TTSTokenizerMultiCodebookEncoderModel._from_config(self.config.encoder_config)
-        self.decoder = Qwen3TTSTokenizerMultiCodebookDecoder._from_config(self.config.decoder_config)
+        self.encoder = Qwen3TTSTokenizerMultiCodebookEncoderModel(self.config.encoder_config)
+        self.decoder = Qwen3TTSTokenizerMultiCodebookDecoder(self.config.decoder_config)
 
         self.post_init()
 
