@@ -1054,7 +1054,10 @@ def _build_checkpoint_conversion_mapping():
         "t5gemma2_encoder": [
             WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)embed_tokens\.", "text_model.embed_tokens."),
             WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)(?<!layer)(?<!_)norm\.", "text_model.norm."),
-            WeightRenaming(r"(?<!vision_model.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.", "text_model.layers."),
+            WeightRenaming(
+                r"(?<!vision_model.encoder\.)(?<!vision_tower.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.",
+                "text_model.layers.",
+            ),
         ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
