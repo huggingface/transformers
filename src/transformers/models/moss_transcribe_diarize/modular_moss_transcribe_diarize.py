@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import re
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -453,6 +454,8 @@ class MossTranscribeDiarizeEncoder(WhisperEncoder):
         return (input_lengths - 1) // 2 + 1
 
 
+@auto_docstring
+@dataclass
 class MossTranscribeDiarizeModelOutputWithPast(AudioFlamingo3ModelOutputWithPast):
     pass
 

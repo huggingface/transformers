@@ -389,6 +389,7 @@ class MossTranscribeDiarizeEncoder(MossTranscribeDiarizePreTrainedModel):
         return (input_lengths - 1) // 2 + 1
 
 
+@auto_docstring
 @dataclass
 class MossTranscribeDiarizeModelOutputWithPast(BaseModelOutputWithPast):
     r"""
