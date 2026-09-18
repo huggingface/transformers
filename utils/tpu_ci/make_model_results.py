@@ -32,6 +32,7 @@ import json
 import re
 import sys
 import tempfile
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -73,6 +74,21 @@ FAILURE_CATEGORY_RULES = [
 # naming on both sides.
 MACHINE_TYPE_TO_GPU = {"single-gpu": "single", "multi-gpu": "multi"}
 
+# Why a failure happened, which is what decides who fixes it. Matched against the captured trace in
+# order, first match wins; anything unmatched is left for a human to look at rather than guessed.
+# These are observations from real runs, not a taxonomy -- add a rule when a run shows a new shape.
+TRIAGE_RULES = [
+    ("backend gap: op not implemented", r"is not implemented for|NotImplementedError: '?aten::"),
+    ("backend gap: compiler", r"InductorError"),
+    # `handle_stacktraces` rewrites the file path to "(line N)", so what is left of a bare
+    # `pytest.fail()` -- which is how `run_test_using_subprocess` reports a child that died -- is a
+    # location and nothing else.
+    ("backend gap: one process owns the device", r"^\(line \d+\)\s+Failed\s*$|\(subprocess\)"),
+    ("unsupported on this device", r"only supported on|does not support .* device"),
+    ("tolerance or expectation", r"mean relative difference|Tensor-likes are not close|not equal to tolerance"),
+]
+UNTRIAGED = "needs triage"
+
 DEFAULT_REPO_ID = "hf-gcp-tpu-internal/transformers_daily_ci"
 RESULTS_FOLDER = "ci_results_run_models_gpu"
 
@@ -101,6 +117,14 @@ def categorize_failure(line: str) -> str:
         if re.search(pattern, line):
             return category
     return "Unclassified"
+
+
+def triage(trace: str) -> str:
+    """Which bucket a failure falls into, judged from its trace."""
+    for bucket, pattern in TRIAGE_RULES:
+        if re.search(pattern, trace):
+            return bucket
+    return UNTRIAGED
 
 
 def new_entry() -> dict:
@@ -191,12 +215,24 @@ def render_summary(results: dict[str, dict]) -> str:
     rate = f"{100 * totals['success'] / attempted:.1f}%" if attempted else "n/a"
     lines.append(f"\nPass rate over attempted tests: {rate} ({totals['skipped']} skipped, not counted).\n")
 
+    buckets = Counter(
+        triage(failure["trace"])
+        for entry in results.values()
+        for gpu_failures in entry["failures"].values()
+        for failure in gpu_failures
+    )
+    if buckets:
+        lines.append("\n| Failure bucket | Count |\n|---|---|")
+        lines += [f"| {bucket} | {count} |" for bucket, count in buckets.most_common()]
+
     for name, entry in sorted(results.items()):
         failures = [failure for gpu_failures in entry["failures"].values() for failure in gpu_failures]
         if not failures:
             continue
         lines.append(f"\n### {name}\n")
-        lines += [f"- `{failure['line']}`\n  {failure['trace']}" for failure in failures]
+        lines += [
+            f"- `{failure['line']}`\n  _{triage(failure['trace'])}_ — {failure['trace']}" for failure in failures
+        ]
 
     return "\n".join(lines) + "\n"
 
@@ -258,6 +294,11 @@ def self_check() -> None:
     ], entry
     assert entry["failures"]["multi"][0]["trace"] == "(line 42)  AssertionError: nope", entry
     assert entry["failures"]["multi"][1]["trace"] == "(line 99)  ValueError: nope either", entry
+
+    assert triage("RuntimeError: operator 'aten::foo' is not implemented for TPU") == TRIAGE_RULES[0][0]
+    assert triage("(line 3155)  Failed") == TRIAGE_RULES[2][0]
+    assert triage("ValueError: mean relative difference for hidden_states: 2e-04") == TRIAGE_RULES[4][0]
+    assert triage("AssertionError: something new") == UNTRIAGED
 
     summary = render_summary(results)
     assert "| models_bert | 3 | 2 | 1 | 2 | 12 |" in summary, summary
