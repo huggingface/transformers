@@ -41,6 +41,7 @@ from pathlib import Path
 # under `if __name__ == "__main__":`, so importing it only brings in the report parsing.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from important_files import IMPORTANT_MODELS  # noqa: E402
 from notification_service import handle_stacktraces, handle_test_results, pop_default  # noqa: E402
 
 
@@ -190,9 +191,18 @@ def build_model_results(reports_dir: Path) -> dict[str, dict]:
     return results
 
 
-def render_summary(results: dict[str, dict]) -> str:
+def render_summary(results: dict[str, dict], expected: list[str] | None = None) -> str:
     """Render the run as markdown. Rebuilt from the reports every time, never appended to."""
-    lines = ["| Model | Passed | Failed | Skipped | Errors | Time (s) |", "|---|---|---|---|---|---|"]
+    lines = []
+    if expected:
+        # A model with no report at all did not pass and did not fail: either it was never selected,
+        # or its run died before pytest could write one. Both vanish from a table of what ran, which
+        # is the most expensive way to not notice something.
+        missing = [name for name in expected if f"models_{name}" not in results]
+        if missing:
+            lines.append(f"**{len(missing)} model(s) produced no report at all:** {', '.join(missing)}\n")
+
+    lines += ["| Model | Passed | Failed | Skipped | Errors | Time (s) |", "|---|---|---|---|---|---|"]
     totals = dict.fromkeys(["success", "failed", "skipped", "errors"], 0)
     for name, entry in sorted(results.items()):
         failed = sum(count for category in entry["failed"].values() for count in category.values())
@@ -300,7 +310,8 @@ def self_check() -> None:
     assert triage("ValueError: mean relative difference for hidden_states: 2e-04") == TRIAGE_RULES[4][0]
     assert triage("AssertionError: something new") == UNTRIAGED
 
-    summary = render_summary(results)
+    summary = render_summary(results, expected=["bert", "gpt2"])
+    assert "1 model(s) produced no report at all:** gpt2" in summary, summary
     assert "| models_bert | 3 | 2 | 1 | 2 | 12 |" in summary, summary
     assert "Pass rate over attempted tests: 60.0% (1 skipped, not counted)." in summary, summary
     print("Self-check passed.")
@@ -311,6 +322,12 @@ def main() -> None:
     parser.add_argument("reports_dir", nargs="?", type=Path, help="directory holding the `*_test_reports` dirs")
     parser.add_argument("--output", type=Path, default=Path("model_results.json"), help="where to write the results")
     parser.add_argument("--summary", type=Path, default=None, help="also write a markdown summary there")
+    parser.add_argument(
+        "--expect",
+        default="IMPORTANT_MODELS",
+        help="comma-separated models the run should have covered, so the summary can name the ones "
+        "it has no report for at all. `IMPORTANT_MODELS` for the shared list, empty to not check.",
+    )
     parser.add_argument("--upload", action="store_true", help="also upload the results to the dataset repo")
     parser.add_argument("--repo-id", default=DEFAULT_REPO_ID, help="dataset repo to upload to")
     parser.add_argument("--date", default=None, help="date folder to upload under, defaults to today (UTC)")
@@ -333,7 +350,8 @@ def main() -> None:
     print(f"Wrote {len(results)} entries to {args.output}")
 
     if args.summary:
-        args.summary.write_text(render_summary(results))
+        expected = IMPORTANT_MODELS if args.expect == "IMPORTANT_MODELS" else [n for n in args.expect.split(",") if n]
+        args.summary.write_text(render_summary(results, expected))
         print(f"Wrote the summary to {args.summary}")
 
     if args.upload:
