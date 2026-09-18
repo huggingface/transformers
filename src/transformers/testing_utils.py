@@ -3423,6 +3423,17 @@ if is_torch_xpu_available():
     BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
 
 
+if is_torch_tpu_available():
+    # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
+    # falls back to the `default` entry of its table rather than being faked here.
+    BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
+    BACKEND_DEVICE_COUNT["tpu"] = torch.tpu.device_count
+    BACKEND_SYNCHRONIZE["tpu"] = torch.tpu.synchronize
+    BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
+    if hasattr(torch.tpu, "empty_cache"):
+        BACKEND_EMPTY_CACHE["tpu"] = torch.tpu.empty_cache
+
+
 if is_torch_xla_available():
     BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
     BACKEND_MANUAL_SEED["xla"] = torch.cuda.manual_seed
