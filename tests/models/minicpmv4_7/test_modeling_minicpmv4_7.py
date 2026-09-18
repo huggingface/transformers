@@ -608,7 +608,7 @@ class MiniCPMV4_7ViTWindowAttentionMergerTest(unittest.TestCase):
             window_kernel_size=[2, 2],
             layer_norm_eps=1e-6,
         )
-        return config, MiniCPMV4_7ViTWindowAttentionMerger(config).eval()
+        return config, MiniCPMV4_7ViTWindowAttentionMerger(config).eval().to(torch_device)
 
     def _run(self, target_sizes):
         config, merger = self._build_merger()
@@ -651,7 +651,7 @@ class MiniCPMV4_7ViTWindowAttentionMergerTest(unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV4_7IntegrationTest(unittest.TestCase):
-    model_id = "openbmb/MiniCPM-V-4_6"
+    model_id = "openbmb/MiniCPM-V-4_7"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -707,8 +707,7 @@ class MiniCPMV4_7IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
-                ("cuda", (10, 0)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+                ("cuda", (8, 0)): "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
             }
         ).get_expectation()
         # fmt: on
@@ -744,7 +743,7 @@ class MiniCPMV4_7IntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+                ("cuda", (8, 0)): "So, let me analyze the video. The scene is an indoor tennis court. There are two people playing tennis. The main person in the foreground is",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -788,11 +787,8 @@ class MiniCPMV4_7IntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
-                ] * 2,
-                ("cuda", (10, 0)): [
-                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+                ("cuda", (8, 0)): [
+                    "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
                 ] * 2,
             }
         )  # fmt: skip
@@ -837,13 +833,9 @@ class MiniCPMV4_7IntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
-                    "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
-                ],
-                ("cuda", (10, 0)): [
-                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
-                    "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
+                ("cuda", (8, 0)): [
+                    "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
+                    'Okay, the user is asking "Who are you?" This is a straightforward question about my identity. I need to introduce myself clearly and concisely',
                 ],
             }
         )  # fmt: skip

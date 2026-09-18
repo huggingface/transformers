@@ -178,13 +178,14 @@ class MiniCPMV4_7Processor(ProcessorMixin):
             mrope_tgt_sizes_per_sample = self._assemble_mrope_target_sizes(
                 offsets_per_sample, images_mrope_grids, videos_mrope_grids
             )
-            target_sizes_mrope = []
-            for sample_grids in mrope_tgt_sizes_per_sample:
-                target_sizes_mrope.append(
-                    torch.tensor(sample_grids, dtype=torch.int32)
-                    if sample_grids
-                    else torch.zeros(0, 2, dtype=torch.int32)
-                )
+            # Samples in a batch need not carry the same number of visuals — a text-only sample
+            # carries none — so the per-sample grids are right-padded into one tensor. Canvas
+            # M-RoPE walks the rows in visual-span order, so the padding rows are never read.
+            max_visuals = max((len(grids) for grids in mrope_tgt_sizes_per_sample), default=0)
+            target_sizes_mrope = torch.zeros(len(mrope_tgt_sizes_per_sample), max_visuals, 2, dtype=torch.int32)
+            for idx, sample_grids in enumerate(mrope_tgt_sizes_per_sample):
+                if sample_grids:
+                    target_sizes_mrope[idx, : len(sample_grids)] = torch.tensor(sample_grids, dtype=torch.int32)
             # Do not return special_token_ids (available on model config) or image_bounds
             # (model recomputes bounds on compact/unpadded ids for left-padding safety).
             mrope_inputs = {"target_sizes_mrope": target_sizes_mrope}
@@ -305,6 +306,10 @@ class MiniCPMV4_7Processor(ProcessorMixin):
     @property
     def unused_input_names(self) -> list[str]:
         return ["num_patches_per_image", "grids", "grids_videos", "num_patches_per_frame", "num_frames_per_video"]
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids", "target_sizes_mrope"]
 
     def _image_mrope_grids(self, image_inputs: dict, images: ImageInput) -> list[list[list[int]]]:
         """Return one flat list of patch grids per image, aligned with the image replacement strings."""

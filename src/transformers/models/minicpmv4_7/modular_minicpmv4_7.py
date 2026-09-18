@@ -381,7 +381,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
+        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
         **kwargs,
@@ -429,7 +429,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         inputs_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values=None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
+        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
     ) -> torch.Tensor | None:
@@ -489,7 +489,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
+        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -504,7 +504,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
             Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
-        target_sizes_mrope (`list[torch.Tensor]`, *optional*):
+        target_sizes_mrope (`torch.IntTensor` of shape `(batch_size, num_visuals, 2)`, *optional*):
             Spatial grid sizes (height, width in patches) per visual crop for canvas M-RoPE.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids (`0` text, `1` image, `2` video), matching the Qwen processor
@@ -586,7 +586,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
+        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -601,7 +601,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
-        target_sizes_mrope (`list[torch.Tensor]`, *optional*):
+        target_sizes_mrope (`torch.IntTensor` of shape `(batch_size, num_visuals, 2)`, *optional*):
             Spatial grid sizes per visual crop for canvas M-RoPE.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids (`0` text, `1` image, `2` video) from the processor. Required
@@ -836,6 +836,10 @@ class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
 class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
     valid_processor_kwargs = MiniCPMV4_7ProcessorKwargs
 
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids", "target_sizes_mrope"]
+
     @auto_docstring
     def __call__(
         self,
@@ -913,13 +917,14 @@ class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
             mrope_tgt_sizes_per_sample = self._assemble_mrope_target_sizes(
                 offsets_per_sample, images_mrope_grids, videos_mrope_grids
             )
-            target_sizes_mrope = []
-            for sample_grids in mrope_tgt_sizes_per_sample:
-                target_sizes_mrope.append(
-                    torch.tensor(sample_grids, dtype=torch.int32)
-                    if sample_grids
-                    else torch.zeros(0, 2, dtype=torch.int32)
-                )
+            # Samples in a batch need not carry the same number of visuals — a text-only sample
+            # carries none — so the per-sample grids are right-padded into one tensor. Canvas
+            # M-RoPE walks the rows in visual-span order, so the padding rows are never read.
+            max_visuals = max((len(grids) for grids in mrope_tgt_sizes_per_sample), default=0)
+            target_sizes_mrope = torch.zeros(len(mrope_tgt_sizes_per_sample), max_visuals, 2, dtype=torch.int32)
+            for idx, sample_grids in enumerate(mrope_tgt_sizes_per_sample):
+                if sample_grids:
+                    target_sizes_mrope[idx, : len(sample_grids)] = torch.tensor(sample_grids, dtype=torch.int32)
             # Do not return special_token_ids (available on model config) or image_bounds
             # (model recomputes bounds on compact/unpadded ids for left-padding safety).
             mrope_inputs = {"target_sizes_mrope": target_sizes_mrope}

@@ -888,7 +888,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
+        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -903,7 +903,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
-        target_sizes_mrope (`list[torch.Tensor]`, *optional*):
+        target_sizes_mrope (`torch.IntTensor` of shape `(batch_size, num_visuals, 2)`, *optional*):
             Spatial grid sizes (height, width in patches) per visual crop for canvas M-RoPE.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids (`0` text, `1` image, `2` video), matching the Qwen processor
@@ -990,7 +990,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
+        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
         **kwargs,
@@ -1038,7 +1038,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values=None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
+        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
     ) -> torch.Tensor | None:
@@ -1114,7 +1114,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
+        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -1129,7 +1129,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
-        target_sizes_mrope (`list[torch.Tensor]`, *optional*):
+        target_sizes_mrope (`torch.IntTensor` of shape `(batch_size, num_visuals, 2)`, *optional*):
             Spatial grid sizes per visual crop for canvas M-RoPE.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids (`0` text, `1` image, `2` video) from the processor. Required
