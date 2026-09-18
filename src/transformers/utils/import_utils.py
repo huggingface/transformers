@@ -162,8 +162,8 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.16.0"
-KERNELS_MAX_VERSION = "0.17.0"
+KERNELS_MIN_VERSION = "0.17.0"
+KERNELS_MAX_VERSION = "0.18.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
@@ -1194,7 +1194,7 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
     ]
 
     # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
-    if is_available and (is_torch_cuda_available() or is_torch_mlu_available()):
+    if is_available and (is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available()):
         try:
             return version.parse(flash_attn_version) >= version.parse("2.3.3")
         except packaging.version.InvalidVersion:
