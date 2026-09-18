@@ -1,5 +1,6 @@
 # Sentencepiece backend layer tests
 
+import re
 import shutil
 import tempfile
 from typing import TYPE_CHECKING
@@ -10,6 +11,9 @@ from transformers.tokenization_python import AddedToken
 
 if TYPE_CHECKING:
     pass
+
+
+_BYTE_FALLBACK_RE = re.compile(r"^<0x[0-9A-Fa-f]{2}>$")
 
 
 class SentencePieceBackendTesterMixin:
@@ -105,6 +109,31 @@ class SentencePieceBackendTesterMixin:
             slow_decoded = tokenizer.decode(slow_ids)
             fast_decoded = rust_tokenizer.decode(slow_ids)
             self.assertEqual(slow_decoded, fast_decoded)
+
+    def test_sentencepiece_byte_fallback_convert_tokens_to_string(self):
+        """
+        Regression test: ``convert_tokens_to_string`` must decode SentencePiece byte-fallback
+        pieces (e.g. "<0x0A>", "<0xF0>") back into their original characters instead of leaving
+        the literal hex placeholders in the output. See https://github.com/huggingface/transformers/issues/47473
+        """
+        if not self.test_sentencepiece:
+            self.skipTest(reason="test_sentencepiece is set to False")
+
+        tokenizer = self.get_tokenizer()
+
+        # Only meaningful for vocabularies that actually define byte-fallback pieces.
+        if not any(_BYTE_FALLBACK_RE.match(piece) for piece in tokenizer.get_vocab()):
+            self.skipTest(reason="Tokenizer vocabulary has no byte-fallback pieces")
+
+        text = "hello 🤗 world"
+        tokens = tokenizer.tokenize(text)
+        # Sanity check: the emoji must actually be split into byte-fallback pieces for this
+        # test to be exercising the bug.
+        self.assertTrue(any(_BYTE_FALLBACK_RE.match(tok) for tok in tokens))
+
+        reconstructed = tokenizer.convert_tokens_to_string(tokens)
+        self.assertNotIn("<0x", reconstructed)
+        self.assertIn("🤗", reconstructed)
 
     def test_save_sentencepiece_tokenizer(self) -> None:
         text = "This is text to test the tokenizer."
