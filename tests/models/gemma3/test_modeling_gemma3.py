@@ -224,6 +224,14 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
 
+    def test_tied_lm_head_in_tp_plan(self):
+        # The tied lm_head must be in the plan, else tp_plan="auto" leaves it unsharded -> mixed
+        # torch.Tensor/DTensor error at the first forward
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma3ForConditionalGeneration(config)
+        self.assertIn("lm_head", model.tp_plan)
+        self.assertEqual(model.tp_plan["lm_head"], "colwise_gather_output")
+
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
