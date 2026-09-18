@@ -856,7 +856,6 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        kwargs["output_hidden_states"] = True
         outputs = self.mobilevitv2(pixel_values, **kwargs)
 
         encoder_hidden_states = outputs.hidden_states
