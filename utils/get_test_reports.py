@@ -57,7 +57,9 @@ def run_pytest(
         - cpu_tests (bool): if True, include CPU-only tests; if False, exclude non-device tests
     """
     relative_path = subdir.relative_to(root_test_dir)
-    report_name = f"{machine_type}_{suite}_{relative_path}_test_reports"
+    # `--make-reports=<name>` writes to `reports/<name>/`, so a `/` in the name would nest the
+    # report dir instead of producing the flat one the CI emits. The CI does this same replacement.
+    report_name = f"{machine_type}_{suite}_{str(relative_path).replace('/', '_')}_test_reports"
     print(f"Suite: {suite} | Running on: {relative_path}")
 
     cmd = ["python3", "-m", "pytest", "-rsfE", "-v", f"--make-reports={report_name}", str(subdir)]
