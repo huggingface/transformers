@@ -733,8 +733,15 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
 
         hidden_states = rwkv_outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.head(hidden_states[:, slice_indices, :])
+        if isinstance(logits_to_keep, int):
+            slice_indices = slice(-logits_to_keep, None)
+            hidden_states = hidden_states[:, slice_indices, :]
+        elif logits_to_keep.dtype == torch.bool:
+            hidden_states = hidden_states[logits_to_keep]
+        else:
+            hidden_states = hidden_states[:, logits_to_keep, :]
+
+        logits = self.head(hidden_states)
 
         loss = None
         if labels is not None:
