@@ -1259,16 +1259,13 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

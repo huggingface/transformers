@@ -47,8 +47,8 @@ from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
-import httpx
 from huggingface_hub import create_repo, delete_repo
+from huggingface_hub.utils import httpx
 from packaging import version
 
 from transformers import logging as transformers_logging
@@ -1986,6 +1986,7 @@ def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
     target_names = (
         "LayerNorm",
+        "LayerNorm1P",
         "GroupNorm",
         "BatchNorm",
         "RMSNorm",

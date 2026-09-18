@@ -258,19 +258,20 @@ class Idefics2ImageProcessor(TorchvisionBackend):
         if do_pad:
             max_num_images = max(len(images_) for images_ in processed_images)
             max_height, max_width = get_max_height_width(processed_images)
+            first_image = next(image for images in processed_images for image in images)
 
             processed_images_padded = torch.zeros(
                 len(processed_images),
                 max_num_images,
-                *(processed_images[0][0].shape[0], max_height, max_width),
-                device=processed_images[0][0].device,
+                *(first_image.shape[0], max_height, max_width),
+                device=first_image.device,
             )
             pixel_attention_masks = torch.zeros(
                 len(processed_images),
                 max_num_images,
                 *(max_height, max_width),
                 dtype=torch.int64,
-                device=processed_images[0][0].device,
+                device=first_image.device,
             )
             for i, images in enumerate(processed_images):
                 for j, image in enumerate(images):
