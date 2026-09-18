@@ -29,7 +29,7 @@ class NemotronAsrStreamingProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": "longest",
-            "return_attention_mask": True,
+            "return_padding_mask": True,
             "subsampling_factor": 8,
         },
         "text_kwargs": {
@@ -130,10 +130,9 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
             logger.warning_once(
                 f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
             )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-            )
+        else:
+            # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
+            output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
         if audio is not None:
             # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.

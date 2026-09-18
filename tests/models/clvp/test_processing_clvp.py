@@ -21,7 +21,7 @@ import unittest
 from transformers import ClvpFeatureExtractor, ClvpProcessor, ClvpTokenizer
 from transformers.testing_utils import require_torch
 
-from .test_feature_extraction_clvp import floats_list
+from ...test_processing_common import floats_list
 
 
 @require_torch

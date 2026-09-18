@@ -31,7 +31,7 @@ from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pyctcdecode, require_torch, require_torchaudio, slow
 from transformers.utils import is_pyctcdecode_available, is_torch_available
 
-from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
+from ...test_processing_common import floats_list
 
 
 if is_pyctcdecode_available():

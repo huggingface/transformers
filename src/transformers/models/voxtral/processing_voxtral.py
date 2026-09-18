@@ -314,12 +314,12 @@ class VoxtralProcessor(ProcessorMixin):
                 logger.warning_once(
                     f"You've provided audio without specifying the sampling rate. It will be assumed to be {audio_kwargs['sampling_rate']}, which can result in silent errors."
                 )
-            elif sampling_rate != audio_kwargs["sampling_rate"]:
-                raise ValueError(
-                    f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({audio_kwargs['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-                )
+            else:
+                # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
+                audio_kwargs["sampling_rate"] = sampling_rate
 
-        sampling_rate = audio_kwargs["sampling_rate"]
+        # Rate used to decode audio referenced by URL/path below: always the processor's own.
+        sampling_rate = self.feature_extractor.sampling_rate
 
         # make sure to remove from text_kwargs and audio_kwargs
         return_dict = text_kwargs.pop("return_dict", False)

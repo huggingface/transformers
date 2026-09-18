@@ -96,7 +96,7 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": "max_length",
-            "return_attention_mask": True,
+            "return_padding_mask": True,
         },
     }
 

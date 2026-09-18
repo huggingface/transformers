@@ -20,7 +20,7 @@ from transformers import ClapFeatureExtractor, ClapProcessor, RobertaTokenizer
 from transformers.testing_utils import require_sentencepiece, require_torchaudio
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
 
-from .test_feature_extraction_clap import floats_list
+from ...test_processing_common import floats_list
 
 
 @require_torchaudio
