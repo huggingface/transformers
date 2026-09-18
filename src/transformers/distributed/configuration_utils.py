@@ -18,6 +18,7 @@ import warnings
 from dataclasses import asdict, dataclass
 from typing import Literal
 
+from .utils import _get_torch_distributed_rank
 
 @dataclass
 class DistributedConfig:
@@ -92,12 +93,13 @@ class DistributedConfig:
 
         if self.enable_expert_parallel and self.ep_size is None:
             self.ep_size = self.tp_size
-            warnings.warn(
-                f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
-                f"Use ep_size={self.ep_size} instead.",
-                FutureWarning,
-                stacklevel=4,
-            )
+            if _get_torch_distributed_rank() == 0:
+                warnings.warn(
+                    f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
+                    f"Use ep_size={self.ep_size} instead.",
+                    FutureWarning,
+                    stacklevel=4,
+                )
 
         if self.ep_size is None:
             self.ep_size = 1
