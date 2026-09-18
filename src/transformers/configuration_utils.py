@@ -361,13 +361,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if per_layer_config is not None:
             self.per_layer_config = per_layer_config
 
-        # TODO: to support models whose input embedding module is not named `embed_tokens` (e.g. GPT-NeoX's `embed_in`).
-        if getattr(self, "tie_word_embeddings", False) and self.base_model_tp_plan is not None:
-            self.base_model_tp_plan = {
-                **self.base_model_tp_plan,
-                "embed_tokens": "embedding_rowwise",
-            }
-
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
         cls_has_custom_init = "__init__" in cls.__dict__
