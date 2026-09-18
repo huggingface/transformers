@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
+from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
     backend_device_count,
     backend_empty_cache,
@@ -92,8 +93,7 @@ def _get_distributed_device_type():
 
 
 def _get_distributed_backend():
-    backend_map = {"cpu": "gloo", "cuda": "nccl", "xpu": "xccl", "hpu": "hccl"}
-    return backend_map.get(_get_distributed_device_type(), "gloo")
+    return get_distributed_backend(_get_distributed_device_type()) or "gloo"
 
 
 def _get_rank_device(rank):
