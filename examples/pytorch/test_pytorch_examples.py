@@ -426,7 +426,7 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --remove_unused_columns False
-            --preprocessing_num_workers 2
+            --preprocessing_num_workers 1
             --max_steps 10
             --seed 42
         """.split()
@@ -455,7 +455,7 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --remove_unused_columns False
-            --preprocessing_num_workers 2
+            --preprocessing_num_workers 1
             --max_steps 10
             --target_language tur
             --seed 42
@@ -486,7 +486,7 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 4
             --remove_unused_columns False
-            --preprocessing_num_workers 2
+            --preprocessing_num_workers 1
             --max_steps 10
             --seed 42
         """.split()
@@ -542,7 +542,7 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --learning_rate 1e-4
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
-            --preprocessing_num_workers 2
+            --preprocessing_num_workers 1
             --max_train_steps 2
             --validation_split_percentage 5
             --seed 42
