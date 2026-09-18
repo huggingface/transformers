@@ -399,32 +399,31 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir_or_file: str) ->
 
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
-    checkpoint_state_dict = optimizer_state_dict
     if os.path.isfile(checkpoint_dir_or_file):
         from torch.distributed.tensor import distribute_tensor
 
         loaded_state = torch.load(checkpoint_dir_or_file, map_location="cpu", weights_only=True)["optimizer"]
-        missing_keys = checkpoint_state_dict.keys() - loaded_state.keys()
+        missing_keys = optimizer_state_dict.keys() - loaded_state.keys()
         if missing_keys:
             raise ValueError(f"Missing keys in optimizer checkpoint: {sorted(missing_keys)}")
-        for key, target in checkpoint_state_dict.items():
+        for key, target in optimizer_state_dict.items():
             value = loaded_state[key]
             if isinstance(target, torch.Tensor) and (
                 not isinstance(value, torch.Tensor) or value.shape != target.shape
             ):
                 raise ValueError(f"Optimizer checkpoint tensor {key!r} must have shape {tuple(target.shape)}.")
-        for key, target in checkpoint_state_dict.items():
+        for key, target in optimizer_state_dict.items():
             value = loaded_state[key]
             if is_dtensor(target):
                 value = distribute_tensor(value.to(target.device), target.device_mesh, target.placements)
             elif isinstance(target, torch.Tensor):
                 value = value.to(target.device)
-            checkpoint_state_dict[key] = value
+            optimizer_state_dict[key] = value
     else:
         from .checkpoint import HuggingFaceLoadPlanner
 
         dcp.load(
-            {"optimizer": checkpoint_state_dict},
+            {"optimizer": optimizer_state_dict},
             checkpoint_id=checkpoint_dir_or_file,
             planner=HuggingFaceLoadPlanner(),
         )
