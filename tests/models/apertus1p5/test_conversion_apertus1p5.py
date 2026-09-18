@@ -28,14 +28,15 @@ if is_torch_available():
     from safetensors.torch import load_file, save_file
 
     from transformers import (
+        Apertus1p5ForConditionalGeneration,
         Apertus1p5TextConfig,
+        Apertus1p5TextForCausalLM,
         Apertus1p5VisionTokenizerConfig,
         Apertus1p5VisionTokenizerModel,
         WavTokenizerConfig,
+        WavTokenizerModel,
     )
-    from transformers.models.apertus1p5 import convert_apertus1p5_vision_tokenizer_to_hf as vision_conversion
     from transformers.models.apertus1p5 import convert_apertus1p5_weights_to_hf as conversion
-    from transformers.models.apertus1p5.convert_apertus1p5_vision_tokenizer_to_hf import _comparable
 
 
 @require_torch
@@ -71,7 +72,9 @@ class Apertus1p5ConversionTest(unittest.TestCase):
             (tmp / "apertus" / "config.json").write_text(
                 json.dumps({"model_type": "apertus", "architectures": ["ApertusForCausalLM"]})
             )
-            (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": "apertus1p5_vision_tokenizer"}))
+            (tmp / "vision" / "config.json").write_text(
+                json.dumps({**Apertus1p5VisionTokenizerConversionTest.ORIGINAL_CONFIG, "codebook_size": 131072})
+            )
             (tmp / "audio" / "config.json").write_text(
                 json.dumps(
                     {
@@ -98,7 +101,10 @@ class Apertus1p5ConversionTest(unittest.TestCase):
             for source in ("apertus", "vision", "audio"):
                 (tmp / source).mkdir()
             save_file({"model.layer.weight": torch.ones(1)}, tmp / "apertus" / SAFE_WEIGHTS_NAME)
-            save_file({"encoder.weight": torch.ones(1)}, tmp / "vision" / SAFE_WEIGHTS_NAME)
+            Apertus1p5VisionTokenizerConversionTest._write_original(
+                tmp / "vision",
+                config={**Apertus1p5VisionTokenizerConversionTest.ORIGINAL_CONFIG, "codebook_size": 131072},
+            )
             save_file(
                 {
                     "encoder_model.encoder.weight": torch.ones(1),
@@ -128,7 +134,10 @@ class Apertus1p5ConversionTest(unittest.TestCase):
             for source in ("apertus", "vision", "audio"):
                 (tmp / source).mkdir()
             save_file({"model.layer.weight": torch.ones(1)}, tmp / "apertus" / SAFE_WEIGHTS_NAME)
-            save_file({"encoder.weight": torch.ones(1)}, tmp / "vision" / SAFE_WEIGHTS_NAME)
+            Apertus1p5VisionTokenizerConversionTest._write_original(
+                tmp / "vision",
+                config={**Apertus1p5VisionTokenizerConversionTest.ORIGINAL_CONFIG, "codebook_size": 131072},
+            )
             save_file({"unexpected.weight": torch.ones(1)}, tmp / "audio" / SAFE_WEIGHTS_NAME)
 
             with self.assertRaisesRegex(ValueError, "Unexpected key in the WavTokenizer checkpoint"):
@@ -142,10 +151,15 @@ class Apertus1p5ConversionTest(unittest.TestCase):
             (tmp / "apertus" / "config.json").write_text(
                 json.dumps({"model_type": "apertus", "tie_word_embeddings": True})
             )
-            (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": "apertus1p5_vision_tokenizer"}))
+            (tmp / "vision" / "config.json").write_text(
+                json.dumps({**Apertus1p5VisionTokenizerConversionTest.ORIGINAL_CONFIG, "codebook_size": 131072})
+            )
             (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "wavtokenizer"}))
             save_file({"model.layer.weight": torch.ones(1)}, tmp / "apertus" / SAFE_WEIGHTS_NAME)
-            save_file({"encoder.weight": torch.ones(1)}, tmp / "vision" / SAFE_WEIGHTS_NAME)
+            Apertus1p5VisionTokenizerConversionTest._write_original(
+                tmp / "vision",
+                config={**Apertus1p5VisionTokenizerConversionTest.ORIGINAL_CONFIG, "codebook_size": 131072},
+            )
             save_file(
                 {"backbone.weight": torch.ones(1), "head.linear.weight": torch.ones(1)},
                 tmp / "audio" / SAFE_WEIGHTS_NAME,
@@ -163,7 +177,9 @@ class Apertus1p5ConversionTest(unittest.TestCase):
             for source in ("text", "vision", "audio"):
                 (tmp / source).mkdir()
             (tmp / "text" / "config.json").write_text(json.dumps({"model_type": "llama"}))
-            (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": "apertus1p5_vision_tokenizer"}))
+            (tmp / "vision" / "config.json").write_text(
+                json.dumps({**Apertus1p5VisionTokenizerConversionTest.ORIGINAL_CONFIG, "codebook_size": 131072})
+            )
             (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "wavtokenizer"}))
 
             with self.assertRaisesRegex(ValueError, "not an Apertus text checkpoint"):
@@ -176,26 +192,80 @@ class Apertus1p5ConversionTest(unittest.TestCase):
                 conversion.convert("apertus", "vision", tmp_dir, tmp_dir)
             with self.assertRaisesRegex(ValueError, "same directory"):
                 conversion.write_processor(tmp_dir, "audio", tmp_dir)
+            alias = Path(tmp_dir) / "alias"
+            alias.symlink_to(tmp_dir, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "same directory"):
+                conversion.convert("apertus", tmp_dir, "audio", str(alias))
+            self.assertEqual(list(Path(tmp_dir).iterdir()), [alias])
 
-    def test_build_config_rejects_unconverted_tokenizer_sources(self):
-        """An original-format source must be refused, not absorbed into a composite that only fails on load."""
-        raw_emu35 = {"model_type": "Emu3p5VisionVQ", "ch": 256, "ch_mult": [1, 1, 2, 2, 4], "z_channels": 256}
+    def test_build_config_rejects_invalid_tokenizer_sources(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp = Path(tmp_dir)
-            for source in ("apertus", "vision", "audio"):
+            for source in ("text", "vision", "audio"):
                 (tmp / source).mkdir()
-            (tmp / "apertus" / "config.json").write_text(json.dumps({"model_type": "apertus"}))
+            (tmp / "text" / "config.json").write_text(json.dumps({"model_type": "apertus"}))
             (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "wavtokenizer"}))
-
-            (tmp / "vision" / "config.json").write_text(json.dumps(raw_emu35))
-            with self.assertRaisesRegex(ValueError, "convert_apertus1p5_vision_tokenizer_to_hf.py"):
-                conversion.build_config(str(tmp / "apertus"), str(tmp / "vision"), str(tmp / "audio"))
-
-            # the same guard on the audio side
-            (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": "apertus1p5_vision_tokenizer"}))
-            (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "something_else"}))
+            for model_type in ("apertus1p5_vision_tokenizer", "Emu3VisionVQ", None):
+                with self.subTest(model_type=model_type):
+                    (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": model_type}))
+                    with self.assertRaisesRegex(ValueError, "original EMU3.5"):
+                        conversion.build_config(str(tmp / "text"), str(tmp / "vision"), str(tmp / "audio"))
+            (tmp / "vision" / "config.json").write_text(
+                json.dumps({**Apertus1p5VisionTokenizerConversionTest.ORIGINAL_CONFIG, "codebook_size": 131072})
+            )
+            (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "original_audio"}))
             with self.assertRaisesRegex(ValueError, "convert_wavtokenizer_checkpoint.py"):
-                conversion.build_config(str(tmp / "apertus"), str(tmp / "vision"), str(tmp / "audio"))
+                conversion.build_config(str(tmp / "text"), str(tmp / "vision"), str(tmp / "audio"))
+
+    def test_cli_resolves_only_required_sources(self):
+        with (
+            patch.object(conversion, "resolve_checkpoint_dir", side_effect=lambda source, **kwargs: source) as resolve,
+            patch.object(conversion, "convert") as convert,
+            patch.object(conversion, "write_processor") as processor,
+            patch.object(conversion, "verify_composite") as verify,
+        ):
+            conversion.main(["--output_dir", "out", "--skip_convert", "--verify"])
+            resolve.assert_not_called()
+            convert.assert_not_called()
+            verify.assert_called_once_with("out")
+            conversion.main(
+                [
+                    "--output_dir",
+                    "out",
+                    "--processor_only",
+                    "--apertus_checkpoint",
+                    "text",
+                    "--audio_tokenizer_checkpoint",
+                    "audio",
+                ]
+            )
+            self.assertEqual([call.args[0] for call in resolve.call_args_list], ["text", "audio"])
+            processor.assert_called_once_with("text", "audio", "out")
+            convert.assert_not_called()
+            resolve.reset_mock()
+            conversion.main(
+                [
+                    "--output_dir",
+                    "out",
+                    "--apertus_checkpoint",
+                    "text",
+                    "--vision_tokenizer_checkpoint",
+                    "BAAI/Emu3.5-VisionTokenizer@revision",
+                    "--audio_tokenizer_checkpoint",
+                    "audio",
+                ]
+            )
+            self.assertEqual(resolve.call_args_list[1].kwargs, {"allow_patterns": ["config.json", SAFE_WEIGHTS_NAME]})
+            convert.assert_called_once_with("text", "BAAI/Emu3.5-VisionTokenizer@revision", "audio", "out")
+
+    def test_vision_download_selects_only_config_and_weights(self):
+        with patch.object(conversion, "snapshot_download", return_value="snapshot") as download:
+            conversion.resolve_checkpoint_dir(
+                "BAAI/Emu3.5-VisionTokenizer@revision", allow_patterns=["config.json", SAFE_WEIGHTS_NAME]
+            )
+        download.assert_called_once_with(
+            "BAAI/Emu3.5-VisionTokenizer", revision="revision", allow_patterns=["config.json", SAFE_WEIGHTS_NAME]
+        )
 
     def test_resolve_checkpoint_dir_rejects_a_file(self):
         """A path to an original-format `.ckpt` must not be forwarded to the Hub as a repo id."""
@@ -296,13 +366,14 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
             return ".".join(("encoder", "down", stage_idx, "downsample", *parts[4:]))
         return key
 
-    def _write_original(self, directory, config=None, dtype=torch.float32):
+    @classmethod
+    def _write_original(cls, directory, config=None, dtype=torch.float32):
         """Write a synthetic original checkpoint (`config.json` + `model.safetensors`); return the kept half."""
-        config = self.ORIGINAL_CONFIG if config is None else config
+        config = cls.ORIGINAL_CONFIG if config is None else config
         directory = Path(directory)
         # The kept half comes from the real model class, so its shapes and converted names are correct by construction.
-        kept = Apertus1p5VisionTokenizerModel(vision_conversion.convert_config(config)).state_dict()
-        original_kept = {self._to_original_key(key): value for key, value in kept.items()}
+        kept = Apertus1p5VisionTokenizerModel(conversion.convert_vision_config(config)).state_dict()
+        original_kept = {cls._to_original_key(key): value for key, value in kept.items()}
         dropped = {
             "post_quant_conv.weight": torch.zeros(8, 8, 1, 1),
             "post_quant_conv.bias": torch.zeros(8),
@@ -316,7 +387,7 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
         return kept
 
     def test_convert_config_maps_original_fields(self):
-        config = vision_conversion.convert_config(self.ORIGINAL_CONFIG)
+        config = conversion.convert_vision_config(self.ORIGINAL_CONFIG)
         self.assertEqual(config.codebook_size, 16)
         self.assertEqual(config.embed_dim, 8)
         self.assertEqual(config.latent_channels, 8)  # <- z_channels
@@ -341,44 +412,26 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
         """
         defaults = Apertus1p5VisionTokenizerConfig()
         distinct = {**self.ORIGINAL_CONFIG, "in_channels": 1, "dropout": 0.25}
-        config = vision_conversion.convert_config(distinct)
+        config = conversion.convert_vision_config(distinct)
 
-        for target, source in vision_conversion.ORIGINAL_CONFIG_FIELDS.items():
+        for target, source in conversion.VISION_CONFIG_FIELDS.items():
             with self.subTest(field=target):
-                self.assertEqual(_comparable(getattr(config, target)), _comparable(distinct[source]))
-                self.assertNotEqual(
-                    _comparable(getattr(config, target)),
-                    _comparable(getattr(defaults, target)),
-                    f"`{target}` equals the class default, so this fixture cannot detect a lost mapping",
-                )
+                actual, default = getattr(config, target), getattr(defaults, target)
+                if isinstance(actual, (list, tuple)):
+                    actual, default = list(actual), list(default)
+                self.assertEqual(actual, distinct[source])
+                self.assertNotEqual(actual, default, f"`{target}` must differ from its default in this fixture")
         self.assertEqual(config.dropout, 0.25)
         self.assertNotEqual(config.dropout, defaults.dropout)
 
     def test_convert_config_rejects_incomplete_config(self):
         incomplete = {key: value for key, value in self.ORIGINAL_CONFIG.items() if key != "z_channels"}
         with self.assertRaisesRegex(ValueError, "z_channels"):
-            vision_conversion.convert_config(incomplete)
+            conversion.convert_vision_config(incomplete)
 
     def test_convert_config_defaults_dropout(self):
         without_dropout = {key: value for key, value in self.ORIGINAL_CONFIG.items() if key != "dropout"}
-        self.assertEqual(vision_conversion.convert_config(without_dropout).dropout, 0.0)
-
-    def test_convert_checkpoint_rejects_output_dir_equal_to_source(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaisesRegex(ValueError, "same directory"):
-                vision_conversion.convert_checkpoint(tmp_dir, tmp_dir)
-
-    def test_verify_rejects_a_half_precision_checkpoint(self):
-        """`_keep_in_fp32_modules_strict` upcasts on load, so `verify` must read the stored dtypes."""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            source, output = Path(tmp_dir) / "original", Path(tmp_dir) / "converted"
-            source.mkdir()
-            self._write_original(source)
-            vision_conversion.convert_checkpoint(str(source), str(output))
-            # re-save the converted checkpoint in half precision behind the converter's back
-            Apertus1p5VisionTokenizerModel.from_pretrained(output).to(torch.bfloat16).save_pretrained(output)
-            with self.assertRaisesRegex(RuntimeError, "stored dtype"):
-                vision_conversion.verify(str(output), str(source))
+        self.assertEqual(conversion.convert_vision_config(without_dropout).dropout, 0.0)
 
     def test_convert_state_dict_drops_decoder_branch(self):
         original = {
@@ -391,7 +444,7 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
             "decoder.conv_in.weight": torch.ones(2, 2),
             "post_quant_conv.weight": torch.ones(2, 2),
         }
-        converted = vision_conversion.convert_state_dict(original)
+        converted = conversion.convert_vision_state_dict(original)
         self.assertEqual(
             set(converted),
             {
@@ -410,47 +463,88 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
             original["encoder.down.1.block.2.conv1.weight"],
         )
 
-    def test_converts_and_reloads_checkpoint(self):
+    def test_original_vision_assembles_into_separate_composite_shard(self):
+        text_config = Apertus1p5TextConfig(
+            vocab_size=266752,
+            output_vocab_size=40,
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            hidden_act="gelu",
+        )
+        audio_config = WavTokenizerConfig(
+            num_filters=8,
+            upsampling_ratios=[2, 2],
+            hidden_size=32,
+            codebook_dim=32,
+            codebook_size=12,
+            decoder_hidden_size=32,
+            decoder_intermediate_size=64,
+            decoder_num_layers=2,
+        )
+        text = Apertus1p5TextForCausalLM(text_config)
+        audio = WavTokenizerModel(audio_config)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            source, output = Path(tmp_dir) / "original", Path(tmp_dir) / "converted"
-            source.mkdir()
-            kept = self._write_original(source)
+            tmp = Path(tmp_dir)
+            text.save_pretrained(tmp / "text", max_shard_size="10KB")
+            audio.save_pretrained(tmp / "audio")
+            (tmp / "vision").mkdir()
+            vision_weights = self._write_original(
+                tmp / "vision", config={**self.ORIGINAL_CONFIG, "codebook_size": 131072}
+            )
+            with patch.object(conversion, "write_processor"):
+                conversion.convert(*(str(tmp / part) for part in ("text", "vision", "audio", "output")))
+            reloaded, info = Apertus1p5ForConditionalGeneration.from_pretrained(
+                tmp / "output", output_loading_info=True
+            )
+            self.assertFalse({key: value for key, value in info.items() if value})
+            self.assertEqual(reloaded.config.vision_config.latent_channels, self.ORIGINAL_CONFIG["z_channels"])
+            self.assertEqual(reloaded.config.vision_config.channel_multiplier, self.ORIGINAL_CONFIG["ch_mult"])
+            expected = {
+                "model.language_model." + k.removeprefix("model.") if k != "lm_head.weight" else k: v
+                for k, v in text.state_dict().items()
+            }
+            expected.update({"model.vision_tokenizer." + k: v for k, v in vision_weights.items()})
+            expected.update({"model.audio_tokenizer." + k: v for k, v in audio.encoder_model.state_dict().items()})
+            actual = reloaded.state_dict()
+            self.assertEqual(set(actual), set(expected))
+            for key in expected:
+                torch.testing.assert_close(actual[key], expected[key], rtol=0, atol=0)
+            index = json.loads((tmp / "output" / SAFE_WEIGHTS_INDEX_NAME).read_text())["weight_map"]
+            vision_shards = {value for key, value in index.items() if key.startswith("model.vision_tokenizer.")}
+            self.assertEqual(vision_shards, {"model-vision_tokenizer-model.safetensors"})
+            for key, shard in index.items():
+                prefix = (
+                    "vision_tokenizer"
+                    if key.startswith("model.vision_tokenizer.")
+                    else ("wavtokenizer" if key.startswith("model.audio_tokenizer.") else "apertus")
+                )
+                self.assertTrue(shard.startswith(f"model-{prefix}-"))
+            self.assertFalse(any("decoder." in key or "post_quant_conv." in key for key in index))
 
-            vision_conversion.convert_checkpoint(str(source), str(output))
-            reloaded = Apertus1p5VisionTokenizerModel.from_pretrained(output)
-
-            state_dict = reloaded.state_dict()
-            self.assertEqual(set(state_dict), set(kept))
-            for key, value in kept.items():
-                torch.testing.assert_close(state_dict[key], value, rtol=0, atol=0)
-
-            with (output / "config.json").open() as f:
-                saved_config = json.load(f)
-            self.assertEqual(saved_config["model_type"], "apertus1p5_vision_tokenizer")
-            self.assertEqual(saved_config["latent_channels"], 8)
-            self.assertEqual(saved_config["base_channels"], 32)
-            self.assertNotIn("z_channels", saved_config)
-
-    def test_verify_passes_on_a_converted_checkpoint(self):
+    def test_rejects_mismatched_vision_weight_shape(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            source, output = Path(tmp_dir) / "original", Path(tmp_dir) / "converted"
-            source.mkdir()
+            source = Path(tmp_dir)
             self._write_original(source)
-            vision_conversion.convert_checkpoint(str(source), str(output))
-            # runs all six checks, including the odd-sided (non-multiple-of-the-factor) size
-            vision_conversion.verify(str(output), str(source))
+            weights = load_file(source / SAFE_WEIGHTS_NAME)
+            weights["quantize.embedding.weight"] = weights["quantize.embedding.weight"][:1]
+            save_file(weights, str(source / SAFE_WEIGHTS_NAME))
+            with self.assertRaisesRegex(RuntimeError, "size mismatch"):
+                conversion.load_vision_tokenizer(str(source))
 
     def test_rejects_half_precision_source(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            source, output = Path(tmp_dir) / "original", Path(tmp_dir) / "converted"
+            source = Path(tmp_dir) / "original"
             source.mkdir()
             self._write_original(source, dtype=torch.bfloat16)
             with self.assertRaisesRegex(ValueError, "float32"):
-                vision_conversion.convert_checkpoint(str(source), str(output))
+                conversion.load_vision_tokenizer(str(source))
 
     def test_rejects_unexpected_source_tensor(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            source, output = Path(tmp_dir) / "original", Path(tmp_dir) / "converted"
+            source = Path(tmp_dir) / "original"
             source.mkdir()
             self._write_original(source)
             tensors = {**load_file(source / SAFE_WEIGHTS_NAME), "encoder.bogus.weight": torch.zeros(2)}
@@ -461,7 +555,7 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
             )
             # the strict load is the correctness gate for the tensor set
             with self.assertRaisesRegex(RuntimeError, "Unexpected key"):
-                vision_conversion.convert_checkpoint(str(source), str(output))
+                conversion.load_vision_tokenizer(str(source))
 
 
 if __name__ == "__main__":
