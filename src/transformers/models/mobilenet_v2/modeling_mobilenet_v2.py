@@ -402,7 +402,6 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        kwargs["output_hidden_states"] = True
         outputs = self.mobilenet_v2(pixel_values, **kwargs)
 
         pooled_output = outputs.pooler_output
@@ -551,7 +550,6 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        kwargs["output_hidden_states"] = True
         outputs = self.mobilenet_v2(pixel_values, **kwargs)
 
         encoder_hidden_states = outputs.hidden_states
