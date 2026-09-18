@@ -574,17 +574,22 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename, *weight_conversions]
-        # A converter's targets become source patterns on SAVE, and a parameter name is a prefix
-        # of its own companions' — `experts.gate_up_proj` matches `experts.gate_up_proj_scale_inv`
-        # and `..._input_global_scale` too. Unanchored, the weight converter claims them and tries
-        # to split a one-value global into gate|up halves. Anchor every target that names a
-        # parameter outright: a `.weight` (Qwen4-Exp's `ngram_embedding`) or an expert projection.
-        anchored = (".weight", "gate_up_proj", "up_proj", "down_proj")
-        for conv in weight_conversions:
-            if isinstance(conv, WeightConverter):
-                conv._original_target_patterns = [
-                    f"{p}$" if p.endswith(anchored) else p for p in conv._original_target_patterns
-                ]
+
+        def anchor(conversions):
+            """A converter's targets become its source patterns on SAVE, and a parameter name is a
+            prefix of its own companions' — `experts.gate_up_proj` matches
+            `experts.gate_up_proj_scale_inv` and `..._input_global_scale` too. Unanchored, the
+            weight converter claims them on the way out and tries to split a one-value global into
+            gate|up halves. Anchor every target that names a parameter outright: a `.weight`
+            (Qwen4-Exp's `ngram_embedding`) or an expert projection. Runs LAST, since
+            `_with_expert_layout_ops` rebuilds converters and would drop it."""
+            for conv in conversions:
+                if isinstance(conv, WeightConverter):
+                    conv._original_target_patterns = [
+                        f"{p}$" if p.endswith((".weight", "gate_up_proj", "up_proj", "down_proj")) else p
+                        for p in conv._original_target_patterns
+                    ]
+            return conversions
 
         if self.pre_quantized and self.quantization_config.dequantize:
             updated = []
@@ -599,7 +604,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
                         operations=[FineGrainedDequantize(self), *conv.operations],
                     )
                 updated.append(conv)
-            return updated + self.get_weight_conversions()
+            return anchor(updated + self.get_weight_conversions())
 
         if self.pre_quantized and self._quant_method() == "nvfp4":
             updated = []
@@ -613,7 +618,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 updated.append(conv)
             weight_conversions = updated
 
-        return self._with_expert_layout_ops(weight_conversions + self.get_weight_conversions())
+        return anchor(self._with_expert_layout_ops(weight_conversions + self.get_weight_conversions()))
 
     def _with_expert_layout_ops(self, weight_conversions):
         """Give every converter that produces expert tensors the layout ``FineGrainedExperts`` holds

@@ -1198,15 +1198,23 @@ class FineGrainedViewPackedInt8(ConversionOps):
     ``copy_`` into an int8 param would numerically CONVERT and corrupt values >= 128. Non-uint8
     tensors pass through, so this can ride converters that also match unquantized modules."""
 
-    def __init__(self, hf_quantizer=None):
+    def __init__(self, hf_quantizer=None, inverse: bool = False):
         self.hf_quantizer = hf_quantizer
+        self.inverse = inverse
 
     def convert(self, input_dict, target_patterns=None, **kwargs):
+        held, want = (torch.int8, torch.uint8) if self.inverse else (torch.uint8, torch.int8)
         out = {}
         for key, value in _keyed_by_target(input_dict, target_patterns).items():
             value = value[0] if isinstance(value, list) else value
-            out[key] = value.view(torch.int8) if torch.is_tensor(value) and value.dtype == torch.uint8 else value
+            out[key] = value.view(want) if torch.is_tensor(value) and value.dtype == held else value
         return out
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # a bitcast is its own inverse; on save the int8 the module holds goes back out as the
+        # uint8 bytes the checkpoint packs fp4 into
+        return FineGrainedViewPackedInt8(self.hf_quantizer, inverse=not self.inverse)
 
 
 class FineGrainedWeightGlobals(ConversionOps):
@@ -1310,6 +1318,34 @@ class FineGrainedInputScales(ConversionOps):
         per_expert = stacked.reshape(stacked.shape[0], -1).amax(dim=1)
         one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")  # the NVFP4 global only
         return {full_layer_name: (per_expert.amax().reshape(1) if one_value else per_expert).contiguous()}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return FineGrainedInputScalesSplit(self.hf_quantizer)
+
+
+class FineGrainedInputScalesSplit(ConversionOps):
+    """Save reverse of :class:`FineGrainedInputScales`: the module's scale back onto every
+    projection key the checkpoint calibrated one for. The merge took a max — over the gate|up
+    pair, and for the NVFP4 gate_up global over the experts too — so the folded halves are gone
+    and each projection is written the value that covers it, which is what the module reads back.
+    A collapsed global re-expands per expert, since that is the shape the checkpoint holds."""
+
+    def __init__(self, hf_quantizer=None):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
+        value = next(iter(input_dict.values()))
+        value = value[0] if isinstance(value, list) else value
+        if value.numel() == 1 and model is not None:
+            experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None)
+            if experts is not None:
+                value = value.reshape(1).expand(experts.num_experts).contiguous()
+        return dict.fromkeys(target_patterns or list(input_dict), value)
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return FineGrainedInputScales(self.hf_quantizer)
 
 
 class FineGrainedQuantize(ConversionOps):
