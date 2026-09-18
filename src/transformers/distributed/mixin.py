@@ -200,19 +200,6 @@ class DistributedMixin:
             save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
         return save_on_this_rank
 
-    def load_distributed_checkpoint(self, checkpoint_dir: str | os.PathLike) -> None:
-        """Load model weights from a local safetensors checkpoint into this initialized model.
-
-        Pass the directory containing the rank-local safetensors files, or the retained `sharded/`
-        directory after consolidation.
-        All ranks must call this method when using a distributed model. The destination may use the
-        original mesh, a different mesh, or ordinary tensors without a process group.
-
-        This method preserves the destination's placements and requires materialized tensors, it does
-        not initialize the model architecture or load its configuration or optimizer state.
-        """
-        load_model_checkpoint_distributed(self, checkpoint_dir)
-
     def save_distributed_checkpoint(
         self,
         model_to_save,
