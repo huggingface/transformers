@@ -110,7 +110,7 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     model_type = "qwen3_tts_tokenizer_multi_codebook"
     sub_configs = {
         "encoder_config": AutoConfig,
-        "decoder_config": Qwen3TTSTokenizerMultiCodebookCode2WavConfig,
+        "decoder_config": AutoConfig,
     }
 
     encoder_config: dict | PreTrainedConfig | None = None
@@ -128,10 +128,13 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
             self.encoder_config = CONFIG_MAPPING["mimi"](num_quantizers=16)
 
         if isinstance(self.decoder_config, dict):
-            self.decoder_config = Qwen3TTSTokenizerMultiCodebookCode2WavConfig(**self.decoder_config)
+            self.decoder_config["model_type"] = self.decoder_config.get(
+                "model_type", "qwen3_tts_tokenizer_multi_codebook_code2wav"
+            )
+            self.decoder_config = CONFIG_MAPPING[self.decoder_config["model_type"]](**self.decoder_config)
         elif self.decoder_config is None:
             logger.info("decoder_config is None. Initializing V2 decoder with default values.")
-            self.decoder_config = Qwen3TTSTokenizerMultiCodebookCode2WavConfig()
+            self.decoder_config = CONFIG_MAPPING["qwen3_tts_tokenizer_multi_codebook_code2wav"]()
 
         super().__post_init__(**kwargs)
 
