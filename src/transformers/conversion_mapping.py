@@ -749,6 +749,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
         ],
         # Legacy MoE weight names → standard ``@use_experts_implementation`` interface.
+        "aria_text": [
+            WeightRenaming(
+                source_patterns=r"mlp\.experts\.fc1\.weight",
+                target_patterns="mlp.experts.gate_up_proj",
+            ),
+            WeightRenaming(
+                source_patterns=r"mlp\.experts\.fc2\.weight",
+                target_patterns="mlp.experts.down_proj",
+            ),
+        ],
         "granitemoe": [
             WeightRenaming(
                 source_patterns=r"block_sparse_moe\.input_linear\.weight",
