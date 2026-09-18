@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Run the daily model tests on the machine this is launched from and turn the reports into the
+# `model_results.json` the CI dashboard reads. Meant to be run by hand from the repo root, on a
+# device whose wheels are not in the shared CI images (currently TPU).
+#
+#   MACHINE_TYPE=multi-gpu    key the results land under: `multi-gpu` or `single-gpu`. The "gpu" is
+#                             the CI's own spelling and only ever appears in report directory names.
+#   ONLY_IN=IMPORTANT_MODELS  which models to run, `IMPORTANT_MODELS` or a space-separated list.
+#   RUN_SLOW=1                also run the tests marked slow.
+#   TMP_CACHE=<prefix>        run with a throwaway hub cache under that prefix.
+#   UPLOAD=1                  upload the results to the dataset repo as well as writing them out.
+#
+# Only one process at a time can hold a given TPU chip, and torch_tpu aborts the process rather than
+# raising when it cannot acquire one, so do not run anything else that imports torch_tpu alongside.
+set -euo pipefail
+
+export TRANSFORMERS_IS_CI=yes NO_COLOR=1 OMP_NUM_THREADS=8
+
+# `TPU_VISIBLE_DEVICES` is torch_tpu's `CUDA_VISIBLE_DEVICES`: the runtime treats it as the source of
+# truth for device visibility, and even overwrites `TPU_VISIBLE_CHIPS` to match it. Restricting the
+# run to one chip is what makes the `single` column mean the same thing it does for the other
+# devices, whose CI runs a single-gpu and a multi-gpu job.
+if [ "${MACHINE_TYPE:-multi-gpu}" = "single-gpu" ]; then
+    export TPU_VISIBLE_DEVICES="${TPU_VISIBLE_DEVICES:-0}"
+fi
+
+python3 -m utils.get_test_reports tests/ --suite models \
+    --only-in ${ONLY_IN:-IMPORTANT_MODELS} \
+    --machine-type "${MACHINE_TYPE:-multi-gpu}" \
+    ${RUN_SLOW:+--run-slow} \
+    ${TMP_CACHE:+--tmp-cache "$TMP_CACHE"}
+
+python3 utils/tpu_ci/make_model_results.py reports/ --summary model_results.md ${UPLOAD:+--upload}
