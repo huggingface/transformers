@@ -39,13 +39,13 @@ Informational (INFO, non-failing):
      Measured and reported here.
 
 Without `--vision_tokenizer_checkpoint`, the weight-based checks 3 and 4 are skipped. Any FAIL makes the
-script exit non-zero. Produce that directory with
-`src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py`.
+script exit non-zero. Pass the original EMU3.5 source (local directory or Hub `repo_id[@revision]`);
+the shared converter loads and validates its vision encoder without writing a standalone checkpoint.
 
 Example:
     python scripts/check_apertus1p5_processor_parity.py \
         --checkpoint /path/to/Apertus-1.5-8B-composite-hf \
-        --vision_tokenizer_checkpoint /path/to/apertus1p5-vision-tokenizer-hf
+        --vision_tokenizer_checkpoint BAAI/Emu3.5-VisionTokenizer
 """
 
 import argparse
@@ -241,7 +241,7 @@ def main():
     parser.add_argument(
         "--vision_tokenizer_checkpoint",
         default=None,
-        help="Converted Apertus1p5VisionTokenizerModel dir (enables the weight-based checks)",
+        help="Original EMU3.5 checkpoint directory or Hub repo (enables the weight-based checks)",
     )
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
@@ -251,11 +251,16 @@ def main():
     check_structural_parity(processor)
 
     if args.vision_tokenizer_checkpoint:
-        from transformers import Apertus1p5VisionTokenizerModel
-
-        vision_tokenizer = (
-            Apertus1p5VisionTokenizerModel.from_pretrained(args.vision_tokenizer_checkpoint).to(args.device).eval()
+        from transformers.models.apertus1p5.convert_apertus1p5_weights_to_hf import (
+            load_vision_tokenizer,
+            resolve_checkpoint_dir,
         )
+        from transformers.utils import CONFIG_NAME, SAFE_WEIGHTS_NAME
+
+        source = resolve_checkpoint_dir(
+            args.vision_tokenizer_checkpoint, allow_patterns=[CONFIG_NAME, SAFE_WEIGHTS_NAME]
+        )
+        vision_tokenizer = load_vision_tokenizer(source).to(args.device)
         check_spliced_stream_parity(processor, vision_tokenizer, args.device)
         check_backend_drift(processor, vision_tokenizer, args.device)
     else:
