@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import AutoTokenizer, BarkProcessor
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_symlink_support, require_torch, slow
 
 
 @require_torch
@@ -181,6 +181,7 @@ class BarkProcessorTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 processor._load_voice_preset("evil")
 
+    @require_symlink_support
     def test_load_voice_preset_allows_symlinked_cache_files(self):
         # The path-traversal guard must be lexical, not symlink-resolving: the HF hub cache stores each
         # snapshot file as a symlink into a sibling `blobs/` dir (snapshots/<rev>/f -> ../../blobs/<sha>),

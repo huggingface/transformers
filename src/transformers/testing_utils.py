@@ -662,6 +662,28 @@ def require_natten(test_case):
     return unittest.skipUnless(is_natten_available(), "test requires natten")(test_case)
 
 
+def _can_create_symlinks() -> bool:
+    """Whether the current process can create symlinks (e.g. False on Windows without elevation/Developer Mode)."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        try:
+            # The target need not exist; on Windows the privilege error is raised before it is checked.
+            os.symlink(os.path.join(tmp_dir, "target"), os.path.join(tmp_dir, "link"))
+        except (OSError, NotImplementedError):
+            return False
+        return True
+
+
+def require_symlink_support(test_case):
+    """
+    Decorator marking a test that requires the ability to create symlinks.
+
+    These tests are skipped when symlink creation isn't permitted (for example, on Windows without elevation or
+    Developer Mode enabled).
+
+    """
+    return unittest.skipUnless(_can_create_symlinks(), "test requires symlink creation support")(test_case)
+
+
 def require_torch(test_case):
     """
     Decorator marking a test that requires PyTorch.
