@@ -33,7 +33,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import torch
+from transformers.testing_utils import backend_device_count, torch_device
 
 from .important_files import IMPORTANT_MODELS
 
@@ -243,10 +243,11 @@ if __name__ == "__main__":
 
     # Infer machine type if not provided
     if args.machine_type == "":
-        if not torch.cuda.is_available():
+        device_count = backend_device_count(torch_device)
+        if device_count == 0:
             machine_type = "cpu"
         else:
-            machine_type = "multi-gpu" if torch.cuda.device_count() > 1 else "single-gpu"
+            machine_type = "multi-gpu" if device_count > 1 else "single-gpu"
     else:
         machine_type = args.machine_type
 
