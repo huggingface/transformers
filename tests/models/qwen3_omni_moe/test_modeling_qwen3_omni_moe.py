@@ -684,8 +684,18 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
+            max_memory = None
+            if torch.device(torch_device).type == "cuda":
+                max_memory = {
+                    i: f"{int(torch.cuda.get_device_properties(i).total_memory * 0.85 / 1024**3)}GiB"
+                    for i in range(torch.cuda.device_count())
+                }
+                max_memory["cpu"] = "50GiB"
             cls.model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-                "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
+                "Qwen/Qwen3-Omni-30B-A3B-Instruct",
+                dtype=torch.bfloat16,
+                device_map="auto",
+                max_memory=max_memory,
             )
         return cls.model
 
