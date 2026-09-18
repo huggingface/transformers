@@ -453,10 +453,11 @@ def _load_consolidated_checkpoint_in_distributed_model(
     model.load_state_dict(state_dict, strict=strict)
 
 
-def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLike):
+def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLike, strict: bool = True):
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
     from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
 
     reader = HuggingFaceStorageReader(str(checkpoint_dir))
@@ -465,7 +466,9 @@ def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | o
     if any(value.is_meta for value in original_state.values() if isinstance(value, torch.Tensor)):
         raise ValueError("Materialize the model's tensors before loading a distributed checkpoint.")
     state = _prepare_state_dict_for_dcp(original_state)
-    dcp.load(state, storage_reader=reader)
+    # `allow_partial_load=False` (i.e. strict) raises if a key in `state` (the model's own params) has no
+    # matching entry in the checkpoint, checkpoint keys absent from `state` are always silently ignored.
+    dcp.load(state, storage_reader=reader, planner=DefaultLoadPlanner(allow_partial_load=not strict))
     for name, value in state.items():
         if is_dtensor(value) and value.placements != original_state[name].placements:
             state[name] = value.redistribute(placements=original_state[name].placements)
@@ -482,9 +485,9 @@ def load_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLik
     safe_weights_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME)
 
     if is_sharded_checkpoint(checkpoint_dir):
-        _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir)
+        _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir, strict=strict)
     elif is_sharded_checkpoint(os.path.join(checkpoint_dir, "sharded")):
-        _load_sharded_checkpoint_in_distributed_model(model, os.path.join(checkpoint_dir, "sharded"))
+        _load_sharded_checkpoint_in_distributed_model(model, os.path.join(checkpoint_dir, "sharded"), strict=strict)
     elif os.path.isfile(safe_index_file):
         with open(safe_index_file, "r", encoding="utf-8") as f:
             index = json.load(f)
