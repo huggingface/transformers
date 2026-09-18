@@ -642,7 +642,7 @@ def _group_visual_frames(
         if groups and input_ids[crop[0] - 1].item() == slice_start_id:
             groups[-1][-1]["slices"].append(crop)
         else:
-            frame = {"thumbnail": crop, "slices": []}
+            frame = {"thumbnail": crop, "slices": [], "modality": modality}
             adjacent = groups and all(
                 input_ids[position].item() in gap_ids for position in range(previous_end, crop[0] - 1)
             )
@@ -652,152 +652,6 @@ def _group_visual_frames(
                 groups.append([frame])
         previous_end = crop[1]
     return groups
-
-
-def _compute_canvas(
-    input_ids: torch.LongTensor,
-    mm_token_type_ids: torch.IntTensor,
-    target_sizes: torch.IntTensor,
-    special_token_ids: dict,
-    merge_factor: int,
-) -> torch.LongTensor:
-    """Lay one unpadded sequence out on the canvas and return its ``(3, seq_len)`` positions.
-
-    Text runs keep plain 1-D positions on all three channels. Every frame freezes the temporal
-    channel and spends the height/width channels on its own canvas, which is the slice grid when
-    the crop was sliced and the thumbnail grid otherwise. The next frame starts one step past the
-    widest side of the previous canvas, so images, slices and video frames never overlap.
-    """
-    device = input_ids.device
-    seq_len = input_ids.shape[0]
-    position_ids = torch.arange(seq_len, device=device, dtype=torch.long).expand(3, -1).clone()
-    structural_ids = {
-        special_token_ids["im_start_id"],
-        special_token_ids["im_end_id"],
-        special_token_ids["slice_start_id"],
-        special_token_ids["slice_end_id"],
-    }
-
-    pos = 0
-    cursor = 0
-    for frames in _group_visual_frames(input_ids, mm_token_type_ids, special_token_ids):
-        group_start = frames[0]["thumbnail"][0] - 1
-        group_end = _crop_end(frames[-1], input_ids, structural_ids, seq_len)
-
-        # Text in front of the group is plain 1-D.
-        if group_start > cursor:
-            text_len = group_start - cursor
-            position_ids[:, cursor:group_start] = torch.arange(text_len, device=device) + pos
-            pos += text_len
-
-        frame_cursor = group_start
-        for frame in frames:
-            thumb_start, thumb_end, thumb_index = frame["thumbnail"]
-            slices = frame["slices"]
-            frame_start = thumb_start - 1
-
-            # Tokens between two frames of a clip are 1-D text; the extra step afterwards keeps the
-            # next frame's halo from landing on the last of them.
-            if frame_start > frame_cursor:
-                gap_len = frame_start - frame_cursor
-                position_ids[:, frame_cursor:frame_start] = torch.arange(gap_len, device=device) + pos
-                pos += gap_len + 1
-
-            frame_end = min(_crop_end(frame, input_ids, structural_ids, group_end), group_end)
-            canvas_origin = pos
-            halo_before_canvas = max(canvas_origin - 1, 0)
-
-            llm_thumb_h = target_sizes[thumb_index, 0].item() // merge_factor
-            llm_thumb_w = target_sizes[thumb_index, 1].item() // merge_factor
-
-            if slices:
-                # Slices are laid out row-major; a gap wider than the two `</slice><slice>` markers
-                # is the newline that ends a row and therefore fixes the column count.
-                num_cols = len(slices)
-                for k in range(len(slices) - 1):
-                    if slices[k + 1][0] - slices[k][1] > 2:
-                        num_cols = k + 1
-                        break
-                num_rows = len(slices) // num_cols if num_cols > 0 else 1
-                if num_rows * num_cols != len(slices):
-                    num_rows, num_cols = 1, len(slices)
-                llm_slice_h = target_sizes[slices[0][2], 0].item() // merge_factor
-                llm_slice_w = target_sizes[slices[0][2], 1].item() // merge_factor
-                canvas_height = num_rows * llm_slice_h
-                canvas_width = num_cols * llm_slice_w
-            else:
-                llm_slice_h, llm_slice_w = 0, 0
-                num_rows, num_cols = 0, 0
-                canvas_height = llm_thumb_h
-                canvas_width = llm_thumb_w
-
-            # Base coat for the whole frame, then `<image>` -> halo just outside the canvas.
-            position_ids[:, frame_start:frame_end] = canvas_origin
-            position_ids[1:, frame_start] = halo_before_canvas
-
-            # `</image>` closes the thumbnail on the far corner of the canvas.
-            image_end_pos = thumb_end
-            if image_end_pos < frame_end:
-                position_ids[1, image_end_pos] = canvas_origin + canvas_height
-                position_ids[2, image_end_pos] = canvas_origin + canvas_width
-
-            # Thumbnail tokens. With slices around, the thumbnail is stretched over the full canvas
-            # so that it stays aligned with the detail crops underneath it. Without slices the canvas
-            # is the thumbnail grid itself and `linspace` degenerates to `arange`.
-            h_coords = torch.linspace(0, canvas_height - 1, llm_thumb_h, device=device).round().long()
-            w_coords = torch.linspace(0, canvas_width - 1, llm_thumb_w, device=device).round().long()
-            h_idx = h_coords.view(-1, 1).expand(-1, llm_thumb_w).reshape(-1)
-            w_idx = w_coords.view(1, -1).expand(llm_thumb_h, -1).reshape(-1)
-            position_ids[0, thumb_start:thumb_end] = canvas_origin
-            position_ids[1, thumb_start:thumb_end] = h_idx + canvas_origin
-            position_ids[2, thumb_start:thumb_end] = w_idx + canvas_origin
-
-            # Slice tokens plus the `<slice>`/`</slice>` markers that pin each crop's corners.
-            for k, (slice_start, slice_end, slice_index) in enumerate(slices):
-                slice_h = target_sizes[slice_index, 0].item() // merge_factor
-                slice_w = target_sizes[slice_index, 1].item() // merge_factor
-                h_off = (k // num_cols) * llm_slice_h
-                w_off = (k % num_cols) * llm_slice_w
-
-                slice_start_pos = slice_start - 1
-                if slice_start_pos >= frame_start:
-                    position_ids[1, slice_start_pos] = canvas_origin + h_off
-                    position_ids[2, slice_start_pos] = canvas_origin + w_off
-
-                slice_end_pos = slice_end
-                if slice_end_pos < frame_end:
-                    position_ids[1, slice_end_pos] = canvas_origin + h_off + slice_h - 1
-                    position_ids[2, slice_end_pos] = canvas_origin + w_off + slice_w - 1
-
-                h_idx = torch.arange(slice_h, device=device).view(-1, 1).expand(-1, slice_w).reshape(-1)
-                w_idx = torch.arange(slice_w, device=device).view(1, -1).expand(slice_h, -1).reshape(-1)
-                position_ids[0, slice_start:slice_end] = canvas_origin
-                position_ids[1, slice_start:slice_end] = h_idx + h_off + canvas_origin
-                position_ids[2, slice_start:slice_end] = w_idx + w_off + canvas_origin
-
-            # The "\n" that ends a row of slices sits just past the right edge of that row.
-            for k in range(len(slices) - 1):
-                gap_start, gap_end = slices[k][1], slices[k + 1][0]
-                if gap_end - gap_start <= 2:
-                    continue
-                boundary_h = (k // num_cols + 1) * llm_slice_h - 1
-                right_edge_w = num_cols * llm_slice_w
-                for newline_pos in range(gap_start + 1, gap_end - 1):
-                    position_ids[1, newline_pos] = canvas_origin + boundary_h
-                    position_ids[2, newline_pos] = canvas_origin + right_edge_w
-
-            pos = canvas_origin + max(canvas_height, canvas_width) + 1
-            frame_cursor = frame_end
-
-        if frame_cursor < group_end:
-            trail_len = group_end - frame_cursor
-            position_ids[:, frame_cursor:group_end] = torch.arange(trail_len, device=device) + pos
-            pos += trail_len
-        cursor = group_end
-
-    if cursor < seq_len:
-        position_ids[:, cursor:seq_len] = torch.arange(seq_len - cursor, device=device) + pos
-    return position_ids
 
 
 @auto_docstring(
@@ -888,7 +742,6 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -943,7 +796,8 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                target_sizes_mrope=target_sizes_mrope,
+                target_sizes=target_sizes,
+                target_sizes_videos=target_sizes_videos,
                 mm_token_type_ids=mm_token_type_ids,
                 downsample_mode=downsample_mode,
             )
@@ -990,7 +844,8 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
-        target_sizes_mrope: torch.IntTensor | None = None,
+        target_sizes: torch.LongTensor | None = None,
+        target_sizes_videos: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
         **kwargs,
@@ -1000,30 +855,160 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         ``mm_token_type_ids`` marks the crops, so the canvas is laid out per sequence on the
         tokens ``attention_mask`` keeps. Padding stays at zero and never shifts the canvas.
         """
-        del kwargs
-        special_token_ids = self.config.get_mrope_special_token_ids()
         # `16x` merges 4x4 patches into one LLM token (window merger 2x2, then merger 2x2), `4x`
         # skips the window merger and merges 2x2. Same divisor the processor counts placeholders
         # with, so it has to follow the per-call override the vision tower is given, not the config.
         downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
         merge_factor = 2 if downsample_mode == "4x" else 4
+        special_token_ids = {
+            "im_start_id": self.config.image_start_id,
+            "im_end_id": self.config.image_end_id,
+            "slice_start_id": self.config.slice_start_id,
+            "slice_end_id": self.config.slice_end_id,
+            "newline_id": self.config.newline_id,
+        }
+        structural_ids = set(special_token_ids.values())
 
-        batch_size, seq_len = input_ids.shape
-        position_ids = torch.zeros(3, batch_size, seq_len, dtype=torch.long, device=input_ids.device)
+        device = input_ids.device
+        position_ids = torch.zeros(3, *input_ids.size(), dtype=torch.long, device=input_ids.device)
 
-        for batch_idx in range(batch_size):
+        grid_iters = {
+            1: iter(target_sizes) if target_sizes is not None else None,
+            2: iter(target_sizes_videos) if target_sizes_videos is not None else None,
+        }
+
+        for batch_idx in range(input_ids.shape[0]):
+            current_input_ids = input_ids[batch_idx]
+            current_mm_token_type_ids = mm_token_type_ids[batch_idx]
             if attention_mask is not None:
                 valid_mask = attention_mask[batch_idx].bool()
-            else:
-                valid_mask = torch.ones(seq_len, dtype=torch.bool, device=input_ids.device)
+                current_input_ids = current_input_ids[valid_mask]
+                current_mm_token_type_ids = current_mm_token_type_ids[valid_mask]
 
-            position_ids[:, batch_idx, valid_mask] = _compute_canvas(
-                input_ids[batch_idx][valid_mask],
-                mm_token_type_ids[batch_idx][valid_mask],
-                target_sizes_mrope[batch_idx],
-                special_token_ids,
-                merge_factor,
-            )
+            seq_len = current_input_ids.shape[0]
+            curr_position_ids = torch.arange(seq_len, device=device, dtype=torch.long).expand(3, -1).clone()
+
+            pos = 0
+            cursor = 0
+            for frames in _group_visual_frames(current_input_ids, current_mm_token_type_ids, special_token_ids):
+                group_start = frames[0]["thumbnail"][0] - 1
+                group_end = _crop_end(frames[-1], current_input_ids, structural_ids, seq_len)
+
+                # Text in front of the group is plain 1-D.
+                if group_start > cursor:
+                    text_len = group_start - cursor
+                    curr_position_ids[:, cursor:group_start] = torch.arange(text_len, device=device) + pos
+                    pos += text_len
+
+                frame_cursor = group_start
+                for frame in frames:
+                    thumb_start, thumb_end, thumb_index = frame["thumbnail"]
+                    slices = frame["slices"]
+                    frame_start = thumb_start - 1
+
+                    # Tokens between two frames of a clip are 1-D text; the extra step afterwards keeps the
+                    # next frame's halo from landing on the last of them.
+                    if frame_start > frame_cursor:
+                        gap_len = frame_start - frame_cursor
+                        curr_position_ids[:, frame_cursor:frame_start] = torch.arange(gap_len, device=device) + pos
+                        pos += gap_len + 1
+
+                    frame_end = min(_crop_end(frame, current_input_ids, structural_ids, group_end), group_end)
+                    canvas_origin = pos
+                    halo_before_canvas = max(canvas_origin - 1, 0)
+
+                    target_sizes = next(grid_iters[frame["modality"]])
+                    llm_thumb_h = target_sizes[thumb_index, 0].item() // merge_factor
+                    llm_thumb_w = target_sizes[thumb_index, 1].item() // merge_factor
+
+                    if slices:
+                        # Slices are laid out row-major; a gap wider than the two `</slice><slice>` markers
+                        # is the newline that ends a row and therefore fixes the column count.
+                        num_cols = len(slices)
+                        for k in range(len(slices) - 1):
+                            if slices[k + 1][0] - slices[k][1] > 2:
+                                num_cols = k + 1
+                                break
+                        num_rows = len(slices) // num_cols if num_cols > 0 else 1
+                        if num_rows * num_cols != len(slices):
+                            num_rows, num_cols = 1, len(slices)
+                        llm_slice_h = target_sizes[slices[0][2], 0].item() // merge_factor
+                        llm_slice_w = target_sizes[slices[0][2], 1].item() // merge_factor
+                        canvas_height = num_rows * llm_slice_h
+                        canvas_width = num_cols * llm_slice_w
+                    else:
+                        llm_slice_h, llm_slice_w = 0, 0
+                        num_rows, num_cols = 0, 0
+                        canvas_height = llm_thumb_h
+                        canvas_width = llm_thumb_w
+
+                    # Base coat for the whole frame, then `<image>` -> halo just outside the canvas.
+                    curr_position_ids[:, frame_start:frame_end] = canvas_origin
+                    curr_position_ids[1:, frame_start] = halo_before_canvas
+
+                    # `</image>` closes the thumbnail on the far corner of the canvas.
+                    image_end_pos = thumb_end
+                    if image_end_pos < frame_end:
+                        curr_position_ids[1, image_end_pos] = canvas_origin + canvas_height
+                        curr_position_ids[2, image_end_pos] = canvas_origin + canvas_width
+
+                    # Thumbnail tokens. With slices around, the thumbnail is stretched over the full canvas
+                    # so that it stays aligned with the detail crops underneath it. Without slices the canvas
+                    # is the thumbnail grid itself and `linspace` degenerates to `arange`.
+                    h_coords = torch.linspace(0, canvas_height - 1, llm_thumb_h, device=device).round().long()
+                    w_coords = torch.linspace(0, canvas_width - 1, llm_thumb_w, device=device).round().long()
+                    h_idx = h_coords.view(-1, 1).expand(-1, llm_thumb_w).reshape(-1)
+                    w_idx = w_coords.view(1, -1).expand(llm_thumb_h, -1).reshape(-1)
+                    curr_position_ids[0, thumb_start:thumb_end] = canvas_origin
+                    curr_position_ids[1, thumb_start:thumb_end] = h_idx + canvas_origin
+                    curr_position_ids[2, thumb_start:thumb_end] = w_idx + canvas_origin
+
+                    # Slice tokens plus the `<slice>`/`</slice>` markers that pin each crop's corners.
+                    for k, (slice_start, slice_end, slice_index) in enumerate(slices):
+                        slice_h = target_sizes[slice_index, 0].item() // merge_factor
+                        slice_w = target_sizes[slice_index, 1].item() // merge_factor
+                        h_off = (k // num_cols) * llm_slice_h
+                        w_off = (k % num_cols) * llm_slice_w
+
+                        slice_start_pos = slice_start - 1
+                        if slice_start_pos >= frame_start:
+                            curr_position_ids[1, slice_start_pos] = canvas_origin + h_off
+                            curr_position_ids[2, slice_start_pos] = canvas_origin + w_off
+
+                        slice_end_pos = slice_end
+                        if slice_end_pos < frame_end:
+                            curr_position_ids[1, slice_end_pos] = canvas_origin + h_off + slice_h - 1
+                            curr_position_ids[2, slice_end_pos] = canvas_origin + w_off + slice_w - 1
+
+                        h_idx = torch.arange(slice_h, device=device).view(-1, 1).expand(-1, slice_w).reshape(-1)
+                        w_idx = torch.arange(slice_w, device=device).view(1, -1).expand(slice_h, -1).reshape(-1)
+                        curr_position_ids[0, slice_start:slice_end] = canvas_origin
+                        curr_position_ids[1, slice_start:slice_end] = h_idx + h_off + canvas_origin
+                        curr_position_ids[2, slice_start:slice_end] = w_idx + w_off + canvas_origin
+
+                    # The "\n" that ends a row of slices sits just past the right edge of that row.
+                    for k in range(len(slices) - 1):
+                        gap_start, gap_end = slices[k][1], slices[k + 1][0]
+                        if gap_end - gap_start <= 2:
+                            continue
+                        boundary_h = (k // num_cols + 1) * llm_slice_h - 1
+                        right_edge_w = num_cols * llm_slice_w
+                        for newline_pos in range(gap_start + 1, gap_end - 1):
+                            curr_position_ids[1, newline_pos] = canvas_origin + boundary_h
+                            curr_position_ids[2, newline_pos] = canvas_origin + right_edge_w
+
+                    pos = canvas_origin + max(canvas_height, canvas_width) + 1
+                    frame_cursor = frame_end
+
+                if frame_cursor < group_end:
+                    trail_len = group_end - frame_cursor
+                    curr_position_ids[:, frame_cursor:group_end] = torch.arange(trail_len, device=device) + pos
+                    pos += trail_len
+                cursor = group_end
+
+            if cursor < seq_len:
+                curr_position_ids[:, cursor:seq_len] = torch.arange(seq_len - cursor, device=device) + pos
+            position_ids[:, batch_idx, valid_mask] = curr_position_ids
 
         if attention_mask is not None:
             seq_lens = attention_mask.sum(-1)
@@ -1038,7 +1023,8 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values=None,
-        target_sizes_mrope: torch.IntTensor | None = None,
+        target_sizes: torch.LongTensor | None = None,
+        target_sizes_videos: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
     ) -> torch.Tensor | None:
@@ -1051,13 +1037,14 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
 
         if (
             input_ids is not None
-            and target_sizes_mrope is not None
+            and (target_sizes_videos is not None or target_sizes is not None)
             and (self.rope_deltas is None or past_key_values_length == 0)
         ):
             mrope_position_ids, rope_deltas = self.get_rope_index(
                 input_ids,
                 attention_mask=attention_mask,
-                target_sizes_mrope=target_sizes_mrope,
+                target_sizes=target_sizes,
+                target_sizes_videos=target_sizes_videos,
                 mm_token_type_ids=mm_token_type_ids,
                 downsample_mode=downsample_mode,
             )
@@ -1076,7 +1063,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             position_ids = position_ids + delta.to(device=inputs_embeds.device)
         else:
             # Can't build correct 3D positions. Let the model infer it as 1D
-            if target_sizes_mrope is not None:
+            if target_sizes_videos is not None or target_sizes is not None:
                 logger.warning_once(
                     "Canvas M-RoPE needs `input_ids` to locate the visual spans, but only `inputs_embeds` was "
                     "given and no cached `rope_deltas` are available. Falling back to 1-D positions, which "
@@ -1114,7 +1101,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -1129,11 +1115,9 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
-        target_sizes_mrope (`torch.IntTensor` of shape `(batch_size, num_visuals, 2)`, *optional*):
-            Spatial grid sizes per visual crop for canvas M-RoPE.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids (`0` text, `1` image, `2` video) from the processor. Required
-            together with `target_sizes_mrope` for canvas M-RoPE.
+            together with `target_sizes` for canvas M-RoPE.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1147,7 +1131,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             downsample_mode=downsample_mode,
-            target_sizes_mrope=target_sizes_mrope,
             mm_token_type_ids=mm_token_type_ids,
             **kwargs,
         )
@@ -1215,7 +1198,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         ts_keys = ("target_sizes", "target_sizes_videos")
-        mrope_keys = ("target_sizes_mrope", "mm_token_type_ids")
+        mrope_keys = "mm_token_type_ids"
         saved = {k: model_kwargs.pop(k) for k in (*ts_keys, *mrope_keys) if model_kwargs.get(k) is not None}
 
         expanded_position_ids = None
@@ -1254,7 +1237,8 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             mrope_positions, self.model.rope_deltas = self.model.get_rope_index(
                 input_ids,
                 attention_mask=model_kwargs.get("attention_mask"),
-                target_sizes_mrope=model_kwargs.get("target_sizes_mrope"),
+                target_sizes=model_kwargs.get("target_sizes"),
+                target_sizes_videos=model_kwargs.get("target_sizes_videos"),
                 mm_token_type_ids=model_kwargs.get("mm_token_type_ids"),
                 downsample_mode=model_kwargs.get("downsample_mode"),
             )

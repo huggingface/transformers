@@ -17,20 +17,19 @@ import itertools
 import math
 from typing import Any
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, make_flat_list_of_images
+from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, MiniCPMV4_6ImageProcessorKwargs
@@ -42,7 +41,7 @@ from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ViTWindowAttentionMerger,
 )
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
-from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, MiniCPMV4_6VideoProcessorKwargs
+from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -92,7 +91,7 @@ def _group_visual_frames(
         if groups and input_ids[crop[0] - 1].item() == slice_start_id:
             groups[-1][-1]["slices"].append(crop)
         else:
-            frame = {"thumbnail": crop, "slices": []}
+            frame = {"thumbnail": crop, "slices": [], "modality": modality}
             adjacent = groups and all(
                 input_ids[position].item() in gap_ids for position in range(previous_end, crop[0] - 1)
             )
@@ -102,152 +101,6 @@ def _group_visual_frames(
                 groups.append([frame])
         previous_end = crop[1]
     return groups
-
-
-def _compute_canvas(
-    input_ids: torch.LongTensor,
-    mm_token_type_ids: torch.IntTensor,
-    target_sizes: torch.IntTensor,
-    special_token_ids: dict,
-    merge_factor: int,
-) -> torch.LongTensor:
-    """Lay one unpadded sequence out on the canvas and return its ``(3, seq_len)`` positions.
-
-    Text runs keep plain 1-D positions on all three channels. Every frame freezes the temporal
-    channel and spends the height/width channels on its own canvas, which is the slice grid when
-    the crop was sliced and the thumbnail grid otherwise. The next frame starts one step past the
-    widest side of the previous canvas, so images, slices and video frames never overlap.
-    """
-    device = input_ids.device
-    seq_len = input_ids.shape[0]
-    position_ids = torch.arange(seq_len, device=device, dtype=torch.long).expand(3, -1).clone()
-    structural_ids = {
-        special_token_ids["im_start_id"],
-        special_token_ids["im_end_id"],
-        special_token_ids["slice_start_id"],
-        special_token_ids["slice_end_id"],
-    }
-
-    pos = 0
-    cursor = 0
-    for frames in _group_visual_frames(input_ids, mm_token_type_ids, special_token_ids):
-        group_start = frames[0]["thumbnail"][0] - 1
-        group_end = _crop_end(frames[-1], input_ids, structural_ids, seq_len)
-
-        # Text in front of the group is plain 1-D.
-        if group_start > cursor:
-            text_len = group_start - cursor
-            position_ids[:, cursor:group_start] = torch.arange(text_len, device=device) + pos
-            pos += text_len
-
-        frame_cursor = group_start
-        for frame in frames:
-            thumb_start, thumb_end, thumb_index = frame["thumbnail"]
-            slices = frame["slices"]
-            frame_start = thumb_start - 1
-
-            # Tokens between two frames of a clip are 1-D text; the extra step afterwards keeps the
-            # next frame's halo from landing on the last of them.
-            if frame_start > frame_cursor:
-                gap_len = frame_start - frame_cursor
-                position_ids[:, frame_cursor:frame_start] = torch.arange(gap_len, device=device) + pos
-                pos += gap_len + 1
-
-            frame_end = min(_crop_end(frame, input_ids, structural_ids, group_end), group_end)
-            canvas_origin = pos
-            halo_before_canvas = max(canvas_origin - 1, 0)
-
-            llm_thumb_h = target_sizes[thumb_index, 0].item() // merge_factor
-            llm_thumb_w = target_sizes[thumb_index, 1].item() // merge_factor
-
-            if slices:
-                # Slices are laid out row-major; a gap wider than the two `</slice><slice>` markers
-                # is the newline that ends a row and therefore fixes the column count.
-                num_cols = len(slices)
-                for k in range(len(slices) - 1):
-                    if slices[k + 1][0] - slices[k][1] > 2:
-                        num_cols = k + 1
-                        break
-                num_rows = len(slices) // num_cols if num_cols > 0 else 1
-                if num_rows * num_cols != len(slices):
-                    num_rows, num_cols = 1, len(slices)
-                llm_slice_h = target_sizes[slices[0][2], 0].item() // merge_factor
-                llm_slice_w = target_sizes[slices[0][2], 1].item() // merge_factor
-                canvas_height = num_rows * llm_slice_h
-                canvas_width = num_cols * llm_slice_w
-            else:
-                llm_slice_h, llm_slice_w = 0, 0
-                num_rows, num_cols = 0, 0
-                canvas_height = llm_thumb_h
-                canvas_width = llm_thumb_w
-
-            # Base coat for the whole frame, then `<image>` -> halo just outside the canvas.
-            position_ids[:, frame_start:frame_end] = canvas_origin
-            position_ids[1:, frame_start] = halo_before_canvas
-
-            # `</image>` closes the thumbnail on the far corner of the canvas.
-            image_end_pos = thumb_end
-            if image_end_pos < frame_end:
-                position_ids[1, image_end_pos] = canvas_origin + canvas_height
-                position_ids[2, image_end_pos] = canvas_origin + canvas_width
-
-            # Thumbnail tokens. With slices around, the thumbnail is stretched over the full canvas
-            # so that it stays aligned with the detail crops underneath it. Without slices the canvas
-            # is the thumbnail grid itself and `linspace` degenerates to `arange`.
-            h_coords = torch.linspace(0, canvas_height - 1, llm_thumb_h, device=device).round().long()
-            w_coords = torch.linspace(0, canvas_width - 1, llm_thumb_w, device=device).round().long()
-            h_idx = h_coords.view(-1, 1).expand(-1, llm_thumb_w).reshape(-1)
-            w_idx = w_coords.view(1, -1).expand(llm_thumb_h, -1).reshape(-1)
-            position_ids[0, thumb_start:thumb_end] = canvas_origin
-            position_ids[1, thumb_start:thumb_end] = h_idx + canvas_origin
-            position_ids[2, thumb_start:thumb_end] = w_idx + canvas_origin
-
-            # Slice tokens plus the `<slice>`/`</slice>` markers that pin each crop's corners.
-            for k, (slice_start, slice_end, slice_index) in enumerate(slices):
-                slice_h = target_sizes[slice_index, 0].item() // merge_factor
-                slice_w = target_sizes[slice_index, 1].item() // merge_factor
-                h_off = (k // num_cols) * llm_slice_h
-                w_off = (k % num_cols) * llm_slice_w
-
-                slice_start_pos = slice_start - 1
-                if slice_start_pos >= frame_start:
-                    position_ids[1, slice_start_pos] = canvas_origin + h_off
-                    position_ids[2, slice_start_pos] = canvas_origin + w_off
-
-                slice_end_pos = slice_end
-                if slice_end_pos < frame_end:
-                    position_ids[1, slice_end_pos] = canvas_origin + h_off + slice_h - 1
-                    position_ids[2, slice_end_pos] = canvas_origin + w_off + slice_w - 1
-
-                h_idx = torch.arange(slice_h, device=device).view(-1, 1).expand(-1, slice_w).reshape(-1)
-                w_idx = torch.arange(slice_w, device=device).view(1, -1).expand(slice_h, -1).reshape(-1)
-                position_ids[0, slice_start:slice_end] = canvas_origin
-                position_ids[1, slice_start:slice_end] = h_idx + h_off + canvas_origin
-                position_ids[2, slice_start:slice_end] = w_idx + w_off + canvas_origin
-
-            # The "\n" that ends a row of slices sits just past the right edge of that row.
-            for k in range(len(slices) - 1):
-                gap_start, gap_end = slices[k][1], slices[k + 1][0]
-                if gap_end - gap_start <= 2:
-                    continue
-                boundary_h = (k // num_cols + 1) * llm_slice_h - 1
-                right_edge_w = num_cols * llm_slice_w
-                for newline_pos in range(gap_start + 1, gap_end - 1):
-                    position_ids[1, newline_pos] = canvas_origin + boundary_h
-                    position_ids[2, newline_pos] = canvas_origin + right_edge_w
-
-            pos = canvas_origin + max(canvas_height, canvas_width) + 1
-            frame_cursor = frame_end
-
-        if frame_cursor < group_end:
-            trail_len = group_end - frame_cursor
-            position_ids[:, frame_cursor:group_end] = torch.arange(trail_len, device=device) + pos
-            pos += trail_len
-        cursor = group_end
-
-    if cursor < seq_len:
-        position_ids[:, cursor:seq_len] = torch.arange(seq_len - cursor, device=device) + pos
-    return position_ids
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
@@ -357,15 +210,6 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     slice_end_id: int | None = None
     newline_id: int | None = None
 
-    def get_mrope_special_token_ids(self) -> dict:
-        return {
-            "im_start_id": self.image_start_id,
-            "im_end_id": self.image_end_id,
-            "slice_start_id": self.slice_start_id,
-            "slice_end_id": self.slice_end_id,
-            "newline_id": self.newline_id,
-        }
-
 
 @auto_docstring
 class MiniCPMV4_7PreTrainedModel(MiniCPMV4_6PreTrainedModel):
@@ -381,7 +225,8 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
-        target_sizes_mrope: torch.IntTensor | None = None,
+        target_sizes: torch.LongTensor | None = None,
+        target_sizes_videos: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
         **kwargs,
@@ -391,30 +236,160 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         ``mm_token_type_ids`` marks the crops, so the canvas is laid out per sequence on the
         tokens ``attention_mask`` keeps. Padding stays at zero and never shifts the canvas.
         """
-        del kwargs
-        special_token_ids = self.config.get_mrope_special_token_ids()
         # `16x` merges 4x4 patches into one LLM token (window merger 2x2, then merger 2x2), `4x`
         # skips the window merger and merges 2x2. Same divisor the processor counts placeholders
         # with, so it has to follow the per-call override the vision tower is given, not the config.
         downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
         merge_factor = 2 if downsample_mode == "4x" else 4
+        special_token_ids = {
+            "im_start_id": self.config.image_start_id,
+            "im_end_id": self.config.image_end_id,
+            "slice_start_id": self.config.slice_start_id,
+            "slice_end_id": self.config.slice_end_id,
+            "newline_id": self.config.newline_id,
+        }
+        structural_ids = set(special_token_ids.values())
 
-        batch_size, seq_len = input_ids.shape
-        position_ids = torch.zeros(3, batch_size, seq_len, dtype=torch.long, device=input_ids.device)
+        device = input_ids.device
+        position_ids = torch.zeros(3, *input_ids.size(), dtype=torch.long, device=input_ids.device)
 
-        for batch_idx in range(batch_size):
+        grid_iters = {
+            1: iter(target_sizes) if target_sizes is not None else None,
+            2: iter(target_sizes_videos) if target_sizes_videos is not None else None,
+        }
+
+        for batch_idx in range(input_ids.shape[0]):
+            current_input_ids = input_ids[batch_idx]
+            current_mm_token_type_ids = mm_token_type_ids[batch_idx]
             if attention_mask is not None:
                 valid_mask = attention_mask[batch_idx].bool()
-            else:
-                valid_mask = torch.ones(seq_len, dtype=torch.bool, device=input_ids.device)
+                current_input_ids = current_input_ids[valid_mask]
+                current_mm_token_type_ids = current_mm_token_type_ids[valid_mask]
 
-            position_ids[:, batch_idx, valid_mask] = _compute_canvas(
-                input_ids[batch_idx][valid_mask],
-                mm_token_type_ids[batch_idx][valid_mask],
-                target_sizes_mrope[batch_idx],
-                special_token_ids,
-                merge_factor,
-            )
+            seq_len = current_input_ids.shape[0]
+            curr_position_ids = torch.arange(seq_len, device=device, dtype=torch.long).expand(3, -1).clone()
+
+            pos = 0
+            cursor = 0
+            for frames in _group_visual_frames(current_input_ids, current_mm_token_type_ids, special_token_ids):
+                group_start = frames[0]["thumbnail"][0] - 1
+                group_end = _crop_end(frames[-1], current_input_ids, structural_ids, seq_len)
+
+                # Text in front of the group is plain 1-D.
+                if group_start > cursor:
+                    text_len = group_start - cursor
+                    curr_position_ids[:, cursor:group_start] = torch.arange(text_len, device=device) + pos
+                    pos += text_len
+
+                frame_cursor = group_start
+                for frame in frames:
+                    thumb_start, thumb_end, thumb_index = frame["thumbnail"]
+                    slices = frame["slices"]
+                    frame_start = thumb_start - 1
+
+                    # Tokens between two frames of a clip are 1-D text; the extra step afterwards keeps the
+                    # next frame's halo from landing on the last of them.
+                    if frame_start > frame_cursor:
+                        gap_len = frame_start - frame_cursor
+                        curr_position_ids[:, frame_cursor:frame_start] = torch.arange(gap_len, device=device) + pos
+                        pos += gap_len + 1
+
+                    frame_end = min(_crop_end(frame, current_input_ids, structural_ids, group_end), group_end)
+                    canvas_origin = pos
+                    halo_before_canvas = max(canvas_origin - 1, 0)
+
+                    target_sizes = next(grid_iters[frame["modality"]])
+                    llm_thumb_h = target_sizes[thumb_index, 0].item() // merge_factor
+                    llm_thumb_w = target_sizes[thumb_index, 1].item() // merge_factor
+
+                    if slices:
+                        # Slices are laid out row-major; a gap wider than the two `</slice><slice>` markers
+                        # is the newline that ends a row and therefore fixes the column count.
+                        num_cols = len(slices)
+                        for k in range(len(slices) - 1):
+                            if slices[k + 1][0] - slices[k][1] > 2:
+                                num_cols = k + 1
+                                break
+                        num_rows = len(slices) // num_cols if num_cols > 0 else 1
+                        if num_rows * num_cols != len(slices):
+                            num_rows, num_cols = 1, len(slices)
+                        llm_slice_h = target_sizes[slices[0][2], 0].item() // merge_factor
+                        llm_slice_w = target_sizes[slices[0][2], 1].item() // merge_factor
+                        canvas_height = num_rows * llm_slice_h
+                        canvas_width = num_cols * llm_slice_w
+                    else:
+                        llm_slice_h, llm_slice_w = 0, 0
+                        num_rows, num_cols = 0, 0
+                        canvas_height = llm_thumb_h
+                        canvas_width = llm_thumb_w
+
+                    # Base coat for the whole frame, then `<image>` -> halo just outside the canvas.
+                    curr_position_ids[:, frame_start:frame_end] = canvas_origin
+                    curr_position_ids[1:, frame_start] = halo_before_canvas
+
+                    # `</image>` closes the thumbnail on the far corner of the canvas.
+                    image_end_pos = thumb_end
+                    if image_end_pos < frame_end:
+                        curr_position_ids[1, image_end_pos] = canvas_origin + canvas_height
+                        curr_position_ids[2, image_end_pos] = canvas_origin + canvas_width
+
+                    # Thumbnail tokens. With slices around, the thumbnail is stretched over the full canvas
+                    # so that it stays aligned with the detail crops underneath it. Without slices the canvas
+                    # is the thumbnail grid itself and `linspace` degenerates to `arange`.
+                    h_coords = torch.linspace(0, canvas_height - 1, llm_thumb_h, device=device).round().long()
+                    w_coords = torch.linspace(0, canvas_width - 1, llm_thumb_w, device=device).round().long()
+                    h_idx = h_coords.view(-1, 1).expand(-1, llm_thumb_w).reshape(-1)
+                    w_idx = w_coords.view(1, -1).expand(llm_thumb_h, -1).reshape(-1)
+                    curr_position_ids[0, thumb_start:thumb_end] = canvas_origin
+                    curr_position_ids[1, thumb_start:thumb_end] = h_idx + canvas_origin
+                    curr_position_ids[2, thumb_start:thumb_end] = w_idx + canvas_origin
+
+                    # Slice tokens plus the `<slice>`/`</slice>` markers that pin each crop's corners.
+                    for k, (slice_start, slice_end, slice_index) in enumerate(slices):
+                        slice_h = target_sizes[slice_index, 0].item() // merge_factor
+                        slice_w = target_sizes[slice_index, 1].item() // merge_factor
+                        h_off = (k // num_cols) * llm_slice_h
+                        w_off = (k % num_cols) * llm_slice_w
+
+                        slice_start_pos = slice_start - 1
+                        if slice_start_pos >= frame_start:
+                            curr_position_ids[1, slice_start_pos] = canvas_origin + h_off
+                            curr_position_ids[2, slice_start_pos] = canvas_origin + w_off
+
+                        slice_end_pos = slice_end
+                        if slice_end_pos < frame_end:
+                            curr_position_ids[1, slice_end_pos] = canvas_origin + h_off + slice_h - 1
+                            curr_position_ids[2, slice_end_pos] = canvas_origin + w_off + slice_w - 1
+
+                        h_idx = torch.arange(slice_h, device=device).view(-1, 1).expand(-1, slice_w).reshape(-1)
+                        w_idx = torch.arange(slice_w, device=device).view(1, -1).expand(slice_h, -1).reshape(-1)
+                        curr_position_ids[0, slice_start:slice_end] = canvas_origin
+                        curr_position_ids[1, slice_start:slice_end] = h_idx + h_off + canvas_origin
+                        curr_position_ids[2, slice_start:slice_end] = w_idx + w_off + canvas_origin
+
+                    # The "\n" that ends a row of slices sits just past the right edge of that row.
+                    for k in range(len(slices) - 1):
+                        gap_start, gap_end = slices[k][1], slices[k + 1][0]
+                        if gap_end - gap_start <= 2:
+                            continue
+                        boundary_h = (k // num_cols + 1) * llm_slice_h - 1
+                        right_edge_w = num_cols * llm_slice_w
+                        for newline_pos in range(gap_start + 1, gap_end - 1):
+                            curr_position_ids[1, newline_pos] = canvas_origin + boundary_h
+                            curr_position_ids[2, newline_pos] = canvas_origin + right_edge_w
+
+                    pos = canvas_origin + max(canvas_height, canvas_width) + 1
+                    frame_cursor = frame_end
+
+                if frame_cursor < group_end:
+                    trail_len = group_end - frame_cursor
+                    curr_position_ids[:, frame_cursor:group_end] = torch.arange(trail_len, device=device) + pos
+                    pos += trail_len
+                cursor = group_end
+
+            if cursor < seq_len:
+                curr_position_ids[:, cursor:seq_len] = torch.arange(seq_len - cursor, device=device) + pos
+            position_ids[:, batch_idx, valid_mask] = curr_position_ids
 
         if attention_mask is not None:
             seq_lens = attention_mask.sum(-1)
@@ -429,7 +404,8 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         inputs_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values=None,
-        target_sizes_mrope: torch.IntTensor | None = None,
+        target_sizes: torch.LongTensor | None = None,
+        target_sizes_videos: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
     ) -> torch.Tensor | None:
@@ -442,13 +418,14 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
 
         if (
             input_ids is not None
-            and target_sizes_mrope is not None
+            and (target_sizes_videos is not None or target_sizes is not None)
             and (self.rope_deltas is None or past_key_values_length == 0)
         ):
             mrope_position_ids, rope_deltas = self.get_rope_index(
                 input_ids,
                 attention_mask=attention_mask,
-                target_sizes_mrope=target_sizes_mrope,
+                target_sizes=target_sizes,
+                target_sizes_videos=target_sizes_videos,
                 mm_token_type_ids=mm_token_type_ids,
                 downsample_mode=downsample_mode,
             )
@@ -467,7 +444,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
             position_ids = position_ids + delta.to(device=inputs_embeds.device)
         else:
             # Can't build correct 3D positions. Let the model infer it as 1D
-            if target_sizes_mrope is not None:
+            if target_sizes_videos is not None or target_sizes is not None:
                 logger.warning_once(
                     "Canvas M-RoPE needs `input_ids` to locate the visual spans, but only `inputs_embeds` was "
                     "given and no cached `rope_deltas` are available. Falling back to 1-D positions, which "
@@ -489,7 +466,6 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -544,7 +520,8 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                target_sizes_mrope=target_sizes_mrope,
+                target_sizes=target_sizes,
+                target_sizes_videos=target_sizes_videos,
                 mm_token_type_ids=mm_token_type_ids,
                 downsample_mode=downsample_mode,
             )
@@ -586,7 +563,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        target_sizes_mrope: torch.IntTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -601,11 +577,9 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
-        target_sizes_mrope (`torch.IntTensor` of shape `(batch_size, num_visuals, 2)`, *optional*):
-            Spatial grid sizes per visual crop for canvas M-RoPE.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids (`0` text, `1` image, `2` video) from the processor. Required
-            together with `target_sizes_mrope` for canvas M-RoPE.
+            together with `target_sizes` for canvas M-RoPE.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -619,7 +593,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             downsample_mode=downsample_mode,
-            target_sizes_mrope=target_sizes_mrope,
             mm_token_type_ids=mm_token_type_ids,
             **kwargs,
         )
@@ -659,7 +632,8 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             mrope_positions, self.model.rope_deltas = self.model.get_rope_index(
                 input_ids,
                 attention_mask=model_kwargs.get("attention_mask"),
-                target_sizes_mrope=model_kwargs.get("target_sizes_mrope"),
+                target_sizes=model_kwargs.get("target_sizes"),
+                target_sizes_videos=model_kwargs.get("target_sizes_videos"),
                 mm_token_type_ids=model_kwargs.get("mm_token_type_ids"),
                 downsample_mode=model_kwargs.get("downsample_mode"),
             )
@@ -675,7 +649,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         ts_keys = ("target_sizes", "target_sizes_videos")
-        mrope_keys = ("target_sizes_mrope", "mm_token_type_ids")
+        mrope_keys = "mm_token_type_ids"
         saved = {k: model_kwargs.pop(k) for k in (*ts_keys, *mrope_keys) if model_kwargs.get(k) is not None}
 
         expanded_position_ids = None
@@ -779,14 +753,10 @@ class MiniCPMV4_7ImageProcessorPil(MiniCPMV4_6ImageProcessorPil):
         return best_grid
 
 
-class MiniCPMV4_7VideoProcessorKwargs(MiniCPMV4_6VideoProcessorKwargs):
-    pass
-
-
 @auto_docstring
 class MiniCPMV4_7VideoProcessor(MiniCPMV4_6VideoProcessor):
     # Video frames form a single temporal sequence, so they are not numbered with local image ids.
-    use_image_id = False
+    use_image_id = AttributeError()
 
     def get_sliced_grid(
         self,
@@ -818,6 +788,7 @@ class MiniCPMV4_7VideoProcessor(MiniCPMV4_6VideoProcessor):
         return best_grid
 
 
+# Different from MiniCPM4-6, we need `mm_token_type_ids` returned by default
 class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
     _defaults = {
         "common_kwargs": {
@@ -836,197 +807,31 @@ class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
 class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
     valid_processor_kwargs = MiniCPMV4_7ProcessorKwargs
 
-    @property
-    def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids", "target_sizes_mrope"]
-
-    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[MiniCPMV4_7ProcessorKwargs],
     ):
-        # MiniCPM needs to override `__call__` due to `_prepend_local_ids`, i.e. we add local image id inside text
-        # Current `replace_image_tokens` API assumes that each image-placeholder doesn't depend on the other!
-        images, text, videos, _ = self.prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
-        self.validate_inputs(images=images, text=text, videos=videos, **kwargs)
-
-        merged_kwargs = self._merge_kwargs(
+        kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
-        use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", None)
-        use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
         # `use_image_id` is an image-only setting, so it must not leak into the video branch.
-        merged_kwargs["videos_kwargs"].pop("use_image_id", None)
+        kwargs["videos_kwargs"].pop("use_image_id", None)
+        return super().__call__(images=images, text=text, videos=videos**kwargs)
 
-        processed_images = processed_videos = {}
-        images_replacements = videos_replacements = []
-        # Per-visual patch grids (not recoverable from config alone), one flat entry per visual
-        # input, in the same order as the per-modality replacement strings.
-        images_mrope_grids: list[list[list[int]]] = []
-        videos_mrope_grids: list[list[list[int]]] = []
-        if images is not None:
-            processed_images, images_replacements = self._process_images(
-                images,
-                **merged_kwargs["images_kwargs"],
-            )
-            images_mrope_grids = self._image_mrope_grids(processed_images, images)
-        if videos is not None:
-            processed_videos, videos_replacements = self._process_videos(
-                videos,
-                **merged_kwargs["videos_kwargs"],
-            )
-            videos_mrope_grids = self._video_mrope_grids(processed_videos, videos)
+    def _prepend_local_ids(self, text, replacements, token):
+        """Prepend local (per-sample) image/video ID tokens to each replacement string."""
+        if token == self.video_token:
+            return replacements
+        return super()._prepend_local_ids(text, replacements, token)
 
-        text_inputs = {}
-        text_replacement_offsets = []
-        return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
-        if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", True)
-            return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
-            )
-
-            if images_replacements and use_image_id:
-                images_replacements = self._prepend_local_ids(text, images_replacements, self.image_token)
-
-            text, text_replacement_offsets = self.get_text_with_replacements(
-                text,
-                images_replacements,
-                videos_replacements,
-            )
-            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
-            self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
-
-            if return_text_replacement_offsets:
-                text_inputs["text_replacement_offsets"] = text_replacement_offsets
-
-            if return_mm_token_type_ids:
-                text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-
-        # `target_sizes_mrope` must follow the order of the visual spans inside `input_ids`, which is
-        # the order the placeholders appear in `text` — not the order the modalities are processed in.
-        # A sample may interleave modalities (e.g. "<video>...</video><image>...</image>"), so the
-        # per-modality grids collected above are re-sequenced through the text replacement offsets.
-        mrope_inputs = {}
-        if offsets_per_sample := text_replacement_offsets:
-            mrope_tgt_sizes_per_sample = self._assemble_mrope_target_sizes(
-                offsets_per_sample, images_mrope_grids, videos_mrope_grids
-            )
-            # Samples in a batch need not carry the same number of visuals — a text-only sample
-            # carries none — so the per-sample grids are right-padded into one tensor. Canvas
-            # M-RoPE walks the rows in visual-span order, so the padding rows are never read.
-            max_visuals = max((len(grids) for grids in mrope_tgt_sizes_per_sample), default=0)
-            target_sizes_mrope = torch.zeros(len(mrope_tgt_sizes_per_sample), max_visuals, 2, dtype=torch.int32)
-            for idx, sample_grids in enumerate(mrope_tgt_sizes_per_sample):
-                if sample_grids:
-                    target_sizes_mrope[idx, : len(sample_grids)] = torch.tensor(sample_grids, dtype=torch.int32)
-            # Do not return special_token_ids (available on model config) or image_bounds
-            # (model recomputes bounds on compact/unpadded ids for left-padding safety).
-            mrope_inputs = {"target_sizes_mrope": target_sizes_mrope}
-
-        data = {**text_inputs, **processed_images, **processed_videos, **mrope_inputs}
-        data = {k: v for k, v in data.items() if k not in self.unused_input_names}
-
-        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
-
-    def _image_mrope_grids(self, image_inputs: dict, images: ImageInput) -> list[list[list[int]]]:
-        """Return one flat list of patch grids per image, aligned with the image replacement strings."""
-        images = make_flat_list_of_images(images)
-        return [self._image_target_sizes(image_inputs, idx).tolist() for idx in range(len(images))]
-
-    @staticmethod
-    def _image_target_sizes(image_inputs: dict, image_idx: int):
-        """Return the patch target sizes belonging to one image of the flattened batch."""
-        cum_patches = np.cumsum(image_inputs["num_patches_per_image"])
-        start_idx = cum_patches[image_idx - 1] if image_idx > 0 else 0
-        end_idx = cum_patches[image_idx]
-        return image_inputs["target_sizes"][start_idx:end_idx]
-
-    def _video_mrope_grids(self, video_inputs: dict, videos: VideoInput) -> list[list[list[int]]]:
-        """Return one flat list of patch grids per video, aligned with the video replacement strings.
-
-        Frames are concatenated in order, and a frame may itself span several patches.
-        """
-        videos = make_batched_videos(videos)
-        mrope_grids = []
-        for idx in range(len(videos)):
-            video_grids = []
-            for frame_ts, _, _ in self._iter_video_frames(video_inputs, idx):
-                video_grids.extend(frame_ts.tolist())
-            mrope_grids.append(video_grids)
-        return mrope_grids
-
-    @staticmethod
-    def _assemble_mrope_target_sizes(
-        offsets_per_sample: list[list[dict]],
-        images_mrope_grids: list[list[list[int]]],
-        videos_mrope_grids: list[list[list[int]]],
-    ) -> list[list[list[int]]]:
-        """Flatten per-visual patch grids into per-sample lists, following the text order of the visuals.
-
-        `get_text_with_replacements` walks each sample left to right and yields one offset entry per
-        placeholder occurrence, tagged with its modality. Consuming the per-modality grid lists in that
-        same order is what makes `target_sizes_mrope[b]` line up with the visual spans inside
-        `input_ids[b]` even when a sample interleaves image and video placeholders.
-
-        Grids are counted per visual input, not per frame: one video placeholder expands to all the
-        frames of that video. For a batch of a single modality this reproduces the plain per-modality
-        concatenation in use before, so single-modality behaviour is unchanged.
-        """
-        available = {
-            "image": len(images_mrope_grids),
-            "video": len(videos_mrope_grids),
-        }
-        num_placeholders = dict.fromkeys(available, 0)
-        for sample_offsets in offsets_per_sample:
-            for offset in sample_offsets:
-                num_placeholders[offset["type"]] += 1
-
-        for modality, expected in available.items():
-            if num_placeholders[modality] != expected:
-                raise ValueError(
-                    f"Number of `{modality}` placeholders does not match the number of `{modality}` inputs: "
-                    f"found {num_placeholders[modality]} placeholder(s) in `text` but received {expected} input(s). "
-                    "Every placeholder must have a matching input."
-                )
-
-        image_iter = iter(images_mrope_grids)
-        video_iter = iter(videos_mrope_grids)
-        grids_per_sample = []
-        for sample_offsets in offsets_per_sample:
-            sample_grids = []
-            for offset in sample_offsets:
-                # One video input expands to one grid per frame, so all of its grids are appended here
-                # in frame order; they then line up with that video's tokens from left to right.
-                for grid in next(image_iter if offset["type"] == "image" else video_iter):
-                    sample_grids.append(grid)
-            grids_per_sample.append(sample_grids)
-        return grids_per_sample
-
-    def _iter_video_frames(self, video_inputs: dict, video_idx: int):
-        """Yield `(frame_target_sizes, grid_rows, grid_cols)` per frame of one video, in text order."""
-        video_target_sizes = video_inputs["target_sizes_videos"]
-        num_frames_per_video = video_inputs["num_frames_per_video"]
-        video_grids = video_inputs["grids_videos"]
-        num_patches_per_frame = video_grids.prod(-1) + 1
-
-        num_frames = num_frames_per_video[video_idx]
-        cum_patches_per_frame = np.cumsum(num_patches_per_frame)
-        num_past_frames = np.cumsum(num_frames_per_video)[video_idx] - num_frames
-
-        for frame_idx in range(num_frames):
-            frame_start_idx = num_past_frames + frame_idx
-
-            start_idx = cum_patches_per_frame[frame_start_idx - 1] if frame_start_idx > 0 else 0
-            end_idx = cum_patches_per_frame[frame_start_idx]
-
-            grid_rows, grid_cols = video_grids[frame_start_idx]
-            yield video_target_sizes[start_idx:end_idx], grid_rows, grid_cols
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids"]
 
 
 __all__ = [

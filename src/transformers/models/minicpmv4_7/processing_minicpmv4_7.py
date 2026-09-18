@@ -20,47 +20,13 @@
 
 
 import numpy as np
-import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput, make_batched_videos
-
-
-class MiniCPMV4_7VideoProcessorKwargs(VideosKwargs, total=False):
-    r"""
-    max_num_frames (`int`, *optional*, defaults to 128):
-        Maximum number of main frames to sample per video.
-    stack_frames (`int`, *optional*, defaults to 1):
-        Sub-frames per second to stack.  ``1`` disables stacking.
-    max_slice_nums (`int`, *optional*, defaults to 9):
-        Maximum number of slices when splitting a high-resolution image.
-    scale_resolution (`int`, *optional*, defaults to 448):
-        Target resolution for individual slices.
-    patch_size (`int`, *optional*, defaults to 14):
-        Spatial patch size of the vision encoder.
-    slice_mode (`bool`, *optional*, defaults to `True`):
-        Whether to split images into multiple slices for higher resolution.
-    downsample_mode (`str`, *optional*, defaults to `"16x"`):
-        Visual token downsampling mode. `"16x"` applies full merge; `"4x"` keeps
-        4x more tokens.
-    use_image_id (`bool`, *optional*, defaults to `True`):
-        Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
-        each image placeholder. Consumed by the Processor for placeholder
-        generation, not by the image processing pipeline itself.
-    """
-
-    max_num_frames: int
-    stack_frames: int
-    max_slice_nums: int
-    scale_resolution: int
-    patch_size: int
-    slice_mode: bool
-    downsample_mode: str
-    use_image_id: bool
 
 
 class MiniCPMV4_7ProcessorKwargs(ProcessingKwargs, total=False):
@@ -107,8 +73,15 @@ class MiniCPMV4_7Processor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[MiniCPMV4_7ProcessorKwargs],
     ):
+        kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+            **kwargs,
+        )
+        # `use_image_id` is an image-only setting, so it must not leak into the video branch.
+        kwargs["videos_kwargs"].pop("use_image_id", None)
         # MiniCPM needs to override `__call__` due to `_prepend_local_ids`, i.e. we add local image id inside text
         # Current `replace_image_tokens` API assumes that each image-placeholder doesn't depend on the other!
         images, text, videos, _ = self.prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
@@ -121,39 +94,27 @@ class MiniCPMV4_7Processor(ProcessorMixin):
         )
         use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", None)
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
-        # `use_image_id` is an image-only setting, so it must not leak into the video branch.
-        merged_kwargs["videos_kwargs"].pop("use_image_id", None)
 
         processed_images = processed_videos = {}
         images_replacements = videos_replacements = []
-        # Per-visual patch grids (not recoverable from config alone), one flat entry per visual
-        # input, in the same order as the per-modality replacement strings.
-        images_mrope_grids: list[list[list[int]]] = []
-        videos_mrope_grids: list[list[list[int]]] = []
         if images is not None:
-            processed_images, images_replacements = self._process_images(
-                images,
-                **merged_kwargs["images_kwargs"],
-            )
-            images_mrope_grids = self._image_mrope_grids(processed_images, images)
+            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
         if videos is not None:
-            processed_videos, videos_replacements = self._process_videos(
-                videos,
-                **merged_kwargs["videos_kwargs"],
-            )
-            videos_mrope_grids = self._video_mrope_grids(processed_videos, videos)
+            processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
 
         text_inputs = {}
-        text_replacement_offsets = []
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", True)
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
                 "return_text_replacement_offsets", False
             )
 
             if images_replacements and use_image_id:
                 images_replacements = self._prepend_local_ids(text, images_replacements, self.image_token)
+
+            if videos_replacements and use_image_id:
+                videos_replacements = self._prepend_local_ids(text, videos_replacements, self.video_token)
 
             text, text_replacement_offsets = self.get_text_with_replacements(
                 text,
@@ -169,28 +130,8 @@ class MiniCPMV4_7Processor(ProcessorMixin):
             if return_mm_token_type_ids:
                 text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
-        # `target_sizes_mrope` must follow the order of the visual spans inside `input_ids`, which is
-        # the order the placeholders appear in `text` — not the order the modalities are processed in.
-        # A sample may interleave modalities (e.g. "<video>...</video><image>...</image>"), so the
-        # per-modality grids collected above are re-sequenced through the text replacement offsets.
-        mrope_inputs = {}
-        if offsets_per_sample := text_replacement_offsets:
-            mrope_tgt_sizes_per_sample = self._assemble_mrope_target_sizes(
-                offsets_per_sample, images_mrope_grids, videos_mrope_grids
-            )
-            # Samples in a batch need not carry the same number of visuals — a text-only sample
-            # carries none — so the per-sample grids are right-padded into one tensor. Canvas
-            # M-RoPE walks the rows in visual-span order, so the padding rows are never read.
-            max_visuals = max((len(grids) for grids in mrope_tgt_sizes_per_sample), default=0)
-            target_sizes_mrope = torch.zeros(len(mrope_tgt_sizes_per_sample), max_visuals, 2, dtype=torch.int32)
-            for idx, sample_grids in enumerate(mrope_tgt_sizes_per_sample):
-                if sample_grids:
-                    target_sizes_mrope[idx, : len(sample_grids)] = torch.tensor(sample_grids, dtype=torch.int32)
-            # Do not return special_token_ids (available on model config) or image_bounds
-            # (model recomputes bounds on compact/unpadded ids for left-padding safety).
-            mrope_inputs = {"target_sizes_mrope": target_sizes_mrope}
-
-        data = {**text_inputs, **processed_images, **processed_videos, **mrope_inputs}
+        # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
+        data = {**text_inputs, **processed_images, **processed_videos}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
 
         return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
@@ -289,6 +230,8 @@ class MiniCPMV4_7Processor(ProcessorMixin):
 
     def _prepend_local_ids(self, text, replacements, token):
         """Prepend local (per-sample) image/video ID tokens to each replacement string."""
+        if token == self.video_token:
+            return replacements
         new_replacements = []
         global_idx = 0
         for sample in text:
@@ -309,101 +252,7 @@ class MiniCPMV4_7Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids", "target_sizes_mrope"]
-
-    def _image_mrope_grids(self, image_inputs: dict, images: ImageInput) -> list[list[list[int]]]:
-        """Return one flat list of patch grids per image, aligned with the image replacement strings."""
-        images = make_flat_list_of_images(images)
-        return [self._image_target_sizes(image_inputs, idx).tolist() for idx in range(len(images))]
-
-    @staticmethod
-    def _image_target_sizes(image_inputs: dict, image_idx: int):
-        """Return the patch target sizes belonging to one image of the flattened batch."""
-        cum_patches = np.cumsum(image_inputs["num_patches_per_image"])
-        start_idx = cum_patches[image_idx - 1] if image_idx > 0 else 0
-        end_idx = cum_patches[image_idx]
-        return image_inputs["target_sizes"][start_idx:end_idx]
-
-    def _video_mrope_grids(self, video_inputs: dict, videos: VideoInput) -> list[list[list[int]]]:
-        """Return one flat list of patch grids per video, aligned with the video replacement strings.
-
-        Frames are concatenated in order, and a frame may itself span several patches.
-        """
-        videos = make_batched_videos(videos)
-        mrope_grids = []
-        for idx in range(len(videos)):
-            video_grids = []
-            for frame_ts, _, _ in self._iter_video_frames(video_inputs, idx):
-                video_grids.extend(frame_ts.tolist())
-            mrope_grids.append(video_grids)
-        return mrope_grids
-
-    @staticmethod
-    def _assemble_mrope_target_sizes(
-        offsets_per_sample: list[list[dict]],
-        images_mrope_grids: list[list[list[int]]],
-        videos_mrope_grids: list[list[list[int]]],
-    ) -> list[list[list[int]]]:
-        """Flatten per-visual patch grids into per-sample lists, following the text order of the visuals.
-
-        `get_text_with_replacements` walks each sample left to right and yields one offset entry per
-        placeholder occurrence, tagged with its modality. Consuming the per-modality grid lists in that
-        same order is what makes `target_sizes_mrope[b]` line up with the visual spans inside
-        `input_ids[b]` even when a sample interleaves image and video placeholders.
-
-        Grids are counted per visual input, not per frame: one video placeholder expands to all the
-        frames of that video. For a batch of a single modality this reproduces the plain per-modality
-        concatenation in use before, so single-modality behaviour is unchanged.
-        """
-        available = {
-            "image": len(images_mrope_grids),
-            "video": len(videos_mrope_grids),
-        }
-        num_placeholders = dict.fromkeys(available, 0)
-        for sample_offsets in offsets_per_sample:
-            for offset in sample_offsets:
-                num_placeholders[offset["type"]] += 1
-
-        for modality, expected in available.items():
-            if num_placeholders[modality] != expected:
-                raise ValueError(
-                    f"Number of `{modality}` placeholders does not match the number of `{modality}` inputs: "
-                    f"found {num_placeholders[modality]} placeholder(s) in `text` but received {expected} input(s). "
-                    "Every placeholder must have a matching input."
-                )
-
-        image_iter = iter(images_mrope_grids)
-        video_iter = iter(videos_mrope_grids)
-        grids_per_sample = []
-        for sample_offsets in offsets_per_sample:
-            sample_grids = []
-            for offset in sample_offsets:
-                # One video input expands to one grid per frame, so all of its grids are appended here
-                # in frame order; they then line up with that video's tokens from left to right.
-                for grid in next(image_iter if offset["type"] == "image" else video_iter):
-                    sample_grids.append(grid)
-            grids_per_sample.append(sample_grids)
-        return grids_per_sample
-
-    def _iter_video_frames(self, video_inputs: dict, video_idx: int):
-        """Yield `(frame_target_sizes, grid_rows, grid_cols)` per frame of one video, in text order."""
-        video_target_sizes = video_inputs["target_sizes_videos"]
-        num_frames_per_video = video_inputs["num_frames_per_video"]
-        video_grids = video_inputs["grids_videos"]
-        num_patches_per_frame = video_grids.prod(-1) + 1
-
-        num_frames = num_frames_per_video[video_idx]
-        cum_patches_per_frame = np.cumsum(num_patches_per_frame)
-        num_past_frames = np.cumsum(num_frames_per_video)[video_idx] - num_frames
-
-        for frame_idx in range(num_frames):
-            frame_start_idx = num_past_frames + frame_idx
-
-            start_idx = cum_patches_per_frame[frame_start_idx - 1] if frame_start_idx > 0 else 0
-            end_idx = cum_patches_per_frame[frame_start_idx]
-
-            grid_rows, grid_cols = video_grids[frame_start_idx]
-            yield video_target_sizes[start_idx:end_idx], grid_rows, grid_cols
+        return super().model_input_names + ["mm_token_type_ids"]
 
 
 __all__ = ["MiniCPMV4_7Processor"]

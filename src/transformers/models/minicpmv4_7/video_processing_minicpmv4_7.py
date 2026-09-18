@@ -33,11 +33,38 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata, group_videos_by_shape, reorder_videos
-from .processing_minicpmv4_7 import MiniCPMV4_7VideoProcessorKwargs
 
 
 def ensure_divide(length: int, divisor: int) -> int:
     return max(round(length / divisor) * divisor, divisor)
+
+
+class MiniCPMV4_7VideoProcessorKwargs(VideosKwargs, total=False):
+    r"""
+    max_num_frames (`int`, *optional*, defaults to 128):
+        Maximum number of main frames to sample per video.
+    stack_frames (`int`, *optional*, defaults to 1):
+        Sub-frames per second to stack.  ``1`` disables stacking.
+    max_slice_nums (`int`, *optional*, defaults to 9):
+        Maximum number of slices when splitting a high-resolution image.
+    scale_resolution (`int`, *optional*, defaults to 448):
+        Target resolution for individual slices.
+    patch_size (`int`, *optional*, defaults to 14):
+        Spatial patch size of the vision encoder.
+    slice_mode (`bool`, *optional*, defaults to `True`):
+        Whether to split images into multiple slices for higher resolution.
+    downsample_mode (`str`, *optional*, defaults to `"16x"`):
+        Visual token downsampling mode. `"16x"` applies full merge; `"4x"` keeps
+        4x more tokens.
+    """
+
+    max_num_frames: int
+    stack_frames: int
+    max_slice_nums: int
+    scale_resolution: int
+    patch_size: int
+    slice_mode: bool
+    downsample_mode: str
 
 
 @auto_docstring
@@ -54,8 +81,6 @@ class MiniCPMV4_7VideoProcessor(BaseVideoProcessor):
     patch_size = 14
     slice_mode = True
     downsample_mode = "16x"
-    # Video frames form a single temporal sequence, so they are not numbered with local image ids.
-    use_image_id = False
     do_sample_frames = True
     max_num_frames = 128
     stack_frames = 1

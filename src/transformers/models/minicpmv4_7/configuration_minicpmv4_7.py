@@ -134,14 +134,5 @@ class MiniCPMV4_7Config(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-    def get_mrope_special_token_ids(self) -> dict:
-        return {
-            "im_start_id": self.image_start_id,
-            "im_end_id": self.image_end_id,
-            "slice_start_id": self.slice_start_id,
-            "slice_end_id": self.slice_end_id,
-            "newline_id": self.newline_id,
-        }
-
 
 __all__ = ["MiniCPMV4_7Config", "MiniCPMV4_7VisionConfig"]
