@@ -166,6 +166,18 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="LLaVA-OneVision-1.5 does not support assisted decoding with multimodal inputs.")
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
+
+    @unittest.skip(reason="LLaVA-OneVision-1.5 does not support assisted decoding with multimodal inputs.")
+    def test_assisted_decoding_matches_greedy_search_1_same(self):
+        pass
+
+    @unittest.skip(reason="LLaVA-OneVision-1.5 does not support assisted decoding with multimodal inputs.")
+    def test_assisted_decoding_sample(self):
+        pass
+
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs throw an error with explicit message saying what is wrong
@@ -183,3 +195,27 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(
             curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
             with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
+
+    def test_video_outputs_and_processor_kwargs(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_dict["input_ids"][:, : self.model_tester.num_image_tokens] = config.video_token_id
+        input_dict["pixel_values_videos"] = input_dict.pop("pixel_values")
+        input_dict["video_grid_thw"] = input_dict.pop("image_grid_thw")
+        input_dict["mm_token_type_ids"] = torch.zeros_like(input_dict["input_ids"])
+        input_dict["second_per_grid_ts"] = torch.ones(self.model_tester.batch_size, device=torch_device)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            outputs = model(**copy.deepcopy(input_dict))
+            self.assertIsNotNone(outputs.video_hidden_states)
+
+    def test_variable_resolution_eager_attention(self):
+        config = self.model_tester.get_config()
+        config._attn_implementation = "eager"
+        patch_dim = self.model_tester.num_channels * config.vision_config.patch_size**2
+        grid_thw = torch.tensor([[1, 4, 4], [1, 2, 4]], device=torch_device)
+        pixel_values = floats_tensor([24, patch_dim])
+
+        model = LlavaOnevision1_5ForConditionalGeneration(config).to(torch_device).eval()
+        outputs = model.get_image_features(pixel_values, grid_thw)
+        self.assertEqual([features.shape[0] for features in outputs.pooler_output], [4, 2])

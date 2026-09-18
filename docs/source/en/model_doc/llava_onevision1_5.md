@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-08-07.*
+*This model was published in HF papers on 2025-09-29 and contributed to Hugging Face Transformers on 2026-09-17.*
 
 # LLaVA-OneVision-1.5
 
@@ -66,6 +66,18 @@ print(processor.batch_decode(generated_ids[:, inputs["input_ids"].shape[1] :], s
 ## LlavaOnevision1_5Config
 
 [[autodoc]] LlavaOnevision1_5Config
+
+## LlavaOnevision1_5ImageProcessor
+
+[[autodoc]] LlavaOnevision1_5ImageProcessor
+
+## LlavaOnevision1_5ImageProcessorPil
+
+[[autodoc]] LlavaOnevision1_5ImageProcessorPil
+
+## LlavaOnevision1_5VideoProcessor
+
+[[autodoc]] LlavaOnevision1_5VideoProcessor
 
 ## LlavaOnevision1_5TextConfig
 

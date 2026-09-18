@@ -62,6 +62,9 @@ def build_config(orig_cfg: dict) -> LlavaOnevision1_5Config:
         initializer_range=text_cfg["initializer_range"],
         rms_norm_eps=text_cfg["rms_norm_eps"],
         use_cache=text_cfg["use_cache"],
+        pad_token_id=text_cfg.get("pad_token_id"),
+        bos_token_id=text_cfg.get("bos_token_id"),
+        eos_token_id=text_cfg.get("eos_token_id"),
         rope_parameters={"rope_type": "default", "rope_theta": text_cfg["rope_theta"]},
         attention_bias=text_cfg["attention_bias"],
         attention_dropout=text_cfg["attention_dropout"],
@@ -94,6 +97,8 @@ def build_config(orig_cfg: dict) -> LlavaOnevision1_5Config:
 
 
 def remap_state_dict_key(key: str) -> str:
+    key = key.replace("visual.merger.mlp.0.", "visual.merger.linear_fc1.")
+    key = key.replace("visual.merger.mlp.2.", "visual.merger.linear_fc2.")
     if re.match(r"^visual", key):
         return "model.visual." + key[len("visual.") :]
     if re.match(r"^model(?!\.(language_model|visual))", key):
@@ -111,6 +116,13 @@ def load_original_state_dict(input_dir: str) -> dict[str, torch.Tensor]:
 def convert_llava_onevision1_5_to_hf(input_dir: str, output_dir: str) -> None:
     with open(os.path.join(input_dir, "config.json")) as f:
         orig_cfg = json.load(f)
+    generation_config_path = os.path.join(input_dir, "generation_config.json")
+    if os.path.isfile(generation_config_path):
+        with open(generation_config_path) as f:
+            generation_config = json.load(f)
+        orig_cfg["text_config"].update(
+            {key: generation_config[key] for key in ("pad_token_id", "bos_token_id", "eos_token_id")}
+        )
 
     config = build_config(orig_cfg)
     model = LlavaOnevision1_5ForConditionalGeneration(config)

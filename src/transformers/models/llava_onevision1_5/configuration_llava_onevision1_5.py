@@ -56,6 +56,7 @@ class LlavaOnevision1_5VisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     intermediate_size: int = 4096
     num_heads: int = 16
+    num_attention_heads: int | None = None
     in_channels: int = 3
     patch_size: int = 14
     spatial_merge_size: int = 2
@@ -63,6 +64,14 @@ class LlavaOnevision1_5VisionConfig(PreTrainedConfig):
     out_hidden_size: int = 2560
     layer_norm_eps: float = 1e-05
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.num_attention_heads is None:
+            self.num_attention_heads = self.num_heads
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": 10000.0}
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="lmms-lab/LLaVA-OneVision-1.5-4B-Instruct")

@@ -19,7 +19,10 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_llava_onevision1_5 import *
+    from .image_processing_llava_onevision1_5 import *
+    from .image_processing_pil_llava_onevision1_5 import *
     from .modeling_llava_onevision1_5 import *
+    from .video_processing_llava_onevision1_5 import *
 else:
     import sys
 

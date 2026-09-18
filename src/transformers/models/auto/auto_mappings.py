@@ -1015,6 +1015,7 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("kimi_k25", "Kimi_K25VideoProcessor"),
         ("llava_next_video", "LlavaNextVideoVideoProcessor"),
         ("llava_onevision", "LlavaOnevisionVideoProcessor"),
+        ("llava_onevision1_5", "LlavaOnevision1_5VideoProcessor"),
         ("minicpmv4_6", "MiniCPMV4_6VideoProcessor"),
         ("minimax_m3_vl", "MiniMaxM3VLVideoProcessor"),
         ("muse_glimmer", "MuseGlimmerVideoProcessor"),
@@ -1281,6 +1282,10 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("llava", {"pil": "LlavaImageProcessorPil", "torchvision": "LlavaImageProcessor"}),
         ("llava_next", {"pil": "LlavaNextImageProcessorPil", "torchvision": "LlavaNextImageProcessor"}),
         ("llava_onevision", {"pil": "LlavaOnevisionImageProcessorPil", "torchvision": "LlavaOnevisionImageProcessor"}),
+        (
+            "llava_onevision1_5",
+            {"pil": "LlavaOnevision1_5ImageProcessorPil", "torchvision": "LlavaOnevision1_5ImageProcessor"},
+        ),
         ("mask2former", {"pil": "Mask2FormerImageProcessorPil", "torchvision": "Mask2FormerImageProcessor"}),
         ("maskformer", {"pil": "MaskFormerImageProcessorPil", "torchvision": "MaskFormerImageProcessor"}),
         ("minicpmv4_6", {"pil": "MiniCPMV4_6ImageProcessorPil", "torchvision": "MiniCPMV4_6ImageProcessor"}),
