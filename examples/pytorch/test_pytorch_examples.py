@@ -117,7 +117,7 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_glue.py
-            --model_name_or_path distilbert/distilbert-base-uncased
+            --model_name_or_path hf-internal-testing/tiny-random-bert
             --output_dir {tmp_dir}
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
             --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
@@ -125,11 +125,12 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --do_eval
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
-            --learning_rate=1e-4
-            --max_steps=10
+            --learning_rate=5e-3
+            --max_steps=30
             --warmup_steps=2
             --seed=42
             --max_seq_length=128
+            --dataloader_num_workers=0
             """.split()
 
         if is_torch_fp16_available_on_device(torch_device):
@@ -209,14 +210,16 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_mlm.py
-            --model_name_or_path distilbert/distilroberta-base
+            --model_name_or_path hf-internal-testing/tiny-random-bert
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
             --do_train
             --do_eval
             --prediction_loss_only
-            --num_train_epochs=1
+            --num_train_epochs=20
+            --learning_rate=5e-3
+            --dataloader_num_workers=0
         """.split()
 
         if torch_device == "cpu":
