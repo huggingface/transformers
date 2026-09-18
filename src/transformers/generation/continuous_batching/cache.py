@@ -417,8 +417,8 @@ class PagedAttentionCache:
         k_cache = self.key_cache[layer_idx_in_group]
         v_cache = self.value_cache[layer_idx_in_group]
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
-        key_states = key_states.transpose(1, 2).squeeze(0)
-        value_states = value_states.transpose(1, 2).squeeze(0)
+        key_states = key_states.squeeze(0)
+        value_states = value_states.squeeze(0)
 
         # Case: write-only, no cache read. The input KV states already contain everything the attention needs.
         if layer_read_index.numel() == 0:

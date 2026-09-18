@@ -551,22 +551,27 @@ def _is_packed_sequence(position_ids, batch_size):
     return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
 
 
-def fa_peft_integration_check(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    target_dtype: torch.dtype | None = None,
-):
-    """
-    PEFT usually casts the layer norms in float32 for training stability reasons
-    therefore the input hidden states gets silently casted in float32. Hence, we need
-    cast them back in float16 / bfloat16 just to be sure everything works as expected.
-    This might slowdown training & inference so it is recommended to not cast the LayerNorms!
-    """
-    if target_dtype and q.dtype == torch.float32:
-        logger.warning_once(f"Casting fp32 inputs back to {target_dtype} for flash-attn compatibility.")
-        q, k, v = q.to(target_dtype), k.to(target_dtype), v.to(target_dtype)
-    return q, k, v
+
+def cast_to_flash_compatible_dtype(
+    module: torch.nn.Module, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """If the query is in float32, converts the query, key and value to a dtype compatible with flash attention."""
+    # Early exit if the query is not in float32
+    if query.dtype != torch.float32:
+        return query, key, value
+
+    # Otherwise, look for the right dtype to cast to
+    device_type = query.device.type
+    if torch.is_autocast_enabled(device_type):
+        target_dtype = torch.get_autocast_dtype(device_type)
+    # Handle the case where the model is quantized
+    elif hasattr(module.config, "_is_quantized"):
+        target_dtype = module.config.dtype
+    else:
+        target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+
+    logger.warning_once(f"Casting fp32 inputs back to {target_dtype} for flash-attn compatibility.")
+    return query.to(target_dtype), key.to(target_dtype), value.to(target_dtype)
 
 
 class FlashAttentionKwargs(TypedDict, total=False):
@@ -737,14 +742,10 @@ def _flash_attention_forward(
     (flash_fn, flash_varlen_fn, _, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
         attn_implementation
     )
-
-    # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
-    query_states, key_states, value_states = fa_peft_integration_check(
-        query_states, key_states, value_states, target_dtype
-    )
+    batch_size = query_states.size(0)
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
-    flash_kwargs = partial(
+    extract_flash_kwargs = partial(
         process_flash_kwargs_fn,
         query_length=query_length,
         key_length=key_states.size(1),
@@ -762,71 +763,42 @@ def _flash_attention_forward(
     # Case 1. If position ids is provided and the position ids indicate packed sequences, see `_is_packed_sequence`.
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
     # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
-    #
+
     # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.
-    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
-    is_fa_with_varlen_kwargs = all(
-        kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
-    )
+    is_fa_with_attention_mask = attention_mask is not None
+    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=batch_size)
+    is_fa_with_varlen_kwargs = None not in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
 
-    # Contains at least one padding token in the sequence
-    if attention_mask is not None:
+    # If there is no padding and it's a single sequence, we can just run flash and return
+    if not (is_fa_with_attention_mask or is_fa_with_varlen_kwargs or is_fa_with_position_ids):
+        out = flash_fn(query_states, key_states, value_states, **extract_flash_kwargs())
+        return out if isinstance(out, tuple) else out[0]
+
+    # If there is an attention mask, we can turn into a one batch concatenation of sequences
+    if is_fa_with_attention_mask:
         q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
-
-        # TODO for now this is required to work with
-        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-        if "mps" in str(q.device):
-            cu_seq_lens_k = cu_seq_lens_k.clone()
-
-        out_unpad = flash_varlen_fn(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
+    # If there is no attention mask, but the cu_seq_lens descriptors are missing, they need to be prepared
+    elif cu_seq_lens_q is None or cu_seq_lens_k is None:
+        q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
+            query_states, key_states, value_states, position_ids
         )
-        if isinstance(out_unpad, tuple):
-            out_unpad = out_unpad[0]
-
-        out = pad_fn(out_unpad, indices_q, query_states.size(0), query_length)
-
-    # Padding free, i.e. sequences flattened into one total sequence
-    elif is_fa_with_varlen_kwargs or is_fa_with_position_ids:
-        if cu_seq_lens_q is None or cu_seq_lens_k is None:
-            q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
-                query_states, key_states, value_states, position_ids
-            )
-        else:
-            q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
-            k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
-            v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
-
-        # TODO for now this is required to work with
-        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-        if "mps" in str(q.device):
-            cu_seq_lens_k = cu_seq_lens_k.clone()
-
-        out = flash_varlen_fn(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
-        )
-        if isinstance(out, tuple):
-            out = out[0]
-
-        out = out.view(query_states.size(0), -1, out.size(-2), out.size(-1))
-
-    # No padding
+    # Otherwise, just flatten the query, key and value states to make the batch dimension disappear
     else:
-        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
-        if isinstance(out, tuple):
-            out = out[0]
+        q, k, v = [x.flatten(start_dim=0, end_dim=1) for x in (query_states, key_states, value_states)]
 
+    flash_kwargs = extract_flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+    flash_kwargs["cu_seqlens_q"] = cu_seq_lens_q
+    flash_kwargs["cu_seqlens_k"] = cu_seq_lens_k.clone()  # not cloning always crashes on MPS and sometimes on CUDA
+
+    out = flash_varlen_fn(q, k, v, **flash_kwargs)
+    out = out[0] if isinstance(out, tuple) else out
+
+    # Restore the padding if there was an attention mask, otherwise just restore the batch dimension
+    if is_fa_with_attention_mask:
+        out = pad_fn(out, indices_q, batch_size, query_length)
+    else:
+        out = out.view(batch_size, -1, out.shape[-2], out.shape[-1])
     return out

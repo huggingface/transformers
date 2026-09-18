@@ -55,7 +55,7 @@ from .generation_configuration_bark import (
 
 
 if is_flash_attn_available():
-    from ...integrations.flash_attention import get_target_dtype
+    from ...integrations.flash_attention import cast_to_flash_compatible_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -228,7 +228,8 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx)
 
-        target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
+        # if the query is in float32, cast it to a dtype compatible with flash attention
+        query, key, value = cast_to_flash_compatible_dtype(self, query, key, value)
 
         attn_output = _flash_attention_forward(
             query,
