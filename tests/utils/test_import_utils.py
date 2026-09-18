@@ -72,17 +72,15 @@ def test_lazy_module_error_points_to_debug_log():
 
     original_error = RuntimeError("simulated broken dependency")
 
-    with LoggingLevel(logging.DEBUG), (
-        CaptureLogger(logger) as captured_logs,
-        patch.object(lazy_module, "_get_module", side_effect=original_error),
-    ):
+    with CaptureLogger(logger) as captured_logs:
+        with LoggingLevel(logging.DEBUG), patch.object(lazy_module, "_get_module", side_effect=original_error):
             try:
                 lazy_module.BrokenObject
             except ModuleNotFoundError as error:
                 assert "Could not import module 'BrokenObject'" in str(error)
                 assert "Set the logging verbosity to DEBUG for the original import error." in str(error)
                 assert "simulated broken dependency" not in str(error)
-                assert "Original import error for 'BrokenObject': simulated broken dependency" in captured_logs.out
+                assert "Original import error for 'BrokenObject': simulated broken dependency" in captured_logs.io.getvalue()
             else:
                 raise AssertionError("Expected ModuleNotFoundError")
 
