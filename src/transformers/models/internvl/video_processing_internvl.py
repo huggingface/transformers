@@ -68,8 +68,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
         num_frames = num_frames if num_frames is not None else self.num_frames
         initial_shift = initial_shift if initial_shift is not None else self.initial_shift
@@ -92,13 +91,12 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
             )
 
-        indices = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames).int()
+        indices = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames, dtype=int)
         return indices
 
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -116,8 +114,6 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos

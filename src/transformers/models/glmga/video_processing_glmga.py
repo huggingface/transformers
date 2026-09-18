@@ -139,8 +139,7 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
             fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
@@ -265,7 +264,6 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
@@ -285,8 +283,6 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     videos=stacked_videos,
