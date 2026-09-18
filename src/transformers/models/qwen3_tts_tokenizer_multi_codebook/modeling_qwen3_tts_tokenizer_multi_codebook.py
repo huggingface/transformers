@@ -2112,8 +2112,8 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Input audio waveform.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Padding mask for `input_values`.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Padding mask used to pad `input_values`.
         """
 
         if padding_mask is None:
@@ -2140,7 +2140,7 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
     ):
         r"""
         audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
-            Discrete code embeddings computed using [`~Qwen3TTSTokenizerMultiCodebookModel.encode`].
+            Discrete code indices computed using `model.encode`.
         """
         audio_lengths = (audio_codes[..., 0] > -1).sum(1) * self.decoder.total_upsample
 
