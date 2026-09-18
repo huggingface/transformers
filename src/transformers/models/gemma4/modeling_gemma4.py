@@ -2496,6 +2496,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     accepts_loss_kwargs = False
     base_model_prefix = "model"
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Gemma4Config):
         super().__init__(config)

@@ -2162,6 +2162,7 @@ class Gemma4Model(Gemma3nModel):
 )
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
