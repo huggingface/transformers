@@ -312,6 +312,41 @@ def _pinned_commit_hash(revision: str | None) -> str | None:
     return None
 
 
+def _resolved_files_or_raise(
+    path_or_repo_id: str,
+    full_filenames: list[str],
+    resolved_files: list[str | None],
+    *,
+    subfolder: str,
+    revision: str | None,
+    raise_for_missing_entries: bool,
+) -> list[str] | None:
+    """
+    Last step of `cached_files`: turn the files it could resolve - `None` for the ones that do not exist in the repo -
+    into its return value, raising for the missing ones if the caller asked for it.
+    """
+    # If there are any missing file and the flag is active, raise
+    if any(file is None for file in resolved_files) and raise_for_missing_entries:
+        missing_entries = [original for original, resolved in zip(full_filenames, resolved_files) if resolved is None]
+        # Last escape
+        if len(resolved_files) == 1 and missing_entries[0] == os.path.join(subfolder, "config.json"):
+            return None
+        # Now we raise for missing entries
+        revision_ = "main" if revision is None else revision
+        msg = (
+            f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {(*missing_entries,)}"
+        )
+        raise OSError(
+            f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
+            " for available files."
+        )
+
+    # Remove potential missing entries (we can silently remove them at this point based on the flags)
+    resolved_files = [file for file in resolved_files if file is not None]
+    # Return `None` if the list is empty, coherent with other Exception when the flag is not active
+    return resolved_files if resolved_files else None
+
+
 def cached_file(
     path_or_repo_id: str | os.PathLike,
     filename: str,
@@ -486,25 +521,25 @@ def cached_files(
     # When `revision` pins an immutable commit, the cache is authoritative for it: every file we already know about at
     # that commit - either downloaded, or recorded as missing - can be served without a single call to the Hub.
     commit_hash = _pinned_commit_hash(revision)
-    existing_files = []
-    file_counter = 0
     if commit_hash is not None and not force_download:
-        for filename in full_filenames:
-            resolved_file = try_to_load_from_cache(
+        cached_or_missing = [
+            try_to_load_from_cache(
                 path_or_repo_id, filename, cache_dir=cache_dir, revision=commit_hash, repo_type=repo_type
             )
-            if resolved_file is not None:
-                if resolved_file is not _CACHED_NO_EXIST:
-                    file_counter += 1
-                    existing_files.append(resolved_file)
-                elif not _raise_exceptions_for_missing_entries:
-                    file_counter += 1
-                else:
-                    raise OSError(f"Could not locate {filename} inside {path_or_repo_id}.")
-
-    # Return cached files when all entries are known, including allowed missing entries.
-    if file_counter == len(full_filenames):
-        return existing_files if existing_files else None
+            for filename in full_filenames
+        ]
+        # `None` means the cache knows nothing about that file, and only then do we need to ask the Hub. If every file
+        # is known - downloaded, or recorded as missing - we are done, and the missing ones are reported exactly as
+        # they would be after a lookup on the Hub.
+        if all(file is not None for file in cached_or_missing):
+            return _resolved_files_or_raise(
+                path_or_repo_id,
+                full_filenames,
+                [None if file is _CACHED_NO_EXIST else file for file in cached_or_missing],
+                subfolder=subfolder,
+                revision=revision,
+                raise_for_missing_entries=_raise_exceptions_for_missing_entries,
+            )
 
     user_agent = http_user_agent(user_agent)
     # download the files if needed
@@ -614,28 +649,14 @@ def cached_files(
         _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, commit_hash or revision)
         for filename in full_filenames
     ]
-    # If there are any missing file and the flag is active, raise
-    if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
-        missing_entries = [original for original, resolved in zip(full_filenames, resolved_files) if resolved is None]
-        # Last escape
-        if len(resolved_files) == 1 and missing_entries[0] == os.path.join(subfolder, "config.json"):
-            return None
-        # Now we raise for missing entries
-        revision_ = "main" if revision is None else revision
-        msg = (
-            f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {(*missing_entries,)}"
-        )
-        raise OSError(
-            f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
-            " for available files."
-        )
-
-    # Remove potential missing entries (we can silently remove them at this point based on the flags)
-    resolved_files = [file for file in resolved_files if file is not None]
-    # Return `None` if the list is empty, coherent with other Exception when the flag is not active
-    resolved_files = None if len(resolved_files) == 0 else resolved_files
-
-    return resolved_files
+    return _resolved_files_or_raise(
+        path_or_repo_id,
+        full_filenames,
+        resolved_files,
+        subfolder=subfolder,
+        revision=revision,
+        raise_for_missing_entries=_raise_exceptions_for_missing_entries,
+    )
 
 
 def has_file(
