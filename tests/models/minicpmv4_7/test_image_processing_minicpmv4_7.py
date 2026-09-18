@@ -219,3 +219,19 @@ class MiniCPMV4_7ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                     (ts_16x[0], ts_16x[1]) if not hasattr(ts_16x[0], "item") else (ts_16x[0].item(), ts_16x[1].item())
                 )
                 self.assertGreaterEqual(h4 * w4, h16 * w16)
+
+    def test_crop_to_patches_aspect_ratio(self):
+        """Test that row/column ordering is correct when cropping non-square images to patches"""
+        for image_processing_class in self.image_processing_classes.values():
+            patch_size = 14
+            image_processor = image_processing_class(slice_mode=True, max_slice_nums=7, scale_resolution=10)
+
+            for num_rows, num_cols in [(2, 3), (3, 2), (1, 6), (6, 1)]:
+                image_height = patch_size * num_rows  # 128
+                image_width = patch_size * num_cols  # 192
+                test_image = Image.new("RGB", (image_width, image_height))
+                result = image_processor(test_image, return_tensors="pt")
+
+                # Should produce 7 patches (6 grid patches + 1 thumbnail)
+                self.assertEqual(result.grids, [[num_rows, num_cols]])
+                self.assertEqual(tuple(result.pixel_values.shape), (1, 3, patch_size, 1568))
