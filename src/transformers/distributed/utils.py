@@ -13,13 +13,25 @@
 # limitations under the License.
 from __future__ import annotations
 
+import json
 import os
+import re
 import warnings
 from collections import defaultdict
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
+import safetensors.torch
+
+from ..utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
+    is_torch_available,
+    is_torch_distributed_available,
+    is_torch_greater_or_equal,
+    logging,
+)
+from .sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 
 
 logger = logging.get_logger(__name__)
@@ -361,6 +373,14 @@ def _prepare_state_dict_for_dcp(state_dict):
     return tree_map(prepare, state_dict)
 
 
+def is_sharded_checkpoint(checkpoint_dir: str | os.PathLike) -> bool:
+    """Return True if the checkpoint directory contains sharded safetensors files."""
+    pattern = r"^shard-[0-9]{5}-model-[0-9]{5}-of-[0-9]{5}\.safetensors$"
+    if not os.path.isdir(checkpoint_dir):
+        return False
+    return any(re.match(pattern, name) for name in os.listdir(checkpoint_dir))
+
+
 def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate: bool = True) -> None:
     """Save rank-local model shards as safetensors with DCP, optionally consolidating them.
 
@@ -391,22 +411,46 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate
     _distributed_barrier()
 
 
-def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
-    """Load local safetensors weights into an initialized model, preserving its current mesh and placements.
+def _distribute_tensor_for_load(tensor: torch.Tensor, destination: torch.Tensor):
+    """Convert a full tensor into a DTensor matching destination's placement."""
+    if not is_dtensor(destination):
+        return tensor
+    if tensor.shape != destination.shape:
+        raise ValueError(f"Cannot load tensor of shape {tensor.shape} into destination of shape {destination.shape}")
 
-    Pass the directory containing the rank-local safetensors files, or the retained `sharded/` directory after
-    consolidation.
+    shard = DtensorShardOperation(destination).shard_tensor(tensor, device=destination.device, dtype=destination.dtype)
+    return _dtensor_from_local_like(shard, destination)
+
+
+def distribute_state_dict_for_load(
+    model: torch.nn.Module, state_dict: dict[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
+    """Convert a state dict of full tensors into a state dict of DTensors matching the destination's placements."""
+
+    model_state_dict = model.state_dict()
+
+    for name, tensor in state_dict.items():
+        destination = model_state_dict.get(name)
+        if is_dtensor(destination) and not is_dtensor(tensor):
+            state_dict[name] = _distribute_tensor_for_load(tensor, destination)
+
+    return state_dict
+
+
+def _load_consolidated_checkpoint_in_distributed_model(model, checkpoint_file: str | os.PathLike, strict: bool = True):
     """
-    _check_distributed_checkpointing_available()
+    Load a consolidated safetensors checkpoint into a distributed model, preserving its current mesh and placements.
+    """
+    state_dict = safetensors.torch.load_file(checkpoint_file, device="cpu")
+    distribute_state_dict_for_load(model, state_dict)
+    model.load_state_dict(state_dict, strict=strict)
 
+
+def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLike):
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
-
-    has_safetensors = any(name.endswith(".safetensors") for name in os.listdir(checkpoint_dir))
-    if not has_safetensors:
-        raise ValueError(f"No safetensors files found in {checkpoint_dir}.")
 
     reader = HuggingFaceStorageReader(str(checkpoint_dir))
 
@@ -419,6 +463,34 @@ def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) 
         if is_dtensor(value) and value.placements != original_state[name].placements:
             state[name] = value.redistribute(placements=original_state[name].placements)
     set_model_state_dict(model, state)
+
+
+def load_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
+    """Load local safetensors weights into an initialized model, preserving its current mesh and placements.
+
+    Pass the directory containing the rank-local safetensors files, or the retained `sharded/` directory after
+    consolidation.
+    """
+    _check_distributed_checkpointing_available()
+
+    safe_index_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
+    safe_weights_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME)
+
+    if is_sharded_checkpoint(checkpoint_dir):
+        _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir, strict=strict)
+    elif is_sharded_checkpoint(os.path.join(checkpoint_dir, "sharded")):
+        _load_sharded_checkpoint_in_distributed_model(model, os.path.join(checkpoint_dir, "sharded"), strict=strict)
+    elif os.path.isfile(safe_index_file):
+        with open(safe_index_file, "r", encoding="utf-8") as f:
+            index = json.load(f)
+        shard_files = list(index["weight_map"].values())
+        for shard_file in shard_files:
+            shard_path = os.path.join(checkpoint_dir, shard_file)
+            if not os.path.isfile(shard_path):
+                raise ValueError(f"Shard file {shard_path} not found in {checkpoint_dir}.")
+            _load_consolidated_checkpoint_in_distributed_model(model, shard_path, strict=strict)
+    elif os.path.isfile(safe_weights_file):
+        _load_consolidated_checkpoint_in_distributed_model(model, safe_weights_file, strict=strict)
 
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consolidate: bool = False) -> None:
