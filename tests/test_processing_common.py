@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.video_utils import get_video_size
 
 
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -1720,6 +1721,66 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
         self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
+
+    def test_get_num_multimodal_tokens_matches_processor_call_video(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if getattr(processor, "video_processor", None) is None:
+            self.skipTest("Processor has no video processor")
+
+        if "video_sizes" not in inspect.signature(processor._get_num_multimodal_tokens).parameters:
+            self.skipTest("Processor doesn't count video tokens yet")
+
+        video_inputs = self.prepare_videos_inputs(batch_size=2)
+        video_inputs = [video_inputs[0], video_inputs[1][:, :, :, :200]]
+        video_sizes = [(len(video), *get_video_size(video)) for video in video_inputs]
+
+        try:
+            num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes)
+        except AttributeError:
+            self.skipTest("Video processor doesn't support `get_num_of_video_patches` yet")
+        if num_video_tokens_from_helper["num_video_tokens"] is None:
+            self.skipTest("Processor doesn't count video tokens yet")
+
+        video_token = getattr(self, "video_token", "")
+        text = [f"This is a video {video_token}"] * len(video_inputs)
+        inputs = processor(
+            text=text,
+            videos=video_inputs,
+            padding=True,
+            do_sample_frames=False,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
+        self.assertListEqual(num_video_tokens_from_call, num_video_tokens_from_helper["num_video_tokens"])
+
+        # Test with two videos per single text
+        text = [f"These are two videos {video_token}{video_token}"] * len(video_inputs)
+        inputs = processor(
+            text=text,
+            videos=video_inputs * 2,
+            padding=True,
+            do_sample_frames=False,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
+        num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2)
+        self.assertEqual(sum(num_video_tokens_from_call), sum(num_video_tokens_from_helper["num_video_tokens"]))
 
     @staticmethod
     def does_processor_return_mm_offsets(processor_class, method_name: str):
