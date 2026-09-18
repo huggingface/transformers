@@ -14,6 +14,9 @@ logs/
 lightning_logs/
 lang_code_data/
 reports/
+# Written by utils/tpu_ci/run_tpu_tests.sh
+model_results.json
+model_results.md
 
 # Distribution / packaging
 .Python
