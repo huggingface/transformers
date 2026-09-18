@@ -241,15 +241,7 @@ class GlmAsrProcessor(ProcessorMixin):
             raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
         conversations = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        make_audio_chat_template_content(audio_item),
-                        {"type": "text", "text": prompt_text},
-                    ],
-                }
-            ]
+            [{"role": "user", "content": make_audio_chat_template_content(audio_item, prompt_text)}]
             for prompt_text, audio_item in zip(prompts, audio_items)
         ]
 

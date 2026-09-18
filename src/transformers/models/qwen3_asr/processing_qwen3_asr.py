@@ -484,7 +484,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             messages = []
             if prompt_text is not None:
                 messages.append({"role": "system", "content": [{"type": "text", "text": prompt_text}]})
-            messages.append({"role": "user", "content": [make_audio_chat_template_content(audio_item)]})
+            messages.append({"role": "user", "content": make_audio_chat_template_content(audio_item)})
             conversations.append(messages)
 
         # The language is forced by prefilling the assistant turn with "language <NAME><asr_text>"
@@ -694,7 +694,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
         conversations = []
         for wl, audio_item in zip(word_lists, audio_items):
-            content = [make_audio_chat_template_content(audio_item)]
+            content = make_audio_chat_template_content(audio_item)
             content.extend({"type": "text", "text": word} for word in wl)
             conversations.append([{"role": "user", "content": content}])
 

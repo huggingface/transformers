@@ -315,6 +315,7 @@ if TYPE_CHECKING:
     from .moonshine import *
     from .moonshine_streaming import *
     from .moshi import *
+    from .moss_transcribe_diarize import *
     from .mpnet import *
     from .mpt import *
     from .mra import *
