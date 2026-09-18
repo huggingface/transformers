@@ -429,6 +429,9 @@ class Blip2PreTrainedModel(PreTrainedModel):
         if isinstance(module, Blip2VisionEmbeddings):
             init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
             init.trunc_normal_(module.class_embedding, mean=0.0, std=std)
+        elif isinstance(module, Blip2ForImageTextRetrieval):
+            init.zeros_(module.query_tokens)
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         elif isinstance(
             module,
             (
@@ -436,7 +439,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
                 Blip2TextModelWithProjection,
                 Blip2VisionModelWithProjection,
                 Blip2ForConditionalGeneration,
-                Blip2ForImageTextRetrieval,
             ),
         ):
             init.zeros_(module.query_tokens)
@@ -1848,6 +1850,8 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         # image text matching head
         self.itm_head = nn.Linear(config.qformer_config.hidden_size, 2)
 
+        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1867,6 +1871,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        return_loss: bool | None = None,
         **kwargs,
     ) -> tuple | Blip2ImageTextMatchingModelOutput:
         r"""
@@ -1879,6 +1884,9 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             [What are input IDs?](../glossary#input-ids)
         use_image_text_matching_head (`bool`, *optional*):
             Whether to return the Image-Text Matching or Contrastive scores.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the image-text contrastive loss. Only supported when
+            `use_image_text_matching_head=False`.
 
         Examples:
 
@@ -1931,6 +1939,10 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+
+        if return_loss and use_image_text_matching_head:
+            raise ValueError("`return_loss` is not yet supported with `use_image_text_matching_head=True`.")
+        loss = None
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -2008,11 +2020,20 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
             logits_per_text = logits_per_image.t()
 
+            if return_loss:
+                targets = torch.arange(logits_per_image.size(0), device=logits_per_image.device)
+                scale = self.logit_scale.exp()
+                loss = (
+                    nn.functional.cross_entropy(logits_per_image * scale, targets, label_smoothing=0.1)
+                    + nn.functional.cross_entropy(logits_per_text * scale, targets, label_smoothing=0.1)
+                ) / 2
+
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return output
+            return ((loss,) + output) if loss is not None else output
 
         return Blip2ImageTextMatchingModelOutput(
+            loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
