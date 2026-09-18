@@ -454,7 +454,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+                ("cuda", None): "The video shows two tennis players engaged in a match or practice session inside an indoor tennis court. The player in the foreground is positioned at the net,",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
