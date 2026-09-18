@@ -618,6 +618,21 @@ def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> 
 # wrap a target submodule and record every call's kwargs.
 
 
+class _CapturedCalls(list):
+    """Captured forward kwargs (one dict per call), plus the identity of each call's cache.
+
+    The captured kwargs are deep-copied so they can be replayed at export time, which loses the
+    identity of stateful arguments. `cache_ids[i]` is the `id()` of call `i`'s live `past_key_values`
+    (`None` when it has none) — what tells apart concurrent decode branches going through the same
+    `forward`, e.g. a classifier-free-guidance loop whose conditional and unconditional passes each
+    carry their own cache.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.cache_ids: list[int | None] = []
+
+
 @contextlib.contextmanager
 def _capture_forward(module: torch.nn.Module):
     """Capture forward call kwargs into a list (one dict per call).
@@ -626,7 +641,7 @@ def _capture_forward(module: torch.nn.Module):
     captured dicts can be passed directly as `kwargs=inputs` to `torch.export`.
     """
 
-    calls: list[dict] = []
+    calls = _CapturedCalls()
     original = module.forward
     sig = inspect.signature(original)
 
@@ -641,6 +656,20 @@ def _capture_forward(module: torch.nn.Module):
             elif param.kind != inspect.Parameter.VAR_POSITIONAL:
                 captured[name] = copy.deepcopy(value)
         calls.append(captured)
+        # Record the *live* cache (`captured`'s copy has a fresh identity), so callers can group the
+        # calls by decode branch.
+        cache = bound.arguments.get("past_key_values")
+        if cache is None:
+            var_keyword = next(
+                (
+                    value
+                    for name, value in bound.arguments.items()
+                    if sig.parameters[name].kind == inspect.Parameter.VAR_KEYWORD
+                ),
+                {},
+            )
+            cache = var_keyword.get("past_key_values")
+        calls.cache_ids.append(id(cache) if cache is not None else None)
         return original(*args, **kwargs)
 
     module.forward = wrapper
@@ -769,6 +798,15 @@ def decompose_prefill_decode(
             f"Inputs passed: {list(inputs.keys())}. "
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
+
+    # A few architectures call the top-level `forward()` more than once per generated token, on
+    # separate decode branches — e.g. VibeVoice's classifier-free guidance, which runs an
+    # unconditional pass alongside the conditional one, each carrying its own cache. Every branch is
+    # its own graph, so keep only the calls that belong to the prefill's branch (same cache object);
+    # otherwise the slicing below would mix branches and produce inconsistent decode inputs.
+    prefill_cache_id = calls.cache_ids[0] if calls.cache_ids else None
+    if prefill_cache_id is not None:
+        calls = [call for call, cache_id in zip(calls, calls.cache_ids) if cache_id == prefill_cache_id]
 
     if len(calls) < num_new_tokens:
         raise RuntimeError(
