@@ -39,7 +39,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -2102,12 +2102,13 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
 
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def encode(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple[list[torch.Tensor]] | Qwen3TTSTokenizerMultiCodebookEncoderOutput:
+    ):
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -2117,10 +2118,7 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
             padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked*
                 or 0 for *masked*.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
@@ -2136,35 +2134,27 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
             for code, mask in zip(audio_codes, padding_mask)
         ]
 
-        if not return_dict:
-            return (audio_codes,)
-
         return Qwen3TTSTokenizerMultiCodebookEncoderOutput(audio_codes=audio_codes)
 
+    @can_return_tuple
+    @auto_docstring
     def decode(
         self,
         audio_codes: torch.Tensor,
-        return_dict: bool | None = None,
-    ) -> tuple[torch.Tensor] | Qwen3TTSTokenizerMultiCodebookOutput:
+    ):
         """
         Decodes the given frames into an output audio waveform.
 
         Args:
             audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`, *optional*):
                 Discret code embeddings computed using `model.encode`.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         audio_lengths = (audio_codes[..., 0] > -1).sum(1) * self.decoder.total_upsample
 
         audio_codes = torch.clamp(audio_codes, min=0)
         quantized_representation = self.quantizer.decode(audio_codes.transpose(1, 2))
         audio_values = self.decoder.chunked_decode(quantized_representation).squeeze(1)
         audio_values = audio_values[..., : audio_lengths.max()]
-
-        if not return_dict:
-            return (audio_values,)
 
         return Qwen3TTSTokenizerMultiCodebookOutput(audio_values=audio_values)
 
