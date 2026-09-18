@@ -20,12 +20,39 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring
+@strict
+class Qwen3TTSTokenizerMultiCodebookQuantizerConfig(PreTrainedConfig):
+    r"""
+    codebook_dim (`int`, *optional*, defaults to 256):
+        Dimension of each codebook vector.
+    frame_rate (`int`, *optional*, defaults to 0):
+        Frame rate used by the vector quantizers.
+    num_quantizers (`int`, *optional*, defaults to 16):
+        Total number of residual vector quantizers.
+    num_semantic_quantizers (`int`, *optional*, defaults to 1):
+        Number of quantizers assigned to semantic codes.
+    vector_quantization_hidden_dimension (`int`, *optional*, defaults to 256):
+        Dimension used within the vector quantizers.
+    """
+
+    model_type = "qwen3_tts_tokenizer_multi_codebook_quantizer"
+    base_config_key = "quantizer_config"
+
+    codebook_size: int = 2048
+    codebook_dim: int = 256
+    frame_rate: int = 0
+    num_quantizers: int = 16
+    num_semantic_quantizers: int = 1
+    vector_quantization_hidden_dimension: int = 256
+    hidden_size: int = 512
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
@@ -48,17 +75,21 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
         Latent dimension used between pre-conv and transformer.
     vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
         Hidden dimension for the vector quantization projection.
+    quantizer_config (`dict`, *optional*):
+        Configuration for the split residual vector quantizer.
     use_causal_conv (`bool`, *optional*, defaults to `True`):
         Whether to use causal convolutions in the decoder.
     trim_right_ratio (`float`, *optional*, defaults to 1.0):
         Ratio for trimming the right side of transposed convolution output.
     """
 
-    codebook_size: int = 2048
+    model_type = "qwen3_tts_tokenizer_multi_codebook_code2wav"
+    sub_configs = {"quantizer_config": Qwen3TTSTokenizerMultiCodebookQuantizerConfig}
 
+    codebook_size: int = 2048
     hidden_size: int = 512
     max_position_embeddings: int = 8000
-    rope_parameters: RopeParameters | dict | None = None
+    rope_parameters: dict | None = None
     num_attention_heads: int = 16
     num_key_value_heads: int = 16
     attention_bias: bool = False
@@ -74,8 +105,6 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
     decoder_dim: int = 1536
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
-
-    model_type = "qwen3_tts_tokenizer_multi_codebook_code2wav"
     head_dim: int = 64
     codebook_dim: int = 512
     num_semantic_quantizers: int = 1
@@ -84,12 +113,25 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
     vector_quantization_hidden_dimension: int = 512
     use_causal_conv: bool = True
     trim_right_ratio: float = 1.0
+    quantizer_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.quantizer_config is None:
+            self.quantizer_config = Qwen3TTSTokenizerMultiCodebookQuantizerConfig(
+                codebook_size=self.codebook_size,
+                codebook_dim=self.codebook_dim // 2,
+                num_quantizers=self.num_quantizers,
+                num_semantic_quantizers=self.num_semantic_quantizers,
+                vector_quantization_hidden_dimension=self.codebook_dim // 2,
+                hidden_size=self.codebook_dim,
+            )
+        elif isinstance(self.quantizer_config, dict):
+            self.quantizer_config = Qwen3TTSTokenizerMultiCodebookQuantizerConfig(**self.quantizer_config)
+
+        super().__post_init__(**kwargs)
 
     @property
     def layer_types(self):
-        """
-        All layers in code2wav should be sliding attention
-        """
         return ["sliding_attention"] * self.num_hidden_layers
 
 
