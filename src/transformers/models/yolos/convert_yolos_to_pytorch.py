@@ -18,9 +18,9 @@ import json
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import YolosConfig, YolosForObjectDetection, YolosImageProcessor
@@ -93,7 +93,7 @@ def rename_key(name: str) -> str:
     if "det_token" in name:
         name = name.replace("det_token", "embeddings.detection_tokens")
     if "mid_pos_embed" in name:
-        name = name.replace("mid_pos_embed", "encoder.mid_position_embeddings")
+        name = name.replace("mid_pos_embed", "encoder.interpolation.mid_position_embeddings")
     if "pos_embed" in name:
         name = name.replace("pos_embed", "embeddings.position_embeddings")
     if "patch_embed.proj" in name:

@@ -166,6 +166,7 @@ if TYPE_CHECKING:
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
+    from .fun_asr_nano import *
     from .funnel import *
     from .fuyu import *
     from .gemma import *
@@ -226,6 +227,7 @@ if TYPE_CHECKING:
     from .hy_v3 import *
     from .hy_v4 import *
     from .hyperclovax import *
+    from .hyperclovax_vision_v2 import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *

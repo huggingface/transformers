@@ -236,9 +236,9 @@ class Kimi_K25VisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        # interleave within the head dim for HW
-        freq_hw = freq.permute(1, 2, 0).flatten(1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        # interleave within the head dim for WH
+        freq_wh = freq.transpose(1, 2).flip(-1).flatten(1)
+        return torch.cat([freq_wh, freq_wh], dim=-1)
 
 
 class Kimi_K25VisionMLP(nn.Module):
@@ -532,7 +532,6 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw, **kwargs)
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
-        position_ids = position_ids.transpose(0, 1).flip(0)  # (2, positions)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(

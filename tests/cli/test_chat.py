@@ -15,6 +15,9 @@ import json
 import os
 import tempfile
 
+import pytest
+import typer
+
 from transformers.cli.chat import (
     get_service_root_url,
     new_chat_history,
@@ -49,6 +52,20 @@ def test_parse_generate_flags():
     parsed = parse_generate_flags(["temperature=0.5", "max_new_tokens=10"])
     assert parsed["temperature"] == 0.5
     assert parsed["max_new_tokens"] == 10
+
+
+def test_parse_generate_flags_value_with_equal_sign():
+    assert parse_generate_flags(["cache_implementation=a=b"]) == {"cache_implementation": "a=b"}
+
+
+def test_parse_generate_flags_missing_equal_sign():
+    with pytest.raises(typer.BadParameter, match="missing `=` after `do_sample`"):
+        parse_generate_flags(["do_sample"])
+
+
+def test_parse_generate_flags_invalid_json_error_message():
+    with pytest.raises(ValueError, match=r"Converted JSON string = \{\"stop_strings\": \[a\]\}"):
+        parse_generate_flags(["stop_strings=[a]"])
 
 
 def test_get_service_root_url():

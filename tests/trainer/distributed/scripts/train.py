@@ -42,6 +42,27 @@ DTYPE_MAP = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float1
 PADDING_CHOICES = ("max_length", "do_not_pad")
 
 
+class DataCollatorWithPositionIds:
+    """Wrap a collator so every batch carries `position_ids`.
+
+    DeepSpeed's Ulysses sequence parallelism requires them, because a token has to keep its global
+    position once the sequence is sharded across ranks (see `deepspeed/runtime/sequence_parallel/
+    ulysses_sp.py`). These samples are not packed, so a plain `arange` per sample is the correct
+    value -- and it is also what the model derives internally when `position_ids` is not passed, so
+    adding it does not change the non-SP runs this test compares against.
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def __call__(self, features):
+        batch = self.inner(features)
+        if "position_ids" not in batch:
+            batch_size, seq_len = batch["input_ids"].shape
+            batch["position_ids"] = torch.arange(seq_len).expand(batch_size, seq_len).clone()
+        return batch
+
+
 def _pop_custom_arg(name):
     """Pop a custom --name value arg from sys.argv before HfArgumentParser sees it."""
     if name in sys.argv:
@@ -120,7 +141,9 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, **collator_kwargs),
+        data_collator=DataCollatorWithPositionIds(
+            DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, **collator_kwargs)
+        ),
     )
 
     if training_args.do_train:

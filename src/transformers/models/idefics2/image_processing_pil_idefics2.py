@@ -246,7 +246,7 @@ class Idefics2ImageProcessorPil(PilBackend):
         if do_pad:
             max_num_images = max(len(images_) for images_ in images)
             max_height, max_width = get_max_height_width(images)
-            num_channels = images[0][0].shape[0]
+            num_channels = next(image for batch_images in images for image in batch_images).shape[0]
 
             padded_images_list = [
                 [np.zeros((num_channels, max_height, max_width), dtype=np.float32) for _ in range(max_num_images)]

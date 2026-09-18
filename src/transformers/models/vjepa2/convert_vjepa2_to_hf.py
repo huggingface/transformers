@@ -18,10 +18,10 @@ import tempfile
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import numpy as np
 import torch
 from huggingface_hub import HfApi
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import VJEPA2Config, VJEPA2Model, VJEPA2VideoProcessor

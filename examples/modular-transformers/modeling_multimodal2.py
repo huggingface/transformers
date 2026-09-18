@@ -329,7 +329,7 @@ class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Multimodal2VisionModel
 

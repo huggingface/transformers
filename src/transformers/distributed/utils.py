@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -129,7 +130,7 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
-# TODO(3outeille): unify initialization across parallelism
+# Retained for the legacy transformers.integrations.tensor_parallel API.
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
 ):
@@ -137,6 +138,12 @@ def initialize_tensor_parallelism(
     Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
+    warnings.warn(
+        "`initialize_tensor_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if tp_size is not None and tp_plan is None:
         raise ValueError("tp_plan has to be set when tp_size is passed.")
     if tp_plan is not None and device_map is not None:
@@ -178,6 +185,12 @@ def initialize_tensor_parallelism(
 
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
+    warnings.warn(
+        "`initialize_fully_sharded_data_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
     # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
     if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
@@ -208,19 +221,37 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     return device_map, mesh
 
 
-def initialize_pipeline_parallelism(
+def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
 ):
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Pipeline parallelism with DistributedConfig requires `torch>=2.5`.")
+    """Create a device mesh containing every configured parallel dimension."""
+    mesh_shape = []
+    mesh_dim_names = []
+
+    if distributed_config.pp_size > 1:
+        mesh_shape.append(distributed_config.pp_size)
+        mesh_dim_names.append("pp")
+    if distributed_config.fsdp_size > 1:
+        mesh_shape.append(distributed_config.fsdp_size)
+        mesh_dim_names.append("fsdp")
+    if distributed_config.tp_size > 1:
+        mesh_shape.append(distributed_config.tp_size)
+        mesh_dim_names.append("tp")
+
+    if not mesh_shape:
+        return None, None
 
     device_type = torch._C._get_accelerator().type
-    _ensure_torch_distributed(device_type)
+    if distributed_config.tp_size > 1 and device_type == "mps":
+        raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
 
+    _ensure_torch_distributed(device_type)
     world_size = torch.distributed.get_world_size()
-    pp_size = distributed_config.pp_size
-    if world_size != pp_size:
-        raise RuntimeError(f"world_size ({world_size}) must be equal to pp_size ({pp_size})")
+    expected_world_size = distributed_config.pp_size * distributed_config.fsdp_size * distributed_config.tp_size
+    if expected_world_size != world_size:
+        raise RuntimeError(
+            f"The parallel mesh requires {expected_world_size} processes, but world_size is {world_size}."
+        )
 
     if device_type != "cpu":
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -229,10 +260,15 @@ def initialize_pipeline_parallelism(
     else:
         device_map = torch.device(device_type)
 
-    assert world_size == pp_size, f"world_size ({world_size}) must be equal to pp_size ({pp_size})"
-    mesh = torch.distributed.init_device_mesh(device_type, (pp_size,), mesh_dim_names=("pp",))
-
-    return device_map, mesh
+    device_mesh = torch.distributed.init_device_mesh(
+        device_type,
+        tuple(mesh_shape),
+        mesh_dim_names=tuple(mesh_dim_names),
+    )
+    # A flattened sub-mesh, so an all-reduce over every rank is one collective instead of one per dimension.
+    if len(mesh_dim_names) > 1:
+        device_mesh._flatten("_".join(mesh_dim_names))
+    return device_map, device_mesh
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:

@@ -433,6 +433,10 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             image_features = torch.cat(image_features_list, dim=0)
             self.assertEqual(image_features.shape[-1], config.text_config.hidden_size)
 
+    @unittest.skip("Pixtral backbone already overrides this test, no need to test again.")
+    def test_vision_axial_rope(self):
+        pass
+
 
 @slow
 @require_torch

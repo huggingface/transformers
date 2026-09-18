@@ -1973,7 +1973,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         ```python
         >>> from transformers import Sam3LiteTextModel, Sam3LiteTextProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = Sam3LiteTextModel.from_pretrained("facebook/sam3_lite_text")
@@ -2011,7 +2011,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         ```python
         >>> from transformers import Sam3LiteTextModel, Sam3LiteTextProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = Sam3LiteTextModel.from_pretrained("facebook/sam3_lite_text")
@@ -2061,7 +2061,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

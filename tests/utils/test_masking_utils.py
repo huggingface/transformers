@@ -15,11 +15,12 @@
 import unittest
 
 from transformers.testing_utils import (
-    cleanup,
     is_torch_available,
     require_torch,
     torch_device,
 )
+
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -67,13 +68,7 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 
 
 @require_torch
-class MaskTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class MaskTest(MemoryCleanupMixin, unittest.TestCase):
     def test_packed_sequence_mask_sdpa(self):
         config = LlamaConfig()
         config._attn_implementation = "sdpa"

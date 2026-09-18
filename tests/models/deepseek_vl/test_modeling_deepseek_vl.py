@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...test_processing_common import url_to_local_path
@@ -71,8 +70,6 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation(self):
         model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
-        model.to(torch_device)
-        model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         messages = [
@@ -105,8 +102,6 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation_batched(self):
         model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
-        model.to(torch_device)
-        model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         messages = [
@@ -155,8 +150,6 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation_with_multi_image(self):
         model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
-        model.to(torch_device)
-        model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         messages = [

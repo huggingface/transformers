@@ -19,8 +19,8 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 from transformers.feature_extraction_utils import BatchFeature

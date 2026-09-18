@@ -28,6 +28,7 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    Mxfp4Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -538,12 +539,15 @@ if __name__ == "__main__":
 
         model_id = f"openai/gpt-oss-{model}"
 
+        # The checkpoints ship as mxfp4 and `Mxfp4HfQuantizer.is_trainable` is False, so wherever mxfp4 is supported
+        # the expert weights stay `requires_grad=False` and everything behind the MoE branch gets no gradient.
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation=attn_impl,
             use_kernels=kernels,
+            quantization_config=Mxfp4Config(dequantize=True),
         )
         model_obj.train()
 

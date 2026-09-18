@@ -14,7 +14,6 @@
 
 """Testing suite for the PyTorch PhiMoE model."""
 
-import contextlib
 import tempfile
 import unittest
 
@@ -22,13 +21,15 @@ from parameterized import parameterized
 
 from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
-    cleanup,
+    backend_device_count,
+    get_cpu_ram_total_gib,
     require_torch,
     slow,
     torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -113,7 +114,7 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class PhimoeIntegrationTest(unittest.TestCase):
+class PhimoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model = None
     offload_dir = None
 
@@ -124,15 +125,19 @@ class PhimoeIntegrationTest(unittest.TestCase):
             # `device_map="auto"` budgets each device to its full capacity when more
             # than one is visible, leaving nothing for the ~1.6 GiB temporary the
             # expert gate/up merge allocates while loading.
-            with contextlib.suppress(Exception):  # absent on older torch
-                torch.cuda.memory._set_allocator_settings("expandable_segments:True")
-            if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
-                raise unittest.SkipTest("phimoe integration test needs an accelerator")
-            accel = getattr(torch, torch_device)
-            n = accel.device_count()
-            per_device = int(min(accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
-            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-            max_memory["cpu"] = "60GiB"
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                # A 70% per-GPU max_memory cap, mostly for A10 multi-GPU runner issue, will cause some weights
+                # to be offloaded to disk on A10 single-GPU runner even with full CPU used, which achieves the same effect of #46539
+                # and #48290. (fewer GPU + full CPU vs. full GPU + fewer CPU)
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
+            else:
+                max_memory = None
             cls.model = PhimoeForCausalLM.from_pretrained(
                 "microsoft/Phi-3.5-MoE-instruct",
                 experts_implementation="eager",
@@ -145,17 +150,9 @@ class PhimoeIntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        del cls.model
         if cls.offload_dir is not None:
             cls.offload_dir.cleanup()
-            cls.offload_dir = None
-        cleanup(torch_device, gc_collect=True)
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+        super().tearDownClass()
 
     def test_model_phimoe_instruct_logits(self):
         input_ids = {"input_ids": torch.tensor([[1212, 318, 281, 1672]], dtype=torch.long, device=torch_device)}

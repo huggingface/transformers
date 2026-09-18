@@ -19,7 +19,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-import httpx
+from huggingface_hub.utils import httpx
 
 from transformers import AutoTokenizer, BertTokenizer, BertTokenizerFast, GPT2TokenizerFast, is_tokenizers_available
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_tokenizers

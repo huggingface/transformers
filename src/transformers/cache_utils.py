@@ -163,6 +163,14 @@ class DynamicLayer(CacheLayerMixin):
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
 
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        # Dropped rather than zeroed, as `update` grows them by concatenation. Clearing `is_initialized` first skips
+        # the zeroing in `super`, which is still called to reset the `cumulative_length` of the inheriting layers.
+        self.keys = self.values = None
+        self.is_initialized = False
+        super().reset()
+
     @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
@@ -254,13 +262,18 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.record_past:
             self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
             self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+            # Return the full states
+            return full_key_states, full_value_states
         # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
         else:
             self.keys = full_key_states
             self.values = full_value_states
-
-        # Return the full states
-        return full_key_states, full_value_states
+            # In theory, when we record the past we always have a call to `crop` after every `forward`, so returning the full states
+            # similar to the non-past case should be enough. However, in case several `forward` are run in a row without calling `crop`
+            # in-between (as is the case in some assisted decoding method, where the assistant itself calls `generate` with a past-aware
+            # Cache), we need to slice to only return the necesary states that are advertized to the mask by `get_mask_sizes`
+            num_visible = self.sliding_window - 1 + key_states.shape[-2]
+            return full_key_states[:, :, -num_visible:, :], full_value_states[:, :, -num_visible:, :]
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -364,8 +377,9 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def reset(self) -> None:
         super().reset()
-        if self.is_indexer_initialized:
-            self.indexer_keys.zero_()
+        # Dropped rather than zeroed, as `update_indexer` grows them by concatenation, like the main states
+        self.indexer_keys = None
+        self.is_indexer_initialized = False
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)

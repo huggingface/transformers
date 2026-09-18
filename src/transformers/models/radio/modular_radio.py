@@ -30,7 +30,6 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2Layer,
     Dinov2LayerScale,
     Dinov2MLP,
-    Dinov2SelfAttention,
 )
 from .configuration_radio import RadioConfig
 
@@ -132,10 +131,6 @@ class RadioLayerScale(Dinov2LayerScale):
     pass
 
 
-class RadioSelfAttention(Dinov2SelfAttention):
-    pass
-
-
 class RadioAttention(Dinov2Attention):
     pass
 
@@ -156,7 +151,7 @@ class RadioPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": RadioLayer,
-        "attentions": RadioSelfAttention,
+        "attentions": RadioAttention,
     }
 
     @torch.no_grad()

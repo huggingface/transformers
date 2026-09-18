@@ -492,6 +492,20 @@ class ModelManager:
                 continue
 
             for ref, revision_info in repo.refs.items():
+                author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
+
+                # One quantization per file, each a separate model, so list files rather than the repo.
+                gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
+                for gguf_file in gguf_files:
+                    generative_models.append(
+                        {
+                            "owned_by": author,
+                            "id": f"{repo.repo_id}:{gguf_file}",
+                            "object": "model",
+                            "created": repo.last_modified,
+                        }
+                    )
+
                 config_path = next((f.file_path for f in revision_info.files if f.file_name == "config.json"), None)
                 if not config_path:
                     continue
@@ -506,7 +520,6 @@ class ModelManager:
                 multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
 
                 if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
-                    author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
                     repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
                     generative_models.append(
                         {

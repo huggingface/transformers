@@ -130,6 +130,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("florence2", "BartTokenizer" if is_tokenizers_available() else None),
         ("fnet", "FNetTokenizer" if is_tokenizers_available() else None),
         ("fsmt", "FSMTTokenizer"),
+        ("fun_asr_nano", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("funnel", "FunnelTokenizer" if is_tokenizers_available() else None),
         ("gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("gemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
@@ -164,6 +165,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("hyperclovax_vision_v2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
@@ -390,6 +392,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "h2ovl_chat",
     "hyperclovax",
     "hyperclovax_vlm",
+    "hyperclovax_vision_v2",
     "internlm2",
     "jamba",
     "janus",
@@ -399,6 +402,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "minicpmv",
     "minimax_m2",
     "modernbert",
+    "modernbert-decoder",
     "molmo",
     "molmo2",
     "nemotron",
@@ -416,7 +420,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "cohere_asr",
     "camembertv2-base",
     "smolvlm",
-    "vision-encoder-decoder",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
@@ -432,6 +435,7 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
+    "naver-clova-ix/donut-*",
     "salesforce/blip2-opt-*",
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",

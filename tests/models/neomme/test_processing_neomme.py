@@ -337,7 +337,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             with self.subTest(name=name), self.assertRaisesRegex(TemplateError, error):
                 processor.apply_chat_template(messages, task=task, tokenize=True)
 
-    def test_apply_chat_template_supports_mixed_document_batch(self):
+    def test_processor_text_has_no_visual(self):
         processor = self.get_processor()
         self._set_retrieval_chat_template(processor)
         image = Image.fromarray(np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8))
@@ -359,6 +359,18 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(inputs["input_ids"][:, 0] == self.marker_ids["<doc>"]))
         self.assertEqual(inputs["position_ids"].shape[1], 2)
         self.assertIn("pixel_values", inputs)
+
+        direct_inputs = processor(
+            text=[
+                processor.tokenizer.document_token + "hello",
+                processor.tokenizer.document_token + processor.image_token,
+            ],
+            images=[[], [image]],
+            padding=True,
+            return_tensors="pt",
+        )
+        for key in ("input_ids", "attention_mask", "pixel_values", "position_ids"):
+            torch.testing.assert_close(inputs[key], direct_inputs[key])
 
     def test_apply_chat_template_rejects_assistant_mask(self):
         processor = self.get_processor()

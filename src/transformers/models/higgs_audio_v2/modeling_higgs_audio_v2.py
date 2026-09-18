@@ -753,7 +753,7 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         loss = None
         if audio_labels is not None:
             audio_logits = logits.reshape(*logits.shape[:2], self.config.num_codebooks, self.config.codebook_size)
-            audio_labels_expanded = input_ids.new_ones((*input_ids.shape[:2], 8)) * -100
+            audio_labels_expanded = input_ids.new_ones((*input_ids.shape[:2], self.config.num_codebooks)) * -100
             audio_token_mask = self.model.get_placeholder_mask(input_ids, inputs_embeds, audio_input_ids_mask)
             audio_labels_expanded[audio_token_mask] = audio_labels[audio_input_ids_mask]
 

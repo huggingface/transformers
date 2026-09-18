@@ -229,7 +229,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
                         ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
@@ -269,8 +269,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
         expected_decoded_texts = Expectations({
-            ("cuda", None): 'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
-            ("xpu", None): 'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
+            (None, None): "user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom",
         })  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
@@ -300,14 +299,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("cuda", None): [
-                    "user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and",
-                    "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each",
-                ],
-                ("xpu", None): [
-                    'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden color, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
-                    'user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each'
-                ],
+                (None, None): ["user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom", 'user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each'],
             }
         )  # fmt: skip
 

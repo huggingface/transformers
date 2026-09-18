@@ -2357,7 +2357,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
@@ -2392,7 +2392,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
@@ -2428,7 +2428,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

@@ -207,7 +207,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor.tokenizer.padding_side = "left"
         self.image = load_coco_image("000000039769.jpg")
         self.image2 = load_test_image(
-            "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         )
 
     def tearDown(self):
@@ -260,9 +260,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = (
-            "In this image, we see the Statue of Liberty, standing tall on its pedestal. The statue is made of metal,"
-        )
+        expected_generated_text = "In this image, we see the Statue of Liberty, which is a well-known landmark. However, upon closer inspection, it"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @require_deterministic_for_xpu
@@ -284,12 +282,8 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", (8, 0)): [
-                    "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
-                    "In this image, we see a cat that is lying on its side on a cat bed.",
-                ],
-                ("cuda", (8, 6)): [
-                    "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
+                (None, None): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
                     "In this image, we see a cat that is lying on its side, and is resting on a pink blanket. The cat is lying on",
                 ],
             }
@@ -306,7 +300,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor.tokenizer.padding_side = "left"
         self.image = load_coco_image("000000039769.jpg")
         self.image2 = load_test_image(
-            "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         )
 
     def tearDown(self):
@@ -351,7 +345,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in"
+        expected_generated_text = "In this image, we see a statue of a woman holding a torch. This statue is located on a small island surrounded by water"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @require_deterministic_for_xpu
@@ -373,12 +367,8 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", 8): [
-                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands tall on a small",
-                    "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
-                ],
-                ("xpu", 5): [
-                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands tall on a small",
+                (None, None): [
+                    "In this image, we see a statue of a woman holding a torch. This statue is located on a small island surrounded by water",
                     "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
                 ],
             }

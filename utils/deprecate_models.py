@@ -10,9 +10,9 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-import httpx
 from custom_init_isort import sort_imports_in_all_inits
 from git import Repo
+from huggingface_hub.utils import httpx
 from packaging import version
 
 from transformers import CONFIG_MAPPING, logging

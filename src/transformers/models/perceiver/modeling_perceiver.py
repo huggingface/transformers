@@ -623,7 +623,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         ...     PerceiverClassificationDecoder,
         ... )
         >>> import torch
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -851,10 +851,6 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Examples:
 
@@ -1120,7 +1116,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationLearned
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1245,7 +1241,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationFourier
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1369,7 +1365,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationConvProcessing
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
