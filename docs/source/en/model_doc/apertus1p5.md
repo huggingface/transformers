@@ -82,36 +82,18 @@ This model was contributed by the [Swiss AI Initiative](https://huggingface.co/s
 
 ## Converting the original checkpoints
 
-The released Apertus 1.5 checkpoints are ready to use; the scripts below are only needed to rebuild a
-composite checkpoint from its sources, for example after retraining the language backbone. A composite merges
-three parts: the language backbone, which is used as-is, and the two media tokenizers, which each have their
-own converter and are prepared first.
+The released Apertus 1.5 checkpoints are ready to use. To rebuild a composite, for example after retraining
+its language backbone, one converter assembles these three sources:
 
-The backbone is an Apertus 1.5 causal LM whose input vocabulary already covers the media code ranges.
-Released checkpoints additionally prune the LM head to the text-only prefix and record its physical width in
-`output_vocab_size` (see the note on the pruned head above); an unpruned backbone also works.
-
-**1. Vision tokenizer.** [`Apertus1p5VisionTokenizerModel`] is an encode-only port of
-[BAAI/Emu3.5-VisionTokenizer](https://huggingface.co/BAAI/Emu3.5-VisionTokenizer). The converter derives the
-configuration from the original `config.json`, drops the decoder branch the port does not implement, and
-renames the remaining encoder-stage tensors into the grouped Transformers layout. The source may be a local
-directory or a Hub `repo_id[@revision]`:
-
-```bash
-python src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py \
-    --checkpoint_path BAAI/Emu3.5-VisionTokenizer \
-    --output_dir /path/to/apertus1p5-vision-tokenizer-hf \
-    --verify
-```
-
-`--verify` reloads the result and checks that the weights are stored in `float32`, that the configuration
-matches what the mapping derives from the source, the code-grid geometry (including image sides that are not
-multiples of the spatial factor), batched encoding, the save/reload round trip, and that the weights stay
-`float32` under a `bfloat16` load.
-
-**2. Audio tokenizer.** The audio side is a [WavTokenizer](./wavtokenizer) checkpoint. Already-converted
-variants are listed on that page and can be passed straight to step 3, so this step is only needed for a
-custom or self-trained checkpoint in the original format:
+- An Apertus 1.5 causal-LM backbone whose input vocabulary covers the media code ranges. Released checkpoints
+  have a text-only LM head recorded by `output_vocab_size`; an unpruned backbone also works.
+- The original [BAAI/Emu3.5-VisionTokenizer](https://huggingface.co/BAAI/Emu3.5-VisionTokenizer) checkpoint.
+  The converter derives the vision configuration, removes decoder weights, renames encoder tensors, and
+  strictly validates the result. No intermediate vision checkpoint is written. Previously converted
+  `Apertus1p5VisionTokenizerModel` checkpoints are not accepted; use the original EMU3.5 source instead.
+- A converted [WavTokenizer](./wavtokenizer) checkpoint. The converter keeps only its encoder and quantizer.
+  Ready-to-use variants are listed on the WavTokenizer page. For a custom original-format audio checkpoint,
+  run its separate converter first:
 
 ```bash
 python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
@@ -119,27 +101,31 @@ python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
     --output_dir /path/to/wavtokenizer-large-unify-40token-hf
 ```
 
-**3. Composite.** The assembler merges the language backbone with both converted tokenizers and writes the
-merged configuration and the processor stack. It assembles but does not convert, so both tokenizer arguments
-must point at the outputs of steps 1 and 2; a raw `BAAI/Emu3.5-VisionTokenizer` or an original-format
-WavTokenizer `.ckpt` is rejected. Each of its three sources may be a local directory or a Hub
-`repo_id[@revision]`. With `--verify` it reloads the result and checks that the tokenizer weights are stored
-in `float32` and stay `float32` under a `bfloat16` load, the image and audio token mappings, text generation,
-and processor-driven multimodal forwards:
+Each source accepts a local directory or a Hub `repo_id[@revision]`. For the original vision tokenizer,
+only `config.json` and `model.safetensors` are downloaded; remote code is not executed.
 
 ```bash
 python src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py \
     --apertus_checkpoint /path/to/apertus-1.5-8b-backbone \
-    --vision_tokenizer_checkpoint /path/to/apertus1p5-vision-tokenizer-hf \
-    --audio_tokenizer_checkpoint /path/to/wavtokenizer-large-unify-40token-hf \
+    --vision_tokenizer_checkpoint BAAI/Emu3.5-VisionTokenizer \
+    --audio_tokenizer_checkpoint swiss-ai/wavtokenizer-large-unify-40token \
     --output_dir /path/to/Apertus-1.5-8B-composite \
     --verify
 ```
 
+Text, vision, and audio weights are written into separate safetensors files with one shared index, alongside
+the composite configuration and processor assets. Assembly processes the language backbone one shard at a
+time without instantiating the full model.
+
+`--verify` loads the resulting composite and checks stored and loaded tokenizer precision, image/audio token
+mappings, text generation, and processor-driven multimodal forwards. Use `--skip_convert --verify` with
+`--output_dir` to verify an existing composite without accessing its source checkpoints. Use `--processor_only`
+with the text and audio sources to update processor assets without rewriting model weights.
+
 > [!NOTE]
-> Both tokenizer sources must be stored in `float32`, and the assembler rejects half-precision ones. Code
-> assignment is an argmax over codebook scores, so half-precision weights permanently flip a fraction of the
-> codes; no later `dtype` choice recovers them.
+> Retained vision weights and all floating-point weights in the WavTokenizer source must be stored in
+> `float32`. Half-precision weights can change discrete code assignments, and casting them back to `float32`
+> cannot recover those codes.
 
 ## Usage examples
 
