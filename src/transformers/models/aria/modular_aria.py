@@ -273,11 +273,17 @@ class AriaProjector(nn.Module):
         """
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
-        if num_patches not in self.patch_to_query_dict:
+        # Compared rather than hashed so the lookup also works when `num_patches` is a symbolic
+        # shape: `torch.export` specialises on the equality guard instead of raising on the hash.
+        query_num = None
+        for patches, queries in self.patch_to_query_dict.items():
+            if num_patches == patches:
+                query_num = queries
+                break
+        if query_num is None:
             raise KeyError(
                 f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}."
             )
-        query_num = self.patch_to_query_dict[num_patches]
 
         queries = self.query[:query_num].unsqueeze(0).repeat(batch_size, 1, 1)
 
@@ -875,7 +881,7 @@ class AriaModel(LlavaModel):
 
         return AriaModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values if use_cache else None,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,

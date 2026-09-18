@@ -124,21 +124,9 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "`decompose_prefill_decode` can't capture the full generate path reliably, causing flaky "
             "CUDAGraphs / export failures. TODO: handle in a follow-up PR."
         ),
-        "AriaForConditionalGeneration": (
-            "Exported decode returns only `logits` while eager also surfaces the populated "
-            "`past_key_values.layers.*.{keys,values}`. Same shape as Voxtral/Gemma3n. "
-            "TODO: align the generate-decomposition path."
-        ),
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
-        "AriaModel": (
-            "`AriaProjector` chooses how many learned queries to use by looking the patch dim up in "
-            "the Python dict `config.projector_patch_to_query_dict`; under dynamic shapes that dim is "
-            "a `SymInt`, so the lookup raises `TypeError: unhashable type: non-nested SymInt`. Static "
-            "shapes work. TODO: select the queries with a tensor lookup so the patch dim can stay dynamic."
-        ),
-        "AriaForConditionalGeneration": "Same `AriaProjector` dict lookup as `AriaModel`.",
         "Sam2Model": (
             "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 10-minute "
             "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
