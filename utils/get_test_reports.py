@@ -120,6 +120,11 @@ def handle_suite(
         subdirs = [s for s in subdirs if s.name >= resume_at]
     if only_in is not None:
         subdirs = [s for s in subdirs if s.name in only_in]
+        # A name that matches nothing is a typo, not a request to run nothing: say so rather than
+        # quietly running one test suite fewer than asked for.
+        unmatched = sorted(set(only_in) - {s.name for s in subdirs})
+        if unmatched:
+            print(f"[WARNING] No {suite} test dir matches: {', '.join(unmatched)}")
     if subdirs and total_processes > 1:
         # This interleaves the subdirs / files. For instance for subdirs = [A, B, C, D, E] and 2 processes:
         # - script launcehd with `--processes 0 2` will run A, C, E
