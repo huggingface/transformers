@@ -22,6 +22,7 @@ from tokenizers.models import Unigram
 from torch import nn
 
 from ...audio_utils import AudioInput
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -271,6 +272,14 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
 
     subsampling_factor = AttributeError()
     scale_input = AttributeError()
+
+    attention_type = AttributeError()
+    attention_context_size = AttributeError()
+    local_attention_chunk_size = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        self.num_key_value_heads = self.num_attention_heads
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="google/medasr")
@@ -587,6 +596,9 @@ class LasrForCTC(ParakeetForCTC):
         ```
         """
         return super().generate(**super_kwargs)
+
+    def change_attention_model(self, *args, **kwargs):
+        raise AttributeError("Not applicable to Lasr: it does not use Parakeet's sliding-window attention.")
 
 
 __all__ = [
