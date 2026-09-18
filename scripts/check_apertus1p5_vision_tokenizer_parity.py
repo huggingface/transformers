@@ -16,10 +16,9 @@ End-to-end parity check between the transformers `Apertus1p5VisionTokenizerModel
 ORIGINAL EMU3.5 Vision Tokenizer implementation (`BAAI/Emu3.5-VisionTokenizer` remote code + weights).
 
 This is the one check that cannot ship, because it needs the original repo's remote code as a reference.
-Everything verifiable without that reference lives in the shipped converter's `--verify`
-(`src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py`): stored precision, the
-derived configuration, code-grid geometry, batched encoding, the save/reload round trip, and the float32 keep
-under a bfloat16 load. This script reuses that converter's conversion functions so the two cannot drift apart.
+The shipped composite converter strictly validates the converted vision weights and provides `--verify`
+for the assembled model. This script reuses its vision mapping functions and compares encoding against the
+original implementation.
 
 What it verifies (per test image: gradients, checkerboards, noise, solid, mixed; several sizes):
   1. convert   - the original state dict loads into the port with `strict=True`, using the shipped converter's
@@ -49,9 +48,9 @@ exercised here; sizes are chosen directly.)
 Requirements: downloads the original weights (~1.8 GB, float32) and executes the original repo's remote code
 (`trust_remote_code=True`), the same code this port was reviewed against.
 
-This script does not write a checkpoint. To produce one, use the shipped converter:
-`python src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py --checkpoint_path
-BAAI/Emu3.5-VisionTokenizer --output_dir <dir> --verify`.
+This script does not write a checkpoint. To assemble a composite, use
+`src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py` with the original EMU3.5 source
+as `--vision_tokenizer_checkpoint`, together with the text and converted audio checkpoints.
 
 Example:
     python scripts/check_apertus1p5_vision_tokenizer_parity.py \
@@ -137,9 +136,9 @@ def main():
         print(f"[{status}] {name}" + (f" - {detail}" if detail else ""))
 
     from transformers import AutoModel
-    from transformers.models.apertus1p5.convert_apertus1p5_vision_tokenizer_to_hf import (
-        convert_config,
-        convert_state_dict,
+    from transformers.models.apertus1p5.convert_apertus1p5_weights_to_hf import (
+        convert_vision_config,
+        convert_vision_state_dict,
     )
     from transformers.models.apertus1p5.modeling_apertus1p5 import Apertus1p5VisionTokenizerModel
 
@@ -149,8 +148,8 @@ def main():
     # ---- 1. convert: original state dict -> port, strict --------------------------------------------------
     # the mapping is fed the config object the ORIGINAL remote code built, so a semantic drift between their
     # config class and the shipped converter's field table surfaces here
-    port = Apertus1p5VisionTokenizerModel(convert_config(original.config.to_dict()))
-    converted = convert_state_dict(original.state_dict())
+    port = Apertus1p5VisionTokenizerModel(convert_vision_config(original.config.to_dict()))
+    converted = convert_vision_state_dict(original.state_dict())
     try:
         port.load_state_dict(converted, strict=True)
         record(PASS, "convert: strict load of original weights", f"{len(converted)} tensors")

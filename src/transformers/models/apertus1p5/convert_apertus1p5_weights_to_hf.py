@@ -1,4 +1,4 @@
-# Copyright 2026 The SwissAI Initiative and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Emu team, BAAI, The SwissAI Initiative and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,43 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Assemble a self-contained Apertus 1.5 checkpoint from three converted sources:
+"""Assemble Apertus 1.5 from a text backbone, original EMU3.5 vision weights, and converted WavTokenizer.
 
-1. An Apertus 1.5 causal-LM backbone with the enlarged input vocabulary. Released checkpoints use a pruned,
-   text-only LM head whose physical width is recorded by `output_vocab_size`.
-2. The encode-only EMU3.5 vision tokenizer, converted from `BAAI/Emu3.5-VisionTokenizer` by
-   `convert_apertus1p5_vision_tokenizer_to_hf.py` (the original weights with `decoder.*`/`post_quant_conv.*`
-   dropped, saved with `save_pretrained`).
-3. A WavTokenizer checkpoint produced by `convert_wavtokenizer_checkpoint.py`. Only its encoder and quantizer are
-   retained; the reconstruction decoder is not used by Apertus.
+Sources accept local directories or Hub `repo_id[@revision]`; use FP32 media-tokenizer checkpoints.
+Conversion validates source formats, precision, and vision weight keys/shapes. Optional `--verify` loads
+the full output model and checks loading, precision, token mappings, generation, and multimodal forwards.
 
-Both tokenizer sources must already be in Transformers format. This script assembles, it does not convert
-them: pointing it at a raw `BAAI/Emu3.5-VisionTokenizer` or an original-format WavTokenizer `.ckpt` fails.
-Run the two converters above first.
+Convert and verify (run from this directory):
+    python convert_apertus1p5_weights_to_hf.py \
+        --apertus_checkpoint /path/to/text-backbone \
+        --vision_tokenizer_checkpoint BAAI/Emu3.5-VisionTokenizer \
+        --audio_tokenizer_checkpoint swiss-ai/wavtokenizer-large-unify-40token \
+        --output_dir /path/to/composite --verify
 
-Weights are mapped into `Apertus1p5ForConditionalGeneration` as follows:
+Verify an existing composite without conversion or source downloads:
+    python convert_apertus1p5_weights_to_hf.py \
+        --output_dir /path/to/composite --skip_convert --verify
 
-- backbone `model.X` -> `model.language_model.X`; `lm_head.weight` remains at the top level
-- vision `X` -> `model.vision_tokenizer.X`
-- audio `encoder_model.encoder.X`/`encoder_model.quantizer.X` ->
-  `model.audio_tokenizer.encoder.X`/`model.audio_tokenizer.quantizer.X`
-
-For a tied backbone without `lm_head.weight`, the tie setting is copied to the composite config. The output
-contains all three weight sets in source-grouped safetensor shards, the merged config, and the processor stack
-derived from the backbone tokenizer. `--processor_only` refreshes only that stack, while `--verify` checks that the
-checkpoint loads cleanly, the stamped architectures, the stored and loaded tokenizer precision, the pruned LM head
-width, the processor components and token ids, the image and audio token mappings, text generation, and
-processor-driven image/audio forwards.
-
-Sources may be local directories or Hub identifiers in `repo_id` or `repo_id@revision` form.
-
-Example:
-    python src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py \
-        --apertus_checkpoint apertus-ai/Apertus-v1.5-8B-integration@refs/pr/1 \
-        --vision_tokenizer_checkpoint /path/to/apertus1p5-vision-tokenizer-hf \
-        --audio_tokenizer_checkpoint /path/to/wavtokenizer-large-unify-40token-hf \
-        --output_dir /path/to/Apertus-1.5-8B-composite --verify
+Use `--processor_only` with text/audio sources to update processor assets without rewriting weights.
+Be aware that this script does not perform the lm-head pruning. It must be done before.
 """
 
 import argparse
@@ -67,12 +49,20 @@ from transformers import (
     Apertus1p5ForConditionalGeneration,
     Apertus1p5ImageProcessor,
     Apertus1p5Processor,
+    Apertus1p5VisionTokenizerConfig,
+    Apertus1p5VisionTokenizerModel,
     AutoProcessor,
     AutoTokenizer,
     WavTokenizerFeatureExtractor,
     logging,
 )
-from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_INDEX_NAME, WEIGHTS_NAME
+from transformers.utils import (
+    CONFIG_NAME,
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
+    WEIGHTS_INDEX_NAME,
+    WEIGHTS_NAME,
+)
 
 
 logging.set_verbosity_info()
@@ -95,6 +85,85 @@ NAMED_SPECIAL_TOKEN_ATTRIBUTES = (
 # Marker of the chat template's list-of-content-blocks user-message branch (the standard Transformers
 # message format); templates without it only accept string or `{"parts": [...]}` user content.
 _TEMPLATE_LIST_CONTENT_MARKER = "message.content is not string and message.content is not mapping"
+
+
+VISION_DROPPED_PREFIXES = ("decoder.", "post_quant_conv.")
+
+# `Apertus1p5VisionTokenizerConfig` field <- original EMU3.5 `config.json` field. `out_ch` and `double_z`
+# belong to the dropped decoder. `dropout` is handled separately: it is the only mapped field that carries no
+# parameters, so a source omitting it stays unambiguous.
+VISION_CONFIG_FIELDS = {
+    "codebook_size": "codebook_size",
+    "embed_dim": "embed_dim",
+    "latent_channels": "z_channels",
+    "in_channels": "in_channels",
+    "base_channels": "ch",
+    "channel_multiplier": "ch_mult",
+    "num_res_blocks": "num_res_blocks",
+    "attn_resolutions": "attn_resolutions",
+    "resolution": "resolution",
+}
+
+VISION_MODEL_TYPE = "Emu3p5VisionVQ"
+
+
+def convert_vision_config(original_config: dict) -> Apertus1p5VisionTokenizerConfig:
+    """Build the port's configuration from the original EMU3.5 configuration."""
+    model_type = original_config.get("model_type")
+    if model_type != VISION_MODEL_TYPE:
+        raise ValueError(
+            f"Expected an original EMU3.5 vision tokenizer (`model_type` {VISION_MODEL_TYPE!r}), got "
+            f"{model_type!r}. Use BAAI/Emu3.5-VisionTokenizer or an original-format local checkpoint; "
+            "preconverted vision checkpoints are not supported."
+        )
+
+    missing = sorted({source for source in VISION_CONFIG_FIELDS.values() if source not in original_config})
+    if missing:
+        raise ValueError(
+            f"The source configuration is missing {', '.join(f'`{key}`' for key in missing)}; expected the "
+            "`config.json` of an EMU3.5 vision tokenizer such as `BAAI/Emu3.5-VisionTokenizer`."
+        )
+
+    return Apertus1p5VisionTokenizerConfig(
+        dropout=original_config.get("dropout", 0.0),
+        **{target: original_config[source] for target, source in VISION_CONFIG_FIELDS.items()},
+    )
+
+
+def convert_vision_key(key: str) -> str:
+    """Map an original EMU3.5 encoder-stage key to the grouped Transformers module layout."""
+    parts = key.split(".")
+    if len(parts) < 4 or parts[:2] != ["encoder", "down"]:
+        return key
+
+    stage_idx, module_name = parts[2:4]
+    if module_name in ("block", "attn") and len(parts) >= 6:
+        layer_idx = parts[4]
+        component = "resnet" if module_name == "block" else "attention"
+        return ".".join(("encoder", "stages", stage_idx, "layers", layer_idx, component, *parts[5:]))
+    if module_name == "downsample":
+        return ".".join(("encoder", "stages", stage_idx, "downsample", *parts[4:]))
+    return key
+
+
+def convert_vision_state_dict(original_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Drop the original decoder branch and rename the retained encoder-stage tensors."""
+    return {
+        convert_vision_key(key): value
+        for key, value in original_state_dict.items()
+        if not key.startswith(VISION_DROPPED_PREFIXES)
+    }
+
+
+def load_vision_tokenizer(checkpoint_dir: str) -> Apertus1p5VisionTokenizerModel:
+    """Convert and strictly validate the original vision tokenizer without saving an intermediate checkpoint."""
+    with open(os.path.join(checkpoint_dir, CONFIG_NAME)) as f:
+        config = convert_vision_config(json.load(f))
+    state_dict = convert_vision_state_dict(load_file(os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME)))
+    _check_fp32_tokenizer_source("vision tokenizer", state_dict)
+    model = Apertus1p5VisionTokenizerModel(config)
+    model.load_state_dict(state_dict, strict=True)
+    return model.eval()
 
 
 def _has_valid_logits_layout(logits: torch.Tensor, output_vocab_size: int) -> bool:
@@ -169,20 +238,15 @@ def build_config(
     text_config["model_type"] = "apertus1p5_text"
     with open(os.path.join(vision_tokenizer_checkpoint, "config.json")) as f:
         vision_config = json.load(f)
-    _check_converted_tokenizer_source(
-        vision_config,
-        expected="apertus1p5_vision_tokenizer",
-        source=vision_tokenizer_checkpoint,
-        converter="convert_apertus1p5_vision_tokenizer_to_hf.py",
-    )
+    vision_config = convert_vision_config(vision_config)
     with open(os.path.join(audio_tokenizer_checkpoint, "config.json")) as f:
         audio_config = json.load(f)
-    _check_converted_tokenizer_source(
-        audio_config,
-        expected="wavtokenizer",
-        source=audio_tokenizer_checkpoint,
-        converter="convert_wavtokenizer_checkpoint.py",
-    )
+    if audio_config.get("model_type") != "wavtokenizer":
+        raise ValueError(
+            f"{audio_tokenizer_checkpoint!r} is not a converted WavTokenizer checkpoint: its `model_type` is "
+            f"{audio_config.get('model_type')!r}, expected 'wavtokenizer'. "
+            "Convert the audio source with convert_wavtokenizer_checkpoint.py first."
+        )
     audio_config.pop("architectures", None)
     audio_config.pop("transformers_version", None)
     # token ids and offsets: the Apertus1p5Config defaults are the verified values of the Apertus 1.5 tokenizer.
@@ -200,35 +264,18 @@ def build_config(
     return config
 
 
-def _check_converted_tokenizer_source(config: dict, expected: str, source: str, converter: str) -> None:
-    """Reject a tokenizer source that is not in Transformers format yet.
-
-    An original-format source can otherwise be assembled straight into the composite: its unknown field names
-    are absorbed as extra config attributes while the port's own fields silently fall back to their defaults,
-    and the decoder tensors it carries are copied through. The result only fails much later, when the composite
-    is loaded.
-    """
-    model_type = config.get("model_type")
-    if model_type != expected:
-        raise ValueError(
-            f"{source!r} is not a converted tokenizer checkpoint: its `model_type` is {model_type!r}, expected "
-            f"{expected!r}. This script assembles converted sources, it does not convert them; run "
-            f"{converter} first."
-        )
-
-
-def resolve_checkpoint_dir(path_or_repo_id: str) -> str:
+def resolve_checkpoint_dir(path_or_repo_id: str, *, allow_patterns: list[str] | None = None) -> str:
     """Resolve a local directory or download a Hub checkpoint (`repo_id` or `repo_id@revision`) to the cache."""
     if os.path.isdir(path_or_repo_id):
         return path_or_repo_id
     if os.path.isfile(path_or_repo_id):
         raise ValueError(
-            f"{path_or_repo_id!r} is a file, but every source must be a converted checkpoint directory. "
-            "Original-format checkpoints have to be converted first."
+            f"{path_or_repo_id!r} is a file, but each source must be a checkpoint directory or Hub repo. "
+            "Original WavTokenizer .ckpt files must be converted first."
         )
     repo_id, _, revision = path_or_repo_id.partition("@")
     logger.info(f"downloading {repo_id}" + (f" (revision {revision})" if revision else "") + " from the hub")
-    return snapshot_download(repo_id, revision=revision or None)
+    return snapshot_download(repo_id, revision=revision or None, allow_patterns=allow_patterns)
 
 
 def iter_source_shards(checkpoint_dir: str):
@@ -290,9 +337,13 @@ def remapped_sources(apertus_checkpoint: str, vision_tokenizer_checkpoint: str, 
             else:
                 raise ValueError(f"Unexpected key in the Apertus backbone checkpoint: {key}")
         yield "apertus", shard, remapped
-    for shard, state_dict in iter_source_shards(vision_tokenizer_checkpoint):
-        _check_fp32_tokenizer_source("vision tokenizer", state_dict)
-        yield "vision_tokenizer", shard, {f"model.vision_tokenizer.{key}": value for key, value in state_dict.items()}
+    vision_model = load_vision_tokenizer(vision_tokenizer_checkpoint)
+    yield (
+        "vision_tokenizer",
+        SAFE_WEIGHTS_NAME,
+        {f"model.vision_tokenizer.{key}": value for key, value in vision_model.state_dict().items()},
+    )
+    del vision_model
     for shard, state_dict in iter_source_shards(audio_tokenizer_checkpoint):
         _check_fp32_tokenizer_source("audio tokenizer", state_dict)
         remapped = {}
@@ -308,7 +359,7 @@ def remapped_sources(apertus_checkpoint: str, vision_tokenizer_checkpoint: str, 
             yield "wavtokenizer", shard, remapped
 
 
-def verify(composite_dir: str, max_new_tokens: int = 12):
+def verify_composite(composite_dir: str, max_new_tokens: int = 12):
     """Load a composite checkpoint and run configuration, dtype, processor, generation, and modality smoke checks."""
     failed_checks = []
 
@@ -366,10 +417,9 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
     if output_vocab_size is None:
         print("[WARN] the composite has an UNPRUNED LM head; expected a pruned backbone (`output_vocab_size`)")
 
-    tokenizer = AutoTokenizer.from_pretrained(composite_dir)
-
     # --- processor round trip: component classes and token-id agreement with the config ---------------------
     processor = AutoProcessor.from_pretrained(composite_dir)
+    tokenizer = processor.tokenizer
     component_classes = (
         type(processor).__name__,
         type(processor.image_processor).__name__,
@@ -382,7 +432,7 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
         (processor.audio_token, config.audio_token_id),
     ]
     token_ids_ok = all(tokenizer.convert_tokens_to_ids(token) == expected for token, expected in token_id_pairs)
-    structure_tokens = (
+    multimodal_structure_tokens = (
         processor.boi_token,
         processor.eoi_token,
         processor.image_wrapper_token,
@@ -390,7 +440,7 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
         processor.boa_token,
         processor.eoa_token,
     )
-    structure_ids = [tokenizer.convert_tokens_to_ids(token) for token in structure_tokens]
+    structure_ids = [tokenizer.convert_tokens_to_ids(token) for token in multimodal_structure_tokens]
     structure_ok = all(token_id is not None and token_id != tokenizer.unk_token_id for token_id in structure_ids)
     processor_ok = component_classes == (
         "Apertus1p5Processor",
@@ -563,7 +613,7 @@ def write_processor(apertus_checkpoint: str, audio_tokenizer_checkpoint: str, ou
     logger.info(f"processor, tokenizer and chat template written to {output_dir}")
 
 
-if __name__ == "__main__":
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Assemble and optionally verify an Apertus 1.5 composite checkpoint.")
     parser.add_argument(
         "--apertus_checkpoint",
@@ -572,8 +622,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--vision_tokenizer_checkpoint",
-        help="Apertus1p5VisionTokenizerModel checkpoint, already converted by "
-        "convert_apertus1p5_vision_tokenizer_to_hf.py: a raw EMU3.5 source is not accepted here. Local "
+        help="Original EMU3.5 vision tokenizer (e.g. BAAI/Emu3.5-VisionTokenizer); preconverted vision "
+        "checkpoints are not supported. Local "
         "directory or Hub `repo_id[@revision]` (not read with --processor_only or --skip_convert)",
     )
     parser.add_argument(
@@ -592,7 +642,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Only (re)write the processor stack into --output_dir, without re-sharding the weights",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.skip_convert and not args.processor_only and not args.verify:
         parser.error("--skip_convert without --verify does nothing; pass --verify or drop --skip_convert")
@@ -613,9 +663,13 @@ if __name__ == "__main__":
             parser.error("--vision_tokenizer_checkpoint is required unless --processor_only or --skip_convert is set")
         convert(
             resolve_checkpoint_dir(args.apertus_checkpoint),
-            resolve_checkpoint_dir(args.vision_tokenizer_checkpoint),
+            resolve_checkpoint_dir(args.vision_tokenizer_checkpoint, allow_patterns=[CONFIG_NAME, SAFE_WEIGHTS_NAME]),
             resolve_checkpoint_dir(args.audio_tokenizer_checkpoint),
             args.output_dir,
         )
     if args.verify:
-        verify(args.output_dir)
+        verify_composite(args.output_dir)
+
+
+if __name__ == "__main__":
+    main()
