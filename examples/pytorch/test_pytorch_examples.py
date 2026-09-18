@@ -496,6 +496,8 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --remove_unused_columns False
             --preprocessing_num_workers 0
             --max_steps 10
+            --max_duration_in_seconds 3.0
+            --min_duration_in_seconds 0.0
             --target_language tur
             --seed 42
         """.split()
@@ -527,6 +529,8 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --remove_unused_columns False
             --preprocessing_num_workers 0
             --max_steps 10
+            --max_duration_in_seconds 3.0
+            --min_duration_in_seconds 0.0
             --seed 42
         """.split()
 
