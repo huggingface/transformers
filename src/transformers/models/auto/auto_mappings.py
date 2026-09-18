@@ -1284,7 +1284,6 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mask2former", {"pil": "Mask2FormerImageProcessorPil", "torchvision": "Mask2FormerImageProcessor"}),
         ("maskformer", {"pil": "MaskFormerImageProcessorPil", "torchvision": "MaskFormerImageProcessor"}),
         ("minicpmv4_6", {"pil": "MiniCPMV4_6ImageProcessorPil", "torchvision": "MiniCPMV4_6ImageProcessor"}),
-        ("minicpmv4_7", {"pil": "MiniCPMV4_7ImageProcessorPil", "torchvision": "MiniCPMV4_7ImageProcessor"}),
         ("minimax_m3_vl", {"torchvision": "MiniMaxM3VLImageProcessor"}),
         ("mllama", {"pil": "MllamaImageProcessorPil", "torchvision": "MllamaImageProcessor"}),
         ("mobilenet_v1", {"pil": "MobileNetV1ImageProcessorPil", "torchvision": "MobileNetV1ImageProcessor"}),

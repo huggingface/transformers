@@ -31,8 +31,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ...video_utils import VideoInput
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
-from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor
-from ..minicpmv4_6.image_processing_pil_minicpmv4_6 import MiniCPMV4_6ImageProcessorPil
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     MiniCPMV4_6Model,
@@ -680,70 +678,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
 
 
 @auto_docstring
-class MiniCPMV4_7ImageProcessor(MiniCPMV4_6ImageProcessor):
-    def get_sliced_grid(
-        self,
-        image_size: tuple[int, int],
-        max_slice_nums: int,
-        scale_resolution: int,
-    ) -> list[int] | None:
-        original_height, original_width = image_size
-        log_ratio = math.log(original_width / original_height)
-        ratio = original_width * original_height / (scale_resolution * scale_resolution)
-        multiple = min(math.ceil(ratio), max_slice_nums)
-        if multiple <= 1:
-            return None
-
-        best_grid = [1, 1]
-        min_error = float("inf")
-        for num_slices in [multiple - 1, multiple, multiple + 1]:
-            if num_slices == 1 or num_slices > max_slice_nums:
-                continue
-            for num_rows in range(1, num_slices + 1):
-                if num_slices % num_rows == 0:
-                    num_cols = num_slices // num_rows
-                    error = abs(log_ratio - math.log(num_cols / num_rows))
-                    if error < min_error:
-                        best_grid = [num_rows, num_cols]
-                        min_error = error
-                    elif error == min_error and num_rows > best_grid[0]:
-                        best_grid = [num_rows, num_cols]
-        return best_grid
-
-
-@auto_docstring
-class MiniCPMV4_7ImageProcessorPil(MiniCPMV4_6ImageProcessorPil):
-    def get_sliced_grid(
-        self,
-        image_size: tuple[int, int],
-        max_slice_nums: int,
-        scale_resolution: int,
-    ) -> list[int] | None:
-        original_height, original_width = image_size
-        log_ratio = math.log(original_width / original_height)
-        ratio = original_width * original_height / (scale_resolution * scale_resolution)
-        multiple = min(math.ceil(ratio), max_slice_nums)
-        if multiple <= 1:
-            return None
-
-        best_grid = [1, 1]
-        min_error = float("inf")
-        for num_slices in [multiple - 1, multiple, multiple + 1]:
-            if num_slices == 1 or num_slices > max_slice_nums:
-                continue
-            for num_rows in range(1, num_slices + 1):
-                if num_slices % num_rows == 0:
-                    num_cols = num_slices // num_rows
-                    error = abs(log_ratio - math.log(num_cols / num_rows))
-                    if error < min_error:
-                        best_grid = [num_rows, num_cols]
-                        min_error = error
-                    elif error == min_error and num_rows > best_grid[0]:
-                        best_grid = [num_rows, num_cols]
-        return best_grid
-
-
-@auto_docstring
 class MiniCPMV4_7VideoProcessor(MiniCPMV4_6VideoProcessor):
     # Video frames form a single temporal sequence, so they are not numbered with local image ids.
     use_image_id = AttributeError()
@@ -830,8 +764,6 @@ __all__ = [
     "MiniCPMV4_7PreTrainedModel",  # noqa
     "MiniCPMV4_7Model",
     "MiniCPMV4_7ForConditionalGeneration",
-    "MiniCPMV4_7ImageProcessor",
-    "MiniCPMV4_7ImageProcessorPil",
     "MiniCPMV4_7VideoProcessor",
     "MiniCPMV4_7Processor",
 ]

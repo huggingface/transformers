@@ -26,10 +26,9 @@ import numpy as np
 import torch
 from huggingface_hub.dataclasses import validate_typed_dict
 
-from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict, validate_kwargs
-from ...processing_utils import Unpack, VideosKwargs
+from ...processing_utils import BatchFeature, Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata, group_videos_by_shape, reorder_videos
