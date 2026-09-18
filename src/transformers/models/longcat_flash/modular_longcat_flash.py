@@ -30,7 +30,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Attention,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3Model,
@@ -39,6 +38,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
+from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from .configuration_longcat_flash import LongcatFlashConfig
 
@@ -155,11 +155,13 @@ class LongcatFlashMoE(nn.Module):
         return hidden_states
 
 
-class LongcatFlashMLA(DeepseekV3Attention):
+class LongcatFlashMLA(DeepseekV32Attention):
+    """MLA from Deepseek V3 with a Q-LoRA rank and LoRA scaling."""
+
     def __init__(self, config: LongcatFlashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        del self.indexer
         self.qk_head_dim = config.qk_head_dim  # qk_head_dim is a settable attribute in LongcatFlashConfig
-
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
@@ -343,10 +345,7 @@ class LongcatFlashModel(DeepseekV3Model):
         self.layers = nn.ModuleList(
             [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
-        # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
         self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used)
-
-        self.config.num_hidden_layers = 2 * config.num_layers
         self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False

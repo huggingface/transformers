@@ -295,13 +295,13 @@ class HYV4Attention(GlmMoeDsaAttention):
         # Non-interleave RoPE
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
+        # Cache read / write is performed while latent KV is still compressed
+        if past_key_values is not None:
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        # Sparse-attention models cache the expanded K/V, not the compressed latents. TODO (remi-or): fix this with topk
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
@@ -380,7 +380,7 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
     def __init__(self, config: HYV4Config):
         super().__init__()
         del self.hc_sinkhorn_iters
-        mix = 2 * self.hc_mult  # noqa: F841
+        concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
         self.hc_post_magnitude = config.hc_magnitude
         self.scale = nn.Parameter(torch.empty(2))
 
