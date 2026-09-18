@@ -546,6 +546,8 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --max_train_steps 2
             --validation_split_percentage 5
             --seed 42
+            --max_duration_in_seconds 1.0
+            --min_duration_in_seconds 0.5
         """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -570,6 +572,7 @@ class ExamplesTests(MemoryCleanupMixin, TestCasePlus):
             --max_steps 10
             --train_val_split 0.1
             --seed 42
+            --config_overrides hidden_size=32,intermediate_size=64,num_hidden_layers=2,num_attention_heads=2,decoder_hidden_size=32,decoder_intermediate_size=64,decoder_num_hidden_layers=2,decoder_num_attention_heads=2
         """.split()
 
         if is_torch_fp16_available_on_device(torch_device):
