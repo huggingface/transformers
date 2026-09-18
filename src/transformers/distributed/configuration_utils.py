@@ -18,6 +18,8 @@ import warnings
 from dataclasses import asdict, dataclass
 from typing import Literal
 
+from ..utils import is_torch_greater_or_equal
+
 
 @dataclass
 class DistributedConfig:
@@ -46,12 +48,14 @@ class DistributedConfig:
         pp_size (`int`, *optional*):
             Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
         ep_size (`int`, *optional*):
-            Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP.
-            Model execution currently requires `ep_size=tp_size` when EP is enabled.
+            Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
+            a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
+            `ep_size=tp_size`; token dispatch (`"ep_dispatch_experts"`) also allows `ep_size > tp_size`.
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
-            `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules.
+            `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
+            `"ep_dispatch_experts"` rule selects all-to-all token dispatch instead of router masking and all-reduce.
     """
 
     tp_size: int | None = None
@@ -125,6 +129,21 @@ class DistributedConfig:
             raise ValueError(
                 "Combining FSDP with pipeline parallelism is not supported yet. "
                 "Use DistributedConfig(tp_size=N, fsdp_size=M), or combine TP and PP."
+            )
+
+    def _validate_resolved_ep_plan(self, ep_plan: dict[str, str]):
+        """Validate the layout against the resolved EP plan, once the model's defaults and overrides are merged."""
+        if self.ep_size <= 1 or not ep_plan:
+            return
+
+        if "ep_dispatch_experts" in ep_plan.values():
+            if self.pp_size > 1:
+                raise ValueError("Combining token dispatch with pipeline parallelism is not supported/tested yet.")
+            if not is_torch_greater_or_equal("2.7"):
+                raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
+        elif {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()) and self.ep_size != self.tp_size:
+            raise ValueError(
+                "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
             )
 
     @classmethod
