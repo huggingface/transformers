@@ -69,7 +69,7 @@ jobs:
     env:
       HF_HOME: /tmp/hf_home
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      RUN_SLOW: "0"
+      RUN_SLOW: "1"
     steps:
       - name: Test ${{ matrix.model }}
         run: |
@@ -98,7 +98,7 @@ jobs:
     env:
       HF_HOME: /tmp/hf_home
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      RUN_SLOW: "0"
+      RUN_SLOW: "1"
     steps:
       - name: Test ${{ matrix.model }}
         run: |
@@ -124,7 +124,7 @@ jobs:
     env:
       HF_HOME: /tmp/hf_home
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      RUN_SLOW: "0"
+      RUN_SLOW: "1"
     steps:
       - name: Test ${{ matrix.model }}
         run: |
