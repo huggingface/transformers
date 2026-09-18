@@ -658,9 +658,6 @@ class StaticIndexedLayer(StaticLayer):
         super().__init__(max_cache_len=max_cache_len)
         self.indexer_keys: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
-        # The indexer update runs independently of (and after) the main K/V `update` in the attention
-        # forward, so it tracks its own cumulative length rather than reusing `self.cumulative_length`.
-        self.indexer_cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
@@ -670,7 +667,9 @@ class StaticIndexedLayer(StaticLayer):
             dtype=self.indexer_dtype,
             device=self.indexer_device,
         )
-        self.indexer_cumulative_length = self.indexer_cumulative_length.to(self.indexer_device)
+        # The indexer update runs independently of the main K/V `update` — it can even run first — so it
+        # tracks its own cumulative length here, alongside the buffer it belongs to.
+        self.indexer_cumulative_length = torch.zeros((), dtype=torch.long, device=self.indexer_device)
         # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.indexer_keys)
@@ -1055,7 +1054,8 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.is_conv_states_initialized[state_idx] = True
 
         if recurrent_states is not None:
-            # The shape is always static, so we init as such
+            # `zeros_like` keeps the recurrent tensor's own dtype, which is not always `self.dtype` (that
+            # follows the conv state): recurrent_gemma accumulates in float32 with a compute-dtype conv state.
             self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states)
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():

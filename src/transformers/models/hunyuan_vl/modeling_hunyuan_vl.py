@@ -36,7 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
@@ -222,16 +222,12 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size, sequence_len, -1).squeeze(0)
 
-        start = 0
-        image_embeddings_list = []
+        position_embeddings_list = []
         for t, h, w in grid_thw:
-            end = start + t * h * w
-            image_embeddings = embeddings[start:end, :]
-            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
-            image_embeddings_list.append(image_embeddings + position_embedding)
-            start = end
+            position_embeddings_list.append(self.interpolate_pos_encoding(embeddings, h, w).squeeze(0).repeat(t, 1))
+        position_embeddings = torch.concat(position_embeddings_list, dim=0)
 
-        return torch.concat(image_embeddings_list, dim=0).unsqueeze(0)
+        return (embeddings + position_embeddings).unsqueeze(0)
 
 
 class HunYuanVLVisionPatchMerger(nn.Module):
@@ -260,7 +256,10 @@ class HunYuanVLVisionPatchMerger(nn.Module):
     def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         hidden_states = self.before_rms(hidden_states)
         dtype = hidden_states.dtype
-        hidden_states = hidden_states.permute(0, 2, 1).reshape(hidden_states.shape[0], -1, *size)
+        hidden_states = hidden_states.permute(0, 2, 1)
+        hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], *size)
+        torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
+        torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
