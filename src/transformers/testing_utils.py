@@ -1986,6 +1986,7 @@ def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
     target_names = (
         "LayerNorm",
+        "LayerNorm1P",
         "GroupNorm",
         "BatchNorm",
         "RMSNorm",
