@@ -1142,11 +1142,21 @@ class PrefixChange(WeightRenaming):
         return result
 
 
-# List of classes that are known to be able to use m:n
-_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
-    ErnieFuseAndSplitTextVisionExperts,
-    ErnieSplitAndDecoupleTextVisionExperts,
-)
+def _internal_many_to_many_conversions() -> tuple[type[ConversionOps], ...]:
+    """The classes known to be able to use m:n.
+
+    A function, not the module-level tuple it would rather be: `FineGrainedWeightGlobals` lives in
+    `integrations.finegrained`, which imports THIS module, so naming it at import time fails
+    whenever the integration is imported first (`cannot import name ... from partially initialized
+    module`). Called once per `WeightConverter`, at construction.
+    """
+    from .integrations.finegrained import FineGrainedWeightGlobals
+
+    return (
+        ErnieFuseAndSplitTextVisionExperts,
+        ErnieSplitAndDecoupleTextVisionExperts,
+        FineGrainedWeightGlobals,
+    )
 
 
 class WeightConverter(WeightTransform):
@@ -1165,7 +1175,7 @@ class WeightConverter(WeightTransform):
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
-            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+            if not any(isinstance(op, _internal_many_to_many_conversions()) for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
@@ -1699,8 +1709,10 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
+                # usually correct when initializing; only exception can be quants (int8 storage
+                # would zero it, float8 would double-round it)
+                _dtype = empty_param.dtype
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`

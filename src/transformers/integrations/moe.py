@@ -164,6 +164,12 @@ def batched_mm_experts_forward(
         proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
+    # Normalize each expert application, where such a norm is defined, before it is weighted.
+    # `getattr`: an experts module built without the decorator has no such attribute, and this
+    # forward is the shared one every backend adapts onto.
+    if getattr(self, "has_post_expert_norm", False):
+        proj_out = self._apply_post_norm(proj_out)  # (S, hidden_dim)
+
     # Apply routing weights
     if sentinel_mask is not None:
         # Zero weights already drop these from the output; the mask keeps them out of the router gradient.
@@ -475,6 +481,12 @@ def grouped_mm_experts_forward(
     if sentinel_mask is not None:
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
+    # Normalize each expert application, where such a norm is defined, before it is weighted.
+    # `getattr`: an experts module built without the decorator has no such attribute, and this
+    # forward is the shared one every backend adapts onto.
+    if getattr(self, "has_post_expert_norm", False):
+        proj_out = self._apply_post_norm(proj_out)  # (S, hidden_dim)
+
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
@@ -542,6 +554,7 @@ def use_experts_implementation(
     is_transposed: bool = False,
     has_bias: bool = False,
     has_gate: bool = True,
+    has_post_expert_norm: bool = False,
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
@@ -560,6 +573,10 @@ def use_experts_implementation(
         has_gate (`bool`, *optional*, defaults to `True`):
             Whether the experts use a gating mechanism or not.
             Whether it has gate_up_proj weights or just up_proj weights.
+        has_post_expert_norm (`bool`, *optional*, defaults to `False`):
+            Whether the experts normalize the down output before the routing weights. The class
+            must then define `_apply_post_norm(self, expert_out)` — the standard name every
+            backend applies, so none of them needs to know the model's own math.
 
     Returns:
         `type[torch.nn.Module]`: The modified experts class.
@@ -577,6 +594,7 @@ def use_experts_implementation(
             self.has_bias = has_bias
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
+            self.has_post_expert_norm = has_post_expert_norm
             self._is_expert_parallel = False
 
         @wraps(original_forward)
@@ -586,6 +604,13 @@ def use_experts_implementation(
 
         if not hasattr(experts_class, "_apply_gate"):
             experts_class._apply_gate = _default_apply_gate
+
+        if has_post_expert_norm and not hasattr(experts_class, "_apply_post_norm"):
+            raise TypeError(
+                f"{experts_class.__name__} declares a post-expert norm but does not "
+                "define `_apply_post_norm(self, expert_out)`, which applies it to one expert "
+                "application's rows before the routing weights."
+            )
 
         experts_class.__init__ = __init__
         experts_class.forward = forward

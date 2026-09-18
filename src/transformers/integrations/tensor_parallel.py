@@ -63,7 +63,30 @@ def shard_and_distribute_module(*args, **kwargs):
     raise RuntimeError("`shard_and_distribute_module` is unavailable with the DTensor tensor-parallel loading path.")
 
 
+def to_local(t):
+    """Deprecated: unwrap a `DTensor` to its local shard, or pass through.
+
+    Kept for callers that predate `_hf_quantized_needs_local_tp`. A quantized module that sets
+    it is handed local tensors by the TP loader, so the kernels — which take raw pointers and do
+    not understand `DTensor` — need no unwrap of their own; nothing in transformers calls this.
+    `DTensor.to_local()` is the direct replacement and is autograd-aware on the train path,
+    rewrapping the gradient to match each parameter's placements.
+    """
+    warnings.warn(
+        "`to_local` is deprecated. Set `_hf_quantized_needs_local_tp = True` on the module so the "
+        "tensor-parallel loader hands it local tensors, or call `DTensor.to_local()` directly.",
+        FutureWarning,
+        stacklevel=2,
+    )
+    from ..distributed.utils import is_dtensor
+
+    if is_dtensor(t):
+        return t.to_local()
+    return t
+
+
 __all__ = [
+    "to_local",
     "ALL_PARALLEL_STYLES",
     "MoeIdentityExpertParallel",
     "MoeTensorParalellExperts",

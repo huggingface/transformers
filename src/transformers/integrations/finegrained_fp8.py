@@ -40,6 +40,12 @@ from .moe import ExpertsInterface, use_experts_implementation
 
 logger = logging.get_logger(__name__)
 
+logger.warning(
+    "finegrained_fp8 is frozen for backward compatibility and no longer receives new recipes; the "
+    "fine-grained quantization machinery lives in transformers.integrations.finegrained "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only)."
+)
+
 
 _FP8_DTYPE = torch.float8_e4m3fn
 _FP8_MIN = torch.finfo(_FP8_DTYPE).min
