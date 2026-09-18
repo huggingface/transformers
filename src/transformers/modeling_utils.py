@@ -84,6 +84,12 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
+from .integrations.safetensors_prefetch import (
+    PrefetchedShard,
+    PrefetchedTensor,
+    is_prefetch_available,
+    prefetch_target_device,
+)
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .loss.loss_utils import LOSS_MAPPING
@@ -189,6 +195,7 @@ class LoadStateDictConfig:
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
+    prefetch: bool | None = None
 
     @property
     def is_quantized(self) -> bool:
@@ -3831,6 +3838,7 @@ class PreTrainedModel(
         weights_only: bool = True,
         fusion_config: dict[str, bool | dict[str, Any]] | None = None,
         disable_mmap: bool | None = None,
+        prefetch: bool | None = None,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
         r"""
@@ -4014,6 +4022,12 @@ class PreTrainedModel(
                 (used by HF Spaces/Endpoints), where mmap + parallel page-faults can deadlock. When `True`,
                 files are read fully into memory and parsed with `safetensors.torch.load`. When `False`, the
                 default memory-mapped loader is always used.
+            prefetch (`bool`, *optional*):
+                Load safetensors shards straight into device memory with safetensors' CUDA prefetch engine
+                (safetensors >= 0.9.0rc1, Linux). Shards are read and copied to the device in the background
+                while the weights are being assigned, and parameters are created as zero-copy views of the
+                loaded buffers. Used only when every entry of `device_map` is the same CUDA device and no
+                on-the-fly quantization is requested; the default loader is used otherwise.
             fusion_config (`dict[str, bool | dict[str, Any]]`, *optional*):
                 Optional fusion configuration applied before model instantiation. Each key enables a fusion family and
                 its value can either be `True` to enable that fusion with default options or a dictionary of
@@ -4310,6 +4324,7 @@ class PreTrainedModel(
             use_safetensors=use_safetensors,
             download_kwargs=download_kwargs,
             disable_mmap=disable_mmap,
+            prefetch=prefetch,
         )
         loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
         loading_info = cls._finalize_model_loading(model, load_config, loading_info)
@@ -4388,8 +4403,23 @@ class PreTrainedModel(
                 load_config.weight_mapping,
             )
 
+        # safetensors' prefetch engine loads the shards into its own device allocations and hands them out
+        # as zero-copy tensors: with it, the caching-allocator warmup would only double the footprint
+        prefetch_device = None
+        if (
+            load_config.prefetch
+            and state_dict is None
+            and checkpoint_files is not None
+            and checkpoint_files[0].endswith(".safetensors")
+            and (load_config.hf_quantizer is None or load_config.hf_quantizer.pre_quantized)
+            and is_prefetch_available()
+        ):
+            prefetch_device = prefetch_target_device(load_config.device_map)
+            if prefetch_device is not None:
+                logger.info(f"Loading safetensors shards with the CUDA prefetch engine on {prefetch_device}")
+
         # Warmup cuda to load the weights much faster on devices
-        if load_config.device_map is not None and not is_hqq_or_quark:
+        if load_config.device_map is not None and not is_hqq_or_quark and prefetch_device is None:
             expanded_device_map = expand_device_map(load_config.device_map, expected_keys)
             caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
 
@@ -4425,6 +4455,14 @@ class PreTrainedModel(
             elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
                 for file in checkpoint_files:
+                    if prefetch_device is not None:
+                        file_pointer = safe_open(file, framework="pt", device=str(prefetch_device), backend="pread")
+                        all_pointer.add(file_pointer)
+                        # a tensor-parallel rank keeps slices: no zero-copy views (see PrefetchedShard)
+                        shard = PrefetchedShard(file_pointer, copy_full=load_config.device_mesh is not None)
+                        for k in file_pointer.keys():
+                            merged_state_dict[k] = PrefetchedTensor(shard, k)  # loads on first indexing
+                        continue
                     if load_config.disable_mmap or _is_on_hf_mount(file):
                         with open(file, "rb") as _fh:
                             merged_state_dict.update(_safe_load_bytes(_fh.read()))

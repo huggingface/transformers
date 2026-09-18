@@ -4032,3 +4032,74 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
             del output, model
 
         self.assertEqual(resident[0] - resident[1], saved_bytes)
+
+
+class SafetensorsPrefetchLoadingTest(unittest.TestCase):
+    """`from_pretrained(..., prefetch=True)`: safetensors' CUDA prefetch engine behind the loader."""
+
+    def test_target_device_gate(self):
+        from transformers.integrations.safetensors_prefetch import prefetch_target_device
+
+        self.assertIsNone(prefetch_target_device(None))
+        self.assertIsNone(prefetch_target_device({"": "cpu"}))
+        self.assertIsNone(prefetch_target_device({"": "disk"}))
+        self.assertIsNone(prefetch_target_device({"a": "cuda:0", "b": "cuda:1"}))
+        self.assertIsNone(prefetch_target_device({"a": "cuda:0", "b": "cpu"}))
+        self.assertEqual(
+            prefetch_target_device({"a": "cuda:1", "b": torch.device("cuda:1"), "c": 1}), torch.device("cuda:1")
+        )
+
+    def test_proxy_keeps_the_slice_surface(self):
+        from transformers.integrations.safetensors_prefetch import PrefetchedShard, PrefetchedTensor
+
+        class Meta:
+            dtype, shape = "BF16", [4, 3]
+
+        class FakeHandle:
+            prefetch_calls = 0
+
+            def get_tensor_meta(self, name):
+                return Meta()
+
+            def prefetch(self):
+                FakeHandle.prefetch_calls += 1
+
+            def get_tensor(self, name):
+                return torch.arange(12, dtype=torch.bfloat16).reshape(4, 3)
+
+        shard = PrefetchedShard(FakeHandle())
+        a, b = PrefetchedTensor(shard, "a"), PrefetchedTensor(shard, "b")
+        self.assertEqual(a.get_dtype(), "BF16")
+        self.assertEqual(a.get_shape(), [4, 3])
+        self.assertEqual(FakeHandle.prefetch_calls, 0)  # header queries never start the load
+        whole = a[...]
+        self.assertEqual(whole.shape, (4, 3))
+        part = a[1:3, :2]
+        self.assertEqual(part.shape, (2, 2))
+        self.assertEqual(part.data_ptr() % whole.element_size(), 0)
+        self.assertNotEqual(part.untyped_storage().data_ptr(), whole.untyped_storage().data_ptr())  # compact copy
+        self.assertEqual(b[...].shape, (4, 3))
+        self.assertEqual(FakeHandle.prefetch_calls, 1)  # one prefetch per shard, on first indexing
+        # a tensor-parallel rank never keeps views into the engine's allocations
+        copying = PrefetchedTensor(PrefetchedShard(FakeHandle(), copy_full=True), "c")
+        full = copying[...]
+        self.assertEqual(full.shape, (4, 3))
+        self.assertNotEqual(full.untyped_storage().data_ptr(), copying[...].untyped_storage().data_ptr())
+
+    @require_torch_gpu
+    def test_prefetch_loads_the_same_weights(self):
+        from transformers import LlamaConfig, LlamaForCausalLM
+        from transformers.integrations.safetensors_prefetch import is_prefetch_available
+
+        if not is_prefetch_available():
+            self.skipTest("safetensors without the prefetch engine")
+        config = LlamaConfig(
+            hidden_size=32, intermediate_size=64, num_hidden_layers=2, num_attention_heads=4, vocab_size=128
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            LlamaForCausalLM(config).save_pretrained(tmp, max_shard_size="20KB")
+            reference = LlamaForCausalLM.from_pretrained(tmp, device_map="cuda:0")
+            loaded = LlamaForCausalLM.from_pretrained(tmp, device_map="cuda:0", prefetch=True)
+        for (name, expected), (_, got) in zip(reference.state_dict().items(), loaded.state_dict().items()):
+            self.assertEqual(got.device.type, "cuda", name)
+            torch.testing.assert_close(got, expected, msg=name)
