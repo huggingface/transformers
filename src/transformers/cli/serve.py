@@ -109,6 +109,13 @@ class Serve:
         enable_cors: Annotated[bool, typer.Option(help="Enable permissive CORS.")] = False,
         log_level: Annotated[str, typer.Option(help="Logging level (e.g. 'info', 'warning').")] = "warning",
         default_seed: Annotated[int | None, typer.Option(help="Default torch seed.")] = None,
+        allowed_media_domains: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--allowed-media-domain",
+                help="Domain allowed for remote image, video, and audio URLs. May be repeated.",
+            ),
+        ] = None,
         non_blocking: Annotated[
             bool, typer.Option(hidden=True, help="Run server in a background thread. Used by tests.")
         ] = False,
@@ -179,6 +186,7 @@ class Serve:
             model_manager=self._model_manager,
             generation_state=self._generation_state,
             chat_template_kwargs=chat_template_kwargs,
+            allowed_media_domains=allowed_media_domains,
         )
 
         self._completion_handler = CompletionHandler(
@@ -190,6 +198,7 @@ class Serve:
             model_manager=self._model_manager,
             generation_state=self._generation_state,
             chat_template_kwargs=chat_template_kwargs,
+            allowed_media_domains=allowed_media_domains,
         )
 
         self._transcription_handler = TranscriptionHandler(self._model_manager, self._generation_state)

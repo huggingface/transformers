@@ -150,7 +150,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [{"role": "user", "content": "Hello"}]
-        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        result = get_processor_inputs_from_messages(messages, Modality.VLM, frozenset({"example.com"}))
         self.assertEqual(result, [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}])
 
     def test_vlm_text_and_image_url(self):
@@ -221,6 +221,30 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         image_item = result[0]["content"][1]
         self.assertEqual(image_item["type"], "image")
         self.assertEqual(image_item["url"], base64_url)
+
+    @require_serve
+    def test_vlm_remote_image_rejected_by_default(self):
+        from fastapi import HTTPException
+
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "image_url", "image_url": {"url": "http://127.0.0.1/internal"}}],
+            }
+        ]
+        with self.assertRaises(HTTPException) as ctx:
+            BaseHandler.get_processor_inputs_from_messages(messages, Modality.VLM, frozenset())
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_vlm_remote_image_accepts_allowed_domain(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "image_url", "image_url": {"url": "https://images.example/img.png"}}],
+            }
+        ]
+        result = BaseHandler.get_processor_inputs_from_messages(messages, Modality.VLM, frozenset({"images.example"}))
+        self.assertEqual(result[0]["content"][0]["url"], "https://images.example/img.png")
 
     def test_vlm_multi_turn(self):
         """VLM multi-turn: string content should be wrapped in text type."""
@@ -340,7 +364,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         ]
         for modality in (Modality.VLM, Modality.MULTIMODAL):
             with self.subTest(modality=modality):
-                result = get_processor_inputs_from_messages(messages, modality)
+                result = get_processor_inputs_from_messages(messages, modality, frozenset({"huggingface.co"}))
                 self.assertEqual(len(result[0]["content"]), 2)
                 video_item = result[0]["content"][0]
                 self.assertEqual(video_item, {"type": "video", "url": video_src})
