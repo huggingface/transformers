@@ -168,9 +168,8 @@ class HYV4Indexer(nn.Module):
     """
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
-    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
-    and returns the additive top-k sparse mask directly (`0` at the selected tokens, `-inf` elsewhere);
-    the raw top-k indices are only ever scattered into that mask, so they are not surfaced.
+    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention, and scores
+    every query against the cached keys to select the top-k tokens the attention may attend to.
 
     **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
@@ -208,13 +207,9 @@ class HYV4Indexer(nn.Module):
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
-        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
-        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
-        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
-        scores directly in bf16/fp32.
-
-        The scoring logic computes:
-            index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
+        Same as [`DeepseekV32Indexer.forward`], but RoPE rotates the trailing slice of each head instead of the
+        leading one, the key norm runs in fp32 with `rms_norm_eps`, and the softmax scale is folded into the head
+        weights. Only the indices are returned.
 
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
@@ -224,8 +219,7 @@ class HYV4Indexer(nn.Module):
             past_key_values: Cache object containing the indexer key cache for this layer.
 
         Returns:
-            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
