@@ -154,6 +154,7 @@ class DistributedMixin:
         if distributed_config.ep_size > 1 and distributed_config.ep_size != distributed_config.tp_size:
             raise ValueError(
                 "All-reduce expert parallelism requires `ep_size=tp_size` and identical tokens per EP group."
+                "The token dispatch version allowing `ep_size != tp_size` is coming soon!"
             )
 
         if distributed_config.tp_size == 1 and distributed_config.fsdp_size == 1 and distributed_config.pp_size == 1:
