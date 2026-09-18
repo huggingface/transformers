@@ -30,6 +30,7 @@ import argparse
 import contextlib
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -62,7 +63,10 @@ def run_pytest(
     report_name = f"{machine_type}_{suite}_{str(relative_path).replace('/', '_')}_test_reports"
     print(f"Suite: {suite} | Running on: {relative_path}")
 
-    cmd = ["python3", "-m", "pytest", "-rsfE", "-v", f"--make-reports={report_name}", str(subdir)]
+    # `sys.executable`, not "python3": the tests have to run in the interpreter this script was
+    # started with. Picking whatever "python3" resolves to on PATH silently runs them against a
+    # different environment, which is only obvious when that one happens not to have pytest.
+    cmd = [sys.executable, "-m", "pytest", "-rsfE", "-v", f"--make-reports={report_name}", str(subdir)]
     if not cpu_tests:
         cmd = cmd + ["-m", "not not_device_test"]
 
