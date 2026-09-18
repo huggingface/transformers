@@ -20,6 +20,7 @@ import pytest
 
 from transformers import dynamic_module_utils
 from transformers.dynamic_module_utils import get_cached_module_file, get_imports
+from transformers.testing_utils import require_symlink_support
 
 
 TOP_LEVEL_IMPORT = """
@@ -230,18 +231,12 @@ def _build_symlinked_hub_cache(repo_root: Path, files: dict[str, str], revision:
     for name, content in files.items():
         sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
         (blobs / sha).write_text(content, encoding="utf-8")
-        try:
-            (snapshot / name).symlink_to(Path("..") / ".." / "blobs" / sha)
-        except OSError as exc:
-            # Windows refuses symlink creation unless the process is elevated or
-            # Developer Mode is enabled, neither of which is the default. The test
-            # exists to prove relative-import discovery follows hub-cache symlinks,
-            # so there is nothing meaningful left to assert without them.
-            pytest.skip(f"Can't create symlinks: {exc}")
+        (snapshot / name).symlink_to(Path("..") / ".." / "blobs" / sha)
 
     return snapshot
 
 
+@require_symlink_support
 def test_get_cached_module_file_local_handles_symlinked_hub_cache(monkeypatch, tmp_path):
     # In a real hub cache the snapshot files are symlinks into a content-addressed ``blobs/`` dir,
     # so relative-import discovery must follow the named ``*.py`` symlinks in the snapshot dir rather
