@@ -39,10 +39,12 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-> [!TIP]
-> Expert parallelism automatically enables [tensor parallelism](./perf_infer_gpu_multi) for attention layers.
+Each MoE model defines two plans in its config: `base_model_tp_plan` for the dense modules and `base_model_ep_plan` for the experts. They are exposed on the loaded model as `model.tp_plan` and `model.ep_plan`. With `tp_size > 1` and `ep_size > 1`, both apply: the [tensor parallel](./perf_infer_gpu_multi) plan shards attention and the dense MLPs, and the expert parallel plan shards the experts. EP rules take precedence over TP rules for the same modules, so expert weights are sharded once, by the EP plan. In the EP plan, the [`GroupedGemmParallel`] style splits the expert weights along the expert dimension so each rank loads only its local experts, and `ep_router` masks the experts that live on other ranks before an all-reduce combines the expert outputs.
 
-Setting `ep_size > 1` switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
+`tp_plan` is applied only when `tp_size > 1`, and `ep_plan` only when `ep_size > 1`. With TP enabled and EP disabled, the full TP plan applies, expert rules included.
+
+> [!TIP]
+> `enable_expert_parallel=True` is a deprecated alias for `ep_size=tp_size`, used only when `ep_size` is omitted, and emits a `FutureWarning`.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 
@@ -50,9 +52,24 @@ Launch your inference script with [torchrun](https://pytorch.org/docs/stable/ela
 torchrun --nproc-per-node 8 your_script.py
 ```
 
+### Overriding the plans
+
+Pass `tp_plan={...}` or `ep_plan={...}` to [`DistributedConfig`] to override individual rules of the predefined plans. Unspecified rules are kept, and the merged plans are stored on the model. Each key must match a module, a parameter, or an existing plan entry; otherwise loading raises a `ValueError` before anything is sharded. Use the full path as seen from the loaded model, so `model.layers.*` for a causal LM and `layers.*` for its base model.
+
+```py
+distributed_config = DistributedConfig(
+    tp_size=4,
+    ep_size=4,
+    tp_plan={"model.layers.*.self_attn.q_proj": "colwise_rep"},
+    ep_plan={"model.layers.*.mlp.experts.down_proj": "grouped_gemm"},
+)
+```
+
+Providing a plan does not infer parallel sizes: set `tp_size` and `ep_size` explicitly.
+
 ## Combining with FSDP2
 
-Expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep `ep_size=tp_size` for the expert parallel width.
+Tensor and expert parallelism shard the weights across `tp`, but the optimizer state and the modules without a rule are still replicated on every rank of the group, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep `ep_size=tp_size` for the expert parallel width.
 
 ```py
 from transformers import AutoModelForCausalLM
