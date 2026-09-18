@@ -17,11 +17,11 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import is_torch_available
+from transformers import is_torch_available, logging
 from transformers.testing_utils import (
+    CaptureLogger,
     CaptureStdout,
     Expectations,
-    cleanup,
     require_deterministic_for_xpu,
     require_torch,
     slow,
@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -77,8 +78,8 @@ class DiffusionGemmaVisionText2TextModelTester:
             "num_hidden_layers": 2,
             # model-specific text config values
             "layer_types": ["sliding_attention", "full_attention"],  # we want to test both types
-            "num_global_key_value_heads": 2,  # key introduced by the gemma4 family
-            "global_head_dim": 32 // 2,  # hidden_size // num_attention_heads
+            # full-attention layer overrides (head_dim is hidden_size // num_attention_heads)
+            "per_layer_config": {1: {"head_dim": 32 // 2, "num_key_value_heads": 2}},
             "top_k_experts": 2,  # key introduced by the gemma4 family
             "use_bidirectional_attention": "vision",  # Test if bidirectional image mask path works
         },
@@ -215,6 +216,60 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         result = model(inputs_dict["input_ids"])
         self.assertEqual(result.last_hidden_state.shape, expected_shape)
 
+    def test_vision_axial_rope(self):
+        # override -> uses gemma4Vision backbone which also overrides this test
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        rope_class = None
+        base_model = DiffusionGemmaModel(config)
+        for name, module in base_model.named_modules():
+            if hasattr(module, "compute_axial_rope_parameters"):
+                rope_class = type(module)
+                vision_config = module.config
+                break
+
+        if rope_class is None:
+            self.skipTest("Couldn't infer RoPE layer for this model class.")
+
+        # First make sure that validation on default config raises no rope-related warnings
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("", cl.out)
+        logger.warning_once.cache_clear()
+
+        # Axial rope type expects only `rope_theta`, otherwise raises warning
+        vision_config.rope_parameters["factor"] = 0.25
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("Unrecognized keys in `rope_parameters` for 'rope_type'='axial': {'factor'}\n", cl.out)
+        del vision_config.rope_parameters["factor"]
+        logger.warning_once.cache_clear()
+
+        inv_freq, attention_scale = rope_class.compute_axial_rope_parameters(config=vision_config)
+        rope_module = rope_class(vision_config).to(device=torch_device)
+
+        self.assertTrue(hasattr(rope_module, "inv_freq"))
+        self.assertTrue(hasattr(rope_module, "attention_scaling"))
+        self.assertEqual(attention_scale, 1.0)  # attention scale is always 1
+        torch.testing.assert_close(inv_freq, rope_module.inv_freq.cpu())
+
+        # create 2D position IDs for a single grid of one row and 10 cols `size=(10, 2)`
+        position_ids = torch.stack(
+            [
+                torch.arange(10, dtype=torch.long, device=torch_device),
+                torch.zeros(10, dtype=torch.long, device=torch_device),
+            ]
+        ).transpose(0, 1)
+        position_ids = position_ids[None, ...].repeat(3, 1, 1)  # batch size of `3`
+        # and an empty hidden states used only to infer device/dtype
+        hidden_states = torch.empty(1, dtype=torch.float32, device=torch_device)
+        cos, sin = rope_module(hidden_states, position_ids)
+        self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
+        self.assertEqual(cos.shape[0], 3)  # angles presserve batch
+
     # Tests overwritten from `ModelTesterMixin`.
     @unittest.skip(reason="TODO")
     def test_attention_outputs(self):
@@ -255,6 +310,43 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     def test_disk_offload_safetensors(self):
         pass
 
+    def test_gradient_checkpointing_matches_no_checkpointing(self):
+        """
+        Gradient checkpointing relies on the encoder writing its KV cache outside the checkpointed layer calls and
+        on the decoder keeping the read-only cache (`_can_checkpoint_with_cache`). Both must reproduce the exact
+        same loss and gradients as the non-checkpointed forward, including encoder gradients through the cache.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # Checkpointing only engages in train mode, so determinism requires disabling dropout instead of eval()
+        config.text_config.attention_dropout = 0.0
+        config.vision_config.dropout = 0.0
+        config.vision_config.attention_dropout = 0.0
+        model = DiffusionGemmaForBlockDiffusion(config).to(torch_device)
+        inputs = self._prepare_for_class(inputs_dict, DiffusionGemmaForBlockDiffusion)
+
+        def loss_and_grads(checkpointing):
+            model.zero_grad(set_to_none=True)
+            if checkpointing:
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+            else:
+                model.gradient_checkpointing_disable()
+            model.train()
+            loss = model(**inputs).logits.float().mean()
+            loss.backward()
+            return loss.detach(), {name: p.grad.clone() for name, p in model.named_parameters() if p.grad is not None}
+
+        loss_ref, grads_ref = loss_and_grads(checkpointing=False)
+        loss_checkpointed, grads_checkpointed = loss_and_grads(checkpointing=True)
+
+        # Snapshot/restore makes the recomputation bit-exact on CPU; accelerators can reorder accumulation in the
+        # backward, so relax the tolerance there.
+        rtol = atol = 0 if torch_device == "cpu" else 1e-5
+        torch.testing.assert_close(loss_checkpointed, loss_ref, rtol=rtol, atol=atol)
+        self.assertEqual(grads_checkpointed.keys(), grads_ref.keys())
+        self.assertTrue(any("encoder" in name for name in grads_checkpointed))
+        for name in grads_ref:
+            torch.testing.assert_close(grads_checkpointed[name], grads_ref[name], rtol=rtol, atol=atol)
+
     @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
     def test_model_parallelism(self):
         pass
@@ -283,18 +375,19 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         self.assertTrue(model.lm_head.weight is model.model.decoder.embed_tokens.weight)
         self.assertTrue(model.lm_head.weight is model.model.encoder.language_model.embed_tokens.weight)
 
-    def test_use_cache_raises_exception(self):
+    def test_use_cache_is_ignored(self):
         """
-        DiffusionGemma always use cache. Therefore, the common kwarg `use_cache` isn't used -- and we raise an
-        exception
+        DiffusionGemma's decoder never writes a cache, so the common kwarg `use_cache` is silently ignored instead
+        of raising. This keeps the model usable with gradient checkpointing, which forces `use_cache=False`.
         """
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
-        with self.assertRaises(ValueError):
-            model(**model_inputs, use_cache=False)
-        with self.assertRaises(ValueError):
-            model(**model_inputs, use_cache=True)
+        # Either value is accepted and has no effect: no exception, and the output matches omitting the kwarg.
+        expected = model(**model_inputs).logits
+        for use_cache in (False, True):
+            logits = model(**model_inputs, use_cache=use_cache).logits
+            torch.testing.assert_close(logits, expected)
 
     def test_diffusion_decoder_mask_no_cache_raises_exception(self):
         """
@@ -394,6 +487,47 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape)
         self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero)
         self.assertEqual(mask_mapping["sliding_attention"][0, 0, :, :left_padding_length].sum(), 0)
+
+    def test_diffusion_decoder_mask_dynamic_cache_int_padding_mask(self):
+        """
+        Same as `test_diffusion_decoder_mask_dynamic_cache_left_padding`, but the padding mask holds `1`/`0` integers,
+        the way a tokenizer returns it, instead of booleans. It must produce the same boolean mask.
+        """
+
+        prefill_length = 8
+        canvas_length = 4
+        concat_kv_length = prefill_length + canvas_length
+        batch_size = 2
+        left_padding_length = 2  # only applied on batch item 0
+        expected_non_zero = (
+            ((concat_kv_length - left_padding_length) * canvas_length)  # batch item 0
+            + (concat_kv_length * canvas_length)  # batch item 1
+        )
+        expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (smaller than sliding window)
+        past_key_values = DynamicCache(config=config)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+
+        # Get the mask
+        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.long, device=torch_device)
+        decoder_attention_mask[0, :left_padding_length] = 0
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config.text_config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            past_key_values=past_key_values,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        for layer_pattern in ("full_attention", "sliding_attention"):
+            self.assertEqual(mask_mapping[layer_pattern].dtype, torch.bool)
+            self.assertEqual(mask_mapping[layer_pattern].shape, expected_attention_mask_shape)
+            self.assertEqual(mask_mapping[layer_pattern].sum(), expected_non_zero)
+            self.assertEqual(mask_mapping[layer_pattern][0, 0, :, :left_padding_length].sum(), 0)
 
     def test_diffusion_decoder_mask_dynamic_cache_beyond_sliding_window(self):
         """
@@ -737,14 +871,8 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
 
 
 @require_torch
-class DiffusionGemmaIntegrationTest(unittest.TestCase):
+class DiffusionGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     _model_path = "google/diffusiongemma-26B-A4B-it"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_diffusion_gemma_chat_template(self):
@@ -780,7 +908,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
     def test_diffusion_gemma_chat_template_image(self):
         image_tokens = [255999, 258880, 258882]  # These tokens must be present in the `input_ids`
         # TODO(joao): this should be 280! Something is wrong with processing?
-        image_token_count = 256
+        image_token_count = 260
 
         processor = AutoProcessor.from_pretrained(self._model_path)
         chat = [
@@ -789,7 +917,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -800,7 +928,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         )
         for token in image_tokens:
             self.assertIn(token, model_inputs["input_ids"])
-        self.assertTrue((model_inputs["input_ids"] == 258880).sum() == image_token_count)
+        self.assertEqual((model_inputs["input_ids"] == 258880).sum().item(), image_token_count)
 
         for expected_model_input in ("attention_mask", "pixel_values", "image_position_ids", "mm_token_type_ids"):
             self.assertIn(expected_model_input, model_inputs)
@@ -962,7 +1090,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -1156,7 +1284,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {"type": "text", "text": "What is shown in this image?"},
                     ],
@@ -1265,7 +1393,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {"type": "text", "text": "Describe the image in detail."},
                     ],
@@ -1445,7 +1573,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -1578,48 +1706,32 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
         expected_sequences = Expectations(
             {
-                ("cuda", None): [
-                    [48, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 728, 48, 48, 48, 48, 598, 371, 48, 48, 595, 48, 48,
-                     983, 371, 48, 598, 371, 48, 48, 595, 48, 48, 371, 595, 371, 516, 371, 595, 516, 516, 516, 379, 48, 371, 48, 48, 371, 371, 173, 516, 4,
-                     595, 516, 371, 595, 48, 516, 48, 371, 516, 495, 371, 516, 516, 983, 371, 516, 516, 48, 371, 516, 371, 48, 516, 48, 371, 516, 48, 983,
-                     48, 841, 371, 48, 516, 48, 379, 516, 832, 48, 371, 48, 371, 371, 371, 48, 48, 48, 371, 371, 48, 48, 48, 48, 48, 371, 371, 48, 48, 173,
-                     48, 48, 48, 516, 48, 48, 48, 371, 379, 48, 371, 48, 516, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48,
-                     48, 841, 48, 48, 48, 48, 516, 173, 371, 48, 48, 48, 516, 48, 48, 516, 48, 48, 48, 48, 371, 48, 371, 48, 48, 371, 48, 379, 48, 371, 48,
-                     832, 595, 48, 688, 48, 48, 371, 48, 371, 48, 48, 48, 48, 48, 516, 371, 371, 48, 48, 48, 371, 48, 405, 48, 48, 48, 48, 48, 48, 48, 48,
-                     48, 48, 48, 371, 48, 371, 48, 371, 48, 48, 371, 371, 516, 48, 371, 48, 516, 516, 48, 48, 48, 173, 48, 48, 48, 516, 371, 516, 48, 160,
-                     516, 48, 371, 173, 48, 48, 48, 371, 48, 48, 48, 48, 516],
-                    [48, 371, 627, 371, 48, 651, 371, 379, 379, 371, 371, 371, 595, 48, 48, 595, 371, 48, 371, 379, 595, 595, 371, 977, 48, 48, 48, 517,
-                     371, 841, 48, 48, 517, 832, 516, 371, 418, 48, 48, 48, 48, 371, 48, 48, 48, 48, 371, 516, 379, 371, 371, 48, 48, 371, 371, 656, 371,
-                     48, 371, 371, 371, 48, 48, 48, 48, 371, 371, 841, 371, 371, 841, 516, 371, 371, 841, 371, 656, 48, 48, 371, 983, 48, 48, 379, 48, 48,
-                     595, 48, 371, 983, 371, 983, 48, 48, 48, 371, 48, 48, 48, 48, 516, 48, 48, 48, 48, 48, 48, 48, 48, 48, 172, 48, 48, 371, 598, 48, 48,
-                     48, 371, 656, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 371, 841, 48, 48, 48, 48, 832, 48, 48,
-                     498, 832, 371, 48, 371, 371, 48, 48, 371, 48, 371, 371, 48, 48, 371, 48, 654, 516, 48, 48, 48, 172, 371, 634, 48, 48, 48, 48, 516,
-                     48, 48, 371, 48, 48, 595, 371, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 371, 48, 371, 379, 595, 48, 48, 48, 371, 48, 48, 634, 48,
-                     48, 48, 172, 48, 48, 48, 48, 379, 48, 48, 48, 371, 48, 371, 48, 48, 48, 371, 48, 48, 371, 48, 48, 48, 371, 48, 48, 371, 48, 371, 48,
-                     48, 549, 48, 48, 48, 48, 48, 634, 499, 172, 48, 48, 48, 48, 48, 48, 48
-                    ]
+                (None, None): [
+                    [48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 516, 48, 48, 48,
+                     48, 48, 371, 48, 48, 48, 48, 48, 957, 371, 516, 598, 371, 516, 48, 567, 48, 405, 516, 595, 48,
+                     379, 371, 595, 516, 841, 516, 379, 48, 48, 48, 48, 371, 371, 48, 516, 48, 832, 371, 48, 371, 48,
+                     516, 173, 405, 371, 48, 371, 48, 516, 832, 371, 516, 516, 48, 371, 371, 371, 48, 499, 48, 371,
+                     516, 48, 516, 48, 841, 371, 516, 516, 48, 371, 48, 48, 48, 371, 48, 371, 48, 48, 48, 48, 48, 371,
+                     516, 48, 379, 371, 48, 48, 371, 48, 48, 48, 371, 48, 48, 48, 516, 48, 48, 48, 172, 48, 48, 48, 48,
+                     371, 516, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 832, 48, 48,
+                     48, 48, 48, 48, 48, 48, 48, 48, 516, 48, 48, 516, 48, 371, 48, 48, 173, 48, 371, 371, 48, 371, 48,
+                     379, 48, 371, 48, 371, 595, 371, 516, 371, 48, 405, 48, 48, 48, 48, 48, 371, 48, 48, 48, 379, 48,
+                     48, 371, 371, 48, 405, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48, 48, 48, 371, 48, 371, 48, 48,
+                     516, 371, 516, 48, 48, 48, 516, 516, 48, 48, 48, 173, 48, 48, 48, 516, 48, 516, 48, 160, 516, 48,
+                     516, 48, 48, 48, 48, 516, 48, 48, 48, 48, 516],
+                    [48, 48, 627, 48, 48, 371, 48, 48, 379, 371, 371, 371, 48, 48, 48, 371, 371, 48, 48, 379, 516, 595,
+                     371, 841, 48, 48, 48, 48, 371, 595, 48, 48, 371, 832, 832, 595, 841, 48, 379, 48, 48, 48, 48, 48,
+                     48, 48, 48, 595, 595, 841, 841, 371, 48, 841, 371, 595, 595, 48, 516, 371, 371, 48, 48, 371, 48,
+                     371, 371, 371, 595, 371, 595, 48, 48, 379, 841, 841, 832, 48, 48, 371, 598, 634, 48, 379, 48, 48,
+                     516, 48, 48, 983, 371, 983, 48, 48, 48, 371, 48, 48, 48, 371, 516, 48, 48, 48, 48, 595, 48, 48,
+                     595, 516, 371, 516, 48, 371, 48, 48, 371, 48, 841, 595, 841, 516, 48, 48, 48, 983, 48, 48, 371,
+                     48, 48, 48, 48, 48, 48, 48, 48, 48, 977, 371, 48, 48, 634, 48, 48, 728, 379, 371, 371, 841, 371,
+                     48, 371, 371, 48, 48, 371, 48, 48, 371, 48, 48, 595, 48, 841, 48, 48, 48, 48, 48, 371, 634, 48,
+                     48, 516, 48, 516, 48, 48, 379, 48, 48, 598, 48, 48, 371, 48, 48, 371, 48, 48, 371, 48, 832, 48,
+                     371, 48, 48, 371, 516, 48, 48, 48, 371, 48, 48, 634, 48, 48, 48, 371, 48, 841, 595, 48, 379, 48,
+                     48, 48, 48, 4, 48, 48, 48, 48, 841, 379, 48, 371, 48, 371, 841, 841, 48, 379, 841, 48, 516, 48,
+                     48, 499, 371, 516, 48, 516, 48, 634, 371, 172, 371, 516, 48, 516, 48, 832, 371],
                 ],
-                ("xpu", 5): [
-                    [48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 173, 4, 48, 48, 48, 48, 48, 48, 371, 48, 48, 371, 371, 48, 48, 48,
-                     371, 371, 371, 48, 371, 516, 499, 516, 371, 371, 371, 173, 516, 48, 371, 371, 48, 371, 48, 595, 173, 371, 379, 371, 516, 379, 48, 48,
-                     48, 371, 48, 371, 371, 48, 516, 516, 48, 595, 48, 48, 48, 841, 371, 516, 48, 516, 371, 48, 48, 371, 48, 500, 859, 48, 48, 48, 48, 48,
-                     48, 48, 371, 48, 371, 48, 371, 371, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48, 172, 48, 48, 371, 371, 371, 48, 48, 48, 48, 48, 48, 48,
-                     48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 405, 48, 48, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48, 48, 48,
-                     48, 48, 371, 48, 48, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 516, 48, 48, 549, 48, 48, 371, 48, 48, 48, 48, 371, 48, 48, 48,
-                     48, 371, 371, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 371, 48, 48,
-                     516, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 172, 48, 48, 173, 48, 48, 516, 371, 48, 516, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48,
-                     48, 48, 48, 48, 48, 48],
-                    [5, 371, 173, 48, 371, 48, 48, 371, 48, 48, 371, 48, 371, 48, 371, 379, 841, 48, 48, 48, 371, 48, 48, 48, 371, 371, 371, 48, 48, 379,
-                     656, 48, 379, 48, 371, 172, 48, 371, 48, 48, 371, 48, 48, 371, 48, 371, 371, 48, 48, 48, 48, 48, 48, 371, 371, 48, 48, 48, 48, 371, 48,
-                     371, 48, 371, 48, 371, 48, 48, 48, 48, 48, 371, 173, 371, 371, 379, 48, 48, 48, 48, 48, 48, 48, 48, 371, 48, 48, 841, 48, 371, 983,
-                     371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48,
-                     48, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 371, 48, 371, 48, 48, 371, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48, 48, 48, 371, 48,
-                     48, 48, 48, 48, 48, 516, 48, 48, 48, 371, 371, 841, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 371, 371, 48, 371, 48, 48, 48,
-                     48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48,
-                     371, 48, 48, 48, 48, 48, 371, 371, 48, 48, 48, 48, 371, 48, 48, 371, 172, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48,
-                     4, 48, 371
-                    ]
-                ]
             }
         )  # fmt: skip
 
@@ -1635,7 +1747,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {"type": "text", "text": "What is shown in this image?"},
                     ],
@@ -1674,48 +1786,33 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
         expected_sequences = Expectations(
             {
-                ("cuda", None): [
-                    [48, 48, 48, 567, 48, 405, 48, 48, 379, 48, 379, 379, 379, 379, 379, 379, 48, 48, 48, 48, 48, 379, 379, 379, 379, 48, 48, 379, 48, 48,
-                     379, 379, 379, 379, 379, 379, 379, 379, 379, 379, 379, 595, 48, 48, 379, 48, 379, 48, 379, 379, 48, 516, 379, 48, 48, 48, 379, 379,
-                     48, 516, 379, 595, 379, 379, 379, 48, 516, 418, 48, 379, 48, 379, 48, 48, 379, 48, 48, 379, 48, 379, 379, 379, 48, 48, 48, 48, 379,
-                     48, 48, 379, 379, 379, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 379, 48, 48, 516, 48, 48, 379, 48, 379, 48, 48, 48, 48, 48, 48, 48,
-                     379, 379, 48, 379, 48, 48, 379, 379, 48, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 379, 48, 48, 379, 48, 379, 48, 48, 379, 48, 48, 48,
-                     48, 48, 48, 48, 977, 48, 48, 379, 48, 379, 379, 379, 379, 379, 48, 48, 48, 48, 48, 379, 379, 379, 379, 48, 48, 48, 379, 48, 48, 48, 48,
-                     379, 379, 379, 48, 379, 48, 48, 48, 48, 48, 48, 379, 48, 379, 48, 48, 48, 48, 48, 516, 379, 48, 48, 379, 48, 48, 48, 516, 48, 379, 48,
-                     48, 48, 48, 379, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 516, 48, 48, 48, 379, 379, 48, 379, 48, 371,
-                     48, 379, 48, 48, 379, 48, 48, 379, 48, 48, 48, 48, 48
-                    ],
-                    [48, 48, 48, 379, 48, 379, 379, 48, 48, 379, 379, 516, 516, 379, 48, 48, 379, 379, 379, 379, 379, 379, 379, 379, 48, 48, 379, 379, 379,
-                     48, 48, 48, 379, 379, 379, 595, 379, 379, 379, 379, 379, 48, 48, 516, 48, 379, 379, 379, 379, 48, 48, 379, 595, 48, 379, 379, 379, 48,
-                     379, 379, 379, 48, 379, 48, 516, 379, 379, 48, 379, 379, 379, 379, 379, 379, 379, 379, 48, 48, 48, 379, 48, 379, 48, 48, 379, 516, 48,
-                     48, 379, 379, 379, 379, 379, 379, 48, 48, 48, 516, 379, 379, 48, 595, 48, 379, 48, 48, 516, 48, 499, 48, 48, 48, 379, 379, 48, 48, 379,
-                     379, 48, 379, 516, 379, 379, 48, 379, 379, 379, 379, 48, 379, 379, 48, 379, 379, 379, 379, 371, 48, 379, 48, 48, 371, 48, 48, 48, 48,
-                     379, 379, 379, 379, 48, 379, 379, 48, 48, 48, 48, 48, 379, 379, 48, 379, 379, 379, 48, 379, 48, 379, 379, 379, 48, 379, 48, 841, 379,
-                     379, 379, 48, 48, 379, 379, 48, 48, 48, 379, 48, 48, 379, 499, 379, 48, 516, 48, 48, 379, 48, 48, 379, 48, 379, 379, 48, 379, 379, 379,
-                     48, 379, 48, 379, 379, 48, 379, 516, 48, 48, 516, 379, 379, 48, 379, 48, 379, 48, 379, 379, 379, 48, 48, 48, 48, 379, 48, 379, 379, 48,
-                     48, 48, 48, 379, 48, 48, 379, 371, 48, 48, 371, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48
-                    ]
+                (None, None): [
+                    [48, 48, 48, 567, 48, 405, 48, 48, 379, 48, 379, 48, 379, 379, 379, 379, 48, 48, 48, 48, 48, 379,
+                     379, 379, 379, 48, 48, 379, 48, 48, 379, 379, 379, 379, 379, 379, 379, 379, 379, 379, 48, 595, 48,
+                     48, 379, 48, 379, 48, 48, 379, 48, 379, 379, 48, 48, 48, 379, 379, 48, 516, 48, 418, 379, 379,
+                     379, 379, 418, 379, 379, 379, 48, 48, 48, 48, 379, 48, 48, 379, 48, 379, 379, 379, 48, 379, 48,
+                     48, 379, 48, 48, 48, 379, 379, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 379, 48, 48, 921, 48, 48,
+                     379, 48, 379, 48, 48, 48, 48, 841, 48, 48, 379, 379, 48, 379, 48, 48, 379, 379, 48, 48, 48, 48,
+                     48, 48, 48, 379, 48, 48, 48, 379, 48, 48, 379, 48, 379, 48, 48, 379, 48, 48, 48, 379, 48, 48, 48,
+                     379, 516, 48, 379, 48, 48, 48, 379, 379, 379, 48, 48, 48, 48, 48, 379, 379, 379, 48, 48, 48, 48,
+                     48, 48, 48, 48, 48, 379, 379, 516, 48, 379, 379, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48,
+                     48, 516, 379, 48, 48, 379, 48, 48, 48, 516, 48, 379, 48, 48, 48, 48, 379, 48, 48, 48, 48, 379, 48,
+                     48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 516, 48, 48, 48, 379, 379, 48, 379, 48, 371, 48,
+                     379, 48, 48, 379, 48, 48, 379, 48, 48, 48, 48, 48],
+                    [48, 48, 48, 379, 48, 379, 379, 48, 48, 379, 379, 516, 595, 379, 48, 48, 379, 379, 379, 379, 379,
+                     379, 379, 379, 48, 379, 379, 379, 379, 48, 48, 48, 379, 379, 379, 595, 379, 379, 379, 379, 379,
+                     48, 48, 516, 48, 48, 379, 379, 379, 379, 48, 379, 595, 48, 379, 379, 379, 48, 379, 379, 379, 48,
+                     379, 48, 516, 379, 379, 48, 379, 379, 379, 499, 379, 379, 379, 379, 48, 48, 48, 379, 48, 379, 48,
+                     48, 379, 379, 48, 48, 379, 379, 379, 379, 379, 379, 379, 379, 379, 516, 379, 379, 48, 656, 499,
+                     379, 48, 48, 516, 379, 516, 48, 379, 48, 379, 379, 48, 48, 379, 379, 48, 379, 379, 379, 379, 48,
+                     379, 516, 379, 379, 379, 379, 379, 48, 379, 379, 379, 379, 371, 48, 516, 48, 48, 371, 48, 48, 48,
+                     48, 379, 379, 379, 379, 48, 379, 379, 48, 48, 48, 379, 48, 379, 48, 48, 379, 595, 379, 48, 379,
+                     48, 379, 379, 379, 48, 379, 48, 841, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379,
+                     499, 379, 48, 841, 48, 48, 48, 48, 48, 379, 379, 379, 48, 48, 379, 379, 379, 48, 379, 371, 379,
+                     379, 48, 379, 516, 48, 48, 516, 379, 379, 48, 379, 379, 379, 48, 379, 48, 379, 48, 48, 48, 48,
+                     379, 48, 379, 379, 48, 48, 48, 379, 379, 48, 48, 379, 371, 48, 48, 371, 48, 379, 371, 48, 48, 371,
+                     48, 48, 48, 48],
                 ],
-                ("xpu", 5): [
-                    [48, 48, 48, 48, 48, 48, 48, 379, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 48, 48, 48,
-                     48, 48, 48, 48, 48, 379, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 48, 48, 48,
-                     48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 379, 48, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48,
-                     48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 405, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48,
-                     48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 379, 48, 379, 48, 48, 379,
-                     48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 379, 48, 379, 48, 48, 48, 379, 48,
-                     48, 379, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48,
-                     48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 371, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48
-                    ],
-                    [21, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 379, 48, 48, 379,
-                     48, 48, 48, 379, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 379, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 379, 48,
-                     48, 48, 48, 48, 48, 48, 48, 48, 418, 48, 48, 379, 48, 379, 48, 48, 48, 379, 48, 48, 379, 48, 48, 48, 48, 48, 379, 48, 48, 379, 48, 48,
-                     379, 379, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 405, 379, 48, 48, 48, 48, 48, 379, 48, 48, 48, 379, 48, 48,
-                     379, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 379, 48, 48, 48, 48, 48, 48, 379, 48, 48, 379, 48, 48, 48,
-                     48, 379, 499, 48, 48, 48, 379, 48, 48, 48, 48, 48, 499, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 379, 48, 48,
-                     48, 48, 48, 379, 48, 48, 48, 48, 48, 379, 379, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 418, 48, 48, 48, 379, 48, 48, 48, 48, 48,
-                     48, 48, 48, 48, 371, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48
-                    ]
-                ]
             }
         )  # fmt: skip
 
@@ -1731,7 +1828,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {"type": "text", "text": "Describe the image in detail."},
                     ],

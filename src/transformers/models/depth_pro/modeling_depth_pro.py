@@ -378,7 +378,7 @@ class DepthProImageEncoder(nn.Module):
         )
 
         if not return_dict:
-            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and poooler output
+            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and pooler output
 
         return DepthProOutput(
             last_hidden_state=encodings.last_hidden_state,
@@ -648,7 +648,7 @@ class DepthProModel(DepthProPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, DepthProModel
 
@@ -1037,7 +1037,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         >>> from transformers import AutoImageProcessor, DepthProForDepthEstimation
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

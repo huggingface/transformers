@@ -116,6 +116,30 @@ class RenderBadgeTest(unittest.TestCase):
         self.assertIn(f"{recap_mod.BADGE_URL}?pr=123", badge)
         self.assertIn("https://dash.example/d/x?var-pr=123", badge)
 
+    def test_render_ci_badge_emits_both_ci_streams(self):
+        """PR CI and run-slow GPU runs have separate verdicts, so each gets its
+        own badge asking the exporter for its own stream."""
+        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
+        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123&event=pr-ci", badge)
+        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123&event=run-slow", badge)
+        self.assertIn("![CPU CI]", badge)
+        self.assertIn("![GPU run-slow]", badge)
+
+    def test_render_ci_badge_keeps_both_badges_on_one_line(self):
+        """The two badges must sit side by side; a newline between them would
+        stack them and push the PR description further down."""
+        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
+        lines = badge.split("\n")
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(lines[1].count("!["), 2)
+
+    def test_render_ci_badge_always_emits_the_run_slow_badge(self):
+        """It is unconditional by design: the body is only rewritten when PR CI
+        completes, so a run-slow that no push follows would otherwise never get a
+        badge. The exporter renders "not run" until a run-slow run exists."""
+        badge = render_ci_badge(999, "https://dash.example/d/x?var-pr=999")
+        self.assertIn("event=run-slow", badge)
+
 
 class RenderRecapTest(unittest.TestCase):
     def _recap(self, **overrides):
@@ -283,24 +307,24 @@ class GetCiRecapTest(unittest.TestCase):
 class GithubPaginateTest(unittest.TestCase):
     def test_stops_on_short_page(self):
         page = [{"i": n} for n in range(100)]
-        with patch.object(recap_mod, "request_json", side_effect=[page, [{"i": 100}]]) as mocked:
+        with patch.object(recap_mod, "github_request", side_effect=[page, [{"i": 100}]]) as mocked:
             items = github_paginate("/repos/x/y/pulls", token="t")
         self.assertEqual(len(items), 101)
         self.assertEqual(mocked.call_count, 2)
 
     def test_stops_on_empty_first_page(self):
-        with patch.object(recap_mod, "request_json", return_value=[]) as mocked:
+        with patch.object(recap_mod, "github_request", return_value=[]) as mocked:
             items = github_paginate("/repos/x/y/pulls", token="t")
         self.assertEqual(items, [])
         self.assertEqual(mocked.call_count, 1)
 
     def test_extracts_keyed_payload(self):
-        with patch.object(recap_mod, "request_json", return_value={"jobs": [{"name": "a"}]}):
+        with patch.object(recap_mod, "github_request", return_value={"jobs": [{"name": "a"}]}):
             items = github_paginate("/repos/x/y/actions/runs/1/jobs", token="t", key="jobs")
         self.assertEqual(items, [{"name": "a"}])
 
     def test_builds_query_separator_when_path_has_query(self):
-        with patch.object(recap_mod, "request_json", return_value=[]) as mocked:
+        with patch.object(recap_mod, "github_request", return_value=[]) as mocked:
             github_paginate("/repos/x/y/pulls?state=open", token="t")
         url = mocked.call_args.args[0]
         self.assertIn("?state=open&per_page=100&page=1", url)
@@ -347,7 +371,7 @@ class DeleteOldCommentsTest(unittest.TestCase):
         ]
         with (
             patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "request_json") as request_mock,
+            patch.object(recap_mod, "github_request") as request_mock,
         ):
             delete_old_dashboard_comments("x/y", "t", 5)
         self.assertEqual(request_mock.call_count, 1)
@@ -365,7 +389,7 @@ class RecreateCiRecapCommentTest(unittest.TestCase):
         recap = f"{RECAP_START}\nnew\n{RECAP_END}"
         with (
             patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "request_json") as request_mock,
+            patch.object(recap_mod, "github_request") as request_mock,
         ):
             recreate_ci_recap_comment("x/y", "t", 5, recap)
 
@@ -385,7 +409,7 @@ class RecreateCiRecapCommentTest(unittest.TestCase):
         recap = f"{RECAP_START}\nnew\n{RECAP_END}"
         with (
             patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "request_json") as request_mock,
+            patch.object(recap_mod, "github_request") as request_mock,
         ):
             recreate_ci_recap_comment("x/y", "t", 5, recap)
 
@@ -396,7 +420,7 @@ class RecreateCiRecapCommentTest(unittest.TestCase):
         recap = f"{RECAP_START}\nnew\n{RECAP_END}"
         with (
             patch.object(recap_mod, "github_paginate", return_value=[{"id": 1, "body": "unrelated"}]),
-            patch.object(recap_mod, "request_json") as request_mock,
+            patch.object(recap_mod, "github_request") as request_mock,
         ):
             recreate_ci_recap_comment("x/y", "t", 5, recap)
 

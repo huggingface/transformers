@@ -1360,7 +1360,7 @@ class RTDetrMLPPredictionHead(DetrMLPPredictionHead):
 @auto_docstring
 class RTDetrPreTrainedModel(PreTrainedModel):
     config: RTDetrConfig
-    base_model_prefix = "rt_detr"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
@@ -1766,7 +1766,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
-        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
+        anchors = torch.where(valid_mask, anchors, torch.full((), torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
 
@@ -1804,7 +1804,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2031,7 +2031,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

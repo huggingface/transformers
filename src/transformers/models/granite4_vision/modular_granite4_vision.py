@@ -219,6 +219,17 @@ class Granite4VisionProcessor(LlavaNextProcessor):
         )
         self.downsample_rate = downsample_rate
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        image_size = image_inputs["image_sizes"][image_idx]
+        if not isinstance(image_size, (list, tuple)):
+            image_size = image_size.tolist()
+        orig_height, orig_width = image_size
+        height, width = image_inputs["pixel_values"][0][0].shape[-2:]
+        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+        return self.image_token * num_image_tokens
+
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints
 
@@ -552,7 +563,7 @@ class Granite4VisionModel(LlavaNextModel):
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).

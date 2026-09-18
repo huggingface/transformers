@@ -224,9 +224,7 @@ class Siglip2TextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -537,7 +535,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Siglip2VisionModel
@@ -697,7 +695,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
                 if attention_mask.dtype == torch.bool:
                     attention_mask = torch.where(
                         attention_mask,
-                        torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                        torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
                         torch.finfo(probe.dtype).min,
                     )
 
@@ -834,7 +832,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
@@ -964,7 +962,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT

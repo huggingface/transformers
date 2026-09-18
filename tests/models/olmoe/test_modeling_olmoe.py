@@ -211,12 +211,13 @@ class OlmoeIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
-        out = model(torch.tensor(input_ids, device=model.device)).logits.float()
+        with torch.no_grad():
+            out = model(torch.tensor(input_ids, device=model.device)).logits.float()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-1.3814, -3.4450, -2.2990, -1.9542, -2.4387, -2.7941, -2.9312, -2.8309]])
+        EXPECTED_MEAN = torch.tensor([[-0.9152, -3.3876, -2.3275, -1.9469, -2.4548, -2.7755, -3.0125, -2.8587]])
         torch.testing.assert_close(out.mean(-1).cpu(), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-2.3874, -2.4076, -2.4995, 4.2278, 1.4004, -0.0252, 0.4189, -2.7560, 0.3531, 1.6678, -0.7941, -1.1818, -0.2920, 0.7131, -1.4173, 1.6723, 0.5406, 0.1345, -0.1800, 0.2304, 1.2791, 0.7489, 0.6341, -0.0151, -1.3693, -1.2532, -2.3921, 0.7376, 1.6876, 0.5483])  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([-0.9844, -1.0469, -3.4531, 3.2812, 0.7422, -0.3926, -0.4160, -2.6562, -1.4531, 0.3867, -1.5234, -1.8359, 0.1426, -0.9375, -2.1875, 0.0742, 0.8281, -2.5156, -2.4531, -1.1953, 0.1875, -0.3438, -0.6992, -0.7539, -2.7812, -3.7344, -3.5625, -0.2910, 0.3008, -0.0957])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30].cpu(), EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     @slow

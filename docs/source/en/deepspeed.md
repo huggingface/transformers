@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -64,11 +64,23 @@ Use `"auto"` in your config for values you want DeepSpeed to fill from [`Trainin
 > See the [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/) reference for a complete list of DeepSpeed config options.
 
 ```json
-"train_micro_batch_size_per_gpu": "auto",  // ← per_device_train_batch_size in TrainingArguments
-"gradient_accumulation_steps": "auto",     // ← gradient_accumulation_steps in TrainingArguments
-"optimizer.params.lr": "auto",             // ← learning_rate in TrainingArguments
-"fp16.enabled": "auto",                    // ← fp16 flag in TrainingArguments
+{
+    "train_micro_batch_size_per_gpu": "auto",
+    "gradient_accumulation_steps": "auto",
+    "optimizer": {
+        "type": "AdamW",
+        "params": { "lr": "auto" }
+    },
+    "fp16": { "enabled": "auto" }
+}
 ```
+
+| DeepSpeed config | [`TrainingArguments`] |
+|---|---|
+| `train_micro_batch_size_per_gpu` | `per_device_train_batch_size` |
+| `gradient_accumulation_steps` | `gradient_accumulation_steps` |
+| `optimizer.params.lr` | `learning_rate` |
+| `fp16.enabled` | `fp16` |
 
 Pass the config to the `deepspeed` argument.
 
@@ -173,8 +185,8 @@ Select a ZeRO stage config to use as a starting point.
         "stage3_prefetch_bucket_size": "auto",
         "stage3_param_persistence_threshold": "auto",
         "stage3_gather_16bit_weights_on_model_save": true,
-        "offload_optimizer": { "device": "cpu", "pin_memory": true },  // optional offloading
-        "offload_param":     { "device": "cpu", "pin_memory": true }  // optional offloading
+        "offload_optimizer": { "device": "cpu", "pin_memory": true },
+        "offload_param":     { "device": "cpu", "pin_memory": true }
     },
     "gradient_clipping": "auto",
     "train_micro_batch_size_per_gpu": "auto",
@@ -217,7 +229,7 @@ The following fields are important for customizing training.
     {
         "zero_optimization": {
             "stage": 3,
-            "stage3_gather_16bit_weights_on_model_save": true,
+            "stage3_gather_16bit_weights_on_model_save": true
         }
     }
     ```

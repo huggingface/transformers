@@ -56,7 +56,7 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     # Predict-stream mask: each stream only attends to its own future position (the diagonal).
     right_mask = (rows != cols).expand(ngram, sequence_length, sequence_length)
 
-    neg_inf_t = torch.tensor(neg_inf, dtype=dtype, device=device)
+    neg_inf_t = torch.full((), neg_inf, dtype=dtype, device=device)
     zero_t = torch.zeros((), dtype=dtype, device=device)
     left_block = torch.where(left_mask, neg_inf_t, zero_t)
     right_block = torch.where(right_mask, neg_inf_t, zero_t)
@@ -373,7 +373,7 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
                     torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask
                 ).long() + self.padding_idx
 
-                # make sure position_ids are not bigger then max_length
+                # make sure position_ids are not bigger than max_length
                 position_ids = position_ids.clamp(0, self.max_length - 1)
 
         return super().forward(position_ids), position_ids
@@ -1707,7 +1707,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Example:
 

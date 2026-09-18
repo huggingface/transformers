@@ -98,6 +98,10 @@ else:
             ("granite4_vision", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
+            (
+                "hyperclovax_vision_v2",
+                {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"},
+            ),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("inkling_mm_model", {"torchvision": "InklingImageProcessor"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
@@ -136,6 +140,7 @@ else:
             ("qwen3_5_moe", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_omni_moe", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
+            ("qwen4_exp", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("regnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("resnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("sam2_video", {"torchvision": "Sam2ImageProcessor"}),
@@ -303,7 +308,7 @@ def get_image_processor_config(
     # Load image_processor dict. Priority goes as (nested config if found -> image processor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
     # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
-    image_processor_dict = {}
+    image_processor_dict = None
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
         if "image_processor" in processor_dict:
@@ -312,7 +317,7 @@ def get_image_processor_config(
     if resolved_image_processor_file is not None and image_processor_dict is None:
         image_processor_dict = safe_load_json_file(resolved_image_processor_file)
 
-    return image_processor_dict
+    return image_processor_dict or {}
 
 
 def _resolve_backend(backend: str | None, use_fast: bool | None, base_class_name: str | None) -> str:

@@ -96,6 +96,7 @@ class Glm4MoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
@@ -183,7 +184,7 @@ class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.num_experts), dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
 
 class Glm4MoeRMSNorm(DeepseekV3RMSNorm):

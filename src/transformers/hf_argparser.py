@@ -300,7 +300,7 @@ class HfArgumentParser(ArgumentParser):
         Returns:
             Tuple consisting of:
 
-                - the dataclass instances in the same order as they were passed to the initializer.abspath
+                - the dataclass instances in the same order as they were passed to the initializer.
                 - if applicable, an additional namespace for more (non-dataclass backed) arguments added to the parser
                   after initialization.
                 - The potential list of remaining argument strings. (same as argparse.ArgumentParser.parse_known_args)

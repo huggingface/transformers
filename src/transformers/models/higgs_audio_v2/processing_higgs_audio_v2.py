@@ -21,6 +21,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_soundfile_available, is_torch_available, logging
+from ...utils.import_utils import requires, requires_backends
 
 
 if is_torch_available():
@@ -48,6 +49,7 @@ class HiggsAudioV2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 class HiggsAudioV2Processor(ProcessorMixin):
     r"""
     Constructs a Higgs Audio processor which wraps a [`DacFeatureExtractor`], a [`AutoTokenizer`],
@@ -327,8 +329,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
         **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
+        requires_backends(self, ["soundfile"])
 
         # ensure correct audio input
         audio = make_list_of_audio(audio)

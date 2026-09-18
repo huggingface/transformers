@@ -54,7 +54,6 @@ class HunYuanVLImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-# Adapted from transformers.models.hunyuan_vl.image_processing_hunyuan_vl.smart_resize
 def smart_resize(
     height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
 ):
@@ -103,20 +102,15 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
     spatial_patch_size = 1
 
     def __init__(self, **kwargs: Unpack[HunYuanVLImageProcessorKwargs]):
-        size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
+        size = kwargs.pop("size", None)
         size = self.size if size is None else size
-        if min_pixels is not None:
+        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
             size["shortest_edge"] = min_pixels
             size.pop("min_pixels", None)
-        if max_pixels is not None:
+        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
             size["longest_edge"] = max_pixels
             size.pop("max_pixels", None)
-        if "shortest_edge" not in size or "longest_edge" not in size:
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-
         super().__init__(size=size, **kwargs)
 
     def _standardize_kwargs(
@@ -128,11 +122,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
     ) -> dict:
         if min_pixels is not None and max_pixels is not None:
             size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
-        kwargs = super()._standardize_kwargs(size=size, **kwargs)
-        size = kwargs.get("size", self.size)
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        return kwargs
+        return super()._standardize_kwargs(size=size, **kwargs)
 
     @auto_docstring
     def preprocess(
@@ -141,6 +131,70 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         **kwargs: Unpack[HunYuanVLImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
+
+    def resize(
+        self,
+        images: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input image aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        height, width = images.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return super().resize(
+            image=images,
+            size=SizeDict(height=resized_height, width=resized_width),
+            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+            # resampling argument, which uses BICUBIC for RGB images. Its config has
+            # `resample=1` (LANCZOS), but the original implementation never uses it.
+            resample=PILImageResampling.BICUBIC,
+        )
+
+    def patchify(
+        self,
+        images: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
+        batch_size, channel, resized_height, resized_width = images.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        patches = images.reshape(
+            batch_size,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        # Flatten patches in row-major order in comparison to Qwen
+        patches = patches.permute(0, 2, 3, 5, 6, 1, 4, 7)
+
+        flatten_patches = (
+            patches.unsqueeze(6)
+            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            .reshape(
+                batch_size,
+                grid_h * grid_w,
+                channel * temporal_patch_size * patch_size * patch_size,
+            )
+        )
+
+        return flatten_patches, grid_h, grid_w
 
     def _preprocess(
         self,
@@ -163,19 +217,12 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=patch_size * merge_size,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
                 stacked_images = self.resize(
-                    image=stacked_images,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    images=stacked_images,
+                    size=size,
                     resample=resample,
+                    factor=patch_size * merge_size,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -184,50 +231,47 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         processed_images_grouped = {}
         processed_grids = {}
         for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-            patches = self.rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            batch_size, channel = patches.shape[:2]
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-            patches = patches.reshape(
-                batch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            # Reorder dimensions to group grid and patch information for subsequent flattening.
-            # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-            patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
-
-            flatten_patches = (
-                patches.unsqueeze(6)
-                .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
-                .reshape(
-                    batch_size,
-                    grid_h * grid_w,
-                    channel * temporal_patch_size * patch_size * patch_size,
-                )
+            patches, grid_h, grid_w = self.patchify(
+                stacked_images,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
-        pixel_values = torch.cat(processed_images, dim=0)
+        pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
         image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
-        """Return the `(grid_h, grid_w)` patch counts used by HunYuanVL token accounting."""
+    def get_number_of_image_patches(
+        self, height: int, width: int, images_kwargs: dict | None = None
+    ) -> tuple[int, int]:
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `tuple[int, int]`: Number of image patches per image, as a `(height, width)` grid.
+        """
         images_kwargs = images_kwargs or {}
         min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
         max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]

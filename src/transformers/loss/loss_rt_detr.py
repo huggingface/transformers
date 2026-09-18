@@ -158,7 +158,7 @@ class RTDetrLoss(nn.Module):
         self.eos_coef = config.eos_coefficient
         empty_weight = torch.ones(config.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
         self.alpha = config.focal_loss_alpha
         self.gamma = config.focal_loss_gamma
 
@@ -445,6 +445,11 @@ def RTDetrForObjectDetectionLoss(
 ):
     criterion = RTDetrLoss(config)
     criterion.to(device)
+    if denoising_meta_values is not None:
+        # Drop denoising queries and calculate loss only over normal queries.
+        # See https://github.com/huggingface/transformers/pull/48528
+        _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
+        _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
     # Second: compute the losses, based on outputs and labels
     outputs_loss = {}
     outputs_loss["logits"] = logits

@@ -53,7 +53,7 @@ class Gemma4AssistantMaskedEmbedder(nn.Module):
         self.vocab_size_per_centroid = self.vocab_size // self.num_centroids
 
         self.centroids = nn.Linear(self.hidden_size, self.num_centroids, bias=False)
-        self.register_buffer("token_ordering", torch.empty(self.vocab_size, dtype=torch.long))
+        self.token_ordering = nn.Buffer(torch.empty(self.vocab_size, dtype=torch.long))
 
     def forward(self, hidden_states: torch.Tensor, lm_head_weight: torch.Tensor) -> torch.Tensor:
         batch, seq_len = hidden_states.shape[:2]
@@ -109,6 +109,7 @@ class Gemma4AssistantPreTrainedModel(PreTrainedModel):
 @auto_docstring(custom_intro="A model for multi-token prediction-based assisted decoding with Gemma 4.")
 class Gemma4AssistantForCausalLM(Gemma4AssistantPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

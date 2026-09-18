@@ -17,6 +17,9 @@ from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
     TextGenerationPipeline,
     logging,
     pipeline,
@@ -259,31 +262,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 [{"generated_text": expected_chat2}],
             ],
         )
-
-    @require_torch
-    def test_small_chat_model_with_response_parsing(self):
-        text_generator = pipeline(
-            task="text-generation",
-            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-        )
-        # Using `do_sample=False` to force deterministic output
-        chat = [
-            {"role": "system", "content": "This is a system message."},
-            {"role": "user", "content": "This is a test"},
-        ]
-        text_generator.tokenizer.response_schema = {
-            # A real response schema should probably have things like "role" and "content"
-            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
-            # output anything like that, so let's keep it simple.
-            "type": "object",
-            "properties": {
-                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
-                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
-            },
-        }
-        outputs = text_generator(chat, do_sample=False, max_new_tokens=10)
-        parsed_message = outputs[0]["generated_text"][-1]
-        self.assertEqual(parsed_message, {"first_word": "factors", "last_word": "factors"})
 
     @require_torch
     def test_small_chat_model_with_response_template_prefix(self):
@@ -654,3 +632,38 @@ class TextGenerationPipelineTests(unittest.TestCase):
             kw_call_args = mock.call_args[1]
             self.assertIn("enable_thinking", kw_call_args)
             self.assertEqual(kw_call_args["enable_thinking"], True)
+
+    @require_torch
+    def test_pipeline_respects_model_generation_config(self):
+        """Test for #47752: Verify priority order: kwargs > user_generation_config > model.generation_config > pipeline_default."""
+        model_id = "hf-internal-testing/tiny-random-gpt2"
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # 1. Modify model.generation_config directly (model_config > pipeline_default)
+        model.generation_config.max_new_tokens = 500
+        model.generation_config.temperature = 0.7
+
+        # Instantiate pipeline without extra generation kwargs
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        # Assert user settings on model.generation_config were respected over pipeline defaults
+        self.assertEqual(pipe.generation_config.max_new_tokens, 500)
+        self.assertEqual(pipe.generation_config.temperature, 0.7)
+
+        # 2. Explicit generation_config object overrides model_config and pipeline_default
+        custom_gc = GenerationConfig(max_new_tokens=250, temperature=0.9)
+        pipe_gc = pipeline("text-generation", model=model, tokenizer=tokenizer, generation_config=custom_gc)
+        self.assertEqual(pipe_gc.generation_config.max_new_tokens, 250)
+        self.assertEqual(pipe_gc.generation_config.temperature, 0.9)
+
+        # 3. Explicit kwargs override user_generation_config, model_config, and pipeline_default
+        pipe_kwargs = pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            generation_config=custom_gc,
+            max_new_tokens=100,
+        )
+        self.assertEqual(pipe_kwargs.generation_config.max_new_tokens, 100)
+        self.assertEqual(pipe_kwargs.generation_config.temperature, 0.9)

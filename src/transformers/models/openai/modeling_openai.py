@@ -50,10 +50,8 @@ class Attention(nn.Module):
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         if n_state % config.n_head != 0:
             raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions),
-            persistent=False,
+        self.bias = nn.Buffer(
+            torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions), persistent=False
         )
         self.n_head = config.n_head
         self.split_size = n_state
@@ -307,7 +305,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
 
-        self.register_buffer("position_ids", torch.arange(config.n_positions), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(config.n_positions), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2026-06-12.*
@@ -32,7 +32,7 @@ Every layer is GQA (`num_key_value_heads = 4`) with per-head QK-norm and **parti
 `rotary_dim`. `config.layer_types[i]` then picks `"full_attention"` (dense causal) or
 `"minimax_m3_sparse"`, where a [`MiniMaxM3VLIndexer`] decides, per query, which block of keys the main attention may see.
 
-The indexer scores every key, then **max-poolsthose per-key scores into blocks of `index_block_size` keys**, so selection happens at the granularity of a *block
+The indexer scores every key, then **max-pools those per-key scores into blocks of `index_block_size` keys**, so selection happens at the granularity of a *block
 of keys*: per query it keeps the top-`index_topk_blocks` key blocks plus the always-on `index_local_blocks`
 local-window block (under block-level causality), broadcasts the per-block `0`/`-inf` choice back onto every key in
 the block. The result is a `[B, 1, S_q, S_k]` additive bias summed onto the causal mask. 

@@ -109,6 +109,7 @@ class InklingImageProcessor(TorchvisionBackend):
             resample=resample,
         )
 
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,

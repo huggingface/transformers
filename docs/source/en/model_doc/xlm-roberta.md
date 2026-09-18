@@ -85,7 +85,7 @@ print(f"The predicted token is: {predicted_token}")
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [quantization guide](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](../quantization/bitsandbytes) the quantive the weights to 4 bits
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4 bits
 
 ```python
 import torch
@@ -122,7 +122,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - A blog post on how to [finetune XLM RoBERTa for multiclass classification with Habana Gaudi on AWS](https://www.philschmid.de/habana-distributed-training)
 - [`XLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)..
-- [Text classification](https://huggingface.co/docs/transformers/tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
+- [Text classification](../tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
 - [Text classification task guide](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
@@ -134,7 +134,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="text-generation"/>
 
 - [`XLMRobertaForCausalLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [Causal language modeling](https://huggingface.co/docs/transformers/tasks/language_modeling) chapter of the 🤗 Hugging Face Task Guides.
+- [Causal language modeling](../tasks/language_modeling) chapter of the 🤗 Hugging Face Task Guides.
 - [Causal language modeling task guide](../tasks/language_modeling)
 
 <PipelineTag pipeline="fill-mask"/>
@@ -160,7 +160,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 <Tip>
 
-This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well as the information relative to the inputs and outputs.
+This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](./roberta) for usage examples as well as the information relative to the inputs and outputs.
 </Tip>
 
 ## XLMRobertaConfig
@@ -172,10 +172,6 @@ This implementation is the same as RoBERTa. Refer to the [documentation of RoBER
 [[autodoc]] XLMRobertaTokenizer
     - get_special_tokens_mask
     - save_vocabulary
-
-## XLMRobertaTokenizerFast
-
-[[autodoc]] XLMRobertaTokenizerFast
 
 ## XLMRobertaModel
 

@@ -63,7 +63,7 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
         Dimensionality of the input patch_embedding layer in the Transformer encoder.
     dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
         The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-        `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
+        `"relu"`, `"selu"` and `"gelu_new"` or `"gelu"` are supported.
     max_num_patches (`int`, *optional*, defaults to 4096):
         Maximum sequence length (here number of patches) supported by the model.
 

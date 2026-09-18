@@ -71,7 +71,7 @@ Model repositories also support [gating](https://hf.co/docs/hub/models-gated) to
 
 A model repository also includes an inference [widget](https://hf.co/docs/hub/models-widgets) for users to directly interact with a model on the Hub.
 
-Check out the Hub [Models](https://hf.co/docs/hub/models) documentation to for more information.
+Check out the Hub [Models](https://hf.co/docs/hub/models) documentation for more information.
 
 ## Uploading a model
 

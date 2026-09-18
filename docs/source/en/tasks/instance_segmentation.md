@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -43,7 +43,7 @@ We encourage you to share your model with the community. Log in to your Hugging 
 ```py
 >>> from huggingface_hub import notebook_login
 
->>> notebook_login()
+>>> notebook_login()  # doctest: +SKIP
 ```
 
 ## Load the dataset
@@ -65,6 +65,8 @@ The [satellite-building-segmentation](https://huggingface.co/datasets/merve/sate
 >>> train_ds = ds["train"]
 >>> valid_ds = ds["validation"]
 >>> print(f"Train: {len(train_ds)} images, Valid: {len(valid_ds)} images")
+Train: 6764 images, Valid: 1934 images
+
 ```
 
 Inspect a single example. Each record has an `image`, an `image_id`, and an `objects` dict containing per-instance annotations. Each instance has a `bbox` in `[x, y, width, height]` format and a `segmentation` field with polygon coordinates:
@@ -72,11 +74,19 @@ Inspect a single example. Each record has an `image`, an `image_id`, and an `obj
 ```py
 >>> sample = train_ds[0]
 >>> print(f"Image ID: {sample['image_id']}")
+Image ID: 0
 >>> print(f"Image size: {sample['image'].size}")
+Image size: (512, 512)
 >>> print(f"Number of instances: {len(sample['objects']['id'])}")
+Number of instances: 7
 >>> print(f"\nObjects keys: {list(sample['objects'].keys())}")
+<BLANKLINE>
+Objects keys: ['id', 'area', 'bbox', 'segmentation', 'category', 'iscrowd']
 >>> print(f"First bbox: {sample['objects']['bbox'][0]}")
+First bbox: [80.0, 0.0, 51.0, 51.5]
 >>> print(f"First category: {sample['objects']['category'][0]}")
+First category: 0
+
 ```
 
 Visualize an example with its ground-truth masks:
@@ -90,9 +100,9 @@ Visualize an example with its ground-truth masks:
 >>> image = sample["image"].convert("RGB")
 
 >>> fig, axes = plt.subplots(1, 2, figsize=(14, 6))
->>> axes[0].imshow(image)
->>> axes[0].set_title("Original image")
->>> axes[0].axis("off")
+>>> _ = axes[0].imshow(image)
+>>> _ = axes[0].set_title("Original image")
+>>> _ = axes[0].axis("off")
 
 >>> overlay = image.copy()
 >>> draw = ImageDraw.Draw(overlay, "RGBA")
@@ -103,9 +113,9 @@ Visualize an example with its ground-truth masks:
 ...         color = tuple(np.random.randint(50, 255, 3)) + (100,)
 ...         draw.polygon(coords, fill=color, outline="red")
 
->>> axes[1].imshow(overlay)
->>> axes[1].set_title(f"Ground truth ({len(objects['id'])} buildings)")
->>> axes[1].axis("off")
+>>> _ = axes[1].imshow(overlay)
+>>> _ = axes[1].set_title(f"Ground truth ({len(objects['id'])} buildings)")
+>>> _ = axes[1].axis("off")
 >>> plt.tight_layout()
 >>> plt.show()
 ```
@@ -199,11 +209,19 @@ Verify a preprocessed example. It contains `pixel_values` (the normalized image 
 ```py
 >>> example = train_ds[0]
 >>> print(f"pixel_values shape: {example['pixel_values'].shape}")
+pixel_values shape: torch.Size([3, 432, 432])
 >>> print(f"pixel_mask shape: {example['pixel_mask'].shape}")
+pixel_mask shape: torch.Size([432, 432])
 >>> print(f"labels keys: {list(example['labels'].keys())}")
+labels keys: ['size', 'image_id', 'class_labels', 'boxes', 'area', 'iscrowd', 'orig_size', 'masks']
 >>> print(f"  class_labels: {example['labels']['class_labels']}")
+  class_labels: tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0])
 >>> print(f"  boxes shape: {example['labels']['boxes'].shape}")
+  boxes shape: torch.Size([26, 4])
 >>> print(f"  masks shape: {example['labels']['masks'].shape}")
+  masks shape: torch.Size([26, 432, 432])
+
 ```
 
 ## Data collator
@@ -309,7 +327,7 @@ With the data, model, and metrics ready, set up training. A few important notes 
 ...     greater_is_better=True,
 ...     remove_unused_columns=False,
 ...     eval_do_concat_batches=False,
-...     push_to_hub=True,
+...     push_to_hub=False,
 ... )
 
 >>> trainer = Trainer(
@@ -322,14 +340,14 @@ With the data, model, and metrics ready, set up training. A few important notes 
 ...     compute_metrics=compute_metrics,
 ... )
 
->>> trainer.train()
+>>> trainer.train()  # doctest: +SKIP
 ```
 
 If you set `push_to_hub=True` in the training arguments, the training checkpoints are pushed to the
 Hugging Face Hub. Upon training completion, push the final model to the Hub as well by calling the [`~transformers.Trainer.push_to_hub`] method.
 
 ```py
->>> trainer.push_to_hub(
+>>> trainer.push_to_hub(  # doctest: +SKIP
 ...     dataset=DATASET_ID,
 ...     tags=["instance-segmentation", "rf-detr-seg", "vision", "satellite", "building"],
 ... )
@@ -363,6 +381,7 @@ The post-processing step converts the raw query outputs (logits + low-res masks)
 ... )[0]
 
 >>> print(f"Detected {len(results['segments_info'])} buildings")
+Detected 0 buildings
 >>> for seg_info in results["segments_info"][:5]:
 ...     print(f"  Building (score: {seg_info['score']:.3f})")
 ```
@@ -372,9 +391,9 @@ Visualize the predictions. The segmentation map assigns each pixel a segment ID 
 ```py
 >>> fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
->>> axes[0].imshow(image)
->>> axes[0].set_title("Input satellite image")
->>> axes[0].axis("off")
+>>> _ = axes[0].imshow(image)
+>>> _ = axes[0].set_title("Input satellite image")
+>>> _ = axes[0].axis("off")
 
 >>> seg_map = results["segmentation"].cpu().numpy()
 >>> overlay = np.array(image).copy()
@@ -383,9 +402,9 @@ Visualize the predictions. The segmentation map assigns each pixel a segment ID 
 ...     color = np.random.randint(0, 255, 3)
 ...     overlay[mask] = (overlay[mask] * 0.4 + color * 0.6).astype(np.uint8)
 
->>> axes[1].imshow(overlay)
->>> axes[1].set_title(f"Predicted masks ({len(results['segments_info'])} buildings)")
->>> axes[1].axis("off")
+>>> _ = axes[1].imshow(overlay)
+>>> _ = axes[1].set_title(f"Predicted masks ({len(results['segments_info'])} buildings)")
+>>> _ = axes[1].axis("off")
 >>> plt.tight_layout()
 >>> plt.show()
 ```

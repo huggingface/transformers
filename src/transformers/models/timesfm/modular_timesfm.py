@@ -128,9 +128,8 @@ class TimesFmPositionalEmbedding(nn.Module):
 
         num_timescales = self.embedding_dims // 2
         log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
-        self.register_buffer(
-            "inv_timescales",
-            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+        self.inv_timescales = nn.Buffer(
+            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment)
         )
 
     def forward(self, seq_length=None, position=None):
@@ -318,7 +317,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
         outputs = torch.where(
             torch.abs(inputs - self.config.pad_val) < self.config.tolerance,
-            torch.tensor(self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
+            torch.full((), self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
             outputs,
         )
         return outputs, (mu, sigma)
@@ -348,12 +347,12 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         patched_inputs = torch.where(
             torch.abs(patched_pads - 1.0) < self.config.tolerance,
-            torch.tensor(0.0, dtype=patched_inputs.dtype, device=patched_inputs.device),
+            torch.full((), 0.0, dtype=patched_inputs.dtype, device=patched_inputs.device),
             patched_inputs,
         )
         patched_pads = torch.where(
             torch.abs(patched_inputs - self.config.pad_val) < self.config.tolerance,
-            torch.tensor(1.0, dtype=patched_pads.dtype, device=patched_pads.device),
+            torch.full((), 1.0, dtype=patched_pads.dtype, device=patched_pads.device),
             patched_pads,
         )
         patched_inputs, stats = self._forward_transform(patched_inputs, patched_pads)

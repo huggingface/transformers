@@ -649,6 +649,31 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertFalse(torch.all(scores == filtered_scores_2_gram))
         self.assertFalse(torch.all(scores == filtered_scores_3_gram))
 
+    def test_no_repeat_ngram_dist_processor_banned_token_reappears(self):
+        vocab_size = 10
+        batch_size = 1
+
+        # The 3-gram (1, 2, 5) repeats the current (1, 2) suffix and bans 5. The later 3-gram (7, 8, 5) ends in the
+        # same token without repeating the suffix, and must not undo that ban.
+        input_ids = torch.tensor([[1, 2, 5, 7, 8, 5, 1, 2]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        filtered_scores = NoRepeatNGramLogitsProcessor(3)(input_ids, scores)
+
+        self.assertListEqual(torch.isinf(filtered_scores).nonzero()[:, 1].tolist(), [5])
+
+    def test_no_repeat_ngram_dist_processor_sequence_shorter_than_ngram(self):
+        vocab_size = 3
+        batch_size = 2
+
+        # The sequences are one token short of holding a 3-gram, so nothing can be banned yet
+        input_ids = torch.tensor([[1, 2], [0, 1]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        filtered_scores = NoRepeatNGramLogitsProcessor(3)(input_ids, scores)
+
+        self.assertFalse(torch.isinf(filtered_scores).any())
+
     def test_encoder_no_repeat_ngram_dist_processor(self):
         vocab_size = 3
         num_beams = 2

@@ -53,7 +53,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: ./.github/workflows/self-scheduled.yml
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-flash-attn"

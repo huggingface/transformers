@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Union
 
@@ -38,7 +38,7 @@ from ...image_utils import (
     get_image_size_for_max_height_width,
     make_list_of_images,
 )
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput, SemanticSegmenterOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
@@ -1097,7 +1097,7 @@ class Sapiens2Config(DINOv3ViTConfig):
         Number of key/value heads for each transformer layer. Setting a layer's value equal to
         `num_attention_heads` gives full multi-head attention; a smaller value gives grouped-query
         attention. Defaults to `num_attention_heads` for the first `num_first_full_attention_layers`
-        and last `num_last_full_attention_layers` layers and `num_key_valueattention_heads` for all other
+        and last `num_last_full_attention_layers` layers and `num_key_value_attention_heads` for all other
         layers.
     num_key_value_attention_heads (`int`):
         Number of key/value heads for layers that use grouped-query attention when `num_key_value_heads_per_layer`
@@ -1175,18 +1175,7 @@ class Sapiens2Embeddings(DINOv3ViTEmbeddings):
 
 
 class Sapiens2RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
-    def __init__(self, config: Sapiens2Config):
-        super().__init__(self)
-
-        del self.num_patches_h
-        del self.num_patches_w
-        image_size = config.image_size
-        image_h, image_w = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
-        patch_size = config.patch_size
-        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
-        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
-        self.num_patches_h = image_h // patch_size_h
-        self.num_patches_w = image_w // patch_size_w
+    pass
 
 
 class Sapiens2RMSNorm(LlamaRMSNorm):
@@ -1527,8 +1516,8 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         hidden_states = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-        output = self.model(hidden_states, position_embeddings, **kwargs)
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        output: BaseModelOutput = self.model(hidden_states, position_embeddings, **kwargs)
         stage_hidden_states = output.hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
