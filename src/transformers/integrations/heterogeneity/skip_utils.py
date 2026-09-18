@@ -104,16 +104,16 @@ def _resolve_return_entries(
 
 if is_torch_available():
 
-    class _NoOpReplacement(nn.Module):
+    class NoOpReplacement(nn.Module):
         def __init__(
             self,
             *,
-            source_class_name: str,
+            source_class: type[nn.Module],
             return_entries: tuple[_ResolvedReturnEntry | None, ...] | None = None,
             return_tuple: bool = False,
         ):
             super().__init__()
-            self._source_class_name = source_class_name
+            self.source_class = source_class
             self._return_entries = return_entries
             self._return_tuple = return_tuple
 
@@ -132,7 +132,7 @@ if is_torch_available():
                     arg_value = return_entry.resolve(args, kwargs)
                 except TypeError:
                     raise TypeError(
-                        f"In the skip replacement for {self._source_class_name}, "
+                        f"In the skip replacement for {self.source_class.__qualname__}, "
                         f"required argument '{return_entry.arg_name}' was not provided"
                     ) from None
 
@@ -140,7 +140,7 @@ if is_torch_available():
                     outputs[i] = return_entry.transform(arg_value)
                 except Exception as e:
                     raise RuntimeError(
-                        f"In the skip replacement for {self._source_class_name}, failed to apply transform "
+                        f"In the skip replacement for {self.source_class.__qualname__}, failed to apply transform "
                         f"{return_entry.transform!r} to argument '{return_entry.arg_name}' "
                         f"(value type: {type(arg_value).__name__}): {e}"
                     ) from e
@@ -164,8 +164,8 @@ def get_skip_replacement_factory(
         return_tuple = True
 
     return partial(
-        _NoOpReplacement,
-        source_class_name=cls.__qualname__,
+        NoOpReplacement,
+        source_class=cls,
         return_entries=_resolve_return_entries(cls, return_entries),
         return_tuple=return_tuple,
     )

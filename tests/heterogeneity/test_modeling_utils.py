@@ -50,6 +50,7 @@ if is_torch_available():
     )
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.modeling_layers import MtpModel
+    from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 
 if is_torch_available():
@@ -160,8 +161,12 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
         self.assertIsInstance(model.layer.self_attn, _ClassSpecificNoOpAttention)
 
-    def test_mtp_model_applies_per_layer_config_and_skips(self):
-        config = tiny_llama_config(num_hidden_layers=2)
+    @parameterized.expand([("no_main_skips", []), ("main_layers_skipped", ["attention", "mlp"])])
+    def test_mtp_model_applies_per_layer_config_and_skips(self, _, main_skips):
+        config = tiny_llama_config(
+            num_hidden_layers=2,
+            per_layer_config={layer_idx: {"skip": main_skips} for layer_idx in range(2)} if main_skips else None,
+        )
         config.num_mtp_layers = 2
         config.mtp_per_layer_config = {
             0: {"intermediate_size": 64, "rms_norm_eps": 1e-5},
@@ -172,32 +177,38 @@ class TestHeterogeneousModeling(unittest.TestCase):
         mtp_model = MtpModel(main_model, num_mtp_layers=2)
 
         self.assertTrue(mtp_model.config.is_heterogeneous)
+        self.assertTrue(mtp_model.config.generic_modeling_applied)
         self.assertEqual(mtp_model.layers[0].mtp_block.mlp.gate_proj.out_features, 64)
         self.assertEqual(mtp_model.layers[1].mtp_block.mlp.gate_proj.out_features, 96)
         self.assertEqual(mtp_model.layers[0].enorm.variance_epsilon, 1e-5)
         self.assertEqual(list(mtp_model.layers[1].mtp_block.self_attn.parameters()), [])
+        for layer in mtp_model.layers:
+            for norm in (layer.enorm, layer.hnorm, layer.post_norm):
+                self.assertIsInstance(norm, LlamaRMSNorm)
 
     def test_mtp_mask_creation_uses_per_layer_config(self):
-        config = tiny_llama_config(num_hidden_layers=2)
+        config = tiny_gpt_oss_config(num_hidden_layers=2, layer_types=["sliding_attention"] * 2, sliding_window=4)
         config.num_mtp_layers = 2
+        config.mtp_layer_types = ["sliding_attention"] * 2
         config.mtp_per_layer_config = {
-            0: {"is_causal": True},
-            1: {"is_causal": False},
+            0: {"sliding_window": 2},
+            1: {"sliding_window": 3},
         }
         config._attn_implementation = "eager"
-        main_model = build_model(config, LlamaForCausalLM)
+        main_model = build_model(config, GptOssForCausalLM)
+        self.assertFalse(main_model.config.generic_modeling_applied)
         mtp_model = MtpModel(main_model, num_mtp_layers=2)
 
-        inputs_embeds = torch.randn(1, 2, config.hidden_size)
-        position_ids = torch.arange(2).unsqueeze(0)
+        inputs_embeds = torch.randn(1, 4, config.hidden_size)
+        position_ids = torch.arange(4).unsqueeze(0)
         mtp_cache = DynamicCache(config=mtp_model.config)
-        causal_mask = mtp_model.create_masks_for_mtp_layer(0, inputs_embeds, mtp_cache, position_ids)["attention_mask"]
-        bidirectional_mask = mtp_model.create_masks_for_mtp_layer(1, inputs_embeds, mtp_cache, position_ids)[
-            "attention_mask"
-        ]
-        expected_causal_mask = torch.tensor([[[[0.0, torch.finfo(inputs_embeds.dtype).min], [0.0, 0.0]]]])
-        torch.testing.assert_close(causal_mask, expected_causal_mask)
-        self.assertIsNone(bidirectional_mask)
+        min_dtype = torch.finfo(inputs_embeds.dtype).min
+        expected_last_rows = ([min_dtype, min_dtype, 0.0, 0.0], [min_dtype, 0.0, 0.0, 0.0])
+        for layer_idx, expected_last_row in enumerate(expected_last_rows):
+            mask = mtp_model.create_masks_for_mtp_layer(layer_idx, inputs_embeds, mtp_cache, position_ids)[
+                "attention_mask"
+            ]
+            torch.testing.assert_close(mask[0, 0, -1], torch.tensor(expected_last_row))
 
     @parameterized.expand(
         [

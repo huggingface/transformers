@@ -150,7 +150,7 @@ def support_per_layer_mask_creation(attribute_name: str | None = None) -> Callab
             config = mask_kwargs["config"]
             layer_idx = mask_kwargs.get("layer_idx")
 
-            if layer_idx is None and config.is_heterogeneous and config._heterogeneity_spec.generic_modeling_applied:
+            if layer_idx is None and config.generic_modeling_applied:
                 attention_mask = mask_kwargs.get("attention_mask")
                 if isinstance(attention_mask, AttentionMasksByLayerIdx):
                     return attention_mask

@@ -322,6 +322,11 @@ class HeterogeneousConfigMixin:
         return hasattr(self, "_heterogeneity_spec")
 
     @property
+    def generic_modeling_applied(self) -> bool:
+        """Whether generic heterogeneous modeling has been applied successfully during model initialization."""
+        return self.is_heterogeneous and self._heterogeneity_spec.generic_modeling_applied
+
+    @property
     def per_layer_config(self) -> Sequence[PreTrainedConfig]:
         return _PerLayerConfigView(self)
 

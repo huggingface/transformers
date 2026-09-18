@@ -30,6 +30,7 @@ from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_m
 from .integrations.heterogeneity import (
     HeterogeneousModelingSpec,
     LayerIdxFromArgument,
+    NoOpReplacement,
     get_heterogeneous_modeling_spec,
     nest_skip_descriptor_paths,
 )
@@ -396,11 +397,14 @@ class MtpModel(PreTrainedModel):
         # Infer the type of the layers based on the main model
         base_model = main_model.get_decoder()
         layer_cls = type(base_model.layers[-1])
-        norm_cls = next(
-            type(module)
+        norm = next(
+            module
             for name, module in base_model.layers[-1].named_modules()  # type: ignore
             if "norm" in name
         )
+        norm_cls = type(norm)
+        if main_model.config.generic_modeling_applied and isinstance(norm, NoOpReplacement):
+            norm_cls = norm.source_class
         # If the config contains the field, we never use per-layer post norm, but maybe a shared one
         self.use_post_norm = True
         self.use_shared_post_norm = False
@@ -454,7 +458,7 @@ class MtpModel(PreTrainedModel):
         if defined, and otherwise uses full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
-        layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
+        layer_config = self.config.per_layer_config[layer_idx]
         mask_kwargs = {
             "config": layer_config,
             "inputs_embeds": inputs_embeds,
