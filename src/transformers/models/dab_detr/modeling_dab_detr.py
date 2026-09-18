@@ -14,6 +14,7 @@
 """PyTorch DAB-DETR model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -25,9 +26,11 @@ from ...backbone_utils import load_backbone
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     logging,
 )
@@ -339,6 +342,35 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
+# Copied from transformers.models.detr.modeling_detr.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Modified from transformers.models.detr.modeling_detr.DetrAttention
 class DetrAttention(nn.Module):
     """
@@ -364,6 +396,7 @@ class DetrAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
+        self.is_causal = False
         self.k_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=bias)
         self.v_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=bias)
         self.q_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=bias)
@@ -375,44 +408,36 @@ class DetrAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         object_queries: torch.Tensor | None = None,
         key_value_states: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
-        batch_size, q_len, embed_dim = hidden_states.size()
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if object_queries is not None:
-            hidden_states_original = hidden_states
-            hidden_states = hidden_states + object_queries
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states) * self.scaling
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states_original)
+        # add position embeddings to the queries and keys, but not to the values
+        query_key_input = hidden_states + object_queries if object_queries is not None else hidden_states
 
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
+        query_states = self.q_proj(query_key_input).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(query_key_input).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-
-        attn_output = attn_output.reshape(batch_size, q_len, embed_dim)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights
 
@@ -446,6 +471,7 @@ class DabDetrAttention(nn.Module):
                 f"output_dim must be divisible by attention_heads (got `output_dim`: {self.output_dim} and `attention_heads`: {self.attention_heads})."
             )
         self.scaling = self.attention_head_dim**-0.5
+        self.is_causal = False
         self.output_proj = nn.Linear(self.output_dim, self.output_dim, bias=bias)
 
     def forward(
@@ -454,40 +480,35 @@ class DabDetrAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         key_states: torch.Tensor | None = None,
         value_states: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
+        # `hidden_states` is already the (externally projected) query. Note that queries and keys use
+        # `attention_head_dim`, while the values use the (possibly different) `values_head_dim`.
+        input_shape = hidden_states.shape[:-1]
+        kv_input_shape = key_states.shape[:-1]
 
-        batch_size, q_len, _ = hidden_states.size()
+        query_states = hidden_states.view(*input_shape, self.attention_heads, self.attention_head_dim).transpose(1, 2)
+        key_states = key_states.view(*kv_input_shape, self.attention_heads, self.attention_head_dim).transpose(1, 2)
+        value_states = value_states.view(*kv_input_shape, self.attention_heads, self.values_head_dim).transpose(1, 2)
 
-        # scaling query and refactor key-, value states
-        query_states = hidden_states * self.scaling
-        query_states = query_states.view(batch_size, -1, self.attention_heads, self.attention_head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, -1, self.attention_heads, self.attention_head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, -1, self.attention_heads, self.values_head_dim).transpose(1, 2)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_probs = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = torch.matmul(attn_probs, value_states)
-
-        if attn_output.size() != (batch_size, self.attention_heads, q_len, self.values_head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.attention_heads, q_len, self.values_head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-
-        attn_output = attn_output.reshape(batch_size, q_len, self.output_dim)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.output_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights
 
