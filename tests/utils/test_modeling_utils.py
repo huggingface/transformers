@@ -76,6 +76,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_kernels,
     require_non_hpu,
+    require_symlink_support,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -898,9 +899,8 @@ class ModelUtilsTest(TestCasePlus):
                 json.dump(repo_config, f)
             self.assertIsInstance(BertModel.from_pretrained(repo), BertModel)
 
+    @require_symlink_support
     def test_transformers_weights_allows_symlinked_snapshot_file(self):
-        if os.name == "nt":
-            self.skipTest("creating symlinks requires privileges on Windows")
         config = BertConfig(
             vocab_size=16,
             hidden_size=8,

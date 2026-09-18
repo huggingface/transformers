@@ -672,6 +672,24 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+@functools.lru_cache(maxsize=1)
+def _is_symlink_supported():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        target = Path(tmp_dir) / "target"
+        link = Path(tmp_dir) / "link"
+        target.touch()
+        try:
+            link.symlink_to(target)
+        except OSError:
+            return False
+    return True
+
+
+def require_symlink_support(test_case):
+    """Decorator marking a test that requires the ability to create symbolic links."""
+    return unittest.skipUnless(_is_symlink_supported(), "test requires symlink support")(test_case)
+
+
 def require_torch_greater_or_equal(version: str):
     """
     Decorator marking a test that requires PyTorch version >= `version`.
