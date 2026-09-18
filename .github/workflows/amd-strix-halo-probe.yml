@@ -3,11 +3,16 @@
 # This file keeps its name on purpose: the pool's runner group allows this
 # workflow path, so we iterate here rather than adding new workflow files.
 #
-# Test-only: the gfx1151 image is built and pushed separately by
-# build-amd-gfx1151-image.yml. This job just PULLS it via a job-level
-# `container:` and runs the tests on a pool runner -- so the per-run cost is a
-# pull, not a build. Refresh the image (Dockerfile change) by running that build
-# workflow first.
+# The gfx1151 image is built + pushed separately by build-amd-gfx1151-image.yml;
+# the jobs here just PULL it via a job-level `container:`.
+#
+#  * default push  -> quick smoke test (`test` job)
+#  * push w/ [models] in the commit msg -> full ALL-MODELS run, ONE JOB PER MODEL
+#
+# One-job-per-model, like the MI300/MI355 CIs: GitHub caps a matrix at 256 jobs,
+# and there are >256 models, so `models-setup` splits tests/models/* into 3
+# slices (~172 each, <=256) and there is one models-ci job group per slice, each
+# a matrix over its slice's folders. Total = one job per model in a single run.
 name: AMD Strix Halo probe
 
 on:
@@ -21,45 +26,40 @@ permissions:
   packages: read   # pull the image from GHCR with the built-in GITHUB_TOKEN
 
 jobs:
-  # --- Full all-models run (gated) -------------------------------------------
-  # Sharded run of every tests/models/* folder, sized to the pool's ~7 usable
-  # concurrency. Runs ONLY when the pushed commit message contains "[models]".
-  # `setup` (on a hosted runner) splits the 514 model folders into N groups; the
-  # matrix then runs each group on the pool inside the prebuilt image.
   models-setup:
-    name: Split model folders into shards
+    name: Split models into slices
     if: ${{ contains(github.event.head_commit.message, '[models]') }}
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.split.outputs.matrix }}
+      slice0: ${{ steps.split.outputs.slice0 }}
+      slice1: ${{ steps.split.outputs.slice1 }}
+      slice2: ${{ steps.split.outputs.slice2 }}
     steps:
       - uses: actions/checkout@v4
       - id: split
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import os, json
+          import os, json, math
           base = "tests/models"
           dirs = sorted(d for d in os.listdir(base)
                         if os.path.isdir(os.path.join(base, d)) and not d.startswith("__"))
-          # GitHub caps a matrix at 256 jobs/run, and we have >256 models, so we
-          # use the max granularity: 256 groups (~2 models each), each job NAMED
-          # by its model(s) so the UI shows model names rather than "shard N".
-          N = min(256, len(dirs))
-          groups = [dirs[i::N] for i in range(N)]           # round-robin balance
-          include = [{"name": ", ".join(g),
-                      "dirs": " ".join(f"tests/models/{d}" for d in g)}
-                     for g in groups if g]
-          print("matrix=" + json.dumps({"include": include}))
+          N = 3                                          # 3 slices keeps each <=256 (514 -> ~172)
+          per = math.ceil(len(dirs) / N)
+          for i in range(N):
+              print(f"slice{i}=" + json.dumps(dirs[i * per:(i + 1) * per]))
           PY
 
-  models-ci:
-    name: "${{ matrix.name }}"
+  # One job per model. Three near-identical job groups, one per slice, so each
+  # matrix stays under GitHub's 256-job cap. Anchors aren't supported in Actions
+  # YAML, hence the repetition. To change the test command, edit all three.
+  models-ci-0:
+    name: "${{ matrix.model }}"
     needs: models-setup
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
-    timeout-minutes: 240
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.models-setup.outputs.matrix) }}
+      matrix:
+        model: ${{ fromJson(needs.models-setup.outputs.slice0) }}
     container:
       image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
       credentials:
@@ -68,21 +68,70 @@ jobs:
       options: --device=/dev/kfd --device=/dev/dri --group-add 992
     env:
       HF_HOME: /tmp/hf_home
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}   # empty if unset -> unauthenticated
-      # Flip to "1" for the full slow suite (real checkpoints) once non-slow is understood.
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
       RUN_SLOW: "0"
     steps:
-      - name: Run model tests for this shard
+      - name: Test ${{ matrix.model }}
         run: |
           cd /transformers
-          echo "models -> ${{ matrix.dirs }}"
-          # Run under xdist with worker restart: some attention tests hard-crash
-          # (segfault) the process on gfx1151, which would otherwise abort the
-          # whole shard and skip every model after it. With a worker subprocess,
-          # a crash is reported as a failed test and the worker restarts to finish
-          # the remaining models -- so the shard always runs to completion.
-          python3 -m pip install -q pytest-xdist || true
-          python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope ${{ matrix.dirs }}
+          # xdist worker-restart survives a segfault (some attention tests crash
+          # on gfx1151); pytest-timeout kills a hung test instead of burning the
+          # whole job's time budget. Job timeout is left at GitHub's default (6h).
+          python3 -m pip install -q pytest-xdist pytest-timeout || true
+          python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
+            --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
+
+  models-ci-1:
+    name: "${{ matrix.model }}"
+    needs: models-setup
+    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ${{ fromJson(needs.models-setup.outputs.slice1) }}
+    container:
+      image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --device=/dev/kfd --device=/dev/dri --group-add 992
+    env:
+      HF_HOME: /tmp/hf_home
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      RUN_SLOW: "0"
+    steps:
+      - name: Test ${{ matrix.model }}
+        run: |
+          cd /transformers
+          python3 -m pip install -q pytest-xdist pytest-timeout || true
+          python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
+            --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
+
+  models-ci-2:
+    name: "${{ matrix.model }}"
+    needs: models-setup
+    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ${{ fromJson(needs.models-setup.outputs.slice2) }}
+    container:
+      image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --device=/dev/kfd --device=/dev/dri --group-add 992
+    env:
+      HF_HOME: /tmp/hf_home
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      RUN_SLOW: "0"
+    steps:
+      - name: Test ${{ matrix.model }}
+        run: |
+          cd /transformers
+          python3 -m pip install -q pytest-xdist pytest-timeout || true
+          python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
+            --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
 
   test:
     name: Smoke + tests (prebuilt gfx1151 image)
@@ -90,8 +139,6 @@ jobs:
     if: ${{ !contains(github.event.head_commit.message, '[models]') }}
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
     timeout-minutes: 120
-    # GitHub pulls this image and runs every step inside it. `options` passes the
-    # GPU devices and the host render group (gid 992 on the pool) into it.
     container:
       image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
       credentials:
@@ -112,7 +159,6 @@ jobs:
           t = torch.ones(8, device="cuda"); torch.cuda.synchronize()
           print("[5] tiny cuda tensor ok, sum:", float(t.sum()), flush=True)
 
-          # bounded values so the fp16 matmul does not overflow to inf
           x = (torch.rand(2048, 2048, device="cuda", dtype=torch.float16) - 0.5) * 0.1
           torch.cuda.synchronize()
           print("[6] matmul sum:", float((x @ x).sum()), flush=True)
