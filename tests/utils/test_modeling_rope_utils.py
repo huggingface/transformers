@@ -248,6 +248,23 @@ class RopeTest(unittest.TestCase):
         config_none.convert_rope_params_to_dict(partial_rotary_factor=0.25)
         self.assertEqual(config_none.ignore_keys_at_rope_validation, {"partial_rotary_factor"})
 
+    def test_rope_validation_with_entries_shared_across_layer_types(self):
+        # Regression test: checkpoints may store a shared entry next to the per-layer dicts. Validating those
+        # values as if they were a layer's parameters used to raise `AttributeError: 'int' object has no attribute
+        # 'get'`.
+        config = self.get_config_with_rope_parameters(
+            rope_params={
+                "rope_type": "yarn",
+                "rope_theta": 10000.0,
+                "factor": 8.0,
+                "original_max_position_embeddings": 4096,
+            },
+            is_nested=True,
+        )
+        config.rope_parameters["original_max_position_embeddings"] = 4096
+
+        config.validate_rope()
+
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
         # multiple RoPE strategies will fail.

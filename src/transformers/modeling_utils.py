@@ -1138,6 +1138,11 @@ class PreTrainedModel(
     # Model's compatible flash kernels (e.g., "kernels-community/flash-mla") defaulting to the first in the list
     _compatible_flash_implementations: list[str] | None = None
 
+    # Set to `False` by models that can never run under context parallelism, whatever their config
+    # (attention sinks, for instance, which SDPA cannot express). Models whose *config* rules it out are
+    # handled by `supports_context_parallel` below, so this stays `True` for almost everything.
+    _supports_context_parallel: bool = True
+
     # Advanced functionalities support
     supports_gradient_checkpointing: bool = False
     _can_compile_fullgraph: bool = False
@@ -1147,6 +1152,25 @@ class PreTrainedModel(
     _supports_attention_backend: bool = False
     # A mapping describing what outputs can be captured by `capture_outputs` decorator during the forward pass
     _can_record_outputs: dict | None = None
+
+    @property
+    def supports_context_parallel(self) -> bool:
+        """Whether this model can be trained with context parallelism.
+
+        Context parallelism shards the sequence and can only express full causal attention: the per-layer
+        mask is dropped, so a layer using a stricter mask (sliding-window or chunked attention) would
+        silently train as full causal instead. A layer carrying a recurrent state along the sequence
+        (linear attention) is ruled out for a different reason: the state is never exchanged between ranks.
+        """
+        if not self._supports_context_parallel:
+            return False
+        config = self.config.get_text_config()
+        layer_types = getattr(config, "layer_types", None)
+        if layer_types is not None:
+            return all(layer_type == "full_attention" for layer_type in layer_types)
+        # Models predating `layer_types` (Mistral, for one) apply a sliding window to every layer whenever
+        # `sliding_window` is set.
+        return getattr(config, "sliding_window", None) is None
 
     @property
     @torch.compiler.allow_in_graph
@@ -3119,7 +3143,9 @@ class PreTrainedModel(
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         if offload:
-            device_type = torch.accelerator.current_accelerator().type
+            # `current_accelerator()` is None when no accelerator is available, in which case the
+            # activations already live on the host and there is nothing to copy off a device.
+            device_type = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
 
             def checkpoint_func(function, *args, **kwargs):
                 with save_on_cpu(pin_memory=True, device_type=device_type):
@@ -4132,7 +4158,7 @@ class PreTrainedModel(
 
         if distributed_config is not None:
             distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
-                distributed_config, device_mesh=device_mesh, device_map=device_map
+                distributed_config, device_map=device_map
             )
 
         if gguf_file is not None and not is_accelerate_available():
@@ -4271,7 +4297,8 @@ class PreTrainedModel(
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
+        if distributed_config is not None:
+            model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
         if device_map is not None:
@@ -4595,6 +4622,14 @@ class PreTrainedModel(
         """
         # if None, the model didn't undergo tensor parallel sharding
         return self._tp_size
+
+    @property
+    def fsdp_size(self):
+        """
+        Returns the model's FSDP sharding degree.
+        """
+        # if None, the model didn't undergo FSDP sharding
+        return self._fsdp_size
 
     @property
     def supports_pp_plan(self):
@@ -5006,7 +5041,16 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         if device.type in ["cuda", "xpu"]:
             accelerator_module = getattr(torch, device.type)
             index = device.index if device.index is not None else accelerator_module.current_device()
-            free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            try:
+                free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            except (RuntimeError, NotImplementedError, AttributeError) as e:
+                # Some backends cannot report free memory (e.g. Intel XPU under WSL2, where the Level Zero Sysman
+                # interface is not exposed). Warmup is a best-effort optimization, so skip it for this device
+                # instead of failing the whole model load.
+                logger.warning_once(
+                    f"Skipping caching allocator warmup for {device}: could not query device memory ({e})"
+                )
+                continue
             unused_memory = accelerator_module.memory_reserved(index) - accelerator_module.memory_allocated(index)
             # If we have reserved but unused memory, we can lower the allocation we want to make, but only if it's still
             # higher than the unused memory. This is because otherwise torch will use that unused memory when performing

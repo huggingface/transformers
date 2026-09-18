@@ -8,6 +8,7 @@ from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, run_test_using_subprocess
 from transformers.utils.import_utils import (
+    _candidate_distribution_names,
     _is_package_available,
     clear_import_cache,
     is_flash_attn_2_available,
@@ -59,6 +60,34 @@ def test_is_package_available_edge_cases():
             assert _is_package_available(pkg_name, return_version=True) == expected
 
 
+def test_is_package_available_unmapped_distribution_does_not_import():
+    """A package missing from `packages_distributions()` must be versioned from metadata, not by importing it.
+
+    `torch` >= 2.14 ships no `top_level.txt`, so on Python < 3.12 it is absent from the mapping. Falling back
+    to `importlib.import_module` there pulls all of torch into every `import transformers`.
+    """
+    pkg_name = "definitely_not_a_real_pkg_xyz"
+
+    with (
+        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
+        patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {}),
+        patch("transformers.utils.import_utils.importlib.metadata.version", return_value="1.2.3") as version,
+        patch("transformers.utils.import_utils.importlib.import_module") as import_module,
+    ):
+        assert _is_package_available(pkg_name, return_version=True) == (True, "1.2.3")
+        version.assert_called_once_with(pkg_name.replace("_", "-"))
+        import_module.assert_not_called()
+
+
+def test_candidate_distribution_names():
+    with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {"PIL": ["pillow"]}):
+        # A mapped import name prefers its distribution, but keeps the import name as a fallback.
+        assert _candidate_distribution_names("PIL") == ["pillow", "PIL"]
+        # An unmapped import name falls back on itself, normalized first, without duplicates.
+        assert _candidate_distribution_names("torch") == ["torch"]
+        assert _candidate_distribution_names("torch_xla") == ["torch-xla", "torch_xla"]
+
+
 @contextmanager
 def mock_flash_attn_env(
     installed_packages: dict[str, str] | None = None,
@@ -99,6 +128,7 @@ def mock_flash_attn_env(
             patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", fake_distribution_mapping),
             patch("transformers.utils.import_utils.is_torch_cuda_available", return_value=cuda_available),
             patch("transformers.utils.import_utils.is_torch_mlu_available", return_value=False),
+            patch("transformers.utils.import_utils.is_torch_musa_available", return_value=False),
             patch("transformers.utils.import_utils.is_kernels_available", return_value=kernels_available),
             patch.dict(sys.modules, {"kernels": fake_kernels_module}),
         ):
