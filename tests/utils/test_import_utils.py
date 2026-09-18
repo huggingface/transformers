@@ -7,12 +7,7 @@ from packaging.version import parse as parse_version
 from parameterized import parameterized
 
 from transformers import logging
-from transformers.testing_utils import (
-    CaptureLogger,
-    LoggingLevel,
-    require_torch,
-    run_test_using_subprocess,
-)
+from transformers.testing_utils import CaptureLogger, LoggingLevel, require_torch, run_test_using_subprocess
 from transformers.utils.import_utils import (
     _candidate_distribution_names,
     _is_package_available,
@@ -78,8 +73,9 @@ def test_lazy_module_error_points_to_debug_log():
     original_error = RuntimeError("simulated broken dependency")
 
     with LoggingLevel(logging.DEBUG):
-        with CaptureLogger(logger) as captured_logs, patch.object(
-            lazy_module, "_get_module", side_effect=original_error
+        with (
+            CaptureLogger(logger) as captured_logs,
+            patch.object(lazy_module, "_get_module", side_effect=original_error),
         ):
             try:
                 lazy_module.BrokenObject
