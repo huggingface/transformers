@@ -669,10 +669,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         return input_ids, model_kwargs
 
 
-class MiniCPMV4_7ImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class MiniCPMV4_7ImageProcessor(MiniCPMV4_6ImageProcessor):
     def get_sliced_grid(
@@ -707,22 +703,6 @@ class MiniCPMV4_7ImageProcessor(MiniCPMV4_6ImageProcessor):
 
 @auto_docstring
 class MiniCPMV4_7ImageProcessorPil(MiniCPMV4_6ImageProcessorPil):
-    # Upstream convention (glm4v, smolvlm, ...) is for the PIL backend to share the
-    # `<Model>ImageProcessorKwargs` of the torchvision backend rather than declaring a
-    # separate `...ImageProcessorPilKwargs`.
-    valid_kwargs = MiniCPMV4_7ImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[MiniCPMV4_7ImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[MiniCPMV4_7ImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def get_sliced_grid(
         self,
         image_size: tuple[int, int],

@@ -31,7 +31,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-class MiniCPMV4_7ImageProcessorKwargs(ImagesKwargs, total=False):
+class MiniCPMV4_7ImageProcessorPilKwargs(ImagesKwargs, total=False):
     r"""
     max_slice_nums (`int`, *optional*, defaults to 9):
         Maximum number of slices when splitting a high-resolution image.
@@ -77,13 +77,10 @@ class MiniCPMV4_7ImageProcessorPil(PilBackend):
     slice_mode = True
     downsample_mode = "16x"
     use_image_id = True
-    # Upstream convention (glm4v, smolvlm, ...) is for the PIL backend to share the
-    # `<Model>ImageProcessorKwargs` of the torchvision backend rather than declaring a
-    # separate `...ImageProcessorPilKwargs`.
-    valid_kwargs = MiniCPMV4_7ImageProcessorKwargs
+    valid_kwargs = MiniCPMV4_7ImageProcessorPilKwargs
     model_input_names = ["pixel_values", "target_sizes"]
 
-    def __init__(self, **kwargs: Unpack[MiniCPMV4_7ImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MiniCPMV4_7ImageProcessorPilKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs):
@@ -170,7 +167,7 @@ class MiniCPMV4_7ImageProcessorPil(PilBackend):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[MiniCPMV4_7ImageProcessorKwargs],
+        **kwargs: Unpack[MiniCPMV4_7ImageProcessorPilKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

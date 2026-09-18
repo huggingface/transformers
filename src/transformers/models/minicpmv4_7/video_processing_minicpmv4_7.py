@@ -35,10 +35,6 @@ from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata, group_videos_by_shape, reorder_videos
 
 
-def ensure_divide(length: int, divisor: int) -> int:
-    return max(round(length / divisor) * divisor, divisor)
-
-
 class MiniCPMV4_7VideoProcessorKwargs(VideosKwargs, total=False):
     r"""
     max_num_frames (`int`, *optional*, defaults to 128):
@@ -56,6 +52,10 @@ class MiniCPMV4_7VideoProcessorKwargs(VideosKwargs, total=False):
     downsample_mode (`str`, *optional*, defaults to `"16x"`):
         Visual token downsampling mode. `"16x"` applies full merge; `"4x"` keeps
         4x more tokens.
+    use_image_id (`bool`, *optional*, defaults to `True`):
+        Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
+        each image placeholder. Consumed by the Processor for placeholder
+        generation, not by the image processing pipeline itself.
     """
 
     max_num_frames: int
@@ -65,6 +65,11 @@ class MiniCPMV4_7VideoProcessorKwargs(VideosKwargs, total=False):
     patch_size: int
     slice_mode: bool
     downsample_mode: str
+    use_image_id: bool
+
+
+def ensure_divide(length: int, divisor: int) -> int:
+    return max(round(length / divisor) * divisor, divisor)
 
 
 @auto_docstring
