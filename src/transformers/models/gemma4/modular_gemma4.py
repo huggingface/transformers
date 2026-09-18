@@ -175,8 +175,6 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    last_hidden_state (`torch.FloatTensor`, *optional*):
-        Final layer hidden states from the language model, of shape `(batch_size, sequence_length, hidden_size)`.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
@@ -188,7 +186,6 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
@@ -2265,7 +2262,6 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            last_hidden_state=hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,

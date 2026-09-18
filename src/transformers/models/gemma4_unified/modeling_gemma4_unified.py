@@ -107,8 +107,6 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    last_hidden_state (`torch.FloatTensor`, *optional*):
-        Final layer hidden states from the language model, of shape `(batch_size, sequence_length, hidden_size)`.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
@@ -129,7 +127,6 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
 
     audio_hidden_states: torch.FloatTensor | None = None
 
-    last_hidden_state: torch.FloatTensor | None = None
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
