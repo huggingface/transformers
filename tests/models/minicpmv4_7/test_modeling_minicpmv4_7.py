@@ -379,15 +379,19 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         config.newline_id = 14
         return self.model_tester.base_model_class(config).to(torch_device).eval()
 
-    def _get_rope_index(self, input_ids, grids=None):
+    def _get_rope_index(self, input_ids, grids=None, grids_videos=None):
         model = self._mrope_model()
         input_ids = torch.tensor(input_ids, device=torch_device)
         attention_mask = torch.ones_like(input_ids)
-        grids = None if grids is None else [torch.tensor(grids, dtype=torch.int32, device=torch_device)]
+        grids = None if grids is None else torch.tensor(grids, dtype=torch.int32, device=torch_device).view(-1, 2)
+        grids_videos = (
+            None if grids_videos is None else torch.tensor(grids_videos, dtype=torch.int32, device=torch_device).view(-1, 2)
+        )
         return model.get_rope_index(
             input_ids,
             attention_mask=attention_mask,
-            target_sizes_mrope=grids,
+            target_sizes=grids,
+            target_sizes_videos=grids_videos,
             mm_token_type_ids=self._mm_token_type_ids(input_ids),
         )
 
@@ -433,13 +437,13 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_get_rope_index_left_padding_matches_unpadded(self):
         """Left padding must shift nothing: the canvas is built on the unpadded tokens."""
         model = self._mrope_model()
-        grids = [torch.tensor([[8, 8]], dtype=torch.int32, device=torch_device)]
+        grids = torch.tensor([[8, 8]], dtype=torch.int32, device=torch_device)
 
         unpadded = torch.tensor([[1, 10, 100, 100, 100, 100, 11, 2]], device=torch_device)
         baseline, _ = model.get_rope_index(
             unpadded,
             attention_mask=torch.ones_like(unpadded),
-            target_sizes_mrope=grids,
+            target_sizes=grids,
             mm_token_type_ids=self._mm_token_type_ids(unpadded),
         )
 
@@ -448,7 +452,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         padded_positions, _ = model.get_rope_index(
             padded,
             attention_mask=padded_mask,
-            target_sizes_mrope=grids,
+            target_sizes=grids,
             mm_token_type_ids=self._mm_token_type_ids(padded),
         )
 
@@ -531,7 +535,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         },
         "one video, two frames, no separator between them": {
             "input_ids": [[1, 10, 101, 101, 101, 101, 11, 10, 101, 101, 101, 101, 11, 2]],
-            "grids": [[[8, 8], [8, 8]]],
+            "grids_videos": [[[8, 8], [8, 8]]],
             "positions": [
                 [[0, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 7]],
                 [[0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7]],
@@ -543,7 +547,8 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
             "input_ids": [
                 [1, 10, 100, 100, 100, 100, 11, 2, 10, 101, 101, 101, 101, 11, 10, 101, 101, 101, 101, 11, 3]
             ],
-            "grids": [[[8, 8], [8, 8], [8, 8]]],
+            "grids": [[[8, 8]]],
+            "grids_videos": [[[8, 8], [8, 8]]],
             "positions": [
                 [[0, 1, 1, 1, 1, 1, 1, 4, 5, 5, 5, 5, 5, 5, 8, 8, 8, 8, 8, 8, 11]],
                 [[0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 11]],
@@ -557,7 +562,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
                 [1, 10, 100, 100, 100, 100, 11, 12, 100, 13, 2],
             ],
             "attention_mask": [[0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            "grids": [[[8, 8]], [[8, 8], [4, 4]]],
+            "grids": [[[8, 8], [8, 8], [4, 4]]],
             "positions": [
                 [[0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 4], [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3]],
                 [[0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 4], [0, 0, 1, 1, 1, 1, 2, 1, 1, 1, 3]],
@@ -577,12 +582,23 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
                     attention_mask = torch.tensor(case["attention_mask"], device=torch_device)
                 else:
                     attention_mask = torch.ones_like(input_ids)
-                grids = [torch.tensor(grid, dtype=torch.int32, device=torch_device) for grid in case["grids"]]
+
+                grids = (
+                    torch.tensor(case["grids"], dtype=torch.int32, device=torch_device).view(-1, 2)
+                    if "grids" in case
+                    else None
+                )
+                grids_videos = (
+                    torch.tensor(case["grids_videos"], dtype=torch.int32, device=torch_device).view(-1, 2)
+                    if "grids_videos" in case
+                    else None
+                )
 
                 position_ids, rope_deltas = model.get_rope_index(
                     input_ids,
                     attention_mask=attention_mask,
-                    target_sizes_mrope=grids,
+                    target_sizes=grids,
+                    target_sizes_videos=grids_videos,
                     mm_token_type_ids=self._mm_token_type_ids(input_ids),
                 )
 
