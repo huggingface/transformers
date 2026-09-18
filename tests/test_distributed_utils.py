@@ -29,7 +29,12 @@ if is_torch_available():
 
     from transformers import LlamaConfig, LlamaForCausalLM
     from transformers.distributed import DistributedConfig
-    from transformers.distributed.utils import clip_grad_norm_, load_optimizer_distributed, save_optimizer_distributed
+    from transformers.distributed.utils import (
+        clip_grad_norm_,
+        load_checkpoint_in_distributed_model,
+        load_optimizer_distributed,
+        save_optimizer_distributed,
+    )
 
     if dist.is_available():
         from torch.distributed.device_mesh import init_device_mesh
@@ -91,7 +96,7 @@ def _load_model(directory, consolidate, config=None):
     with torch.no_grad():
         for parameter in model.parameters():
             parameter.zero_()
-    model.load_distributed_checkpoint(f"{directory}/saved")
+    load_checkpoint_in_distributed_model(model, f"{directory}/saved")
     return model
 
 
@@ -129,6 +134,41 @@ def _optimizer_checkpoint_worker(rank, directory, consolidate):
             restored_optimizer = _optimizer(restored)
             load_optimizer_distributed(restored, restored_optimizer, checkpoint)
             _check_optimizer(restored, restored_optimizer, reference, reference_optimizer)
+
+
+def _save_dcp_sharded_checkpoint_worker(rank, directory):
+    # A distinct rendezvous subdirectory: reusing the same file:// store as another
+    # mp.spawn call would hang, since the previous process group already tore it down.
+    with _distributed_context(rank, f"{directory}/rdv_save"):
+        model = LlamaForCausalLM.from_pretrained(
+            f"{directory}/seed", distributed_config=DistributedConfig(tp_size=2, fsdp_size=2)
+        )
+        model.save_pretrained(
+            f"{directory}/dcp_sharded",
+            distributed_checkpoint=True,
+            consolidate_distributed_checkpoint=False,
+        )
+
+
+def _load_checkpoint_paths_worker(rank, directory):
+    with _distributed_context(rank, f"{directory}/rdv_load"):
+        reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
+        config = DistributedConfig(tp_size=2, fsdp_size=2)
+        checkpoints = {
+            "dcp_sharded": f"{directory}/dcp_sharded",
+            "hf_sharded": f"{directory}/hf_sharded",
+            "single_file": f"{directory}/single_file",
+        }
+        for name, checkpoint_dir in checkpoints.items():
+            model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=config)
+            with torch.no_grad():
+                for parameter in model.parameters():
+                    parameter.zero_()
+            load_checkpoint_in_distributed_model(model, checkpoint_dir)
+            for param_name, parameter in model.state_dict().items():
+                torch.testing.assert_close(
+                    _full_tensor(parameter), reference.state_dict()[param_name], msg=f"checkpoint={name}"
+                )
 
 
 def _gradient_clipping_worker(rank, directory):
@@ -202,6 +242,20 @@ class DistributedUtilsTest(unittest.TestCase):
                 checkpoint = f"{directory}/saved/optimizer.pt" if consolidate else f"{directory}/saved"
                 load_optimizer_distributed(restored, restored_optimizer, checkpoint)
                 _check_optimizer(restored, restored_optimizer, reference, reference_optimizer)
+
+    def test_load_checkpoint_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = LlamaForCausalLM(self.config)
+            reference.save_pretrained(f"{directory}/seed")
+
+            # Non-distributed checkpoints, no process group required.
+            reference.save_pretrained(f"{directory}/hf_sharded", max_shard_size="4KB")
+            reference.save_pretrained(f"{directory}/single_file")
+
+            os.makedirs(f"{directory}/rdv_save")
+            os.makedirs(f"{directory}/rdv_load")
+            mp.spawn(_save_dcp_sharded_checkpoint_worker, args=(directory,), nprocs=4, join=True)
+            mp.spawn(_load_checkpoint_paths_worker, args=(directory,), nprocs=4, join=True)
 
     def test_gradient_clipping(self):
         with tempfile.TemporaryDirectory() as directory:

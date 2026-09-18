@@ -437,11 +437,18 @@ def distribute_state_dict_for_load(
     return state_dict
 
 
-def _load_consolidated_checkpoint_in_distributed_model(model, checkpoint_file: str | os.PathLike, strict: bool = True):
+def _load_consolidated_checkpoint_in_distributed_model(
+    model, checkpoint_files: str | os.PathLike | list[str | os.PathLike], strict: bool = True
+):
     """
-    Load a consolidated safetensors checkpoint into a distributed model, preserving its current mesh and placements.
+    Load one or more consolidated safetensors files into a distributed model, preserving its current mesh and
+    placements.
     """
-    state_dict = safetensors.torch.load_file(checkpoint_file, device="cpu")
+    if isinstance(checkpoint_files, (str, os.PathLike)):
+        checkpoint_files = [checkpoint_files]
+    state_dict = {}
+    for checkpoint_file in checkpoint_files:
+        state_dict.update(safetensors.torch.load_file(checkpoint_file, device="cpu"))
     distribute_state_dict_for_load(model, state_dict)
     model.load_state_dict(state_dict, strict=strict)
 
@@ -466,10 +473,8 @@ def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | o
 
 
 def load_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
-    """Load local safetensors weights into an initialized model, preserving its current mesh and placements.
-
-    Pass the directory containing the rank-local safetensors files, or the retained `sharded/` directory after
-    consolidation.
+    """
+    Load local safetensors weights into an initialized model, preserving its current mesh and placements.
     """
     _check_distributed_checkpointing_available()
 
@@ -477,20 +482,23 @@ def load_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLik
     safe_weights_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME)
 
     if is_sharded_checkpoint(checkpoint_dir):
-        _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir, strict=strict)
+        _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir)
     elif is_sharded_checkpoint(os.path.join(checkpoint_dir, "sharded")):
-        _load_sharded_checkpoint_in_distributed_model(model, os.path.join(checkpoint_dir, "sharded"), strict=strict)
+        _load_sharded_checkpoint_in_distributed_model(model, os.path.join(checkpoint_dir, "sharded"))
     elif os.path.isfile(safe_index_file):
         with open(safe_index_file, "r", encoding="utf-8") as f:
             index = json.load(f)
-        shard_files = list(index["weight_map"].values())
-        for shard_file in shard_files:
+        shard_paths = []
+        for shard_file in sorted(set(index["weight_map"].values())):
             shard_path = os.path.join(checkpoint_dir, shard_file)
             if not os.path.isfile(shard_path):
                 raise ValueError(f"Shard file {shard_path} not found in {checkpoint_dir}.")
-            _load_consolidated_checkpoint_in_distributed_model(model, shard_path, strict=strict)
+            shard_paths.append(shard_path)
+        _load_consolidated_checkpoint_in_distributed_model(model, shard_paths, strict=strict)
     elif os.path.isfile(safe_weights_file):
         _load_consolidated_checkpoint_in_distributed_model(model, safe_weights_file, strict=strict)
+    else:
+        raise ValueError(f"No distributed, sharded, or safetensors checkpoint found in {checkpoint_dir}.")
 
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consolidate: bool = False) -> None:
