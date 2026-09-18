@@ -1106,12 +1106,10 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         return position_ids
 
 
-@auto_docstring
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: MiniCPMV4_7Config):
-        # Parent would build a MiniCPMV4_6Model; bypass it to build the 4.7 model instead.
         super().__init__(config)
         self.model = MiniCPMV4_7Model(config)
         self.vocab_size = config.text_config.vocab_size

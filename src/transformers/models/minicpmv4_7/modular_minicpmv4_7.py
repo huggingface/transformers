@@ -14,21 +14,17 @@
 
 
 import itertools
-import math
 from typing import Any
 
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple
 from ...video_utils import VideoInput
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
@@ -37,7 +33,6 @@ from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ViTWindowAttentionMerger,
 )
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
-from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -546,18 +541,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         return output
 
 
-@auto_docstring
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
-    def __init__(self, config: MiniCPMV4_7Config):
-        # Parent would build a MiniCPMV4_6Model; bypass it to build the 4.7 model instead.
-        PreTrainedModel.__init__(self, config)
-        self.model = MiniCPMV4_7Model(config)
-        self.vocab_size = config.text_config.vocab_size
-        self.lm_head = nn.Linear(config.text_config.hidden_size, self.vocab_size, bias=False)
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -677,41 +661,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         return input_ids, model_kwargs
 
 
-@auto_docstring
-class MiniCPMV4_7VideoProcessor(MiniCPMV4_6VideoProcessor):
-    # Video frames form a single temporal sequence, so they are not numbered with local image ids.
-    use_image_id = AttributeError()
-
-    def get_sliced_grid(
-        self,
-        video_size: tuple[int, int],
-        max_slice_nums: int,
-        scale_resolution: int,
-    ) -> list[int] | None:
-        original_height, original_width = video_size
-        log_ratio = math.log(original_width / original_height)
-        ratio = original_width * original_height / (scale_resolution * scale_resolution)
-        multiple = min(math.ceil(ratio), max_slice_nums)
-        if multiple <= 1:
-            return None
-
-        best_grid = [1, 1]
-        min_error = float("inf")
-        for num_slices in [multiple - 1, multiple, multiple + 1]:
-            if num_slices == 1 or num_slices > max_slice_nums:
-                continue
-            for num_rows in range(1, num_slices + 1):
-                if num_slices % num_rows == 0:
-                    num_cols = num_slices // num_rows
-                    error = abs(log_ratio - math.log(num_cols / num_rows))
-                    if error < min_error:
-                        best_grid = [num_rows, num_cols]
-                        min_error = error
-                    elif error == min_error and num_rows > best_grid[0]:
-                        best_grid = [num_rows, num_cols]
-        return best_grid
-
-
 # Different from MiniCPM4-6, we need `mm_token_type_ids` returned by default
 class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
     _defaults = {
@@ -727,7 +676,6 @@ class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
     }
 
 
-@auto_docstring
 class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
     valid_processor_kwargs = MiniCPMV4_7ProcessorKwargs
 
@@ -764,6 +712,5 @@ __all__ = [
     "MiniCPMV4_7PreTrainedModel",  # noqa
     "MiniCPMV4_7Model",
     "MiniCPMV4_7ForConditionalGeneration",
-    "MiniCPMV4_7VideoProcessor",
     "MiniCPMV4_7Processor",
 ]
