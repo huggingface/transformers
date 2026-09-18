@@ -881,6 +881,7 @@ class Qwen3_5MoeExperts(nn.Module):
         return final_hidden_states
 
 
+@use_kernel_forward_from_hub("SoftmaxTopKRouter")
 class Qwen3_5MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -922,6 +923,7 @@ class Qwen3_5MoeSparseMoeBlock(nn.Module):
         return expert_output
 
 
+@use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5MoeRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -1874,11 +1876,6 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
