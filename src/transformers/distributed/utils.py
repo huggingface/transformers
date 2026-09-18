@@ -33,6 +33,21 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+    from torch.utils._pytree import tree_map
+
+
+def _check_distributed_checkpointing_available(raise_if_not: bool = True) -> bool:
+    if not is_torch_distributed_available() or not is_torch_greater_or_equal("2.7"):
+        if raise_if_not:
+            raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        return False
+    return True
+
+
+if _check_distributed_checkpointing_available(raise_if_not=False):
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader, HuggingFaceStorageWriter
+    from torch.distributed.tensor import Shard, distribute_tensor
+    from torch.distributed.tensor.placement_types import _StridedShard
 
 
 def _is_torch_distributed_initialized() -> bool:
@@ -277,8 +292,7 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+    _check_distributed_checkpointing_available()
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -293,9 +307,7 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
 def _prepare_state_dict_for_dcp(state_dict):
     """Replace disjoint DTensor shards with contiguous shards in the checkpoint view."""
-    from torch.distributed.tensor import Shard
-    from torch.distributed.tensor.placement_types import _StridedShard
-    from torch.utils._pytree import tree_map
+    _check_distributed_checkpointing_available()
 
     def prepare(value):
         if is_dtensor(value) and any(isinstance(p, _StridedShard) for p in value.placements):
@@ -313,8 +325,7 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate
     are written at the root. Otherwise, load the rank-local files with
     `load_distributed_checkpoint`; they are not `from_pretrained` checkpoints.
     """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+    _check_distributed_checkpointing_available()
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -325,7 +336,6 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate
     # We redistribute any strided shards to contiguous shards so DCP can write them out.
     # Sub-optimal compared to a future DCP that can write strided shards directly, but works for now.
     state_dict = _prepare_state_dict_for_dcp(get_model_state_dict(model))
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
 
     writer = HuggingFaceStorageWriter(
         path=checkpoint_dir,
@@ -344,11 +354,11 @@ def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) 
     Pass the directory containing the rank-local safetensors files, or the retained `sharded/` directory after
     consolidation.
     """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+    _check_distributed_checkpointing_available()
 
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader
     from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
 
     has_safetensors = any(name.endswith(".safetensors") for name in os.listdir(checkpoint_dir))
@@ -374,8 +384,7 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consoli
     Native DCP files are retained in `checkpoint_dir` in both cases. Consolidation
     materializes the full optimizer state in rank 0's CPU memory. All ranks must call.
     """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+    _check_distributed_checkpointing_available()
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -401,8 +410,7 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir_or_file: str) ->
     full optimizer state on each rank's CPU before distributing it into the current
     layout. Prefer the directory when memory is limited. All ranks must call.
     """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+    _check_distributed_checkpointing_available()
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -412,14 +420,11 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir_or_file: str) ->
         get_optimizer_state_dict,
         set_optimizer_state_dict,
     )
-    from torch.utils._pytree import tree_map
 
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
     checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
     if os.path.isfile(checkpoint_dir_or_file):
-        from torch.distributed.tensor import distribute_tensor
-
         loaded_state = torch.load(checkpoint_dir_or_file, map_location="cpu", weights_only=True)["optimizer"]
         missing_keys = checkpoint_state_dict.keys() - loaded_state.keys()
         if missing_keys:

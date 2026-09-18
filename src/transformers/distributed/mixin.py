@@ -34,7 +34,6 @@ from .utils import (
     _is_torch_distributed_initialized,
     gather_full_state_dict,
     initialize_distributed_mesh,
-    load_model_checkpoint_distributed,
     save_model_checkpoint_distributed,
 )
 
