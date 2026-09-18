@@ -1148,6 +1148,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MPS is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "tpu" and not is_torch_tpu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but TPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -1166,6 +1170,8 @@ if is_torch_available():
         torch_device = "hpu"
     elif is_torch_xpu_available():
         torch_device = "xpu"
+    elif is_torch_tpu_available():
+        torch_device = "tpu"
     else:
         torch_device = "cpu"
 else:
