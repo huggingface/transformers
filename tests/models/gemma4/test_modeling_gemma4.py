@@ -513,6 +513,16 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
                     reason="The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4"
                 )
 
+    def test_tied_lm_head_in_tp_plan(self):
+        # The tied `lm_head` lives on the multimodal `ForConditionalGeneration` wrapper, which
+        # (unlike the text-only `ForCausalLM`) does not inherit a head TP plan. Without an explicit
+        # entry, `tp_plan="auto"` at tp>1 leaves the tied (DTensor) `lm_head` weight without a
+        # forward wrapper, raising a mixed `torch.Tensor`/`DTensor` error at the first forward.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma4ForConditionalGeneration(config)
+        self.assertIn("lm_head", model.tp_plan)
+        self.assertEqual(model.tp_plan["lm_head"], "colwise_gather_output")
+
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
