@@ -63,6 +63,10 @@ model = AutoModel.from_pretrained(
 )
 ```
 
+Loading from a branch or tag pins every file in that call to one commit, (when `revision` is omitted), then fetches every file from that commit.
+
+That pin lasts for the call only. For reproducibility across runs, pass an explicit commit hash or a tag you treat as fixed. Do not rely on `main` or another moving branch staying fixed between runs.
+
 Model repositories also support [gating](https://hf.co/docs/hub/models-gated) to control who can access a model. Gating is common for allowing a select group of users to preview a research model before it's made public.
 
 <div class="flex justify-center">
