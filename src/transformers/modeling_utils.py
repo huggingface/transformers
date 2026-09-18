@@ -4739,10 +4739,16 @@ class PreTrainedModel(
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
             param_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(param, device=param_device)
+            if param.device.type == "meta":
+                value = torch.empty_like(param, device=param_device)
+            else:
+                value = param.to(param_device)
             # For TP, we may need to shard the param
             if is_dtensor(param):
-                local = torch.empty(param._local_tensor.shape, dtype=param.dtype, device=param_device)
+                if param.device.type == "meta":
+                    local = torch.empty(param._local_tensor.shape, dtype=param.dtype, device=param_device)
+                else:
+                    local = param._local_tensor.to(param_device)
                 value = torch.nn.Parameter(
                     _dtensor_from_local_like(local, param),
                     requires_grad=param.requires_grad,
@@ -4751,7 +4757,10 @@ class PreTrainedModel(
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
             buffer_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(buffer, device=buffer_device)
+            if buffer.device.type == "meta":
+                value = torch.zeros_like(buffer, device=buffer_device)
+            else:
+                value = buffer.to(buffer_device)
             _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
