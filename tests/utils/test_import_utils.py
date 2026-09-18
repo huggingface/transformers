@@ -80,7 +80,10 @@ def test_lazy_module_error_points_to_debug_log():
                 assert "Could not import module 'BrokenObject'" in str(error)
                 assert "Set the logging verbosity to DEBUG for the original import error." in str(error)
                 assert "simulated broken dependency" not in str(error)
-                assert "Original import error for 'BrokenObject': simulated broken dependency" in captured_logs.io.getvalue()
+                assert (
+                    "Original import error for 'BrokenObject': simulated broken dependency"
+                    in captured_logs.io.getvalue()
+                )
             else:
                 raise AssertionError("Expected ModuleNotFoundError")
 
