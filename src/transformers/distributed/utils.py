@@ -518,7 +518,9 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consoli
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import StateDictOptions, get_optimizer_state_dict
 
-    # Key group options by parameter name so regrouping after a mesh change remains loadable.
+    # Flatten optimizer state and group options into fully qualified name entries.
+    # A mesh change can alter which parameters are DTensors and therefore how optimizer groups are constructed, fully
+    # qualified name keys make the checkpoint independent of grouping.
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer, options=options))
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
@@ -548,6 +550,8 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir_or_file: str) ->
         set_optimizer_state_dict,
     )
 
+    # Use the same fully qualified name keys format as for saving so PyTorch can map the checkpoint into the destination
+    # optimizer's current groups, even when a mesh change has altered their structure.
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
     checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
