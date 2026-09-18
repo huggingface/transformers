@@ -17,7 +17,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
@@ -33,12 +32,13 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 if is_torch_available():
     import torch
@@ -358,7 +358,9 @@ class Emu3IntegrationTest(unittest.TestCase):
         )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x200.jpg"
+        )
         prompt = "USER: <image>Describe what do you see here and tell me about the history behind it? ASSISTANT:"
 
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
@@ -379,8 +381,12 @@ class Emu3IntegrationTest(unittest.TestCase):
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
         processor.tokenizer.padding_side = "left"
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/200/200", stream=True).raw)
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x200.jpg"
+        )
+        image_2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_247_200x200.jpg"
+        )
         prompts = [
             "USER: <image>Describe what do you see here? ASSISTANT:",
             "USER: <image>What can you say about the image? ASSISTANT:",
@@ -426,8 +432,12 @@ class Emu3IntegrationTest(unittest.TestCase):
         processor.image_processor.max_pixels = 256 * 256
         processor.image_processor.size = {"min_pixels": 256 * 256, "max_pixels": 256 * 256}
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/200/200", stream=True).raw)
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x200.jpg"
+        )
+        image_2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_247_200x200.jpg"
+        )
         prompt = "USER: <image><image>What do these two images have in common? ASSISTANT:"
 
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
@@ -436,6 +446,7 @@ class Emu3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
                 {
                     ("xpu", 3): ['USER: 64*6464*64What do these two images have in common? ASSISTANT: The two images both depict a rhinoceros, yet they are significantly different in terms of focus and clarity. The rhinoceros in the upper image is in sharp focus, showing detailed textures'],
+                    ("xpu", 5): ["USER: 32*3232*32What do these two images have in common? ASSISTANT: The two images share a common theme of featuring a black dog. The top image focuses on the dog's face, while the bottom image shows the dog's body. Both images display the dog's presence"],
                     (None, None): ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"],
                     ("cuda", 8): ["USER: 32*3232*32What do these two images have in common? ASSISTANT: The two images share a common theme of featuring a black cow. One image captures a close-up of the cow's face, while the other image shows the cow in its natural environment, standing on a"],
                 }

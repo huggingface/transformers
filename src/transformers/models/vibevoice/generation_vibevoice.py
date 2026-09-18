@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 
-from ...cache_utils import DynamicCache, StaticCache
+from ...cache_utils import DynamicCache, QuantizedCache, QuantizedLayer, StaticCache
 from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
@@ -297,6 +297,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 prefill_chunk_size=generation_config.prefill_chunk_size,
                 max_length_attr_name=max_length_attr_name,
             )
+        elif generation_config.cache_implementation == "quantized":
+            cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
+            cache_config.setdefault("config", self.config.get_text_config(decoder=True))
+            backend = cache_config.pop("backend", "quanto")
+            model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
         else:
             # i.e. `cache_implementation` in [None, "dynamic", "offloaded"]
             dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
@@ -394,6 +399,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             mask_4d = diffusion_start_mask.view(-1, 1, 1, 1)
             # Reset the KV cache
             for layer in negative_model_kwargs["past_key_values"].layers:
+                if isinstance(layer, QuantizedLayer):
+                    continue
                 if layer.keys is not None and layer.values is not None:
                     layer_mask_4d = mask_4d.to(layer.keys.device)
                     layer.keys[:, :, -1:, :] = torch.where(
