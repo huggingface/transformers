@@ -20,6 +20,7 @@ from typing import Literal
 
 from .utils import _get_torch_distributed_rank
 
+
 @dataclass
 class DistributedConfig:
     """
