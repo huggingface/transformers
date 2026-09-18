@@ -25,7 +25,14 @@
 #   UPLOAD=1                  upload the results to the dataset repo as well as writing them out.
 #
 # Only one process at a time can hold a given TPU chip, and torch_tpu aborts the process rather than
-# raising when it cannot acquire one, so do not run anything else that imports torch_tpu alongside.
+# raising when it cannot acquire one, so do not run anything else that runs a TPU op alongside.
+#
+# The environment needs `transformers[testing]` plus the media extras, otherwise the vision, audio and
+# video tests fail on missing backends instead of telling you anything about the device. Install
+# torchvision and torchaudio with the installed torch pinned, or the resolver silently replaces it:
+#   uv pip install --index-url https://download.pytorch.org/whl/cpu \
+#       torchvision torchaudio "torch==$(python3 -c 'import torch; print(torch.__version__.split("+")[0])')"
+# `pyctcdecode` is best left out: it pins numpy < 2 and only gates a handful of CTC decoding tests.
 set -euo pipefail
 
 export TRANSFORMERS_IS_CI=yes NO_COLOR=1 OMP_NUM_THREADS=8
