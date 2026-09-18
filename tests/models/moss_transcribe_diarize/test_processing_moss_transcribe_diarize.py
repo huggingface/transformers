@@ -37,6 +37,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
     processor_class = MossTranscribeDiarizeProcessor
     model_id = _CHECKPOINT
     audio_text_kwargs_max_length = 512
+    audio_unstructured_max_length = 201
     chat_template_max_length = 512
 
     @classmethod
