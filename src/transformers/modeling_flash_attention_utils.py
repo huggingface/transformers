@@ -264,12 +264,17 @@ def lazy_import_flash_attention(
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
+        # This is the point where we actually import the flash attention function
         _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
-        # Block-sparse kernels register their own attention interface and expose no varlen fn to introspect;
-        # skip building the kwargs-support map (it is only consumed by the flash varlen path they never take).
-        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn) if _flash_varlen_fn else None
+
+        # Some kernels, like minimax_m3_vl's block spare kernel, have no varlen function. In this case, the varlen path
+        # can never be used, so no need to build a processing function for it, just return a dict builder.
+        if _flash_varlen_fn is not None:
+            _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
+        else:
+            _process_flash_kwargs_fn = dict
 
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
@@ -705,18 +710,11 @@ def _flash_attention_forward(
     attention_mask: torch.Tensor | None,
     query_length: int,
     is_causal: bool,
-    dropout: float = 0.0,
     position_ids: torch.Tensor | None = None,
-    softmax_scale: float | None = None,
-    sliding_window: int | None = None,
-    use_top_left_mask: bool = False,
-    softcap: float | None = None,
-    deterministic: bool | None = None,
     cu_seq_lens_q: torch.LongTensor | None = None,
     cu_seq_lens_k: torch.LongTensor | None = None,
     max_length_q: int | None = None,
     max_length_k: int | None = None,
-    target_dtype: torch.dtype | None = None,
     attn_implementation: str | None = None,
     **kwargs,
 ):
@@ -742,27 +740,17 @@ def _flash_attention_forward(
     (flash_fn, flash_varlen_fn, _, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
         attn_implementation
     )
-    batch_size = query_states.size(0)
+    batch_size, key_length = key_states.shape[:2]
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
     extract_flash_kwargs = partial(
-        process_flash_kwargs_fn,
-        query_length=query_length,
-        key_length=key_states.size(1),
-        is_causal=is_causal,
-        dropout=dropout,
-        softmax_scale=softmax_scale,
-        sliding_window=sliding_window,
-        use_top_left_mask=use_top_left_mask,
-        softcap=softcap,
-        deterministic=deterministic,
-        **kwargs,
+        process_flash_kwargs_fn, query_length=query_length, key_length=key_length, is_causal=is_causal, **kwargs,
     )
 
-    # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
-    # Case 1. If position ids is provided and the position ids indicate packed sequences, see `_is_packed_sequence`.
-    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
-    # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
+    # We use `flash_varlen_fn` to prevent cross-sequence attention and allow padding free approaches under two cases:
+    # Case 1. If position ids is provided and the position_ids indicates packed sequences, see `_is_packed_sequence`.
+    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids.
+    #         It is safe to use `flash_varlen_fn` knowing we already have all necessary the kwargs.
 
     # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.

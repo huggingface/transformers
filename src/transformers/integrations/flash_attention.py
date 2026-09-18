@@ -37,7 +37,7 @@ def flash_attention_forward(
             " Please set your attention to `eager` if you want any of these features."
         )
 
-    # FA2 uses non-transposed inputs
+    # FA2 uses non-transposed inputs, with shape [batch_size, seq_len, num_heads, head_dim]
     query, key, value = (x.transpose(1, 2) for x in (query, key, value))
 
     # FlashAttention requires the query and value have the same head dim; pad `value` up to the query head dim and crop
@@ -47,6 +47,7 @@ def flash_attention_forward(
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
     query, key, value = cast_to_flash_compatible_dtype(module, query, key, value)
+    s_aux = s_aux.to(query.dtype) if s_aux is not None else None
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else module.is_causal
@@ -63,18 +64,13 @@ def flash_attention_forward(
         sliding_window=sliding_window,
         softcap=softcap,
         use_top_left_mask=_use_top_left_mask,
-        target_dtype=target_dtype,
         attn_implementation=module.config._attn_implementation,
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
-        s_aux=(
-            s_aux.to(query.dtype)  # FA only accepts half precision
-            if s_aux is not None
-            else None
-        ),
+        s_aux=s_aux,
         **kwargs,
     )
 
-    if v_head_dim != head_dim:
+    if v_head_dim != q_head_dim:
         attn_output = attn_output[..., :v_head_dim]
 
     return attn_output, None
