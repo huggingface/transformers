@@ -39,6 +39,23 @@ class KimiLinearConfig(PreTrainedConfig):
         Number of heads for the linear attention layers. Defaults to 32.
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
         Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
+    mla_use_nope (`bool`, *optional*, defaults to `False`):
+        Whether the MLA full-attention layers operate in pure NoPE mode (no rotary positional encoding).
+        When `True`, ``qk_rope_head_dim`` is expected to be 0.
+    mla_use_output_gate (`bool`, *optional*, defaults to `False`):
+        Whether the MLA full-attention layers apply a learned sigmoid output gate after the attention
+        projection, as used in Kimi K3.
+    attn_res_block_size (`int`, *optional*, defaults to 0):
+        Block size for Block Attention Residuals (AttnRes). When > 0, layers are grouped into blocks of
+        this many transformer layers and each sub-layer input is attended over completed block
+        representations instead of the standard additive residual. Set to 0 to disable.
+    dense_ffn_hidden (`int`, *optional*):
+        Hidden dimension for dense (non-MoE) FFN layers. Falls back to ``intermediate_size`` when unset.
+    activation_situ_beta (`float`, *optional*, defaults to 1.0):
+        Gate-projection beta for the SiTU activation ``gate * sigmoid(beta * gate)``. Only used
+        when ``hidden_act == "situ"``.
+    activation_situ_linear_beta (`float`, *optional*, defaults to 1.0):
+        Up-projection beta for the SiTU activation. Only used when ``hidden_act == "situ"``.
     """
 
     model_type = "kimi_linear"
@@ -112,6 +129,14 @@ class KimiLinearConfig(PreTrainedConfig):
     linear_num_heads: int = 32
     linear_conv_kernel_dim: int = 4
 
+    # Kimi K3 / Kimi Linear extensions
+    mla_use_nope: bool = False
+    mla_use_output_gate: bool = False
+    attn_res_block_size: int = 0
+    dense_ffn_hidden: int | None = None
+    activation_situ_beta: float = 1.0
+    activation_situ_linear_beta: float = 1.0
+
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
@@ -119,32 +144,48 @@ class KimiLinearConfig(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
-        # Checkpoint stores linear attention attributes in a config sub-dict: if it's there, extract them
+        # Checkpoint stores linear attention attributes in a config sub-dict
         linear_attn_config = kwargs.get("linear_attn_config", {})
         self.linear_head_dim = linear_attn_config.get("head_dim", self.linear_head_dim)
         self.linear_num_heads = linear_attn_config.get("num_heads", self.linear_num_heads)
         self.linear_conv_kernel_dim = linear_attn_config.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
 
-        # For layer types, the precedence is: checkpoint config > layer types > default
+        # Infer NoPE mode from qk_rope_head_dim == 0 when not explicit
+        if not self.mla_use_nope and self.qk_rope_head_dim == 0:
+            self.mla_use_nope = True
+
+        # Layer types: checkpoint config > explicit layer_types > default
         if self.layer_types is None:
             if "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
                 layer_types = [None] * self.num_hidden_layers
                 for layer in linear_attn_config["full_attn_layers"]:
-                    layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
+                    layer_types[layer - 1] = "full_attention"  # 1-indexed
                 for layer in linear_attn_config["kda_layers"]:
                     layer_types[layer - 1] = "linear_attention"
                 self.layer_types = layer_types
             else:
                 self.layer_types = [
-                    "full_attention" if i and i % 4 == 0 else "linear_attention" for i in range(self.num_hidden_layers)
+                    "full_attention" if (i + 1) % 4 == 0 else "linear_attention" for i in range(self.num_hidden_layers)
                 ]
 
-        # Same for MLP layer types, which indicate MLP or MoE
+        # MLP layer types: dense vs sparse (MoE)
         if self.mlp_layer_types is None:
             first_k_dense_replace = kwargs.get("first_k_dense_replace", 1)
             self.mlp_layer_types = [
                 "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
+
+        # dense_ffn_hidden falls back to intermediate_size
+        if self.dense_ffn_hidden is None:
+            self.dense_ffn_hidden = self.intermediate_size
+
+        # Guard token IDs that were inherited from the production checkpoint defaults but are
+        # outside the configured vocabulary.  This allows constructing small-vocab configs
+        # (e.g. for testing) without hitting nn.Embedding's padding_idx assertion.
+        for attr in ("pad_token_id", "bos_token_id", "eos_token_id"):
+            val = getattr(self, attr, None)
+            if val is not None and isinstance(val, int) and val >= self.vocab_size:
+                setattr(self, attr, None)
 
 
 __all__ = ["KimiLinearConfig"]
