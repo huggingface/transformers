@@ -163,7 +163,7 @@ class GgufHfQuantizer(HfQuantizer):
             GGML_ATTN = "transformers-community/ggml-attn"
             try:
                 model.set_attn_implementation(GGML_ATTN)
-            except Exception as error:  # noqa: BLE001
+            except Exception as error:
                 logger.warning(
                     f"Could not use the `{GGML_ATTN}` attention kernel ({error}); keeping "
                     f"`{model.config._attn_implementation}`. Pass `attn_implementation=` to choose one explicitly."
