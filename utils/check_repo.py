@@ -114,8 +114,6 @@ PRIVATE_MODELS = [
     "SmolVLMVisionTransformer",
     "MiniCPMV4_6VisionPreTrainedModel",
     "MiniCPMV4_6VisionModel",
-    "MiniCPMV4_7VisionPreTrainedModel",
-    "MiniCPMV4_7VisionModel",
     "MiniMaxM3VLVisionModel",
     "AriaTextForCausalLM",
     "AriaTextModel",
@@ -268,6 +266,8 @@ IGNORE_NON_TESTED = (
         "Glm5NextVisionModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
+        "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "Step3p7Model",  # `base_model_class = Step3p7Model if is_torch_available() else None`; check_repo's regex can't parse the conditional. Tested implicitly through Step3p7ForConditionalGeneration.
         "Step3p7TextModel",  # Building part of bigger (tested) model
         "Step3p7VisionModel",  # Building part of bigger (tested) model

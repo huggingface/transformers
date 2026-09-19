@@ -17,7 +17,6 @@ import itertools
 from typing import Any
 
 import torch
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...image_utils import ImageInput
@@ -161,17 +160,22 @@ class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
         window_h, window_w = self.window_kernel_size
         window_size = window_h * window_w
         embed_dim = hidden_states.shape[-1]
-        
+        if window_cu_seqlens.numel() - 1 != hidden_states.shape[1] // window_size:
+            raise ValueError(
+                f"Patch grids {target_sizes.tolist()} must be divisible by window kernel size "
+                f"{self.window_kernel_size}"
+            )
+
         patch = hidden_states.reshape(-1, window_size, embed_dim)
         flat = patch.flatten(1)
-        residual = patch.mean(dim=1)
+        patch_residual = patch.mean(dim=1)
 
         hidden_state = self.pre_norm(flat)
         hidden_state = self.linear_1(hidden_state)
         hidden_state = self.act(hidden_state)
         hidden_state = self.linear_2(hidden_state)
 
-        return (hidden_state + residual).unsqueeze(0)
+        return (hidden_state + patch_residual).unsqueeze(0)
 
 
 class MiniCPMV4_7Model(MiniCPMV4_6Model):
@@ -232,7 +236,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         # `16x` merges 4x4 patches into one LLM token (window merger 2x2, then merger 2x2), `4x`
         # skips the window merger and merges 2x2. Same divisor the processor counts placeholders
         # with, so it has to follow the per-call override the vision tower is given, not the config.
-        downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
+        downsample_mode = downsample_mode or self.config.downsample_mode
         merge_factor = 2 if downsample_mode == "4x" else 4
         special_token_ids = {
             "im_start_id": self.config.image_start_id,
@@ -681,7 +685,7 @@ class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
         )
         # `use_image_id` is an image-only setting, so it must not leak into the video branch.
         kwargs["videos_kwargs"].pop("use_image_id", None)
-        return super().__call__(images=images, text=text, videos=videos**kwargs)
+        return super().__call__(images=images, text=text, videos=videos, **kwargs)
 
     def _prepend_local_ids(self, text, replacements, token):
         """Prepend local (per-sample) image/video ID tokens to each replacement string."""
@@ -697,7 +701,6 @@ class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
 __all__ = [
     "MiniCPMV4_7Config",
     "MiniCPMV4_7VisionConfig",
-    "MiniCPMV4_7PreTrainedModel",  # noqa
     "MiniCPMV4_7Model",
     "MiniCPMV4_7ForConditionalGeneration",
     "MiniCPMV4_7Processor",

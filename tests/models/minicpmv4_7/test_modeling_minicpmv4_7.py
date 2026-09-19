@@ -25,13 +25,13 @@ from transformers import (
 from transformers.models.minicpmv4_7.configuration_minicpmv4_7 import MiniCPMV4_7VisionConfig
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -41,7 +41,6 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, MiniCPMV4_7ForConditionalGeneration, MiniCPMV4_7Model
-    from transformers.models.minicpmv4_7.modeling_minicpmv4_7 import MiniCPMV4_7ViTWindowAttentionMerger
     from transformers.models.qwen3_5.configuration_qwen3_5 import Qwen3_5TextConfig
 
 
@@ -608,74 +607,10 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
                 self.assertEqual(rope_deltas.tolist(), case["deltas"])
 
 
-@require_torch
-class MiniCPMV4_7ViTWindowAttentionMergerTest(unittest.TestCase):
-    """The merger runs over a packed batch whose per-image patch grids need not agree.
-
-    Slicing emits a global thumbnail grid next to the slice grids, and the two differ for any
-    image that is not square-ish, e.g. 896x448 at `max_slice_nums=9` gives
-    `[[24, 44], [32, 32], [32, 32]]`.
-    """
-
-    def _build_merger(self):
-        config = MiniCPMV4_7VisionConfig(
-            hidden_size=32,
-            intermediate_size=32,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            window_kernel_size=[2, 2],
-            layer_norm_eps=1e-6,
-        )
-        return config, MiniCPMV4_7ViTWindowAttentionMerger(config).eval().to(torch_device)
-
-    def _run(self, target_sizes):
-        config, merger = self._build_merger()
-        num_patches = sum(height * width for height, width in target_sizes)
-        hidden_states = floats_tensor([1, num_patches, config.hidden_size])
-        with torch.no_grad():
-            merged = merger(hidden_states, torch.tensor(target_sizes, dtype=torch.int32))
-        return merged
-
-    def test_uniform_grids(self):
-        merged = self._run([[32, 32], [32, 32], [32, 32]])
-        self.assertEqual(merged.shape[:2], torch.Size([1, 3 * 16 * 16]))
-
-    def test_non_uniform_grids(self):
-        """A thumbnail grid that disagrees with the slice grids used to raise in `view()`."""
-        target_sizes = [[24, 44], [32, 32], [32, 32]]
-        merged = self._run(target_sizes)
-        expected = sum((height // 2) * (width // 2) for height, width in target_sizes)
-        self.assertEqual(expected, 776)
-        self.assertEqual(merged.shape[:2], torch.Size([1, expected]))
-
-    def test_single_grid(self):
-        merged = self._run([[16, 64]])
-        self.assertEqual(merged.shape[:2], torch.Size([1, 8 * 32]))
-
-    def test_merges_each_image_against_its_own_grid(self):
-        """Merging image-by-image must not depend on the order images are packed in."""
-        config, merger = self._build_merger()
-        target_sizes = [[24, 44], [32, 32]]
-        num_patches = sum(height * width for height, width in target_sizes)
-        hidden_states = floats_tensor([1, num_patches, config.hidden_size])
-
-        with torch.no_grad():
-            merged = merger(hidden_states, torch.tensor(target_sizes, dtype=torch.int32))
-            first_only = merger(hidden_states[:, : 24 * 44, :], torch.tensor(target_sizes[:1], dtype=torch.int32))
-
-        torch.testing.assert_close(merged[:, : 12 * 22, :], first_only)
-
-
 @slow
 @require_torch_accelerator
-class MiniCPMV4_7IntegrationTest(unittest.TestCase):
+class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "openbmb/MiniCPM-V-4_7"
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_logits(self):

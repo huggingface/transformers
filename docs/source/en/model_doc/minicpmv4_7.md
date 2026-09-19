@@ -58,9 +58,6 @@ outputs[0]["generated_text"]
 
 ### Inference on a single image
 
-> [!NOTE]
-> The model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
-
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
