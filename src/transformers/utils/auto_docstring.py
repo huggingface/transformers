@@ -43,7 +43,7 @@ AUTODOC_FILES = [
     "processing_*.py",
     "image_processing_pil_*.py",
     "image_processing_*.py",
-    "feature_extractor_*.py",
+    "feature_extraction_*.py",
 ]
 
 PLACEHOLDER_TO_AUTO_MODULE = {
@@ -81,6 +81,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "parakeet": "ParakeetCTCConfig",
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
+    "granite-speech5": "GraniteSpeech5CTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
     "cosmos3-edge": "Cosmos3EdgeConfig",
@@ -390,6 +391,14 @@ class ProcessorArgs:
     The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
     (pretokenized string). If you pass a pretokenized input, set `is_split_into_words=True` to avoid ambiguity with batched inputs.
     """,
+    }
+
+    videos = {
+        "description": """
+    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
+    """,
+        "shape": None,
     }
 
     audio = {
@@ -2315,6 +2324,115 @@ class ModelArgs:
     }
 
 
+class ModelForArgs:
+    """Task-specific overrides for `ModelArgs`."""
+
+    class ForSequenceClassification:
+        labels = {
+            "description": """
+    Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+    `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForTokenClassification:
+        labels = {
+            "description": """
+    Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForMultipleChoice:
+        labels = {
+            "description": """
+    Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+    num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+    `input_ids` above)
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForMaskedLM:
+        labels = {
+            "description": """
+    Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForImageClassification:
+        labels = {
+            "description": """
+    Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+    `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    ForVideoClassification = ForImageClassification
+
+    class ForSemanticSegmentation:
+        labels = {
+            "description": """
+    Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size, height, width)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForDepthEstimation:
+        labels = {
+            "description": """
+    Ground truth depth estimation maps for computing the loss.
+    """,
+            "shape": "of shape `(batch_size, height, width)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForObjectDetection:
+        labels = {
+            "description": """
+    Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+    following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+    respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+    in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+    """,
+            "shape": "of len `(batch_size,)`",
+            "type": "list[Dict]",
+        }
+
+    ForInstanceSegmentation = ForObjectDetection
+
+
+# Longest first, so that short suffixes don't mask longer ones.
+MODEL_FOR_ARGS_SUFFIXES = sorted(
+    (name for name in vars(ModelForArgs) if name.startswith("For")), key=len, reverse=True
+)
+
+
+class _EmptyArgs:
+    pass
+
+
+def get_model_for_args(class_name: str) -> type:
+    for suffix in MODEL_FOR_ARGS_SUFFIXES:
+        if class_name.endswith(suffix):
+            return getattr(ModelForArgs, suffix)
+    return _EmptyArgs
+
+
 class ModelOutputArgs:
     last_hidden_state = {
         "description": """
@@ -2614,6 +2732,10 @@ class ClassDocstring:
     The bare {model_name} Decoder outputting raw hidden-states without any specific head on top.
     """
 
+    Encoder = r"""
+    The bare {model_name} Encoder outputting raw hidden-states without any specific head on top.
+    """
+
     TextModel = r"""
     The bare {model_name} Text Model outputting raw hidden-states without any specific head on top.
     """
@@ -2656,8 +2778,15 @@ class ClassDocstring:
     ForImageClassification = r"""
     The {model_name} Model with an image classification head on top e.g. for ImageNet.
     """
+    ForInstanceSegmentation = r"""
+    The {model_name} Model with an instance segmentation head on top e.g. for COCO, LVIS,
+    segmentation.
+    """
     ForSemanticSegmentation = r"""
     The {model_name} Model with a semantic segmentation head on top e.g. for ADE20K, CityScapes.
+    """
+    ForObjectDetection = r"""
+    The {model_name} Model with an object detection head on top.
     """
     ForAudioClassification = r"""
     The {model_name} Model with an audio classification head on top (a linear layer on top of the pooled
@@ -3425,7 +3554,10 @@ def _process_regular_parameters(
                 [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
             )
         else:
-            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, VideoProcessorArgs])
+            model_for_args = get_model_for_args(class_name)
+            source_args_dict = get_args_doc_from_source(
+                [ModelArgs, model_for_args, ImageProcessorArgs, VideoProcessorArgs]
+            )
 
     missing_args = {}
 
@@ -4325,18 +4457,59 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     from transformers.models import auto as auto_module
 
     is_dataclass = False
-    is_processor = False
-    is_config = False
-    is_image_processor = False
-    is_video_processor = False
     docstring_init = ""
     docstring_args = ""
-    if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
+    name = ""
+    pre_block = ""
+
+    # 1) Start from inferring the model name in lower case to format our docstring
+    indent_level = get_indent_level(cls)
+    model_name_lowercase = get_model_name(cls)
+    model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
+    model_base_class = f"{model_name_title.title()}Model" if model_name_title is not None else None
+    if model_name_lowercase is not None:
+        try:
+            model_base_class = getattr(
+                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["model_class"][0]),
+                PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
+            )[model_name_lowercase]
+        except KeyError:
+            pass
+        except ImportError:
+            # In some environments, certain model classes might not be available. In that case, we can skip this part.
+            pass
+
+    if model_name_lowercase and model_name_lowercase not in getattr(
+        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
+        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
+    ):
+        model_name_lowercase = model_name_lowercase.replace("_", "-")
+
+    # 2) Start building the docstring from the class-type by fetching relevant docs on
+    # each branching or fallback to custom intro if defined
+    if custom_intro is not None:
+        pre_block = equalize_indent(custom_intro, indent_level)
+        pre_block += "\n" if not pre_block.endswith("\n") else ""
+
+    if "PreTrainedModel" in (x.__name__ for x in cls.__mro__) or "GenericFor" in cls.__name__:
+        # The ending suffix of class name defines which intro docstring will be added before listing args
+        # The models we have different types of tasks, so it has to be defined either as `custom_intro` for
+        # rare tasks or in `ClassDocstring`
+        name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
+        name = name[0] if name else ""
+        if not pre_block:
+            pre_block = getattr(ClassDocstring, name) if name else ClassDocstring.PreTrainedModel
+            pre_block = pre_block.format(**{"model_name": model_name_title})
+
         docstring_init = auto_method_docstring(
             cls.__init__, parent_class=cls, custom_args=custom_args, checkpoint=checkpoint
         ).__doc__.replace("Args:", "Parameters:")
     elif "ProcessorMixin" in (x.__name__ for x in cls.__mro__):
-        is_processor = True
+        pre_block = pre_block if pre_block else generate_processor_intro(cls)
+        if pre_block:
+            pre_block = equalize_indent(pre_block, indent_level)
+            pre_block = format_args_docstring(pre_block, model_name_lowercase)
+
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
@@ -4347,7 +4520,6 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             ),
         ).__doc__.replace("Args:", "Parameters:")
     elif "ModelOutput" in (x.__name__ for x in cls.__mro__):
-        # We have a data class
         is_dataclass = True
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
@@ -4381,7 +4553,11 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         ).__doc__
     # has to come before checking `BaseImageProcessor in mro` as video classes inherit from image classes
     elif any("BaseVideoProcessor" in x.__name__ for x in cls.__mro__):
-        is_video_processor = True
+        pre_block = pre_block if pre_block else r"Constructs a {video_processor_class} video processor."
+        if pre_block:
+            pre_block = equalize_indent(pre_block, indent_level)
+            pre_block = format_args_docstring(pre_block, model_name_lowercase)
+
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
@@ -4390,7 +4566,11 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source(VideoProcessorArgs),
         ).__doc__
     elif any("BaseImageProcessor" in x.__name__ for x in cls.__mro__):
-        is_image_processor = True
+        pre_block = pre_block if pre_block else r"Constructs a {image_processor_class} image processor."
+        if pre_block:
+            pre_block = equalize_indent(pre_block, indent_level)
+            pre_block = format_args_docstring(pre_block, model_name_lowercase)
+
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
@@ -4399,7 +4579,16 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
         ).__doc__
     elif "PreTrainedConfig" in (x.__name__ for x in cls.__mro__):
-        is_config = True
+        if not pre_block:
+            pre_block = ClassDocstring.Config.format(
+                **{
+                    "model_name": model_name_title,
+                    "model_base_class": model_base_class,
+                    "model_checkpoint": checkpoint,
+                }
+            )
+
+        is_dataclass = True
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
             custom_args = doc_class
@@ -4424,132 +4613,67 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source([ConfigArgs]),
             allowed_params=allowed_params,
         ).__doc__
-
-    indent_level = get_indent_level(cls)
-    model_name_lowercase = get_model_name(cls)
-    model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
-    model_base_class = f"{model_name_title.title()}Model" if model_name_title is not None else None
-    if model_name_lowercase is not None:
-        try:
-            model_base_class = getattr(
-                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["model_class"][0]),
-                PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
-            )[model_name_lowercase]
-        except KeyError:
-            pass
-        except ImportError:
-            # In some environments, certain model classes might not be available. In that case, we can skip this part.
-            pass
-
-    if model_name_lowercase and model_name_lowercase not in getattr(
-        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
-        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
-    ):
-        model_name_lowercase = model_name_lowercase.replace("_", "-")
-
-    name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
-
-    if (
-        name == []
-        and custom_intro is None
-        and not is_dataclass
-        and not is_processor
-        and not is_image_processor
-        and not is_video_processor
-    ):
+    elif custom_intro is None:
         raise ValueError(
-            f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
-            "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
+            f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}, "
+            "Processor, ImageProcessor, VideoProcessor, ModelOutput\n. Add a `custom_intro` to the decorator "
+            "if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if (
-        name != []
-        or custom_intro is not None
-        or is_config
-        or is_dataclass
-        or is_processor
-        or is_image_processor
-        or is_video_processor
-    ):
-        name = name[0] if name else None
-        formatting_kwargs = {"model_name": model_name_title}
-        if name == "Config":
-            formatting_kwargs.update({"model_base_class": model_base_class, "model_checkpoint": checkpoint})
-        if custom_intro is not None:
-            pre_block = equalize_indent(custom_intro, indent_level)
-            if not pre_block.endswith("\n"):
-                pre_block += "\n"
-        elif is_processor:
-            # Generate processor intro dynamically
-            pre_block = generate_processor_intro(cls)
-            if pre_block:
-                pre_block = equalize_indent(pre_block, indent_level)
-                pre_block = format_args_docstring(pre_block, model_name_lowercase)
-        elif is_image_processor:
-            pre_block = r"Constructs a {image_processor_class} image processor."
-            if pre_block:
-                pre_block = equalize_indent(pre_block, indent_level)
-                pre_block = format_args_docstring(pre_block, model_name_lowercase)
-        elif is_video_processor:
-            pre_block = r"Constructs a {video_processor_class} video processor."
-            if pre_block:
-                pre_block = equalize_indent(pre_block, indent_level)
-                pre_block = format_args_docstring(pre_block, model_name_lowercase)
-        elif model_name_title is None or name is None:
-            pre_block = ""
-        else:
-            pre_block = getattr(ClassDocstring, name).format(**formatting_kwargs)
-        # Start building the docstring
-        docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
-        if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
-            docstring += set_min_indent(f"{ClassDocstring.PreTrainedModel}", indent_level)
-        # Add the __init__ docstring
-        if docstring_init:
-            docstring += set_min_indent(f"\n{docstring_init}", indent_level)
-        elif is_dataclass or is_config:
-            # No init function, we have a data class
-            docstring += set_min_indent(f"\n{docstring_args}", indent_level) if docstring_args else "\nArgs:\n"
-            source_args_dict = get_args_doc_from_source(ModelOutputArgs)
-            doc_class = cls.__doc__ if cls.__doc__ else ""
-            documented_kwargs = parse_docstring(doc_class)[0]
-            for param_name, param_type_annotation in [] if _is_python_dataclass(cls) else cls.__annotations__.items():
-                param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
-                # Check for default value
-                param_default = ""
-                param_default = str(getattr(cls, param_name, ""))
-                param_default = f", defaults to `{param_default}`" if param_default != "" else ""
+    # 3) Set the correct indentation
+    docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
+    if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
+        docstring += set_min_indent(f"{ClassDocstring.PreTrainedModel}", indent_level)
 
-                param_type, optional_string, shape_string, additional_info, description, is_documented = (
-                    _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
-                )
+    # 4) Add the __init__ docstring if it's found, (e.g. for processing or modeling classes). If not add
+    # args docstring for dataclass fields (e.g. config or model output classes)
+    if docstring_init:
+        docstring += set_min_indent(f"\n{docstring_init}", indent_level)
+    elif is_dataclass:
+        docstring += set_min_indent(f"\n{docstring_args}", indent_level) if docstring_args else "\nArgs:\n"
+        source_args_dict = get_args_doc_from_source(ModelOutputArgs)
+        doc_class = cls.__doc__ if cls.__doc__ else ""
+        documented_kwargs = parse_docstring(doc_class)[0]
+        for param_name, param_type_annotation in [] if _is_python_dataclass(cls) else cls.__annotations__.items():
+            param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
-                if is_documented:
-                    # Check if type is missing
-                    if param_type == "":
-                        print(
-                            f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type"
-                        )
-                    param_type = param_type if "`" in param_type else f"`{param_type}`"
-                    # Format the parameter docstring
-                    if additional_info:
-                        docstring += set_min_indent(
-                            f"{param_name} ({param_type}{additional_info}):{description}",
-                            indent_level + 8,
-                        )
-                    else:
-                        docstring += set_min_indent(
-                            f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
-                            indent_level + 8,
-                        )
-        # TODO (Yoni): Add support for Attributes section in docs
+            # Check for default value
+            param_default = ""
+            param_default = str(getattr(cls, param_name, ""))
+            param_default = f", defaults to `{param_default}`" if param_default != "" else ""
 
-    else:
+            param_type, optional_string, shape_string, additional_info, description, is_documented = (
+                _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
+            )
+
+            if is_documented:
+                # Check if type is missing
+                if param_type == "":
+                    print(
+                        f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type"
+                    )
+                param_type = param_type if "`" in param_type else f"`{param_type}`"
+                # Format the parameter docstring
+                if additional_info:
+                    docstring += set_min_indent(
+                        f"{param_name} ({param_type}{additional_info}):{description}",
+                        indent_level + 8,
+                    )
+                else:
+                    docstring += set_min_indent(
+                        f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
+                        indent_level + 8,
+                    )
+    # TODO (Yoni): Add support for Attributes section in docs
+    # Classes didn't match any of the classes by MRO raise a warning unless there is a `custom_intro`  defined,
+    # we assume that the `custom_intro` already holds the minimal informative docs
+    elif custom_intro is None:
         print(
             f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"
         )
-    # Assign the dynamically generated docstring to the wrapper class
-    cls.__doc__ = docstring
 
+    # 5) Assign the dynamically generated docstring to the wrapper class
+    cls.__doc__ = docstring
     return cls
 
 
@@ -4655,10 +4779,10 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
 
         Using with ModelOutput classes:
         ```python
-        @dataclass
         @auto_docstring(
             custom_intro="Custom model outputs with additional fields."
         )
+        @dataclass
         class MyModelOutput(ImageClassifierOutput):
             r'''
             loss (`torch.FloatTensor`, *optional*):

@@ -28,6 +28,7 @@ class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
+    is_croppable = False
     supports_early_init = True
     # Subclasses can set `_layer_type` to auto-register themselves in the mappings, if the class definition lives in a modeling
     # file instead of this file. This allows to update the mapping only when the modeling file is imported, which simplifies imports
@@ -117,6 +118,7 @@ class DynamicLayer(CacheLayerMixin):
     """
 
     is_sliding = False
+    is_croppable = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
@@ -160,6 +162,14 @@ class DynamicLayer(CacheLayerMixin):
     def get_max_length(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
+
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        # Dropped rather than zeroed, as `update` grows them by concatenation. Clearing `is_initialized` first skips
+        # the zeroing in `super`, which is still called to reset the `cumulative_length` of the inheriting layers.
+        self.keys = self.values = None
+        self.is_initialized = False
+        super().reset()
 
     @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
@@ -264,13 +274,18 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.record_past:
             self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
             self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+            # Return the full states
+            return full_key_states, full_value_states
         # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
         else:
             self.keys = full_key_states
             self.values = full_value_states
-
-        # Return the full states
-        return full_key_states, full_value_states
+            # In theory, when we record the past we always have a call to `crop` after every `forward`, so returning the full states
+            # similar to the non-past case should be enough. However, in case several `forward` are run in a row without calling `crop`
+            # in-between (as is the case in some assisted decoding method, where the assistant itself calls `generate` with a past-aware
+            # Cache), we need to slice to only return the necesary states that are advertized to the mask by `get_mask_sizes`
+            num_visible = self.sliding_window - 1 + key_states.shape[-2]
+            return full_key_states[:, :, -num_visible:, :], full_value_states[:, :, -num_visible:, :]
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -374,8 +389,9 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def reset(self) -> None:
         super().reset()
-        if self.is_indexer_initialized:
-            self.indexer_keys.zero_()
+        # Dropped rather than zeroed, as `update_indexer` grows them by concatenation, like the main states
+        self.indexer_keys = None
+        self.is_indexer_initialized = False
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
@@ -706,6 +722,11 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_keys.zero_()
             self.indexer_cumulative_length.zero_()
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
+
 
 class QuantizedLayer(DynamicLayer):
     """
@@ -966,6 +987,18 @@ class LinearAttentionCacheLayerMixin(ABC):
             # recurrent_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
+
+    @property
+    def is_croppable(self) -> bool:
+        """
+        Whether `crop` can put this layer back as it was. This is only supported when there are no recurrent states.
+        """
+        if any(self.is_recurrent_states_initialized.values()):
+            return False
+        # If nothing is initialized, return False as we don't yet know whether we will have any recurrent states or no, so let's be
+        # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
+        # have any recurrent state (they are updated in the same forward)
+        return any(self.is_conv_states_initialized.values())
 
     def activate_past_recording(self):
         """
@@ -1243,6 +1276,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": DynamicIndexedLayer,
+    "qwen_sparse_attention": DynamicIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1267,6 +1301,7 @@ STATIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
+    "qwen_sparse_attention": StaticIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1686,6 +1721,11 @@ class Cache:
         return len(layers) > 0 and all(layer.is_initialized for layer in layers)
 
     @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put the whole cache back as it was, so a rollback leaves no trace."""
+        return all(layer.is_croppable for layer in self.layers)
+
+    @property
     def is_sliding(self) -> list[bool]:
         """Return whether the layers of the cache are sliding window"""
         return [getattr(layer, "is_sliding", False) for layer in self.layers]
@@ -1819,20 +1859,20 @@ class DynamicCache(Cache):
         if ddp_cache_data is not None:
             # Init all the layers with the data
             for layer_idx, kv_and_optional_sliding in enumerate(ddp_cache_data):
+                # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
+                # contain a third element, which is an optional sliding window tensor.
+                key_states, value_states = kv_and_optional_sliding[:2]
+                sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
                 # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
-                    # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
-                    # contain a third element, which is an optional sliding window tensor.
-                    sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
                     # If there is a sliding window tensor, use it to initialize the layer
                     if sliding_window_tensor is not None:
-                        # Since the same layer is dispatched across replicas, sliding_window is the same for all
-                        sliding_window = sliding_window_tensor[0].item()
-                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window_tensor.item()))
                     else:
                         layers.append(DynamicLayer())
-                # Update the layer with the data
-                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
+                # Update the layer with the data if any
+                if key_states is not None and value_states is not None:
+                    _, _ = layers[layer_idx].update(key_states, value_states)
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:
@@ -2107,6 +2147,10 @@ class EncoderDecoderCache(Cache):
     @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
+
+    @property
+    def is_croppable(self) -> bool:
+        return self.self_attention_cache.is_croppable
 
     def activate_past_recording(self):
         self.self_attention_cache.activate_past_recording()

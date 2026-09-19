@@ -465,7 +465,7 @@ class HfArgumentParserTest(unittest.TestCase):
         # Second check: anything in `optional_dict_fields` is bad if it's not in `base_list`
         for field_ in optional_dict_fields:
             self.assertIn(
-                field.name,
+                field_.name,
                 base_list,
                 f"Optional dict field `{field_.name}` is not in the base list of valid fields. Please add it to `TrainingArguments._VALID_DICT_FIELDS`",
             )

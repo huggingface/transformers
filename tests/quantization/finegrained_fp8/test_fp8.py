@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -23,7 +22,6 @@ from parameterized import parameterized
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
-    backend_empty_cache,
     get_device_properties,
     require_accelerate,
     require_torch_accelerator,
@@ -34,6 +32,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -83,7 +83,7 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
     and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
     "Skipping FP8QuantizerTest because it is not supported on GPU with capability < 8.9",
 )
-class FP8QuantizerTest(unittest.TestCase):
+class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
     quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
     input_text = "Once upon a time"
@@ -122,24 +122,12 @@ class FP8QuantizerTest(unittest.TestCase):
         """
         Setup quantized model
         """
+        super().setUpClass()
         cls.quantization_config = FineGrainedFP8Config()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name, device_map=cls.device_map, quantization_config=cls.quantization_config
         )
-
-    def setup(self):
-        """
-        Clear also on each setup (e.g. if a different model is used than the base cls one)
-        """
-        gc.collect()
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @parameterized.expand(
         [
@@ -461,8 +449,46 @@ class FP8LinearTest(unittest.TestCase):
         self.assertEqual(x_.shape, (1, 5, 256))
 
 
+class FP8EmbeddingTest(unittest.TestCase):
+    """
+    Some checkpoints quantize an embedding *table* rather than a linear (Qwen4-Exp's n-gram/PLE
+    table).
+    """
+
+    def test_lookup_applies_the_per_tensor_scale(self):
+        """Without the rescale the rows come back as raw FP8 and blow up the next matmul."""
+        from transformers.integrations import FP8Embedding
+
+        table = torch.randn(64, 16, dtype=torch.bfloat16)
+        scale = table.abs().max().float() / torch.finfo(torch.float8_e4m3fn).max
+        embedding = FP8Embedding(64, 16)
+        embedding.weight = torch.nn.Parameter((table.float() / scale).to(torch.float8_e4m3fn), requires_grad=False)
+        embedding.weight_scale = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
+
+        ids = torch.randint(0, 64, (2, 5))
+        rows, expected = embedding(ids), table[ids]
+
+        self.assertEqual(rows.dtype, expected.dtype)
+        error = (rows.float() - expected.float()).abs().max() / expected.float().abs().max()
+        self.assertLess(error, 0.1)
+
+    def test_patterns_match_by_suffix_and_honour_the_skip_list(self):
+        """Suffixes match whether or not the text model is nested under a multimodal wrapper."""
+        from transformers.integrations import FP8Embedding, replace_with_fp8_embedding
+
+        model = torch.nn.ModuleDict(
+            {n: torch.nn.ModuleDict({"table": torch.nn.Embedding(8, 4)}) for n in ("layers", "language_model")}
+        )
+        model.other = torch.nn.Embedding(8, 4)
+        replace_with_fp8_embedding(model, ["table"], modules_to_not_convert=["language_model.table"])
+
+        self.assertIsInstance(model["layers"]["table"], FP8Embedding)  # matched by suffix
+        self.assertIs(type(model["language_model"]["table"]), torch.nn.Embedding)  # skip-listed
+        self.assertIs(type(model.other), torch.nn.Embedding)  # no pattern match
+
+
 class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
-    """`disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
+    """`_disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
     occupy — DeepGEMM's kernels are bound to a single CUDA context and corrupt across devices, but a
     model that fits on one device must keep DeepGEMM even when other GPUs are visible (no overshoot).
     """
@@ -475,22 +501,22 @@ class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
 
     @require_torch_multi_gpu
     def test_multi_device_disables_deepgemm(self):
-        from transformers.integrations.finegrained_fp8 import disable_deepgemm_on_multi_device
+        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
 
         model = torch.nn.Module()
         model.a = self._fp8_module("cuda:0")
         model.b = self._fp8_module("cuda:1")
-        disable_deepgemm_on_multi_device(model)
+        _disable_deepgemm_on_multi_device(model)
         self.assertTrue(model.a._deepgemm_disabled)
         self.assertTrue(model.b._deepgemm_disabled)
 
     @require_torch_gpu
     def test_single_device_keeps_deepgemm(self):
-        from transformers.integrations.finegrained_fp8 import disable_deepgemm_on_multi_device
+        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
 
         model = torch.nn.Module()
         model.a = self._fp8_module("cuda:0")
         model.b = self._fp8_module("cuda:0")
-        disable_deepgemm_on_multi_device(model)
+        _disable_deepgemm_on_multi_device(model)
         self.assertFalse(model.a._deepgemm_disabled)
         self.assertFalse(model.b._deepgemm_disabled)

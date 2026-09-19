@@ -445,6 +445,7 @@ _VARLEN_ATTENTION_PATHS = (
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
+    # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
     "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
     # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
     "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
@@ -791,8 +792,11 @@ def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False) -> Any:
 
     - Tensors → per-dimension Dim.AUTO spec.
     - Scalars / None → None (no dynamic dims).
-    - Objects with ``__dict__`` (ModelOutput, Cache, …) → flat list of leaf specs,
-      matching the ``TreeSpec(list, …)`` that torch.export produces for these types.
+    - Registered pytree nodes (ModelOutput, Cache, …) → list of one spec per child of the
+      registered flatten, recursed, matching the ``TreeSpec(list, …)`` torch.export compares against.
+      Recursing through a ``Cache`` sets ``is_cache_tensor``, which marks the tensors below it as
+      cache state rather than ordinary inputs.
+    - Other objects with ``__dict__`` → flat list of leaf specs.
     - Lists / tuples → same container type, recursed element-wise.
     - Plain dicts → recursed dict of specs.
     - Everything else → None.
@@ -801,13 +805,21 @@ def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False) -> Any:
         return _auto_dynamic_shape(inputs, is_cache_tensor)
     if inputs is None or isinstance(inputs, (int, float, bool, str)):
         return None
-    if hasattr(inputs, "__dict__"):
-        leaves, _ = _pytree_flatten(inputs)
-        return get_auto_dynamic_shapes(leaves, is_cache_tensor or isinstance(inputs, Cache))
     if type(inputs) in (list, tuple, set, frozenset):
         return type(inputs)(get_auto_dynamic_shapes(v, is_cache_tensor) for v in inputs)
     if type(inputs) is dict:
         return {k: get_auto_dynamic_shapes(v, is_cache_tensor) for k, v in inputs.items()}
+    if (node := torch.utils._pytree.SUPPORTED_NODES.get(type(inputs))) is not None:
+        # Registered pytree node (a `ModelOutput`, a `Cache` subclass, ...). Mirror one level of its
+        # registered flatten and recurse, so a field holding a container keeps that container in the
+        # spec. A `Cache` is registered with a flatten that collapses to tensors, so it still yields a
+        # flat list; a `ModelOutput` yields one child per field, which is what `torch.export` compares
+        # against -- flattening it to tensors hands over a flat spec where nested children are expected.
+        children, _ = node.flatten_fn(inputs)
+        return [get_auto_dynamic_shapes(child, is_cache_tensor or isinstance(inputs, Cache)) for child in children]
+    if hasattr(inputs, "__dict__"):
+        leaves, _ = _pytree_flatten(inputs)
+        return get_auto_dynamic_shapes(leaves, is_cache_tensor or isinstance(inputs, Cache))
     return None
 
 

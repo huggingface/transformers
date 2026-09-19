@@ -148,6 +148,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Voxtral now passes and its entry is gone. Measured with this lifted: 18 of 36 variants pass, 11 "
             "reach the runtime drive. TODO: let the decomposition carry a model's extra per-layer inputs."
         ),
+        "VibeVoiceForConditionalGeneration": (
+            "Generation uses two forward calls with different input shapes (prefill + noise scheduler); "
+            "`decompose_prefill_decode` can't capture the full generate path reliably, causing flaky "
+            "CUDAGraphs / export failures. TODO: handle in a follow-up PR."
+        ),
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
@@ -157,10 +162,20 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "agnostic — the torch.export step itself overruns, so every backend hits it."
         ),
         "Sam2VisionModel": (
-            "Same Hiera backbone as `Sam2Model`; when it doesn't overrun it dies in torch's symbolic-shapes "
-            "engine instead — sympy cannot solve the windowing shape expressions "
-            "(`solveset is unable to solve this equation`, `KeyError: ((s100/4)//8)`)."
+            "torch 2.13's constraint solver raises `NotImplementedError` from `solve_univariate_inequality` "
+            "on the Hiera window-partition guard `Eq(s/32 - (s/4)//8, 0)` (a `FloorDiv` in a rational "
+            "equation); tracing itself succeeds. ONNX + ORT also overrun the 1000s timeout at ~7.5 min."
         ),
+        "SeamlessM4TForSpeechToSpeech": (
+            "The Conformer speech encoder is non-causal, so `sdpa_attention_forward` evaluates "
+            "`q_length > 1 and attention_mask is None and is_causal`; under dynamic shapes `q_length > 1` "
+            "is a `SymBool` and Python's `and` returns it as the first falsy operand, so SDPA raises "
+            "`argument 'is_causal' must be bool, not SymBool`. Static shapes work. TODO: handle on the "
+            "exporter side, see https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141"
+        ),
+        "SeamlessM4TForSpeechToText": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
+        "SeamlessM4Tv2ForSpeechToSpeech": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
+        "SeamlessM4Tv2ForSpeechToText": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
     },
     # Generate path, dynamic-shape only. Backend-agnostic (it's in the shared decomposition).
     "generate.dynamic": {
@@ -311,6 +326,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). "
             "Same chunked-attention limitation as the `onnx.generate` skip."
         ),
+        "VibeVoiceForConditionalGeneration": (
+            "Classifier-free guidance runs `forward()` twice per generated token — the conditional branch "
+            "and the unconditional one, each with its own cache of a different length — so the captured "
+            "calls interleave the two branches. `_merge_decode_calls` then merges a conditional decode step "
+            "with an unconditional call, mismatching the query and cache axes (`size 5 vs 3` in attention). "
+            "Single-token static generate is fine (it captures a conditional decode step). "
+            "TODO: make the capture branch-aware."
+        ),
     },
     # Multi-token decode capture on ExecuTorch: the SSM associative scan (what keeps the query axis
     # symbolic under export) has no ExecuTorch lowering and the runtime has no loop
@@ -364,11 +387,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
-        "Sam2VisionModel": (
-            "`torch.export` of the Hiera vision backbone under dynamic shapes takes ~7.5 min "
-            "even after simplifying `window_partition`/`window_unpartition` (12 attention blocks "
-            "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
-        ),
         "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
@@ -504,6 +522,8 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Swin2SRForImageSuperResolution": (
             "Same 466 GiB windowed-attention arena as `Swin2SRModel` -- its upsampler head adds nothing to the plan."
         ),
+        "TimesformerModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "TimesformerForVideoClassification": "Same `timeout` failure as `Mask2FormerModel`.",
     },
     "executorch.static": {
         "Wav2Vec2BertModel": (

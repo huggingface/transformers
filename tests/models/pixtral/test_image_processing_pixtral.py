@@ -26,7 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -36,7 +36,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class PixtralImageProcessingTester:
+class PixtralImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -113,18 +113,6 @@ class PixtralImageProcessingTester:
 
         return batch_size, self.num_channels, return_height, return_width
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        images = prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-        return images
-
 
 @require_torch
 @require_vision
@@ -148,7 +136,24 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_normalize"))
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_pad"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+
+    def test_call_without_padding(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = [
+                np.zeros((30, 60, 3), dtype=np.uint8),
+                np.zeros((60, 30, 3), dtype=np.uint8),
+            ]
+
+            encoded_images = image_processing(image_inputs, do_pad=False).pixel_values
+
+            self.assertIsInstance(encoded_images, list)
+            self.assertEqual([image.shape[-2:] for image in encoded_images], [(16, 24), (24, 16)])
+
+            padded_images = image_processing(image_inputs, do_pad=True).pixel_values
+            self.assertEqual(padded_images.shape[-2:], (24, 24))
 
     # The following tests are overridden as PixtralImageProcessor can return images of different sizes
     # and thus doesn't support returning batched tensors

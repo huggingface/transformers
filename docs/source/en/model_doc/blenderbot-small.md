@@ -70,10 +70,6 @@ the left.
     - get_special_tokens_mask
     - save_vocabulary
 
-## BlenderbotSmallTokenizerFast
-
-[[autodoc]] BlenderbotSmallTokenizerFast
-
 ## BlenderbotSmallModel
 
 [[autodoc]] BlenderbotSmallModel

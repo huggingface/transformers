@@ -130,6 +130,8 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_moe_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -149,6 +151,7 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
     resample_before_merge: bool = False
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
     @property
     def num_grid_per_side(self) -> int:

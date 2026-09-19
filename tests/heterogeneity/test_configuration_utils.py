@@ -406,3 +406,43 @@ class TestHeterogeneousConfig(unittest.TestCase):
                 "3": {"num_key_value_heads": 8},
             },
         )
+
+
+class TestMtpHeterogeneousConfig(unittest.TestCase):
+    def test_get_mtp_config_drops_main_model_per_layer_config_by_default(self):
+        config = _tiny_llama_config(per_layer_config={3: {"intermediate_size": 64}})
+        config.num_mtp_layers = 2
+
+        mtp_config = config.get_mtp_config()
+
+        self.assertEqual(mtp_config.num_hidden_layers, 2)
+        self.assertFalse(mtp_config.is_heterogeneous)
+        self.assertEqual(mtp_config.intermediate_size, object.__getattribute__(config, "intermediate_size"))
+        self.assertTrue(config.is_heterogeneous)
+
+    def test_get_mtp_config_uses_independent_mtp_per_layer_config(self):
+        config = _tiny_llama_config(per_layer_config={3: {"intermediate_size": 64}})
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {
+            0: {"intermediate_size": 80},
+            1: {"num_key_value_heads": 2},
+        }
+
+        mtp_config = config.get_mtp_config()
+
+        self.assertTrue(mtp_config.is_heterogeneous)
+        self.assertEqual(mtp_config.num_hidden_layers, 2)
+        self.assertEqual(mtp_config.per_layer_config[0].intermediate_size, 80)
+        self.assertEqual(
+            mtp_config.per_layer_config[1].intermediate_size,
+            object.__getattribute__(config, "intermediate_size"),
+        )
+        self.assertEqual(mtp_config.per_layer_config[1].num_key_value_heads, 2)
+
+    def test_get_mtp_config_validates_overrides_against_mtp_layer_count(self):
+        config = _tiny_llama_config()
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {2: {"intermediate_size": 80}}
+
+        with self.assertRaisesRegex(ValueError, r"range \[0, 2\)"):
+            config.get_mtp_config()

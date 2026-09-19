@@ -161,10 +161,15 @@ class MiniMaxRMSNorm(MixtralRMSNorm):
 
 
 class MiniMaxCache(DynamicCache):
+    # `crop` raises below, so a rollback cannot be undone here. The inherited property only inspects
+    # `self.layers`, which are all plain dynamic layers, and would otherwise wrongly report `True`.
+    is_croppable = False
+
     def __init__(self, *args, **kwargs):
         # Forward whatever `DynamicCache` takes (notably `config`, which pre-sizes `layers`) instead of
         # swallowing it: a caller that hands one over otherwise gets a cache with no layers, and
-        # `get_linear_cache` indexes off `len(self)`.
+        # `get_linear_cache` indexes off `len(self)`. `linear_cache` is sized to match, so the
+        # per-layer loops below index it at every layer `len(self)` reports.
         super().__init__(*args, **kwargs)
         self.linear_cache: list[torch.Tensor] = [[] for _ in range(len(self.layers))]
 
@@ -500,11 +505,6 @@ class MiniMaxModel(MixtralModel):
 class MiniMaxForCausalLM(MixtralForCausalLM):
     def forward(self, **super_kwargs):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

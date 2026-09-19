@@ -32,13 +32,19 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.image_processing_backends import TorchvisionBackend
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_utils import ImageInput
+from transformers.modeling_layers import GenericForSequenceClassification
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
 from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.testing_utils import require_torch
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from transformers.utils.auto_docstring import (
+    ImageProcessorArgs,
+    ModelArgs,
+    ModelForArgs,
     auto_docstring,
+    get_args_doc_from_source,
+    get_model_for_args,
 )
 from transformers.utils.import_utils import is_torch_available
 
@@ -276,6 +282,22 @@ class DummyForTestModel(PreTrainedModel):
         pass
 
 
+@auto_docstring
+class DummyModelForSequenceClassification(PreTrainedModel):
+    config_class = DummyConfig
+
+    def __init__(self, config: DummyConfig):
+        super().__init__(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+    ) -> CausalLMOutputWithPast:
+        pass
+
+
 class ComplexProcessorKwargs(ProcessingKwargs, total=False):
     r"""
     custom_processing_mode (`str`, *optional*, defaults to `"standard"`):
@@ -378,7 +400,7 @@ class DummyForTestImageProcessorFast(TorchvisionBackend):
         >>> import requests
 
         >>> processor = DummyForTestImageProcessorFast.from_pretrained("dummy-processor")
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor.preprocess(images=image, return_tensors="pt")
         ```
@@ -431,6 +453,8 @@ Args:
         """Test complete class and forward method docstrings for PreTrainedModel with ModelArgs and custom parameters."""
         actual_class_docstring = DummyForTestModel.__doc__
         expected_class_docstring = """
+The bare None Model outputting raw hidden-states without any specific head on top.
+
 This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
 library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
 etc.)
@@ -689,7 +713,7 @@ Parameters:
         >>> import requests
 
         >>> processor = DummyForTestImageProcessorFast.from_pretrained("dummy-processor")
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor.preprocess(images=image, return_tensors="pt")
         ```
@@ -701,7 +725,6 @@ Parameters:
 
         expected_class_docstring = """
 Constructs a fast DummyForTest image processor.
-
 Args:
     do_convert_rgb (`bool`, *kwargs*, *optional*):
         Whether to convert the image to RGB.
@@ -764,6 +787,33 @@ Args:
 """
 
         self.assertEqual(actual_class_docstring, expected_class_docstring)
+
+    def test_task_specific_args_selected_by_class_name_suffix(self):
+        self.assertIs(get_model_for_args("XForSequenceClassification"), ModelForArgs.ForSequenceClassification)
+        # Aliased tasks resolve to the class they are aliasing.
+        self.assertIs(get_model_for_args("XForVideoClassification"), ModelForArgs.ForImageClassification)
+
+        # A suffix that is not registered contributes no args.
+        source_args_dict = get_args_doc_from_source([ModelArgs, get_model_for_args("XForAbc")])
+        self.assertEqual(source_args_dict["labels"], ModelArgs.labels)
+
+    def test_task_specific_args_take_precedence_over_default_args(self):
+        # Task args take precedence over the language modeling default of `ModelArgs`.
+        source_args_dict = get_args_doc_from_source(
+            [ModelArgs, get_model_for_args("XForSequenceClassification"), ImageProcessorArgs]
+        )
+        self.assertEqual(source_args_dict["labels"], ModelForArgs.ForSequenceClassification.labels)
+
+    def test_task_specific_labels_in_generated_forward_docstring(self):
+        self.maxDiff = None
+        self.assertIn(
+            "Labels for computing the sequence classification/regression loss.",
+            DummyModelForSequenceClassification.forward.__doc__,
+        )
+        self.assertIn(
+            "Labels for computing the sequence classification/regression loss.",
+            GenericForSequenceClassification.forward.__doc__,
+        )
 
 
 # ---------------------------------------------------------------------------
