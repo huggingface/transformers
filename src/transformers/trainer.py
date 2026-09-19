@@ -1705,7 +1705,9 @@ class Trainer:
                 param.register_post_accumulate_grad_hook(average)
                 count += 1
         if count:
-            logger.info(f"Synchronised {count} parameters that FSDP2 does not shard: rank 0's values, averaged gradients.")
+            logger.info(
+                f"Synchronised {count} parameters that FSDP2 does not shard: rank 0's values, averaged gradients."
+            )
 
     def _prepare_for_training(self, max_steps, train_dataloader, resume_from_checkpoint):
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
