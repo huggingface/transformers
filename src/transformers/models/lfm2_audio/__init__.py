@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_lfm2_audio import *
+    from .feature_extraction_lfm2_audio import *
     from .modeling_lfm2_audio import *
     from .processing_lfm2_audio import *
 else:

@@ -24,17 +24,27 @@ from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import (
     AutoProcessor,
     Lfm2AudioDetokenizer,
+    Lfm2AudioFeatureExtractor,
     Lfm2AudioProcessor,
-    ParakeetFeatureExtractor,
     PreTrainedTokenizerFast,
 )
 from transformers.testing_utils import require_librosa, require_torch, require_torch_gpu
+from transformers.utils import is_torch_available
+
+from ...test_processing_common import ProcessorTesterMixin
+
+
+if is_torch_available():
+    from transformers.models.lfm2_audio.convert_lfm2_audio_to_hf import DEFAULT_CHAT_TEMPLATE
 
 
 @require_torch
 @require_librosa
-class Lfm2AudioProcessorTest(unittest.TestCase):
-    def setUp(self):
+class Lfm2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Lfm2AudioProcessor
+
+    @classmethod
+    def _setup_tokenizer(cls):
         vocabulary = {
             "<unk>": 0,
             "<|pad|>": 1,
@@ -58,14 +68,36 @@ class Lfm2AudioProcessorTest(unittest.TestCase):
             bos_token="<|startoftext|>",
             additional_special_tokens=["<|im_start|>", "<|im_end|>", "<|reserved_123|>"],
         )
-        feature_extractor = ParakeetFeatureExtractor(
+        return tokenizer
+
+    @classmethod
+    def _setup_feature_extractor(cls):
+        return Lfm2AudioFeatureExtractor(
             feature_size=8,
             sampling_rate=16_000,
             hop_length=160,
             n_fft=512,
             win_length=400,
         )
-        self.processor = Lfm2AudioProcessor(feature_extractor, tokenizer)
+
+    @classmethod
+    def prepare_processor_dict(cls):
+        return {"chat_template": DEFAULT_CHAT_TEMPLATE}
+
+    def setUp(self):
+        self.processor = self.get_processor()
+
+    def test_return_tensor_types(self):
+        import torch
+
+        audio = np.zeros(1600, dtype=np.float32)
+        for tensor_type, expected_type in (("pt", torch.Tensor), ("np", np.ndarray), (None, list)):
+            for kwargs in ({"return_tensors": tensor_type}, {"common_kwargs": {"return_tensors": tensor_type}}):
+                output = self.processor(text=[self.processor.audio_token], audio=[audio], **kwargs)
+                self.assertIsInstance(output.input_ids, expected_type)
+                self.assertIsInstance(output.modality_ids, expected_type)
+                self.assertIsInstance(output.input_features, expected_type)
+                self.assertTrue(np.all(np.asarray(output.modality_ids) == 2))
 
     def test_audio_placeholder_expansion(self):
         audio = np.zeros(1600, dtype=np.float32)
@@ -116,6 +148,21 @@ class Lfm2AudioProcessorTest(unittest.TestCase):
         self.assertEqual(reloaded.feature_extractor.feature_size, 8)
         self.assertEqual(reloaded.audio_codec_model_id, "kyutai/mimi")
 
+    def test_save_and_load_preserves_custom_template_and_decoder(self):
+        template = "{{ messages[0]['content'] }}"
+        processor = Lfm2AudioProcessor(
+            self.processor.feature_extractor,
+            self.processor.tokenizer,
+            chat_template=template,
+            decoder_model_id="local/detokenizer",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            processor.save_pretrained(directory)
+            reloaded = AutoProcessor.from_pretrained(directory)
+        self.assertEqual(reloaded.chat_template, template)
+        self.assertEqual(reloaded.decoder_model_id, "local/detokenizer")
+        self.assertIsInstance(reloaded.feature_extractor, Lfm2AudioFeatureExtractor)
+
     def test_decode_audio_uses_native_mimi_interface(self):
         import torch
 
@@ -156,6 +203,20 @@ class Lfm2AudioProcessorTest(unittest.TestCase):
         )
         self.assertEqual(decoder.audio_codes.shape, (1, 8, 2))
         self.assertEqual(audio.shape, (1, 32))
+
+    def test_decode_audio_propagates_configured_detokenizer_loading_errors(self):
+        import torch
+
+        self.processor.decoder_model_id = "dummy/model"
+        audio_codes = torch.zeros((8, 2), dtype=torch.long)
+        with (
+            patch.object(Lfm2AudioDetokenizer, "from_pretrained", side_effect=OSError("Cannot load detokenizer")),
+            patch("transformers.models.lfm2_audio.processing_lfm2_audio.MimiModel.from_pretrained") as load_mimi,
+        ):
+            with self.assertRaisesRegex(OSError, "Cannot load detokenizer"):
+                self.processor.decode_audio(audio_codes)
+        load_mimi.assert_not_called()
+        self.assertIsNone(self.processor._detokenizer)
 
 
 if __name__ == "__main__":

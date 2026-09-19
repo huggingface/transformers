@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-08-24.*
+*This model was contributed to Hugging Face Transformers on 2026-09-19.*
 
 # LFM2-Audio
 
@@ -30,16 +30,20 @@ The model contains four main components:
 3. an LFM2 backbone that processes text, input-audio, and output-audio positions in one timeline, and
 4. a six-layer depth transformer that predicts eight Mimi codebook tokens for each generated audio frame.
 
-The implementation reuses the native Transformers [`ParakeetEncoderModel`] for the FastConformer. It does not depend
-on Moshi or duplicate its source code in an LFM2-Audio-specific folder. For waveform decoding,
-`LiquidAI/LFM2.5-Audio-1.5B` includes a compact LFM detokenizer that is loaded lazily by
-[`Lfm2AudioProcessor.decode_audio`]. A native Transformers [`MimiModel`] remains available as a fallback for older
-checkpoints.
-
 ## Usage
 
-The original `LiquidAI/LFM2.5-Audio-1.5B` checkpoint predates its native Transformers integration. Use the concrete
-classes below to load that checkpoint directly.
+Convert the original checkpoint once to save the native model configuration, feature extractor, and multimodal
+chat template. The command below writes a local checkpoint:
+
+```bash
+python -m transformers.models.lfm2_audio.convert_lfm2_audio_to_hf \
+    --checkpoint_path LiquidAI/LFM2.5-Audio-1.5B \
+    --output_dir ./LFM2.5-Audio-1.5B-hf
+```
+
+The converted checkpoint loads through the standard Auto classes. The examples below use
+[`kadirnar/LFM2.5-Audio-1.5B-hf`](https://huggingface.co/kadirnar/LFM2.5-Audio-1.5B-hf).
+To use your own conversion, replace the model ID with the local output directory.
 
 ### Automatic speech recognition
 
@@ -47,12 +51,12 @@ classes below to load that checkpoint directly.
 import torch
 from datasets import Audio, load_dataset
 
-from transformers import Lfm2AudioForConditionalGeneration, Lfm2AudioProcessor
+from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 
-model_id = "LiquidAI/LFM2.5-Audio-1.5B"
-processor = Lfm2AudioProcessor.from_pretrained(model_id)
-model = Lfm2AudioForConditionalGeneration.from_pretrained(
+model_id = "kadirnar/LFM2.5-Audio-1.5B-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForMultimodalLM.from_pretrained(
     model_id,
     device_map="auto",
     dtype=torch.bfloat16,
@@ -99,17 +103,26 @@ sampling_rate = processor.output_sampling_rate  # 24 kHz
 text tokens and audio frames. Use `generation_mode="interleaved"` for speech-to-speech responses containing alternating
 text and audio spans.
 
+Generation settings follow the standard priority: call arguments, an explicit `GenerationConfig`, then
+`model.generation_config`. Supported settings include `max_new_tokens`, `max_length`, `do_sample`, `temperature`,
+`top_k`, and `eos_token_id`. Audio and text can use separate sampling settings through the `audio_temperature`,
+`audio_top_k`, `text_temperature`, and `text_top_k` fields of `GenerationConfig`; the corresponding call arguments
+remain supported. Generation uses one beam and returns an `Lfm2AudioGenerateOutput`. Unsupported generation options
+raise an error when set to non-default values.
+
+The processor supports PyTorch tensors (`return_tensors="pt"`), NumPy arrays (`"np"`), and Python lists (`None`).
+Text and audio-code forward passes can be compiled with `torch.compile(fullgraph=True)`. Audio-input forward passes
+also require `torch._dynamo.config.capture_dynamic_output_shape_ops = True` because the number of unpadded encoder
+features depends on the audio lengths.
+
 ## Lfm2AudioConfig
 
 [[autodoc]] Lfm2AudioConfig
 
-## Lfm2AudioPreprocessorConfig
+## Lfm2AudioFeatureExtractor
 
-[[autodoc]] Lfm2AudioPreprocessorConfig
-
-## Lfm2AudioEncoderConfig
-
-[[autodoc]] Lfm2AudioEncoderConfig
+[[autodoc]] Lfm2AudioFeatureExtractor
+    - __call__
 
 ## Lfm2AudioDepthConfig
 

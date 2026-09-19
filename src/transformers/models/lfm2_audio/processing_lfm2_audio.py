@@ -14,23 +14,19 @@
 
 from __future__ import annotations
 
-import copy
-
 from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 from ...utils.import_utils import requires
-from ..auto import AutoTokenizer
-from ..parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
-from .configuration_lfm2_audio import Lfm2AudioConfig
 
 
 if is_torch_available():
     import torch
 
     from ..mimi.modeling_mimi import MimiModel
+    from .modeling_lfm2_audio import Lfm2AudioDetokenizer
 
 
 TEXT_MODALITY = 1
@@ -50,52 +46,14 @@ class Lfm2AudioProcessorKwargs(ProcessingKwargs, total=False):
 Lfm2AudioProcessorKwargs.__annotations__["audio_kwargs"] = Lfm2AudioAudioKwargs
 
 
-DEFAULT_CHAT_TEMPLATE = r"""{{- bos_token -}}
-{%- set ns = namespace(system_prompt="") -%}
-{%- if messages and messages[0]["role"] == "system" -%}
-    {%- set system_content = messages[0]["content"] -%}
-    {%- if system_content is string -%}
-        {%- set ns.system_prompt = system_content -%}
-    {%- else -%}
-        {%- for part in system_content -%}
-            {%- if part["type"] == "text" -%}
-                {%- set ns.system_prompt = ns.system_prompt + part["text"] -%}
-            {%- endif -%}
-        {%- endfor -%}
-    {%- endif -%}
-    {%- set messages = messages[1:] -%}
-{%- endif -%}
-{%- if ns.system_prompt -%}
-    {{- "<|im_start|>system\n" + ns.system_prompt + "<|im_end|>\n" -}}
-{%- endif -%}
-{%- for message in messages -%}
-    {{- "<|im_start|>" + message["role"] + "\n" -}}
-    {%- if message["content"] is string -%}
-        {{- message["content"] -}}
-    {%- else -%}
-        {%- for part in message["content"] -%}
-            {%- if part["type"] == "audio" -%}
-                {{- "<|reserved_123|>" -}}
-            {%- elif part["type"] == "text" -%}
-                {{- part["text"] -}}
-            {%- endif -%}
-        {%- endfor -%}
-    {%- endif -%}
-    {{- "<|im_end|>\n" -}}
-{%- endfor -%}
-{%- if add_generation_prompt -%}
-    {{- "<|im_start|>assistant\n" -}}
-{%- endif -%}"""
-
-
 @requires(backends=("torch", "librosa"))
 @auto_docstring
 class Lfm2AudioProcessor(ProcessorMixin):
     r"""
-    Constructs an LFM2-Audio processor that combines a [`ParakeetFeatureExtractor`] and a tokenizer.
+    Constructs an LFM2-Audio processor that combines a [`Lfm2AudioFeatureExtractor`] and a tokenizer.
 
     Args:
-        feature_extractor (`ParakeetFeatureExtractor`):
+        feature_extractor (`Lfm2AudioFeatureExtractor`):
             Log-mel frontend used for audio prompts.
         tokenizer (`PreTrainedTokenizerBase`):
             Tokenizer used by the LFM2 backbone.
@@ -104,10 +62,9 @@ class Lfm2AudioProcessor(ProcessorMixin):
         audio_token (`str`, *optional*, defaults to `"<|reserved_123|>"`):
             Placeholder token replaced with FastConformer features.
         decoder_model_id (`str`, *optional*):
-            Checkpoint containing the LFM audio detokenizer. When omitted, [`~Lfm2AudioProcessor.from_pretrained`]
-            uses the processor checkpoint itself and looks in its `audio_detokenizer` subfolder.
+            Checkpoint containing the LFM audio detokenizer. Set by the conversion script and saved with the processor.
         audio_codec_model_id (`str`, *optional*, defaults to `"kyutai/mimi"`):
-            Mimi checkpoint used lazily as a fallback by [`~Lfm2AudioProcessor.decode_audio`].
+            Mimi checkpoint used by [`~Lfm2AudioProcessor.decode_audio`] when no LFM detokenizer is configured.
     """
 
     valid_processor_kwargs = Lfm2AudioProcessorKwargs
@@ -130,69 +87,16 @@ class Lfm2AudioProcessor(ProcessorMixin):
         decoder_subfolder (`str`, *optional*, defaults to `"audio_detokenizer"`):
             Subfolder containing the detokenizer configuration and weights.
         audio_codec_model_id (`str`, *optional*, defaults to `"kyutai/mimi"`):
-            Mimi checkpoint used lazily when an LFM detokenizer is unavailable.
+            Mimi checkpoint used lazily when no LFM detokenizer is configured.
         """
-        if chat_template is None or audio_token not in chat_template:
-            chat_template = DEFAULT_CHAT_TEMPLATE.replace(DEFAULT_AUDIO_TOKEN, audio_token)
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.decoder_model_id = None if decoder_model_id is None else str(decoder_model_id)
         self.decoder_subfolder = decoder_subfolder
         self.audio_codec_model_id = audio_codec_model_id
         self._detokenizer = None
-        self._detokenizer_unavailable = False
         self._audio_codec = None
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        decoder_model_id = kwargs.pop("decoder_model_id", None)
-        processor = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        if decoder_model_id is not None:
-            processor.decoder_model_id = str(decoder_model_id)
-        elif processor.decoder_model_id is None:
-            processor.decoder_model_id = str(pretrained_model_name_or_path)
-        return processor
-
-    @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
-        """Build the frontend from `config.json` for checkpoints released before processor files existed."""
-        try:
-            return super()._get_arguments_from_pretrained(
-                pretrained_model_name_or_path,
-                processor_dict=processor_dict,
-                **copy.deepcopy(kwargs),
-            )
-        except (OSError, ValueError):
-            # `LiquidAI/LFM2.5-Audio-1.5B` predates native Transformers support and therefore has no
-            # preprocessor config. Its complete frontend configuration is embedded in `config.json`.
-            pass
-
-        load_kwargs = copy.deepcopy(kwargs)
-        subfolder = load_kwargs.pop("subfolder", "")
-        config = Lfm2AudioConfig.from_pretrained(
-            pretrained_model_name_or_path,
-            subfolder=subfolder,
-            **load_kwargs,
-        )
-        frontend = config.preprocessor_config
-        feature_extractor = ParakeetFeatureExtractor(
-            feature_size=frontend.features,
-            sampling_rate=frontend.sample_rate,
-            hop_length=round(frontend.window_stride * frontend.sample_rate),
-            n_fft=frontend.n_fft,
-            win_length=round(frontend.window_size * frontend.sample_rate),
-            preemphasis=0.97,
-            padding_value=frontend.pad_value,
-        )
-        tokenizer_kwargs = copy.deepcopy(kwargs)
-        tokenizer_kwargs.pop("subfolder", None)
-        tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path,
-            subfolder=subfolder,
-            **tokenizer_kwargs,
-        )
-        return [feature_extractor, tokenizer]
 
     def validate_inputs(
         self,
@@ -215,13 +119,6 @@ class Lfm2AudioProcessor(ProcessorMixin):
         audio_inputs = self.feature_extractor(audio, **kwargs)
         feature_attention_mask = audio_inputs.pop("attention_mask")
         feature_lengths = feature_attention_mask.sum(-1)
-        # Liquid Audio's inference path uses the complete centered-STFT output, including the terminal frame that
-        # the NeMo frontend zeroes beyond its reported length. That extra frame matters whenever the reported length
-        # is divisible by FastConformer's 8x subsampling factor: omitting it removes one audio placeholder and can
-        # make ASR generation collapse to empty text.
-        feature_lengths = (feature_lengths + 1).clamp_max(feature_attention_mask.shape[-1])
-        frame_indices = torch.arange(feature_attention_mask.shape[-1], device=feature_attention_mask.device)
-        feature_attention_mask = frame_indices[None] < feature_lengths[:, None]
         audio_inputs["input_features_attention_mask"] = feature_attention_mask
         audio_inputs["num_audio_tokens"] = (feature_lengths + 7) // 8
         replacements = [self.replace_audio_token(audio_inputs, idx) for idx in range(len(audio))]
@@ -238,8 +135,8 @@ class Lfm2AudioProcessor(ProcessorMixin):
         **kwargs: Unpack[Lfm2AudioProcessorKwargs],
     ) -> BatchFeature:
         common_kwargs = dict(kwargs.pop("common_kwargs", {}))
-        if "return_tensors" not in kwargs:
-            common_kwargs.setdefault("return_tensors", "pt")
+        return_tensors = kwargs.pop("return_tensors", common_kwargs.pop("return_tensors", "pt"))
+        common_kwargs["return_tensors"] = "pt"
         kwargs["common_kwargs"] = common_kwargs
 
         text_kwargs = dict(kwargs.pop("text_kwargs", {}))
@@ -263,6 +160,11 @@ class Lfm2AudioProcessor(ProcessorMixin):
             if "attention_mask" in outputs:
                 modality_ids = modality_ids.masked_fill(~outputs["attention_mask"].bool(), 0)
             outputs["modality_ids"] = modality_ids
+        if return_tensors is None:
+            return BatchFeature({key: value.tolist() for key, value in outputs.items()})
+        if return_tensors == "np":
+            return BatchFeature({key: value.cpu().numpy() for key, value in outputs.items()})
+        outputs.convert_to_tensors(return_tensors)
         return outputs
 
     @property
@@ -355,21 +257,15 @@ class Lfm2AudioProcessor(ProcessorMixin):
             device = audio_codes.device
 
         if audio_codec is None and self.decoder_model_id is not None:
-            if self._detokenizer is None and not self._detokenizer_unavailable:
-                from .modeling_lfm2_audio import Lfm2AudioDetokenizer
-
-                try:
-                    self._detokenizer = Lfm2AudioDetokenizer.from_pretrained(
-                        self.decoder_model_id,
-                        subfolder=self.decoder_subfolder,
-                        dtype=torch.float32,
-                    ).eval()
-                except OSError:
-                    self._detokenizer_unavailable = True
-            if self._detokenizer is not None:
-                detokenizer = self._detokenizer.to(device)
-                with torch.no_grad():
-                    return detokenizer(audio_codes.to(device))
+            if self._detokenizer is None:
+                self._detokenizer = Lfm2AudioDetokenizer.from_pretrained(
+                    self.decoder_model_id,
+                    subfolder=self.decoder_subfolder,
+                    dtype=torch.float32,
+                ).eval()
+            detokenizer = self._detokenizer.to(device)
+            with torch.no_grad():
+                return detokenizer(audio_codes.to(device))
 
         if audio_codec is None:
             if self._audio_codec is None:

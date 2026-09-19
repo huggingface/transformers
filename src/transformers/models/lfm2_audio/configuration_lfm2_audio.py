@@ -24,161 +24,6 @@ from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
 
 @auto_docstring(checkpoint="LiquidAI/LFM2.5-Audio-1.5B")
 @strict
-class Lfm2AudioPreprocessorConfig(PreTrainedConfig):
-    r"""
-    normalize (`str`, *optional*, defaults to `"per_feature"`):
-        Feature-normalization strategy used by the released checkpoint.
-    window_size (`float`, *optional*, defaults to 0.025):
-        Analysis-window duration in seconds.
-    window_stride (`float`, *optional*, defaults to 0.01):
-        Distance between consecutive analysis windows in seconds.
-    window (`str`, *optional*, defaults to `"hann"`):
-        Window function used by the short-time Fourier transform.
-    features (`int`, *optional*, defaults to 128):
-        Number of log-mel bins.
-    n_fft (`int`, *optional*, defaults to 512):
-        Fourier-transform size.
-    log (`bool`, *optional*, defaults to `True`):
-        Whether to return logarithmic mel energies.
-    frame_splicing (`int`, *optional*, defaults to 1):
-        Number of adjacent frames to splice. Only 1 is supported by the native frontend.
-    dither (`float`, *optional*, defaults to 1e-5):
-        Dither value stored by the released checkpoint.
-    pad_to (`int`, *optional*, defaults to 0):
-        Frame multiple used for padding. A value of 0 disables extra padding.
-    pad_value (`float`, *optional*, defaults to 0.0):
-        Value used to pad waveforms and features.
-    """
-
-    model_type = "lfm2_audio_preprocessor"
-
-    sample_rate: int = 16_000
-    normalize: str = "per_feature"
-    window_size: float = 0.025
-    window_stride: float = 0.01
-    window: str = "hann"
-    features: int = 128
-    n_fft: int = 512
-    log: bool = True
-    frame_splicing: int = 1
-    dither: float = 1e-5
-    pad_to: int = 0
-    pad_value: float = 0.0
-
-
-@auto_docstring(checkpoint="LiquidAI/LFM2.5-Audio-1.5B")
-@strict
-class Lfm2AudioEncoderConfig(PreTrainedConfig):
-    r"""
-    feat_in (`int`, *optional*, defaults to 128):
-        Number of input log-mel features.
-    feat_out (`int`, *optional*, defaults to -1):
-        Optional encoder output size in the legacy NeMo config. A value of -1 keeps `hidden_size`.
-    subsampling (`str`, *optional*, defaults to `"dw_striding"`):
-        FastConformer subsampling implementation.
-    subsampling_factor (`int`, *optional*, defaults to 8):
-        Temporal reduction applied before the encoder layers.
-    subsampling_conv_channels (`int`, *optional*, defaults to 256):
-        Number of channels in the subsampling convolutions.
-    causal_downsampling (`bool`, *optional*, defaults to `False`):
-        Whether the legacy frontend uses causal downsampling.
-    reduction (`str`, *optional*):
-        Optional extra reduction stage. Native LFM2-Audio checkpoints do not use one.
-    reduction_position (`int`, *optional*):
-        Encoder layer at which an extra reduction stage would be applied.
-    reduction_factor (`int`, *optional*, defaults to 1):
-        Factor of the optional extra reduction stage.
-    ff_expansion_factor (`int`, *optional*, defaults to 4):
-        Expansion factor of each Conformer feed-forward block.
-    self_attention_model (`str`, *optional*, defaults to `"rel_pos"`):
-        Attention variant. LFM2-Audio uses relative-position attention.
-    att_context_size (`list[int]`, *optional*):
-        Optional left and right attention-context limits.
-    xscaling (`bool`, *optional*, defaults to `False`):
-        Whether to scale encoder inputs by the square root of `hidden_size`.
-    untie_biases (`bool`, *optional*, defaults to `True`):
-        Whether relative-position biases are independent in each encoder layer.
-    pos_emb_max_len (`int`, *optional*, defaults to 5000):
-        Maximum length of the relative-position embedding.
-    conv_norm_type (`str`, *optional*, defaults to `"batch_norm"`):
-        Normalization used by Conformer convolution modules.
-    conv_context_size (`list[int]`, *optional*):
-        Optional left and right convolution-context limits.
-    dropout_pre_encoder (`float`, *optional*, defaults to 0.1):
-        Dropout applied after subsampling.
-    dropout_emb (`float`, *optional*, defaults to 0.0):
-        Dropout applied to relative-position embeddings.
-    dropout_att (`float`, *optional*, defaults to 0.1):
-        Attention-probability dropout.
-    """
-
-    model_type = "lfm2_audio_encoder"
-
-    feat_in: int = 128
-    feat_out: int = -1
-    num_hidden_layers: int = 17
-    hidden_size: int = 512
-    subsampling: str = "dw_striding"
-    subsampling_factor: int = 8
-    subsampling_conv_channels: int = 256
-    causal_downsampling: bool = False
-    reduction: str | None = None
-    reduction_position: int | None = None
-    reduction_factor: int = 1
-    ff_expansion_factor: int = 4
-    self_attention_model: str = "rel_pos"
-    num_attention_heads: int = 8
-    att_context_size: list[int] | None = None
-    xscaling: bool = False
-    untie_biases: bool = True
-    pos_emb_max_len: int = 5000
-    conv_kernel_size: int = 9
-    conv_norm_type: str = "batch_norm"
-    conv_context_size: list[int] | None = None
-    dropout: float | int = 0.1
-    dropout_pre_encoder: float | int = 0.1
-    dropout_emb: float | int = 0.0
-    dropout_att: float | int = 0.1
-
-    def to_parakeet_config(self) -> ParakeetEncoderConfig:
-        """Translate the released NeMo-style config to Transformers' FastConformer config."""
-        if self.subsampling != "dw_striding":
-            raise ValueError(f"LFM2-Audio only supports `subsampling='dw_striding'`, got {self.subsampling!r}.")
-        if self.self_attention_model != "rel_pos":
-            raise ValueError(
-                f"LFM2-Audio only supports relative-position attention, got {self.self_attention_model!r}."
-            )
-        if self.conv_norm_type != "batch_norm":
-            raise ValueError(f"LFM2-Audio only supports batch-norm convolutions, got {self.conv_norm_type!r}.")
-        if self.reduction is not None or self.reduction_factor != 1:
-            raise ValueError("LFM2-Audio checkpoints with an additional encoder reduction stage are not supported.")
-
-        return ParakeetEncoderConfig(
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.hidden_size * self.ff_expansion_factor,
-            hidden_act="silu",
-            attention_bias=True,
-            convolution_bias=True,
-            conv_kernel_size=self.conv_kernel_size,
-            subsampling_factor=self.subsampling_factor,
-            subsampling_conv_channels=self.subsampling_conv_channels,
-            num_mel_bins=self.feat_in,
-            subsampling_conv_kernel_size=3,
-            subsampling_conv_stride=2,
-            dropout=self.dropout_pre_encoder,
-            dropout_positions=self.dropout_emb,
-            layerdrop=0.0,
-            activation_dropout=self.dropout,
-            attention_dropout=self.dropout_att,
-            max_position_embeddings=self.pos_emb_max_len,
-            scale_input=self.xscaling,
-        )
-
-
-@auto_docstring(checkpoint="LiquidAI/LFM2.5-Audio-1.5B")
-@strict
 class Lfm2AudioDepthConfig(PreTrainedConfig):
     r"""
     dim (`int`, *optional*, defaults to 1024):
@@ -192,6 +37,10 @@ class Lfm2AudioDepthConfig(PreTrainedConfig):
     """
 
     model_type = "lfm2_audio_depth"
+    attribute_map = {"hidden_size": "dim", "num_hidden_layers": "layers", "rms_norm_eps": "norm_eps"}
+
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
 
     layers: int = 6
     dim: int = 1024
@@ -220,8 +69,6 @@ class Lfm2AudioConfig(PreTrainedConfig):
     r"""
     codebooks (`int`, *optional*, defaults to 8):
         Number of Mimi codebooks generated for every audio timestep.
-    tie_audio_embeddings (`bool`, *optional*, defaults to `False`):
-        Whether to tie the input and output weights of the audio embedding table.
     semantic_codebook_factor (`float`, *optional*, defaults to 100.0):
         Relative loss weight assigned to the first, semantic Mimi codebook.
     codebook_weight (`str`, *optional*, defaults to `"log"`):
@@ -235,11 +82,8 @@ class Lfm2AudioConfig(PreTrainedConfig):
         Number of consecutive text tokens in interleaved generation.
     interleaved_n_audio (`int`, *optional*, defaults to 12):
         Number of consecutive audio frames in interleaved generation.
-    preprocessor (`dict` or [`Lfm2AudioPreprocessorConfig`], *optional*):
-        Configuration of the log-mel audio frontend.
-    encoder (`dict`, [`Lfm2AudioEncoderConfig`] or [`ParakeetEncoderConfig`], *optional*):
-        Configuration of the FastConformer audio encoder. The legacy NeMo-style configuration in the released
-        checkpoint is translated to [`ParakeetEncoderConfig`] automatically.
+    encoder (`dict` or [`ParakeetEncoderConfig`], *optional*):
+        Configuration of the FastConformer audio encoder.
     lfm (`dict` or [`Lfm2Config`], *optional*):
         Configuration of the LFM2 language-model backbone.
     depthformer (`dict` or [`Lfm2AudioDepthConfig`], *optional*):
@@ -258,21 +102,18 @@ class Lfm2AudioConfig(PreTrainedConfig):
 
     model_type = "lfm2_audio"
     sub_configs = {
-        "preprocessor": Lfm2AudioPreprocessorConfig,
         "encoder": ParakeetEncoderConfig,
         "lfm": Lfm2Config,
         "depthformer": Lfm2AudioDepthConfig,
     }
 
     codebooks: int = 8
-    tie_audio_embeddings: bool = False
     semantic_codebook_factor: float | int = 100.0
     codebook_weight: str = "log"
     text_loss_multiplier: float | int | None = 1.0
     audio_loss_multiplier: float | int | None = 1.0
     interleaved_n_text: int = 6
     interleaved_n_audio: int = 12
-    preprocessor: dict | PreTrainedConfig | None = None
     encoder: dict | PreTrainedConfig | None = None
     lfm: dict | PreTrainedConfig | None = None
     depthformer: dict | PreTrainedConfig | None = None
@@ -284,32 +125,31 @@ class Lfm2AudioConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
+        # Older checkpoints stored a flag for an audio output projection that was never used.
+        kwargs.pop("tie_audio_embeddings", None)
         self.semantic_codebook_factor = float(self.semantic_codebook_factor)
         self.text_loss_multiplier = 1.0 if self.text_loss_multiplier is None else float(self.text_loss_multiplier)
         self.audio_loss_multiplier = 1.0 if self.audio_loss_multiplier is None else float(self.audio_loss_multiplier)
 
-        if isinstance(self.preprocessor, dict):
-            self.preprocessor = Lfm2AudioPreprocessorConfig(**self.preprocessor)
-        elif self.preprocessor is None:
-            self.preprocessor = Lfm2AudioPreprocessorConfig()
-
         if isinstance(self.encoder, dict):
-            if self.encoder.get("model_type") == "parakeet_encoder":
-                self.encoder = ParakeetEncoderConfig(**self.encoder)
-            else:
-                encoder = dict(self.encoder)
-                for legacy_name, canonical_name in {
-                    "n_layers": "num_hidden_layers",
-                    "d_model": "hidden_size",
-                    "n_heads": "num_attention_heads",
-                }.items():
-                    if legacy_name in encoder:
-                        encoder.setdefault(canonical_name, encoder.pop(legacy_name))
-                self.encoder = Lfm2AudioEncoderConfig(**encoder).to_parakeet_config()
-        elif isinstance(self.encoder, Lfm2AudioEncoderConfig):
-            self.encoder = self.encoder.to_parakeet_config()
+            self.encoder = ParakeetEncoderConfig(**self.encoder)
         elif self.encoder is None:
-            self.encoder = Lfm2AudioEncoderConfig().to_parakeet_config()
+            self.encoder = ParakeetEncoderConfig(
+                hidden_size=512,
+                num_hidden_layers=17,
+                num_attention_heads=8,
+                intermediate_size=2048,
+                num_mel_bins=128,
+                conv_kernel_size=9,
+                subsampling_factor=8,
+                subsampling_conv_channels=256,
+                dropout=0.1,
+                attention_dropout=0.1,
+                activation_dropout=0.1,
+                max_position_embeddings=5000,
+                layerdrop=0.0,
+                scale_input=False,
+            )
 
         if isinstance(self.lfm, dict):
             self.lfm = Lfm2Config(**self.lfm)
@@ -333,6 +173,10 @@ class Lfm2AudioConfig(PreTrainedConfig):
         self.vocab_size = self.lfm.vocab_size
         self.initializer_range = self.lfm.initializer_range
         super().__post_init__(**kwargs)
+        if self.encoder._attn_implementation is None:
+            self.encoder._attn_implementation = "eager"
+        if self.depthformer._attn_implementation is None:
+            self.depthformer._attn_implementation = "sdpa"
 
     @property
     def text_config(self) -> Lfm2Config:
@@ -347,12 +191,6 @@ class Lfm2AudioConfig(PreTrainedConfig):
         return self.encoder
 
     @property
-    def preprocessor_config(self) -> Lfm2AudioPreprocessorConfig:
-        if not isinstance(self.preprocessor, Lfm2AudioPreprocessorConfig):
-            raise ValueError("`preprocessor` was not initialized as an Lfm2AudioPreprocessorConfig.")
-        return self.preprocessor
-
-    @property
     def depth_config(self) -> Lfm2AudioDepthConfig:
         if not isinstance(self.depthformer, Lfm2AudioDepthConfig):
             raise ValueError("`depthformer` was not initialized as an Lfm2AudioDepthConfig.")
@@ -362,6 +200,4 @@ class Lfm2AudioConfig(PreTrainedConfig):
 __all__ = [
     "Lfm2AudioConfig",
     "Lfm2AudioDepthConfig",
-    "Lfm2AudioEncoderConfig",
-    "Lfm2AudioPreprocessorConfig",
 ]
