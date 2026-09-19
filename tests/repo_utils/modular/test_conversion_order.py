@@ -61,7 +61,8 @@ class ConversionOrderTest(unittest.TestCase):
         # Find the order
         priority_list, _ = create_dependency_mapping.find_priority_list(FILES_TO_PARSE)
         # Extract just the model names (list of lists)
-        model_priority_list = [[file.split("/")[-2] for file in level] for level in priority_list]
+        # FILES_TO_PARSE uses os.path.join (OS-native separators); do not split on "/".
+        model_priority_list = [[os.path.basename(os.path.dirname(file)) for file in level] for level in priority_list]
 
         # These are based on what the current library order should be (as of 09/01/2025)
         self.assertTrue(appear_after("mixtral", "mistral", model_priority_list))
