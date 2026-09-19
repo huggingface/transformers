@@ -620,7 +620,7 @@ class HYV4HyperConnection(nn.Module):
 
     def __init__(self, config: HYV4Config):
         super().__init__()
-        self.hc_mult = config.hc_mult  # number of streams, refered as N below
+        self.hc_mult = config.hc_mult  # number of streams, referred as N below
         self.hc_eps = config.hc_eps
         self.input_norm = HYV4UnweightedRMSNorm(eps=config.rms_norm_eps)
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
