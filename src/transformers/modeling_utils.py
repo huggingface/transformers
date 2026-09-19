@@ -57,7 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
-from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
+from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
 from .distributed.utils import (
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
@@ -4146,9 +4146,10 @@ class PreTrainedModel(
             distributed_config = DistributedConfig(tp_plan=tp_plan, tp_size=tp_size)
 
         if distributed_config is not None:
-            distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
-                distributed_config, device_mesh=device_mesh, device_map=device_map
+            distributed_config, device_map, mesh_manager = cls.prepare_distribute_model(
+                distributed_config, device_map=device_map
             )
+            device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp")) if mesh_manager is not None else None
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4286,7 +4287,8 @@ class PreTrainedModel(
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
+        if distributed_config is not None:
+            model = cls.maybe_distribute_model(model, distributed_config, mesh_manager)
 
         # Prepare the full device map
         if device_map is not None:
@@ -4991,7 +4993,7 @@ def get_total_byte_count(
         param_byte_count = param.numel() * dtype_size
 
         if len(tp_plan) > 0:
-            is_part_of_plan = _get_parameter_tp_plan(param_name, tp_plan, is_weight=True) is not None
+            is_part_of_plan = _get_parameter_plan(param_name, tp_plan, is_weight=True) is not None
             param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
 
         total_byte_count[device] += param_byte_count
@@ -5031,7 +5033,16 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         if device.type in ["cuda", "xpu"]:
             accelerator_module = getattr(torch, device.type)
             index = device.index if device.index is not None else accelerator_module.current_device()
-            free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            try:
+                free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            except (RuntimeError, NotImplementedError, AttributeError) as e:
+                # Some backends cannot report free memory (e.g. Intel XPU under WSL2, where the Level Zero Sysman
+                # interface is not exposed). Warmup is a best-effort optimization, so skip it for this device
+                # instead of failing the whole model load.
+                logger.warning_once(
+                    f"Skipping caching allocator warmup for {device}: could not query device memory ({e})"
+                )
+                continue
             unused_memory = accelerator_module.memory_reserved(index) - accelerator_module.memory_allocated(index)
             # If we have reserved but unused memory, we can lower the allocation we want to make, but only if it's still
             # higher than the unused memory. This is because otherwise torch will use that unused memory when performing

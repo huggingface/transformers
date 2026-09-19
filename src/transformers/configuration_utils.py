@@ -97,7 +97,16 @@ _LEGACY_LAYER_TYPE_REMAP = {
 
 
 def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
-    """Apply legacy → current layer-type name mapping."""
+    """Apply legacy → current layer-type name mapping.
+
+    Converts names in `_LEGACY_LAYER_TYPE_REMAP` to their current equivalents like `attention` → `full_attention`. Names not in that dict are returned unchanged.
+
+    Args:
+        layer_types (list[str]): Layer type names that may include legacy values.
+
+    Returns:
+        list[str]: Remapped names in the same order.
+    """
     return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
 
 
@@ -215,6 +224,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
         per_layer_config (`dict[int | str, dict[str, Any]]`, *optional*):
             A sparse mapping from layer indices to configuration attribute overrides. Each key is a layer index, and each value contains the attributes that differ from the global config for that layer.
+        tie_last_hidden_states (`bool`, *optional*):
+            Whether `hidden_states[-1]` should be the post-final-norm `last_hidden_state` rather than the pre-final-norm
+            hidden state. If unset, the model's built-in default is used.
 
         > Parameters for fine-tuning tasks
 

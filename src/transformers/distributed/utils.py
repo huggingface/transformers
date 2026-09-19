@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -36,6 +37,7 @@ _READAHEAD_MAX_TOTAL_BYTES = 5 * 2**30
 
 
 if TYPE_CHECKING:
+    from torch.distributed.device_mesh import DeviceMesh
     from torch.distributed.tensor import DTensor
 
     from .configuration_utils import DistributedConfig
@@ -306,7 +308,21 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
-# TODO(3outeille): unify initialization across parallelism
+class MeshManager:
+    """Named access to dense and expert parallel axes without exposing their view selection."""
+
+    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
+        self._dense_mesh = dense_mesh
+        self._expert_mesh = expert_mesh
+
+    def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
+        """Select expert axes for `ep`/`efsdp`, otherwise dense axes; DeviceMesh handles slicing."""
+        dims = (dims,) if isinstance(dims, str) else dims
+        mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
+        return mesh[dims]
+
+
+# Retained for the legacy transformers.integrations.tensor_parallel API.
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
 ):
@@ -314,6 +330,12 @@ def initialize_tensor_parallelism(
     Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
+    warnings.warn(
+        "`initialize_tensor_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if tp_size is not None and tp_plan is None:
         raise ValueError("tp_plan has to be set when tp_size is passed.")
     if tp_plan is not None and device_map is not None:
@@ -355,6 +377,12 @@ def initialize_tensor_parallelism(
 
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
+    warnings.warn(
+        "`initialize_fully_sharded_data_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
     # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
     if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
@@ -370,17 +398,11 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         device_map = torch.device(device_type)
 
     fsdp_size = distributed_config.fsdp_size
-    tp_size = distributed_config.tp_size
 
-    # `fsdp` is the outer dimension so that the `tp` ranks of a group are contiguous, which is what
-    # the expert all-to-all and the TP collectives want.
     dims, names = [], []
     if fsdp_size > 1:
         dims.append(fsdp_size)
         names.append("fsdp")
-    if tp_size > 1:
-        dims.append(tp_size)
-        names.append("tp")
 
     # Build the N-dimensional device mesh
     mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
@@ -391,19 +413,30 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     return device_map, mesh
 
 
-def initialize_pipeline_parallelism(
+def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
-):
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Pipeline parallelism with DistributedConfig requires `torch>=2.5`.")
+) -> tuple[torch.device | None, MeshManager | None]:
+    """Build named dense and expert views, independently of the expert dispatcher.
+
+    Both views include singleton dimensions so callers can always select their axes by name.
+    Each parameter's FSDP and TP/EP axes come from the same view. Separate roots avoid requiring
+    the newer `DeviceMesh._unflatten` API; the expert view is unused when EP is disabled.
+    """
+    mesh_shape = (distributed_config.pp_size, distributed_config.fsdp_size, distributed_config.tp_size)
+    if mesh_shape == (1, 1, 1):
+        return None, None
 
     device_type = torch._C._get_accelerator().type
-    _ensure_torch_distributed(device_type)
+    if distributed_config.tp_size > 1 and device_type == "mps":
+        raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
 
+    _ensure_torch_distributed(device_type)
     world_size = torch.distributed.get_world_size()
-    pp_size = distributed_config.pp_size
-    if world_size != pp_size:
-        raise RuntimeError(f"world_size ({world_size}) must be equal to pp_size ({pp_size})")
+    expected_world_size = distributed_config.pp_size * distributed_config.fsdp_size * distributed_config.tp_size
+    if expected_world_size != world_size:
+        raise RuntimeError(
+            f"The parallel mesh requires {expected_world_size} processes, but world_size is {world_size}."
+        )
 
     if device_type != "cpu":
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -412,10 +445,17 @@ def initialize_pipeline_parallelism(
     else:
         device_map = torch.device(device_type)
 
-    assert world_size == pp_size, f"world_size ({world_size}) must be equal to pp_size ({pp_size})"
-    mesh = torch.distributed.init_device_mesh(device_type, (pp_size,), mesh_dim_names=("pp",))
-
-    return device_map, mesh
+    dense_mesh = torch.distributed.init_device_mesh(
+        device_type,
+        mesh_shape,
+        mesh_dim_names=("pp", "fsdp", "tp"),
+    )
+    expert_mesh = torch.distributed.init_device_mesh(
+        device_type,
+        (distributed_config.pp_size, distributed_config.efsdp_size, distributed_config.ep_size),
+        mesh_dim_names=("pp", "efsdp", "ep"),
+    )
+    return device_map, MeshManager(dense_mesh, expert_mesh)
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:

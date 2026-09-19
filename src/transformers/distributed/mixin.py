@@ -20,24 +20,24 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
-from .configuration_utils import EXPERTS_DISPATCH_STRATEGIES, DistributedConfig
+from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
-    _validate_tp_plan_styles,
+    _validate_parallel_plan_styles,
+    apply_dispatch_expert_parallelism,
+    apply_masked_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
+    resolve_parallel_plans,
 )
 from .utils import (
+    MeshManager,
     _distributed_barrier,
-    _ensure_torch_distributed,
     _get_torch_distributed_rank,
-    _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
     gather_full_state_dict,
-    initialize_fully_sharded_data_parallelism,
-    initialize_pipeline_parallelism,
-    initialize_tensor_parallelism,
+    initialize_distributed_mesh,
     save_model_checkpoint_distributed,
 )
 
@@ -53,11 +53,11 @@ class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
+    _mesh_manager: MeshManager | None = None
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
     _fsdp_size = None
-    _expert_parallel_dispatch = False
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
 
@@ -88,15 +88,12 @@ class DistributedMixin:
     @property
     def tp_plan(self) -> dict[str, str]:
         """The full tp plan for the model's modules."""
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
-            if not self._ep_plan:
-                raise ValueError(
-                    f"Expert parallelism was requested (`enable_expert_parallel=True`), but "
-                    f"`{self.__class__.__name__}` does not define an expert-parallel plan. Add a "
-                    f"`base_model_ep_plan` to its config, or disable expert parallelism."
-                )
-            return self._ep_plan
-        return self._tp_plan
+        return self._tp_plan if self._tp_plan is not None else {}
+
+    @property
+    def ep_plan(self) -> dict[str, str]:
+        """The full expert parallel plan for the model's modules."""
+        return self._ep_plan if self._ep_plan is not None else {}
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
@@ -114,7 +111,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
 
-        _validate_tp_plan_styles(plan)
+        _validate_parallel_plan_styles(plan)
 
         model_param_names = [name for name, _ in self.named_parameters()]
         for layer_pattern in plan.keys():
@@ -132,6 +129,14 @@ class DistributedMixin:
 
         self._tp_plan = plan
 
+    @ep_plan.setter
+    def ep_plan(self, plan: dict[str, str] | None):
+        plan = {} if plan is None else plan
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `ep_plan`")
+        _validate_parallel_plan_styles(plan)
+        self._ep_plan = plan
+
     @pp_plan.setter
     def pp_plan(self, plan: dict[str, tuple[str, str]] | None):
         if plan is None:
@@ -146,109 +151,60 @@ class DistributedMixin:
     def prepare_distribute_model(
         cls,
         distributed_config: DistributedConfig | dict | None,
-        *,
-        device_mesh=None,
         device_map=None,
-    ) -> tuple[DistributedConfig | None, object, object]:
+    ) -> tuple[DistributedConfig | None, object, MeshManager | None]:
         if distributed_config is None:
-            return None, device_map, device_mesh
+            return None, device_map, None
 
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
-        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
-            _ensure_torch_distributed()
-            world_size = _get_torch_distributed_world_size()
-            if distributed_config.tp_size * distributed_config.fsdp_size != world_size:
-                raise RuntimeError(
-                    f"tp_size ({distributed_config.tp_size}) * fsdp_size ({distributed_config.fsdp_size}) "
-                    f"is not equal to world_size ({world_size})"
-                )
+        if distributed_config.tp_size == 1 and distributed_config.fsdp_size == 1 and distributed_config.pp_size == 1:
+            return distributed_config, device_map, None
 
-        if distributed_config.tp_size > 1 and distributed_config.tp_plan is None:
-            distributed_config.tp_plan = "auto"
+        if distributed_config.tp_size > 1 and device_map is not None:
+            raise ValueError("Tensor parallelism and `device_map` are mutually exclusive.")
+        if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
+            raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+        device_map, mesh_manager = initialize_distributed_mesh(distributed_config)
 
-        if distributed_config.fsdp_size > 1:
-            # Builds a 2-D (fsdp, tp) mesh when tensor/expert parallelism is also requested.
-            if device_mesh is not None:
-                raise ValueError(
-                    "`device_mesh` cannot be passed together with `fsdp_size > 1`: the mesh is built here."
-                )
-            device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
-        elif distributed_config.tp_size > 1:
-            device_map, device_mesh = initialize_tensor_parallelism(
-                distributed_config.tp_plan,
-                tp_size=distributed_config.tp_size,
-                device_mesh=device_mesh,
-                device_map=device_map,
-            )
-        elif distributed_config.pp_size > 1:
-            device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
-
-        return distributed_config, device_map, device_mesh
+        return distributed_config, device_map, mesh_manager
 
     @classmethod
     def maybe_distribute_model(
         cls,
         model: nn.Module,
         distributed_config: DistributedConfig | None,
-        device_mesh,
+        mesh_manager: MeshManager | None,
     ):
-        """Apply TP or FSDP2 after model init, before weight loading."""
-        if device_mesh is not None:
-            model.config.distributed_config = distributed_config
-            model._device_mesh = device_mesh
-            # The Trainer mirrors these into accelerate's `ParallelismConfig`; without them accelerate
-            # sees unaccounted ranks and falls back to DDP, which rejects the DTensor parameters.
-            model._tp_size = distributed_config.tp_size
-            model._fsdp_size = distributed_config.fsdp_size
-            model._expert_parallel_dispatch = distributed_config.dispatches_tokens
+        """Apply pipeline, tensor/expert, then FSDP parallelism before weight loading."""
+        if mesh_manager is None:
+            return model
 
-            # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
-            # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
-            if distributed_config.tp_size > 1:
-                tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-                if isinstance(distributed_config.tp_plan, dict):
-                    model.tp_plan = distributed_config.tp_plan
-                if distributed_config.dispatches_tokens:
-                    # Every rank trains on its own part of the batch, so only the experts can be sharded across the
-                    # group: the experts get the dispatch style, the router keeps its global ids and scores, and
-                    # whatever else the plan shards stays replicated, data-parallel like the rest of the trunk.
-                    # Replicated parameters inside the experts module keep their gradient all-reduce: FSDP2 treats
-                    # that module as expert-owned and does not reduce them, and each rank saw different tokens.
-                    kept = ("grouped_gemm", "moe_tp_experts", "replicated_with_grad_allreduce")
-                    replicated = sorted(
-                        name for name, style in model.tp_plan.items() if style not in ("ep_router", *kept)
-                    )
-                    if replicated:
-                        logger.warning(
-                            f"`experts_dispatch={distributed_config.experts_dispatch!r}` shards only the experts, "
-                            "so these expert parallel plan "
-                            f"entries are ignored and their modules stay replicated: {replicated}."
-                        )
-                    # `tp_plan` reads `_ep_plan` under expert parallelism, so that is the plan to rewrite.
-                    dispatch_style = EXPERTS_DISPATCH_STRATEGIES[distributed_config.experts_dispatch]
-                    model._ep_plan = {
-                        name: dispatch_style if style == "moe_tp_experts" else style
-                        for name, style in model.tp_plan.items()
-                        if style in kept
-                    }
-                model = apply_tensor_parallelism(model, tp_mesh)
+        model.config.distributed_config = distributed_config
+        model._mesh_manager = mesh_manager
+        model._device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp"))
+        model._tp_size = distributed_config.tp_size
+        model._fsdp_size = distributed_config.fsdp_size
 
-            if distributed_config.dispatches_tokens:
-                # Every expert-parallel rank trains on its own part of the batch, so the parameters outside the
-                # experts are data-parallel across the whole mesh: FSDP2 shards them across all of it and owns
-                # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
-                trunk_mesh = device_mesh["fsdp_tp"] if device_mesh.ndim > 1 else device_mesh
-                expert_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else None
-                model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
-            elif distributed_config.fsdp_size > 1:
-                fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
-                model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+        tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
+        distributed_config._validate_resolved_ep_plan(ep_plan)
 
-            if distributed_config.pp_size > 1:
-                pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
-                model = apply_pipeline_parallelism(model, pp_mesh)
+        if distributed_config.pp_size > 1:
+            model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
+
+        if tp_plan:
+            model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
+        if ep_plan:
+            if "ep_dispatch_experts" in ep_plan.values():
+                model = apply_dispatch_expert_parallelism(
+                    model, mesh_manager.get_mesh("ep"), mesh_manager.get_mesh("tp"), ep_plan
+                )
+            else:
+                model = apply_masked_expert_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
+
+        if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
+            model = apply_fully_sharded_data_parallelism(model, mesh_manager)
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
@@ -309,7 +265,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or distributed_config.dispatches_tokens:
+        if distributed_config.fsdp_size > 1 or (
+            distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
+        ):
             # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and
             # the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
