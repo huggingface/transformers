@@ -17,12 +17,14 @@ import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torch.nn.utils.rnn import pad_sequence
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..dac.modeling_dac import DacDecoderOutput
+from ..encodec.modeling_encodec import EncodecOutput
 from ..mimi.modeling_mimi import (
     MimiEncoderOutput,
     MimiEuclideanCodebook,
@@ -219,7 +221,11 @@ class Qwen3TTSTokenizerMultiCodebookEncoderOutput(MimiEncoderOutput):
     pass
 
 
-class Qwen3TTSTokenizerMultiCodebookOutput(DacDecoderOutput):
+class Qwen3TTSTokenizerMultiCodebookDecoderOutput(DacDecoderOutput):
+    pass
+
+
+class Qwen3TTSTokenizerMultiCodebookOutput(EncodecOutput):
     pass
 
 
@@ -426,14 +432,35 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
             Discrete code indices computed using `model.encode`.
         """
-        audio_lengths = (audio_codes[..., 0] > -1).sum(1) * self.decoder.total_upsample
-
-        audio_codes = torch.clamp(audio_codes, min=0)
         quantized_representation = self.quantizer.decode(audio_codes.transpose(1, 2))
         audio_values = self.decoder.chunked_decode(quantized_representation).squeeze(1)
-        audio_values = audio_values[..., : audio_lengths.max()]
 
-        return Qwen3TTSTokenizerMultiCodebookOutput(audio_values=audio_values)
+        return Qwen3TTSTokenizerMultiCodebookDecoderOutput(audio_values=audio_values)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+    ):
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Input audio waveform.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Padding mask used to pad `input_values`.
+        """
+        length = input_values.shape[-1]
+        encoder_outputs = self.encode(input_values, padding_mask=padding_mask, return_dict=True)
+        audio_codes = pad_sequence(encoder_outputs.audio_codes, batch_first=True, padding_value=-1)
+
+        decoder_outputs = self.decode(audio_codes.clamp(min=0), return_dict=True)
+        audio_values = decoder_outputs.audio_values[..., :length]
+
+        return Qwen3TTSTokenizerMultiCodebookOutput(
+            audio_values=audio_values,
+            audio_codes=audio_codes,
+        )
 
 
 __all__ = [

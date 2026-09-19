@@ -27,6 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import Parameter
+from torch.nn.utils.rnn import pad_sequence
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -257,12 +258,29 @@ class Qwen3TTSTokenizerMultiCodebookEncoderOutput(ModelOutput):
 
 @auto_docstring
 @dataclass
-class Qwen3TTSTokenizerMultiCodebookOutput(ModelOutput):
+class Qwen3TTSTokenizerMultiCodebookDecoderOutput(ModelOutput):
     r"""
     audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Qwen3TTSTokenizerMultiCodebook.
     """
 
+    audio_values: torch.FloatTensor | None = None
+
+
+# General docstring
+
+
+@auto_docstring
+@dataclass
+class Qwen3TTSTokenizerMultiCodebookOutput(ModelOutput):
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(nb_frames, batch_size, nb_quantizers, frame_len)`, *optional*):
+        Discrete code embeddings computed using `model.encode`.
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Qwen3TTSTokenizerMultiCodebook.
+    """
+
+    audio_codes: torch.LongTensor | None = None
     audio_values: torch.FloatTensor | None = None
 
 
@@ -1234,26 +1252,6 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
         return torch.cat(wavs, dim=-1)
 
 
-@auto_docstring
-@dataclass
-class Qwen3TTSTokenizerMultiCodebookDecoderOutput(ModelOutput):
-    r"""
-    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
-        Decoded audio values, obtained using the decoder part of Qwen3TTSTokenizerMultiCodebook.
-    decoder_past_key_values (`Cache`, *optional*):
-        Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
-        This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-        The model will output the same cache format that is fed as input.
-
-        If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-        have their past key value states given to this model).
-    """
-
-    audio_values: torch.FloatTensor | None = None
-    decoder_past_key_values: Cache | None = None
-
-
 class Qwen3TTSTokenizerMultiCodebookConvTranspose1d(nn.Module):
     """ConvTranspose1d with asymmetric or causal padding and normalization."""
 
@@ -2142,14 +2140,35 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
             Discrete code indices computed using `model.encode`.
         """
-        audio_lengths = (audio_codes[..., 0] > -1).sum(1) * self.decoder.total_upsample
-
-        audio_codes = torch.clamp(audio_codes, min=0)
         quantized_representation = self.quantizer.decode(audio_codes.transpose(1, 2))
         audio_values = self.decoder.chunked_decode(quantized_representation).squeeze(1)
-        audio_values = audio_values[..., : audio_lengths.max()]
 
-        return Qwen3TTSTokenizerMultiCodebookOutput(audio_values=audio_values)
+        return Qwen3TTSTokenizerMultiCodebookDecoderOutput(audio_values=audio_values)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+    ):
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Input audio waveform.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Padding mask used to pad `input_values`.
+        """
+        length = input_values.shape[-1]
+        encoder_outputs = self.encode(input_values, padding_mask=padding_mask, return_dict=True)
+        audio_codes = pad_sequence(encoder_outputs.audio_codes, batch_first=True, padding_value=-1)
+
+        decoder_outputs = self.decode(audio_codes.clamp(min=0), return_dict=True)
+        audio_values = decoder_outputs.audio_values[..., :length]
+
+        return Qwen3TTSTokenizerMultiCodebookOutput(
+            audio_values=audio_values,
+            audio_codes=audio_codes,
+        )
 
 
 __all__ = ["Qwen3TTSTokenizerMultiCodebookModel", "Qwen3TTSTokenizerMultiCodebookPreTrainedModel"]
