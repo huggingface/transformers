@@ -44,6 +44,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "minimax": "mixtral",
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
+    "Dots3NoteTextModel": "qwen2_moe",
     "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
@@ -1097,6 +1098,40 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "dots3_note_audio_encoder": [
+            WeightRenaming(r"dots_encoder\.speech_encoder\.", "speech_encoder."),
+            WeightRenaming(r"speech_encoder\.(conv2d[123]|conv_out)\.", r"speech_encoder.conv_stem.\1."),
+            WeightRenaming(r"(speech_encoder\.layers\.\d+\.self_attn)\.out_proj\.", r"\1.o_proj."),
+            WeightRenaming(r"\.self_attn_layer_norm\.", ".input_layernorm."),
+            WeightRenaming(r"\.final_layer_norm\.", ".post_attention_layernorm."),
+            WeightRenaming(r"(speech_encoder\.layers\.\d+)\.fc1\.", r"\1.mlp.gate_up_proj."),
+            WeightRenaming(r"(speech_encoder\.layers\.\d+)\.fc2\.", r"\1.mlp.down_proj."),
+            WeightRenaming(r"audio_adapter\.proj\.0\.", "audio_adapter.norm."),
+            WeightRenaming(r"audio_adapter\.proj\.1\.", "audio_adapter.fc1."),
+            WeightRenaming(r"audio_adapter\.proj\.3\.", "audio_adapter.fc2."),
+        ],
+        "dots3_note_vision_encoder": [
+            WeightRenaming(r"(blocks\.\d+)\.norm_1\.", r"\1.norm1."),
+            WeightRenaming(r"(blocks\.\d+)\.norm_2\.", r"\1.norm2."),
+            WeightRenaming(r"(blocks\.\d+\.mlp)\.fc1\.", r"\1.gate_proj."),
+            WeightRenaming(r"(blocks\.\d+\.mlp)\.fc2\.", r"\1.down_proj."),
+            WeightRenaming(r"(blocks\.\d+\.mlp)\.fc3\.", r"\1.up_proj."),
+            WeightRenaming(r"\.mlp\.gate_weight$", ".mlp.gate.weight"),
+            WeightRenaming(r"\.mlp\.router_bias$", ".mlp.gate.e_score_correction_bias"),
+            WeightConverter(
+                source_patterns=[".mlp.experts.*.fc1.weight", ".mlp.experts.*.fc3.weight"],
+                target_patterns=".mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=".mlp.experts.*.fc2.weight",
+                target_patterns=".mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "Dots3NoteModel": [
+            WeightRenaming(r"^(embed_tokens|layers|norm)\.", r"language_model.\1."),
         ],
         "qwen3_vl_moe": [
             WeightConverter(

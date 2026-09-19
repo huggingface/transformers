@@ -1047,8 +1047,8 @@ default_enabled = true
 # No `cutoff_date`: 10 findings over 9 models, in two shapes that need a case-by-case call with the
 # attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
 # Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
-# axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4"]
+# axk2, deepseek_v32, diffusion_gemma, dots3_note, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "dots3_note", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4"]
 
 [rules.TRF051.explanation]
 what_it_does = "Flags comparisons against a _attn_implementation attribute in modeling_*.py and modular_*.py."
