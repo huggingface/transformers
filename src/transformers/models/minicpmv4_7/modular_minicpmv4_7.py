@@ -156,34 +156,22 @@ class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
             cu_seqlens=window_cu_seqlens.to(device),
             max_seqlen=window_max_seqlens,
         )
-        hidden_states = hidden_states[:, torch.argsort(window_index), :]
-        hidden_states = residual + hidden_states
+        hidden_states = residual[:, window_index, :] + hidden_states
 
-        batch_size, _ = target_sizes.shape
         window_h, window_w = self.window_kernel_size
-        cu_seqlens = F.pad(
-            torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(device), (1, 0)
-        )
-        all_patches = []
-        for batch_idx in range(batch_size):
-            height = int(target_sizes[batch_idx, 0])
-            width = int(target_sizes[batch_idx, 1])
-            patch = hidden_states[0, cu_seqlens[batch_idx] : cu_seqlens[batch_idx + 1], :]
+        window_size = window_h * window_w
+        embed_dim = hidden_states.shape[-1]
+        
+        patch = hidden_states.reshape(-1, window_size, embed_dim)
+        flat = patch.flatten(1)
+        residual = patch.mean(dim=1)
 
-            embed_dim = patch.shape[-1]
-            merged_h, merged_w = height // window_h, width // window_w
-            patch_5d = patch.view(merged_h, window_h, merged_w, window_w, embed_dim).permute(0, 2, 1, 3, 4)
-            hidden_state = patch_5d.reshape(merged_h * merged_w, window_h * window_w * embed_dim)
-            patch_residual = patch_5d.reshape(merged_h * merged_w, window_h * window_w, embed_dim).mean(dim=1)
+        hidden_state = self.pre_norm(flat)
+        hidden_state = self.linear_1(hidden_state)
+        hidden_state = self.act(hidden_state)
+        hidden_state = self.linear_2(hidden_state)
 
-            hidden_state = self.pre_norm(hidden_state)
-            hidden_state = self.linear_1(hidden_state)
-            hidden_state = self.act(hidden_state)
-            hidden_state = self.linear_2(hidden_state)
-
-            all_patches.append(hidden_state + patch_residual)
-
-        return torch.concat(all_patches, dim=0).unsqueeze(0)
+        return (hidden_state + residual).unsqueeze(0)
 
 
 class MiniCPMV4_7Model(MiniCPMV4_6Model):
