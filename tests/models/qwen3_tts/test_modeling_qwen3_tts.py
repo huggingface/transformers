@@ -138,6 +138,21 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_talker_config_accepts_checkpoint_metadata(self):
+        config = Qwen3TTSConfig(
+            talker_config={
+                "attention_dropout": 0,
+                "spk_id": {},
+                "spk_is_dialect": {},
+                "codec_language_id": {},
+            }
+        )
+
+        self.assertEqual(config.talker_config.attention_dropout, 0)
+        self.assertEqual(config.talker_config.spk_id, {})
+        self.assertEqual(config.talker_config.spk_is_dialect, {})
+        self.assertEqual(config.talker_config.codec_language_id, {})
+
     def test_model_instantiation(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = Qwen3TTSForConditionalGeneration(config)
