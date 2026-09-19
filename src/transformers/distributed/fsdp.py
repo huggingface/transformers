@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
     from .configuration_utils import DistributedConfig
+    from .utils import MeshManager
 
 if is_torch_available():
     import torch
@@ -184,15 +185,15 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
         logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
 
 
-def apply_fully_sharded_data_parallelism(
-    model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
-) -> nn.Module:
+def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshManager) -> nn.Module:
     """
-    Apply FSDP2 (fully_shard) to a model.
+    Apply FSDP2 (fully_shard) to a model: dispatched experts on `efsdp` and the rest of the modules on `fsdp`.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
     """
+    distributed_config = model.config.distributed_config
+    fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
         raise ValueError(
@@ -205,6 +206,20 @@ def apply_fully_sharded_data_parallelism(
 
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
+
+    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
+    if distributed_config.ep_size > 1 and "ep_dispatch_experts" in model.ep_plan.values():
+        expert_mesh = mesh_manager.get_mesh("efsdp")
+        for module in model.modules():
+            if getattr(module, "_is_expert_parallel", False):
+                fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
+                # An expert group spans several data-parallel batches, so an expert's gradient sums over
+                # all of them. FSDP2 would divide by the efsdp group size; dividing by fsdp_size instead
+                # gives the same per-batch average the dense modules get on the fsdp mesh, even when efsdp has a single rank.
+                module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
+                if torch.distributed.get_backend(expert_mesh.get_group()) != "nccl":
+                    # Non-NCCL backends need to sum first, then apply the division otherwise it runtime error.
+                    module.set_force_sum_reduction_for_comms(True)
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)

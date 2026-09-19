@@ -25,6 +25,7 @@ from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
+    apply_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
     resolve_parallel_plans,
@@ -197,19 +198,29 @@ class DistributedMixin:
         # Resolve both plans before sharding anything: overrides are merged into `model.tp_plan` / `model.ep_plan`,
         # and the experts named by the EP plan are removed from the TP plan so they are sharded once.
         tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
+        distributed_config._validate_resolved_ep_plan(ep_plan)
 
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        tp_mesh = mesh_manager.get_mesh("tp")
         if tp_plan:
-            model = apply_tensor_parallelism(model, tp_mesh, tp_plan)
-        if ep_plan:
-            # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
-            model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
+            model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
 
-        if distributed_config.fsdp_size > 1:
-            model = apply_fully_sharded_data_parallelism(model, mesh_manager.get_mesh("fsdp"))
+        if ep_plan:
+            tp_mesh = mesh_manager.get_mesh("tp")
+            ep_mesh = mesh_manager.get_mesh("ep")
+
+            if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
+                # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
+                model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
+            elif "ep_dispatch_experts" in ep_plan.values():
+                # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
+                # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
+                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
+
+        if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
+            model = apply_fully_sharded_data_parallelism(model, mesh_manager)
+
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
@@ -270,9 +281,11 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1:
-            # Also covers the 2-D (fsdp, tp) mesh: every parameter is FSDP-managed, and the full
-            # state dict is only materialized on rank 0.
+        if distributed_config.fsdp_size > 1 or (
+            distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
+        ):
+            # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and the
+            # full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
                 raise ValueError(
                     "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
@@ -294,5 +307,5 @@ class DistributedMixin:
         """Barrier so non-writer ranks wait for rank 0 to finish gathered checkpoint writes."""
         if distributed_config is None:
             return
-        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
+        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1 or distributed_config.ep_size > 1:
             _distributed_barrier()
