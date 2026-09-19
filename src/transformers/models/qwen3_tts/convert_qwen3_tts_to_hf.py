@@ -30,11 +30,8 @@ python src/transformers/models/qwen3_tts/convert_qwen3_tts_to_hf.py \
     --push_to_hub your-username/Qwen3-TTS-12Hz-0.6B-Base-HF
 ```
 
-To convert the Qwen3-TTS-Tokenizer-12Hz (multi-codebook) model, use the dedicated script:
-    src/transformers/models/qwen3_tts_tokenizer_multi_codebook/convert_qwen3_tts_tokenizer_multi_codebook_to_hf.py
-
-The processor saved here records the converted multi-codebook tokenizer that decodes the generated codes, so
-that tokenizer has to exist first; pass a different one with `--audio_tokenizer_id`.
+The processor saved here uses the original Qwen3-TTS-Tokenizer-12Hz checkpoint to decode generated codes; pass a
+different tokenizer with `--audio_tokenizer_id`.
 """
 
 import argparse
@@ -335,8 +332,8 @@ def main():
     parser.add_argument(
         "--audio_tokenizer_id",
         type=str,
-        default="shahvandit/qwen3-tts-tokenizer-multi-codebook-hf",
-        help="Repository ID of the converted multi-codebook tokenizer the processor should decode with.",
+        default="Qwen/Qwen3-TTS-Tokenizer-12Hz",
+        help="Repository ID of the audio tokenizer the processor should decode with.",
     )
     args = parser.parse_args()
 

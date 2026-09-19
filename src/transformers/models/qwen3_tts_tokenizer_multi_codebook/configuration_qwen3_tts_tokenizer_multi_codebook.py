@@ -131,7 +131,11 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         Sampling rate, in hertz (Hz), of the decoder's output audio waveform.
     """
 
-    model_type = "qwen3_tts_tokenizer_multi_codebook"
+    model_type = "qwen3_tts_tokenizer_12hz"
+    attribute_map = {
+        "input_sample_rate": "input_sampling_rate",
+        "output_sample_rate": "output_sampling_rate",
+    }
     sub_configs = {
         "encoder_config": AutoConfig,
         "quantizer_config": Qwen3TTSTokenizerMultiCodebookQuantizerConfig,
@@ -145,6 +149,8 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     output_sampling_rate: int | None = 24000
 
     def __post_init__(self, **kwargs):
+        encoder_valid_num_quantizers = kwargs.pop("encoder_valid_num_quantizers", None)
+
         if isinstance(self.encoder_config, dict):
             self.encoder_config["model_type"] = self.encoder_config.get("model_type", "mimi")
             self.encoder_config["num_quantizers"] = self.encoder_config.get("num_quantizers", 16)
@@ -152,6 +158,12 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         elif self.encoder_config is None:
             logger.info("encoder_config is None. Initializing V2 encoder with default values.")
             self.encoder_config = CONFIG_MAPPING["mimi"](num_quantizers=16)
+
+        self.encoder_config.valid_num_quantizers = (
+            self.encoder_config.num_quantizers
+            if encoder_valid_num_quantizers is None
+            else encoder_valid_num_quantizers
+        )
 
         if isinstance(self.decoder_config, dict):
             self.decoder_config["model_type"] = self.decoder_config.get(

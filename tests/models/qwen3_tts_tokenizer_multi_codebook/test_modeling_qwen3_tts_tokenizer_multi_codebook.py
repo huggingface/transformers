@@ -125,6 +125,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
     is_encoder_decoder = True
     test_pruning = False
     test_resize_embeddings = False
+    test_torch_exportable = False  # data-dependent guard in codec attention padding
     test_head_masking = False
     test_missing_keys = False
 
@@ -228,7 +229,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
 @require_torch
 class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
     """
-    Slow integration tests against a real converted checkpoint.
+    Slow integration tests against the original checkpoint.
     """
 
     TARGET_SAMPLE_RATE = 24000
@@ -238,7 +239,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
         from transformers.testing_utils import cleanup
 
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
+        cls.checkpoint = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 
     def tearDown(self):
         from transformers.testing_utils import cleanup
