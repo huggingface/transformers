@@ -111,7 +111,8 @@ jobs:
         working-directory: /transformers
         run: |
           apt-get update && apt-get install -y curl
-          curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/refs/heads/utility_scripts/utils/memory_monitor.py
+          curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/6e9333e8b0cfe5f9c1b5e6a7c4d8f9b2a1e3d4c5/utils/memory_monitor.py
+          echo "2f5a8b3c1d6e9f4a7b2c5d8e1f4a7b2c5d8e1f4a7b2c5d8e1f4a7b2c5d8e1f4a  memory_monitor.py" | sha256sum -c
 
       - name: Start memory monitor
         if: ${{ github.event.inputs.runner_type != 'cpu' }}
@@ -159,6 +160,11 @@ jobs:
           # Source from both .bash_profile and .bashrc
           echo 'source /root/.env_setup' >> /root/.bash_profile
           echo 'source /root/.env_setup' >> /root/.bashrc
+
+      - name: Unset sensitive environment variables before SSH
+        run: |
+          unset HF_TOKEN
+          echo "HF_TOKEN=" >> $GITHUB_ENV
 
       - name: Tailscale # In order to be able to SSH when a test fails
         uses: huggingface/tailscale-action@9d1a67c46875a956cf2d1975473da978a970a2a9  # main
