@@ -581,7 +581,10 @@ class ExportTesterMixin:
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not Dynamo exportable/traceable")
 
-        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
+        # Model sources are UTF-8; pin the encoding so this read does not depend on the
+        # locale's preferred encoding (e.g. cp936 on Windows), which crashes on files
+        # containing non-ASCII characters.
+        with open(inspect.getfile(self.all_model_classes[0]), "r", encoding="utf-8") as f:
             source_code = f.read()
             # TODO: add use_experts_implementation support to remaining MoE models
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
