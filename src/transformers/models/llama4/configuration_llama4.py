@@ -161,7 +161,6 @@ class Llama4TextConfig(PreTrainedConfig):
     interleave_moe_layer_step: int = 1
     use_qk_norm: bool = True
     output_router_logits: bool = False
-    router_aux_loss_coef: float = 0.001
     router_jitter_noise: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
     no_rope_layers: list[int] | None = None

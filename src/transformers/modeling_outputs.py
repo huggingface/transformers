@@ -361,14 +361,16 @@ class MoeCausalLMOutputWithPast(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
 
-        aux_loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
-            aux_loss for the sparse modules.
+        aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` and the model trains its router with a load-balancing loss):
+            Load-balancing auxiliary loss for the sparse modules. Models that balance their experts with a router bias
+            instead (DeepSeek-V3 and the architectures derived from it) return `None` here while still returning
+            `router_logits`.
 
-        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.output_router_logits=True`):
+            Tuple of `torch.FloatTensor` (one for each sparse layer) of shape `(batch_size * sequence_length, num_experts)`.
 
-            Raw router logits (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
-            loss for Mixture of Experts models.
+            Raw router logits computed by the MoE routers. They can be used to compute a load-balancing loss or to
+            inspect how tokens are dispatched to experts.
 
         past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).

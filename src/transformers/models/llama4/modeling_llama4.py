@@ -31,10 +31,10 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
     ModelOutput,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
@@ -45,7 +45,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -488,7 +488,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
     _can_record_outputs = {
         "attentions": Llama4TextAttention,
         "hidden_states": Llama4TextDecoderLayer,
-        "router_logits": Llama4TextMoe,
+        "router_logits": OutputRecorder(Llama4Router, index=1),
     }
 
     def __init__(self, config: Llama4TextConfig):
@@ -519,7 +519,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -567,7 +567,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             )
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
@@ -601,9 +601,10 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -621,6 +622,10 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -628,6 +633,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -639,12 +645,13 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -668,6 +675,8 @@ class Llama4CausalLMOutputWithPast(ModelOutput):
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
     loss: torch.FloatTensor | None = None
@@ -676,6 +685,7 @@ class Llama4CausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class Llama4VisionMLP2(torch.nn.Module):
@@ -1335,6 +1345,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
+            router_logits=outputs.router_logits,
         )
 
 

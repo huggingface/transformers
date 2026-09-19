@@ -76,6 +76,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
     conv_L_cache: int = 3
     num_dense_layers: int = 2
     num_experts_per_tok: int = 4
+    output_router_logits: bool = False
     num_experts: int = 32
     use_expert_bias: bool = True
     routed_scaling_factor: float = 1.0

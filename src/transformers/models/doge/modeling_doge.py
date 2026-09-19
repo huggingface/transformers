@@ -771,6 +771,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -784,7 +785,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
-        if output_router_logits:
+        if output_router_logits and self.config.is_moe:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
