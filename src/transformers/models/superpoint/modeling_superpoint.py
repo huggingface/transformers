@@ -34,26 +34,11 @@ from ...utils import (
 logger = logging.get_logger(__name__)
 
 
-def remove_keypoints_from_borders(
-    keypoints: torch.Tensor, scores: torch.Tensor, border: int, height: int, width: int
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Removes keypoints (and their associated scores) that are too close to the border"""
-    mask_h = (keypoints[:, 0] >= border) & (keypoints[:, 0] < (height - border))
-    mask_w = (keypoints[:, 1] >= border) & (keypoints[:, 1] < (width - border))
-    mask = mask_h & mask_w
-    return keypoints[mask], scores[mask]
 
-
-def top_k_keypoints(keypoints: torch.Tensor, scores: torch.Tensor, k: int) -> tuple[torch.Tensor, torch.Tensor]:
-    """Keeps the k keypoints with highest score"""
-    if k >= len(keypoints):
-        return keypoints, scores
-    scores, indices = torch.topk(scores, k, dim=0)
-    return keypoints[indices], scores
 
 
 def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
-    """Applies non-maximum suppression on scores"""
+    """Applies non-maximum suppression on scores."""
     if nms_radius < 0:
         raise ValueError("Expected positive values for nms_radius")
 
@@ -216,14 +201,13 @@ class SuperPointInterestPointDecoder(nn.Module):
             config.decoder_hidden_size, config.keypoint_decoder_dim, kernel_size=1, stride=1, padding=0
         )
 
-    def forward(self, encoded: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, encoded: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         scores = self._get_pixel_scores(encoded)
-        keypoints, scores = self._extract_keypoints(scores)
-
-        return keypoints, scores
+        keypoints, scores, mask = self._extract_keypoints(scores)
+        return keypoints, scores, mask
 
     def _get_pixel_scores(self, encoded: torch.Tensor) -> torch.Tensor:
-        """Based on the encoder output, compute the scores for each pixel of the image"""
+        """Based on the encoder output, compute the scores for each pixel of the image."""
         scores = self.relu(self.conv_score_a(encoded))
         scores = self.conv_score_b(scores)
         scores = nn.functional.softmax(scores, 1)[:, :-1]
@@ -233,30 +217,74 @@ class SuperPointInterestPointDecoder(nn.Module):
         scores = simple_nms(scores, self.nms_radius)
         return scores
 
-    def _extract_keypoints(self, scores: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _extract_keypoints(
+        self, scores: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation.
-        The keypoints are in the form of relative (x, y) coordinates.
+        Extract keypoints from the score map using a statically-shaped pipeline
+        compatible with ``torch.export``.
+
+        Instead of ``torch.nonzero`` and boolean-index masking (both of which
+        produce data-dependent shapes), we apply threshold and border
+        constraints as additive ``-inf`` penalties and delegate selection to
+        ``torch.topk``, which always returns exactly ``k`` entries.
+
+        Args:
+            scores: ``(batch_size, height, width)`` pixel score map after NMS.
+
+        Returns:
+            keypoints: ``(batch_size, k, 2)`` float tensor of ``(x, y)``
+                keypoint coordinates in pixel space.
+            topk_scores: ``(batch_size, k)`` float tensor of keypoint scores.
+            mask: ``(batch_size, k)`` bool tensor; ``True`` where the entry is
+                a real keypoint rather than padding.
         """
-        _, height, width = scores.shape
+        batch_size, height, width = scores.shape
 
-        # Threshold keypoints by score value
-        keypoints = torch.nonzero(scores[0] > self.keypoint_threshold)
-        scores = scores[0][tuple(keypoints.t())]
+        border = self.border_removal_distance
 
-        # Discard keypoints near the image borders
-        keypoints, scores = remove_keypoints_from_borders(
-            keypoints, scores, self.border_removal_distance, height * 8, width * 8
+        # Build row / column index grids for the border check without any
+        # boolean indexing (keeps shapes static).
+        rows = torch.arange(height, device=scores.device).view(1, height, 1)
+        cols = torch.arange(width, device=scores.device).view(1, 1, width)
+
+        # Replicate the original border logic exactly:
+        # the legacy code called remove_keypoints_from_borders with
+        # ``height * 8`` and ``width * 8``, so we reproduce that arithmetic.
+        valid = (
+            (scores > self.keypoint_threshold)
+            & (rows >= border)
+            & (rows < height * 8 - border)
+            & (cols >= border)
+            & (cols < width * 8 - border)
         )
 
-        # Keep the k keypoints with highest score
-        if self.max_keypoints >= 0:
-            keypoints, scores = top_k_keypoints(keypoints, scores, self.max_keypoints)
+        # Replace invalid positions with -inf so they sink to the end of topk.
+        masked_scores = scores.masked_fill(~valid, float("-inf"))
 
-        # Convert (y, x) to (x, y)
-        keypoints = torch.flip(keypoints, [1]).to(scores.dtype)
+        # Determine k — must be a concrete integer for export.
+        # When max_keypoints is -1 ("no limit") we use every pixel; this path
+        # is valid in eager mode but cannot be exported because k is
+        # data-dependent via height * width.  Users who need export must set
+        # max_keypoints to a positive value.
+        k = self.max_keypoints if self.max_keypoints > 0 else height * width
 
-        return keypoints, scores
+        # torch.topk always returns exactly k entries → static output shape.
+        topk_scores, topk_indices = torch.topk(
+            masked_scores.reshape(batch_size, height * width), k=k, dim=1
+        )
+
+        # Convert flat indices to (x, y) pixel coordinates (pure arithmetic,
+        # no data-dependent shapes).
+        keypoints_y = topk_indices // width  # (B, k)
+        keypoints_x = topk_indices % width   # (B, k)
+        keypoints = torch.stack([keypoints_x, keypoints_y], dim=-1).to(scores.dtype)  # (B, k, 2)
+
+        # A position is a real keypoint if and only if its score is finite.
+        # Cast to int (0/1) to match the original mask dtype expected by callers.
+        mask = (topk_scores > float("-inf")).to(torch.int)  # (B, k) int
+
+        return keypoints, topk_scores, mask
 
 
 class SuperPointDescriptorDecoder(nn.Module):
@@ -289,31 +317,52 @@ class SuperPointDescriptorDecoder(nn.Module):
         )
 
     def forward(self, encoded: torch.Tensor, keypoints: torch.Tensor) -> torch.Tensor:
-        """Based on the encoder output and the keypoints, compute the descriptors for each keypoint"""
+        """
+        Compute descriptors for all keypoints in a batch.
+
+        Args:
+            encoded: ``(batch_size, channels, height, width)`` encoder feature map.
+            keypoints: ``(batch_size, num_keypoints, 2)`` keypoint coordinates in
+                ``(x, y)`` pixel space of the full-resolution score map.
+
+        Returns:
+            descriptors: ``(batch_size, num_keypoints, descriptor_dim)``
+        """
         descriptors = self.conv_descriptor_b(self.relu(self.conv_descriptor_a(encoded)))
         descriptors = nn.functional.normalize(descriptors, p=2, dim=1)
-
-        descriptors = self._sample_descriptors(keypoints[None], descriptors[0][None], 8)[0]
-
-        # [descriptor_dim, num_keypoints] -> [num_keypoints, descriptor_dim]
-        descriptors = torch.transpose(descriptors, 0, 1)
-
+        descriptors = self._sample_descriptors(keypoints, descriptors, 8)
+        # (batch_size, descriptor_dim, num_keypoints) -> (batch_size, num_keypoints, descriptor_dim)
+        descriptors = descriptors.transpose(1, 2)
         return descriptors
 
     @staticmethod
-    def _sample_descriptors(keypoints, descriptors, scale: int = 8) -> torch.Tensor:
-        """Interpolate descriptors at keypoint locations"""
+    def _sample_descriptors(
+        keypoints: torch.Tensor, descriptors: torch.Tensor, scale: int = 8
+    ) -> torch.Tensor:
+        """
+        Interpolate descriptors at keypoint locations.
+
+        Args:
+            keypoints: ``(batch_size, num_keypoints, 2)`` in ``(x, y)`` pixel
+                space of the full-resolution image.
+            descriptors: ``(batch_size, num_channels, height, width)`` feature
+                map at ``1/scale`` resolution.
+            scale: downsampling factor between the full image and the feature map.
+
+        Returns:
+            descriptors: ``(batch_size, num_channels, num_keypoints)``
+        """
         batch_size, num_channels, height, width = descriptors.shape
         keypoints = keypoints - scale / 2 + 0.5
         divisor = torch.tensor([[(width * scale - scale / 2 - 0.5), (height * scale - scale / 2 - 0.5)]])
         divisor = divisor.to(keypoints)
-        keypoints /= divisor
+        keypoints = keypoints / divisor
         keypoints = keypoints * 2 - 1  # normalize to (-1, 1)
         kwargs = {"align_corners": True}
-        # [batch_size, num_channels, num_keypoints, 2] -> [batch_size, num_channels, num_keypoints, 2]
+        # (batch_size, num_keypoints, 2) -> (batch_size, 1, num_keypoints, 2) for grid_sample
         keypoints = keypoints.view(batch_size, 1, -1, 2)
         descriptors = nn.functional.grid_sample(descriptors, keypoints, mode="bilinear", **kwargs)
-        # [batch_size, descriptor_decoder_dim, num_channels, num_keypoints] -> [batch_size, descriptor_decoder_dim, num_keypoints]
+        # (batch_size, num_channels, 1, num_keypoints) -> (batch_size, num_channels, num_keypoints)
         descriptors = descriptors.reshape(batch_size, num_channels, -1)
         descriptors = nn.functional.normalize(descriptors, p=2, dim=1)
         return descriptors
@@ -420,35 +469,15 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
 
-        list_keypoints_scores = [
-            self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in last_hidden_state
-        ]
+        # Process the entire batch in one pass through the keypoint decoder.
+        # Returns statically-shaped tensors: (B, k, 2), (B, k), (B, k) —
+        # no Python loops over batch elements, no data-dependent shapes.
+        keypoints, scores, mask = self.keypoint_decoder(last_hidden_state)
 
-        list_keypoints = [keypoints_scores[0] for keypoints_scores in list_keypoints_scores]
-        list_scores = [keypoints_scores[1] for keypoints_scores in list_keypoints_scores]
+        # Compute descriptors for the full batch at once: (B, k, descriptor_dim).
+        descriptors = self.descriptor_decoder(last_hidden_state, keypoints)
 
-        list_descriptors = [
-            self.descriptor_decoder(last_hidden_state[None, ...], keypoints[None, ...])
-            for last_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
-        ]
-
-        maximum_num_keypoints = max(keypoints.shape[0] for keypoints in list_keypoints)
-
-        keypoints = torch.zeros((batch_size, maximum_num_keypoints, 2), device=pixel_values.device)
-        scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device)
-        descriptors = torch.zeros(
-            (batch_size, maximum_num_keypoints, self.config.descriptor_decoder_dim),
-            device=pixel_values.device,
-        )
-        mask = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=torch.int)
-
-        for i, (_keypoints, _scores, _descriptors) in enumerate(zip(list_keypoints, list_scores, list_descriptors)):
-            keypoints[i, : _keypoints.shape[0]] = _keypoints
-            scores[i, : _scores.shape[0]] = _scores
-            descriptors[i, : _descriptors.shape[0]] = _descriptors
-            mask[i, : _scores.shape[0]] = 1
-
-        # Convert to relative coordinates
+        # Convert keypoint pixel coordinates to relative (x, y) in [0, 1].
         keypoints = keypoints / torch.tensor([width, height], device=keypoints.device)
 
         hidden_states = encoder_outputs[1] if output_hidden_states else None
