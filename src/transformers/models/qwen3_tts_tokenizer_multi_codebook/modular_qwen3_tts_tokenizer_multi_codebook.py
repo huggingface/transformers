@@ -150,7 +150,11 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         Sampling rate, in hertz (Hz), of the decoder's output audio waveform.
     """
 
-    model_type = "qwen3_tts_tokenizer_multi_codebook"
+    model_type = "qwen3_tts_tokenizer_12hz"
+    attribute_map = {
+        "input_sample_rate": "input_sampling_rate",
+        "output_sample_rate": "output_sampling_rate",
+    }
     sub_configs = {
         "encoder_config": AutoConfig,
         "quantizer_config": Qwen3TTSTokenizerMultiCodebookQuantizerConfig,
@@ -164,6 +168,8 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     output_sampling_rate: int | None = 24000
 
     def __post_init__(self, **kwargs):
+        encoder_valid_num_quantizers = kwargs.pop("encoder_valid_num_quantizers", None)
+
         if isinstance(self.encoder_config, dict):
             self.encoder_config["model_type"] = self.encoder_config.get("model_type", "mimi")
             self.encoder_config["num_quantizers"] = self.encoder_config.get("num_quantizers", 16)
@@ -171,6 +177,12 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         elif self.encoder_config is None:
             logger.info("encoder_config is None. Initializing V2 encoder with default values.")
             self.encoder_config = CONFIG_MAPPING["mimi"](num_quantizers=16)
+
+        self.encoder_config.valid_num_quantizers = (
+            self.encoder_config.num_quantizers
+            if encoder_valid_num_quantizers is None
+            else encoder_valid_num_quantizers
+        )
 
         if isinstance(self.decoder_config, dict):
             self.decoder_config["model_type"] = self.decoder_config.get(
@@ -240,10 +252,6 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMul
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
     _no_split_modules = ["Qwen3OmniMoeCode2WavTransformerLayer", "Qwen3TTSTokenizerMultiCodebookDecoderBlock"]
 
-
-#  Decoder block
-
-
 class Qwen3TTSTokenizerMultiCodebookDecoderBlock(Qwen3OmniMoeCode2WavDecoderBlock):
     pass
 
@@ -251,12 +259,22 @@ class Qwen3TTSTokenizerMultiCodebookDecoderBlock(Qwen3OmniMoeCode2WavDecoderBloc
 class Qwen3TTSTokenizerMultiCodebookSnakeBeta(Qwen2_5OmniSnakeBeta):
     pass
 
-
-#  VQ / RVQ classes
-
-
 class Qwen3TTSTokenizerMultiCodebookEuclideanCodebook(MimiEuclideanCodebook):
-    pass
+    def __init__(self, config: PreTrainedConfig, epsilon: float = 1e-5):
+        nn.Module.__init__(self)
+        embed = torch.zeros(config.codebook_size, config.codebook_dim)
+
+        self.codebook_size = config.codebook_size
+        # The top-level quantizer flag is absent from the original checkpoint and defaults to the correct loaded state.
+        # The Mimi encoder's flags remain persistent because they are serialized by the original checkpoint.
+        self.initialized = nn.Buffer(
+            torch.tensor([True], dtype=torch.float32),
+            persistent=not isinstance(config, Qwen3TTSTokenizerMultiCodebookQuantizerConfig),
+        )
+        self.cluster_usage = nn.Buffer(torch.ones(config.codebook_size))
+        self.embed_sum = nn.Buffer(embed)
+        self._embed = None
+        self.epsilon = epsilon
 
 
 class Qwen3TTSTokenizerMultiCodebookVectorQuantization(MimiVectorQuantization):
@@ -273,10 +291,6 @@ class Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(MimiSplitResidu
 
 class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3OmniMoeCode2WavTransformerModel):
     pass
-
-
-#  Decoder
-
 
 class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
@@ -348,10 +362,6 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
             start_index = end_index
         return torch.cat(wavs, dim=-1)
 
-
-#  Encoder (Mimi-based, encoder-only)
-
-
 @auto_docstring(
     custom_intro="""
     The Qwen3TTSTokenizerMultiCodebook encoder model, based on MimiModel but only using the encoder path.
@@ -411,7 +421,7 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
 
         encoded_frames = self.encoder.encode(
             input_values=input_values.unsqueeze(1),
-            num_quantizers=self.config.encoder_config.num_quantizers,
+            num_quantizers=self.config.encoder_config.valid_num_quantizers,
             return_dict=True,
         )
         audio_codes = encoded_frames.audio_codes
