@@ -994,8 +994,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
 
         # V5: Convert deprecated additional_special_tokens to extra_special_tokens before storing init_kwargs
-        if "additional_special_tokens" in kwargs and "extra_special_tokens" not in kwargs:
-            kwargs["extra_special_tokens"] = kwargs.pop("additional_special_tokens")
+        if "additional_special_tokens" in kwargs:
+            add_tokens = kwargs.pop("additional_special_tokens")
+            if add_tokens and not kwargs.get("extra_special_tokens"):
+                kwargs["extra_special_tokens"] = add_tokens
 
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
@@ -1166,9 +1168,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         special_tokens_dict = dict(special_tokens_dict)
         if "additional_special_tokens" in special_tokens_dict:
-            special_tokens_dict.setdefault(
-                "extra_special_tokens", special_tokens_dict.pop("additional_special_tokens")
-            )
+            add_tokens = special_tokens_dict.pop("additional_special_tokens")
+            if add_tokens and not special_tokens_dict.get("extra_special_tokens"):
+                special_tokens_dict["extra_special_tokens"] = add_tokens
 
         allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
         tokens_to_add = []
@@ -1810,7 +1812,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # V5: Convert deprecated additional_special_tokens to extra_special_tokens
         if "additional_special_tokens" in init_kwargs:
-            init_kwargs.setdefault("extra_special_tokens", init_kwargs.pop("additional_special_tokens"))
+            add_tokens = init_kwargs.pop("additional_special_tokens")
+            if add_tokens and not init_kwargs.get("extra_special_tokens"):
+                init_kwargs["extra_special_tokens"] = add_tokens
 
         # V5: Collect model-specific tokens (custom *_token keys not in standard attributes)
         default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)
