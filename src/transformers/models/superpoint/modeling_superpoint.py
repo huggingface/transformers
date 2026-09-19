@@ -34,9 +34,6 @@ from ...utils import (
 logger = logging.get_logger(__name__)
 
 
-
-
-
 def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     """Applies non-maximum suppression on scores."""
     if nms_radius < 0:
@@ -217,9 +214,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         scores = simple_nms(scores, self.nms_radius)
         return scores
 
-    def _extract_keypoints(
-        self, scores: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _extract_keypoints(self, scores: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Extract keypoints from the score map using a statically-shaped pipeline
         compatible with ``torch.export``.
@@ -270,14 +265,12 @@ class SuperPointInterestPointDecoder(nn.Module):
         k = self.max_keypoints if self.max_keypoints > 0 else height * width
 
         # torch.topk always returns exactly k entries → static output shape.
-        topk_scores, topk_indices = torch.topk(
-            masked_scores.reshape(batch_size, height * width), k=k, dim=1
-        )
+        topk_scores, topk_indices = torch.topk(masked_scores.reshape(batch_size, height * width), k=k, dim=1)
 
         # Convert flat indices to (x, y) pixel coordinates (pure arithmetic,
         # no data-dependent shapes).
         keypoints_y = topk_indices // width  # (B, k)
-        keypoints_x = topk_indices % width   # (B, k)
+        keypoints_x = topk_indices % width  # (B, k)
         keypoints = torch.stack([keypoints_x, keypoints_y], dim=-1).to(scores.dtype)  # (B, k, 2)
 
         # A position is a real keypoint if and only if its score is finite.
@@ -336,9 +329,7 @@ class SuperPointDescriptorDecoder(nn.Module):
         return descriptors
 
     @staticmethod
-    def _sample_descriptors(
-        keypoints: torch.Tensor, descriptors: torch.Tensor, scale: int = 8
-    ) -> torch.Tensor:
+    def _sample_descriptors(keypoints: torch.Tensor, descriptors: torch.Tensor, scale: int = 8) -> torch.Tensor:
         """
         Interpolate descriptors at keypoint locations.
 
