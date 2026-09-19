@@ -25,7 +25,8 @@ from ...utils.import_utils import requires
 if is_torch_available():
     import torch
 
-    from ..mimi.modeling_mimi import MimiModel
+    from ...modeling_utils import PreTrainedModel
+    from ..auto import AutoModel
     from .modeling_lfm2_audio import Lfm2AudioDetokenizer
 
 
@@ -238,7 +239,7 @@ class Lfm2AudioProcessor(ProcessorMixin):
     def decode_audio(
         self,
         audio_codes: torch.LongTensor,
-        audio_codec: MimiModel | None = None,
+        audio_codec: PreTrainedModel | None = None,
         device: str | torch.device | None = None,
     ) -> torch.FloatTensor:
         """Decode generated codebooks with the bundled LFM detokenizer or a native Mimi model."""
@@ -269,7 +270,7 @@ class Lfm2AudioProcessor(ProcessorMixin):
 
         if audio_codec is None:
             if self._audio_codec is None:
-                self._audio_codec = MimiModel.from_pretrained(self.audio_codec_model_id).eval()
+                self._audio_codec = AutoModel.from_pretrained(self.audio_codec_model_id).eval()
             audio_codec = self._audio_codec
         audio_codec = audio_codec.to(device)
         with torch.no_grad():

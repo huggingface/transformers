@@ -211,7 +211,7 @@ class Lfm2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio_codes = torch.zeros((8, 2), dtype=torch.long)
         with (
             patch.object(Lfm2AudioDetokenizer, "from_pretrained", side_effect=OSError("Cannot load detokenizer")),
-            patch("transformers.models.lfm2_audio.processing_lfm2_audio.MimiModel.from_pretrained") as load_mimi,
+            patch("transformers.models.lfm2_audio.processing_lfm2_audio.AutoModel.from_pretrained") as load_mimi,
         ):
             with self.assertRaisesRegex(OSError, "Cannot load detokenizer"):
                 self.processor.decode_audio(audio_codes)

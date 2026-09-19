@@ -28,6 +28,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationConfig, GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
@@ -42,8 +43,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ..auto import AutoModel
-from .configuration_lfm2_audio import Lfm2AudioConfig, Lfm2AudioDepthConfig, Lfm2Config
+from ..auto import CONFIG_MAPPING, AutoModel
+from .configuration_lfm2_audio import Lfm2AudioConfig, Lfm2AudioDepthConfig
 
 
 @auto_docstring(custom_intro="Base class for LFM2-Audio backbone outputs.")
@@ -188,11 +189,12 @@ class Lfm2AudioInverseShortTimeFourierTransform(nn.Module):
 class Lfm2AudioDetokenizer(PreTrainedModel):
     """Decode LFM2-Audio codebooks with the detokenizer bundled in LFM2.5-Audio checkpoints."""
 
-    config: Lfm2Config
+    config: PreTrainedConfig
+    config_class = CONFIG_MAPPING["lfm2"]
     main_input_name = "audio_codes"
     _supports_sdpa = True
 
-    def __init__(self, config: Lfm2Config):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         self.emb = Lfm2AudioCodebookEmbedding(hidden_size=config.hidden_size)
         self.lfm = AutoModel.from_config(config)

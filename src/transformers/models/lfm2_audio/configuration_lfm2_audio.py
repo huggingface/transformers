@@ -18,8 +18,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..lfm2.configuration_lfm2 import Lfm2Config
-from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="LiquidAI/LFM2.5-Audio-1.5B")
@@ -102,8 +101,8 @@ class Lfm2AudioConfig(PreTrainedConfig):
 
     model_type = "lfm2_audio"
     sub_configs = {
-        "encoder": ParakeetEncoderConfig,
-        "lfm": Lfm2Config,
+        "encoder": AutoConfig,
+        "lfm": AutoConfig,
         "depthformer": Lfm2AudioDepthConfig,
     }
 
@@ -132,9 +131,9 @@ class Lfm2AudioConfig(PreTrainedConfig):
         self.audio_loss_multiplier = 1.0 if self.audio_loss_multiplier is None else float(self.audio_loss_multiplier)
 
         if isinstance(self.encoder, dict):
-            self.encoder = ParakeetEncoderConfig(**self.encoder)
+            self.encoder = CONFIG_MAPPING["parakeet_encoder"](**self.encoder)
         elif self.encoder is None:
-            self.encoder = ParakeetEncoderConfig(
+            self.encoder = CONFIG_MAPPING["parakeet_encoder"](
                 hidden_size=512,
                 num_hidden_layers=17,
                 num_attention_heads=8,
@@ -152,9 +151,9 @@ class Lfm2AudioConfig(PreTrainedConfig):
             )
 
         if isinstance(self.lfm, dict):
-            self.lfm = Lfm2Config(**self.lfm)
+            self.lfm = CONFIG_MAPPING["lfm2"](**self.lfm)
         elif self.lfm is None:
-            self.lfm = Lfm2Config()
+            self.lfm = CONFIG_MAPPING["lfm2"]()
 
         if isinstance(self.depthformer, dict):
             self.depthformer = Lfm2AudioDepthConfig(**self.depthformer)
@@ -179,14 +178,14 @@ class Lfm2AudioConfig(PreTrainedConfig):
             self.depthformer._attn_implementation = "sdpa"
 
     @property
-    def text_config(self) -> Lfm2Config:
-        if not isinstance(self.lfm, Lfm2Config):
+    def text_config(self) -> PreTrainedConfig:
+        if not isinstance(self.lfm, CONFIG_MAPPING["lfm2"]):
             raise ValueError("`lfm` was not initialized as an Lfm2Config.")
         return self.lfm
 
     @property
-    def encoder_config(self) -> ParakeetEncoderConfig:
-        if not isinstance(self.encoder, ParakeetEncoderConfig):
+    def encoder_config(self) -> PreTrainedConfig:
+        if not isinstance(self.encoder, CONFIG_MAPPING["parakeet_encoder"]):
             raise ValueError("`encoder` was not initialized as a ParakeetEncoderConfig.")
         return self.encoder
 
