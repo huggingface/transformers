@@ -18,8 +18,6 @@ import warnings
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from .utils import _get_torch_distributed_rank
-
 
 @dataclass
 class DistributedConfig:
@@ -32,7 +30,8 @@ class DistributedConfig:
             `WORLD_SIZE // (other_parallel_size)`. If `None` and no `tp_plan` is set, defaults to 1.
         tp_plan (`dict[str, str]` or `"auto"`, *optional*):
             Tensor parallel sharding plan. Pass `"auto"`, or leave as `None` when `tp_size` is set, to use the
-            model's predefined `base_model_tp_plan`. Pass a dictionary to override the predefined plan.
+            model's predefined `base_model_tp_plan`. Pass a dictionary to override individual rules of that plan;
+            unspecified rules are kept.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
@@ -49,6 +48,10 @@ class DistributedConfig:
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP.
             Model execution currently requires `ep_size=tp_size` when EP is enabled.
+        ep_plan (`dict[str, str]`, *optional*):
+            Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
+            dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
+            `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules.
     """
 
     tp_size: int | None = None
@@ -60,6 +63,7 @@ class DistributedConfig:
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
     ep_size: int | None = None
+    ep_plan: dict[str, str] | None = None
 
     @property
     def efsdp_size(self) -> int:
@@ -94,13 +98,12 @@ class DistributedConfig:
 
         if self.enable_expert_parallel and self.ep_size is None:
             self.ep_size = self.tp_size
-            if _get_torch_distributed_rank() == 0:
-                warnings.warn(
-                    f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
-                    f"Use ep_size={self.ep_size} instead.",
-                    FutureWarning,
-                    stacklevel=4,
-                )
+            warnings.warn(
+                f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
+                f"Use ep_size={self.ep_size} instead.",
+                FutureWarning,
+                stacklevel=4,
+            )
 
         if self.ep_size is None:
             self.ep_size = 1
@@ -109,6 +112,9 @@ class DistributedConfig:
 
     def _validate_mesh_config(self):
         """Validate mesh sizes before the model's expert plan is available."""
+        if self.ep_plan is not None and not isinstance(self.ep_plan, dict):
+            raise ValueError("`ep_plan` must be a dictionary or None.")
+
         if self.ep_size > 1:
             if self.ep_size % self.tp_size:
                 raise ValueError("`ep_size` must be a multiple of `tp_size`.")
