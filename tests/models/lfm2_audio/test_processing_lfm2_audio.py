@@ -87,6 +87,17 @@ class Lfm2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.processor = self.get_processor()
 
+    def test_tokenizer_padding_defaults_and_overrides(self):
+        processor = self.processor_class(
+            self.processor.feature_extractor,
+            self.get_component("tokenizer", padding="max_length", max_length=12),
+        )
+        inputs = {"text": [f"{processor.audio_token} hello"], "audio": [np.zeros(1600, dtype=np.float32)]}
+        self.assertEqual(processor(**inputs).input_ids.shape, (1, 12))
+        self.assertEqual(processor(**inputs, text_kwargs={"max_length": 8}).input_ids.shape, (1, 8))
+        self.assertEqual(processor(**inputs, text_kwargs={"padding": False}).input_ids.shape, (1, 3))
+        self.assertEqual(processor(**inputs, padding=False).input_ids.shape, (1, 3))
+
     def test_return_tensor_types(self):
         import torch
 

@@ -141,9 +141,9 @@ class Lfm2AudioProcessor(ProcessorMixin):
         kwargs["common_kwargs"] = common_kwargs
 
         text_kwargs = dict(kwargs.pop("text_kwargs", {}))
-        if "add_special_tokens" not in kwargs:
+        if "add_special_tokens" not in kwargs and "add_special_tokens" not in self.tokenizer.init_kwargs:
             text_kwargs.setdefault("add_special_tokens", False)
-        if "padding" not in kwargs:
+        if "padding" not in kwargs and "padding" not in self.tokenizer.init_kwargs:
             text_kwargs.setdefault("padding", True)
         text_kwargs["return_mm_token_type_ids"] = True
         kwargs["text_kwargs"] = text_kwargs
