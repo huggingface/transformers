@@ -22,6 +22,7 @@ from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
+    is_torchdynamo_exporting,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_tracing,
@@ -255,8 +256,8 @@ def _ignore_causal_mask_sdpa(
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
-    # `ignore_causal_mask = True` if we are not tracing
-    if is_tracing(padding_mask):
+    # `ignore_causal_mask = True` if we are not exporting
+    if is_torchdynamo_exporting():
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
@@ -290,7 +291,7 @@ def _can_skip_bidirectional_mask_xpu(
     - Skip if no padding and no local attention constraint
     """
 
-    if is_tracing(padding_mask):
+    if is_torchdynamo_exporting():
         return False
 
     # Check local attention constraint (same as CUDA)
