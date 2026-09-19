@@ -120,8 +120,6 @@ class GPTSw3Tokenizer(SentencePieceBackend):
         self.keep_accents = keep_accents
 
         # Used for whitespace normalization in input texts
-        # Escapes are used on purpose: these code points are easy to lose to editors and
-        # automated rewrites that normalize unusual whitespace in source files.
         self.whitespaces = {
             "\u0020",  # space
             "\u2002",  # en space
