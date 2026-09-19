@@ -386,7 +386,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             if (
                 self.training
-                and past_key_values is None
+                and (past_key_values is None or past_key_values.get_seq_length() == 0)
                 and attention_mask is not None
                 and attention_mask.ndim == 2
                 and attention_mask.shape[-1] == inputs_embeds.shape[1]
