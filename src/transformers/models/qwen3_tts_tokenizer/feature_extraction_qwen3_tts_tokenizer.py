@@ -26,9 +26,9 @@ logger = logging.get_logger(__name__)
 
 
 @requires(backends=("torch",))
-class Qwen3TTSTokenizerMultiCodebookFeatureExtractor(SequenceFeatureExtractor):
+class Qwen3TTSTokenizerFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a Qwen3TTSTokenizerMultiCodebook feature extractor.
+    Constructs a Qwen3TTSTokenizer feature extractor.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
@@ -119,4 +119,4 @@ class Qwen3TTSTokenizerMultiCodebookFeatureExtractor(SequenceFeatureExtractor):
         return output_values
 
 
-__all__ = ["Qwen3TTSTokenizerMultiCodebookFeatureExtractor"]
+__all__ = ["Qwen3TTSTokenizerFeatureExtractor"]

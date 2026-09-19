@@ -49,7 +49,7 @@ from transformers import (
     Qwen3TTSFeatureExtractor,
     Qwen3TTSForConditionalGeneration,
     Qwen3TTSProcessor,
-    Qwen3TTSTokenizerMultiCodebookModel,
+    Qwen3TTSTokenizerModel,
 )
 
 
@@ -211,7 +211,7 @@ def convert_processor(checkpoint_path: Path, output_path: Path, audio_tokenizer_
     and `save_audio` have no tokenizer to call.
     """
     logger.info(f"Loading audio tokenizer from {audio_tokenizer_id}")
-    audio_tokenizer = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(audio_tokenizer_id)
+    audio_tokenizer = Qwen3TTSTokenizerModel.from_pretrained(audio_tokenizer_id)
 
     # The original checkpoint carries the padding settings the feature extractor should keep; the rest of its
     # fields fall back to the class defaults.

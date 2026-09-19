@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import Qwen3TTSTokenizerMultiCodebookFeatureExtractor
+from transformers import Qwen3TTSTokenizerFeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
@@ -30,7 +30,7 @@ if is_torch_available():
 
 
 @require_torch
-class Qwen3TTSTokenizerMultiCodebookFeatureExtractionTester:
+class Qwen3TTSTokenizerFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -78,11 +78,11 @@ class Qwen3TTSTokenizerMultiCodebookFeatureExtractionTester:
 
 
 @require_torch
-class Qwen3TTSTokenizerMultiCodebookFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = Qwen3TTSTokenizerMultiCodebookFeatureExtractor
+class Qwen3TTSTokenizerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = Qwen3TTSTokenizerFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = Qwen3TTSTokenizerMultiCodebookFeatureExtractionTester(self)
+        self.feat_extract_tester = Qwen3TTSTokenizerFeatureExtractionTester(self)
 
     def test_call(self):
         TOL = 1e-6
@@ -106,7 +106,7 @@ class Qwen3TTSTokenizerMultiCodebookFeatureExtractionTest(SequenceFeatureExtract
 
     def test_sampling_rate_validation(self):
         """Test that sampling rate validation works correctly."""
-        feature_extractor = Qwen3TTSTokenizerMultiCodebookFeatureExtractor(sampling_rate=24000)
+        feature_extractor = Qwen3TTSTokenizerFeatureExtractor(sampling_rate=24000)
         input_audio = np.random.randn(1000).astype(np.float32)
 
         result = feature_extractor([input_audio], sampling_rate=24000)
@@ -117,7 +117,7 @@ class Qwen3TTSTokenizerMultiCodebookFeatureExtractionTest(SequenceFeatureExtract
 
     def test_padding_mask_generation(self):
         """Test that padding masks are generated correctly."""
-        feature_extractor = Qwen3TTSTokenizerMultiCodebookFeatureExtractor()
+        feature_extractor = Qwen3TTSTokenizerFeatureExtractor()
         audio1 = np.random.randn(1000).astype(np.float32)
         audio2 = np.random.randn(1500).astype(np.float32)
 
