@@ -466,6 +466,8 @@ class Lfm2AudioDetokenizerTest(unittest.TestCase):
 class Lfm2AudioIntegrationTest(unittest.TestCase):
     """Expectations come from reproduce_integration_outputs.py and the unmodified Liquid Audio checkpoint.
 
+    Reproducer: https://gist.github.com/kadirnar/dae8c4bc540572e1f81c9616fde89f1a
+
     To test a local conversion without uploading it::
 
         LFM2_AUDIO_CHECKPOINT=/path/to/LFM2.5-Audio-1.5B-hf RUN_SLOW=1 pytest \
