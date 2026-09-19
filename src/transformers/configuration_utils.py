@@ -97,7 +97,16 @@ _LEGACY_LAYER_TYPE_REMAP = {
 
 
 def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
-    """Apply legacy → current layer-type name mapping."""
+    """Apply legacy → current layer-type name mapping.
+
+    Converts names in `_LEGACY_LAYER_TYPE_REMAP` to their current equivalents like `attention` → `full_attention`. Names not in that dict are returned unchanged.
+
+    Args:
+        layer_types (list[str]): Layer type names that may include legacy values.
+
+    Returns:
+        list[str]: Remapped names in the same order.
+    """
     return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
 
 
