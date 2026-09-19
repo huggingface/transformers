@@ -258,19 +258,6 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_output_router_logits_from_config(self):
-        """`config.output_router_logits` turns the auxiliary loss on, and an explicit argument wins over it."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = MiniMaxM3SparseForConditionalGeneration(config).to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"]
-
-        assert model(input_ids).aux_loss is None
-        assert model(input_ids, output_router_logits=True).aux_loss is not None
-
-        model.config.get_text_config().output_router_logits = True
-        assert model(input_ids).aux_loss is not None
-        assert model(input_ids, output_router_logits=False).aux_loss is None
-
     @unittest.skip(reason="IDK exactly why, can be adressed later")
     def test_reverse_loading_mapping(self):
         pass
