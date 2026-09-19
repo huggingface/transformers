@@ -771,12 +771,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     def _unpack_router_logits(self, router_outputs):
         # `router_outputs` holds the raw router logits recorded for each sparse layer, of shape
         # (batch_size, sequence_length, num_experts)
-        total_router_logits = []
-        total_expert_indexes = []
-        for router_logits in router_outputs:
-            total_router_logits.append(router_logits)
-            total_expert_indexes.append(torch.argmax(router_logits, dim=-1, keepdim=True))
-        return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+        router_logits = torch.cat(router_outputs, dim=1)
+        return router_logits, router_logits.argmax(dim=-1)
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
