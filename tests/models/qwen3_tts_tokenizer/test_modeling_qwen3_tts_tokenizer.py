@@ -20,8 +20,8 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 
 from transformers import (
-    Qwen3TTSTokenizerMultiCodebookConfig,
-    Qwen3TTSTokenizerMultiCodebookModel,
+    Qwen3TTSTokenizerConfig,
+    Qwen3TTSTokenizerModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -35,9 +35,9 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 
 
-class Qwen3TTSTokenizerMultiCodebookModelTester:
+class Qwen3TTSTokenizerModelTester:
     """
-    Builds a tiny Qwen3TTSTokenizerMultiCodebook config and synthetic inputs for unit testing.
+    Builds a tiny Qwen3TTSTokenizer config and synthetic inputs for unit testing.
     """
 
     def __init__(
@@ -92,7 +92,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTester:
         }
 
     def get_config(self):
-        return Qwen3TTSTokenizerMultiCodebookConfig(
+        return Qwen3TTSTokenizerConfig(
             encoder_config=self.encoder_config,
             decoder_config=self.decoder_config,
         )
@@ -109,7 +109,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTester:
         return self.prepare_config_and_inputs()
 
     def create_and_check_model_forward(self, config, inputs_dict):
-        model = Qwen3TTSTokenizerMultiCodebookModel(config=config).to(torch_device).eval()
+        model = Qwen3TTSTokenizerModel(config=config).to(torch_device).eval()
         result = model(**inputs_dict)
         self.parent.assertEqual(result.audio_values.shape, inputs_dict["input_values"].shape)
 
@@ -119,8 +119,8 @@ if is_torch_available():
 
 
 @require_torch
-class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Qwen3TTSTokenizerMultiCodebookModel,) if is_torch_available() else ()
+class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Qwen3TTSTokenizerModel,) if is_torch_available() else ()
     _is_composite = True
     is_encoder_decoder = True
     test_pruning = False
@@ -136,9 +136,9 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = Qwen3TTSTokenizerMultiCodebookModelTester(self)
+        self.model_tester = Qwen3TTSTokenizerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Qwen3TTSTokenizerMultiCodebookConfig, has_text_modality=False
+            self, config_class=Qwen3TTSTokenizerConfig, has_text_modality=False
         )
 
     def test_config(self):
@@ -151,7 +151,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
     def test_forward_pads_codes_and_truncates_audio(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         inputs_dict["padding_mask"][0, self.model_tester.audio_samples // 2 :] = False
-        model = Qwen3TTSTokenizerMultiCodebookModel(config).to(torch_device).eval()
+        model = Qwen3TTSTokenizerModel(config).to(torch_device).eval()
 
         with torch.no_grad():
             outputs = model(**inputs_dict)
@@ -195,7 +195,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(
-        reason="`attn_implementation` set on Qwen3TTSTokenizerMultiCodebookConfig is not propagated to the "
+        reason="`attn_implementation` set on Qwen3TTSTokenizerConfig is not propagated to the "
         "encoder sub-config, which reports None instead of the requested value"
     )
     def test_config_attn_implementation_setter(self):
@@ -205,7 +205,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
     def test_capture_outputs_decorator(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel does not have `inputs_embeds` logic")
+    @unittest.skip(reason="Qwen3TTSTokenizerModel does not have `inputs_embeds` logic")
     def test_inputs_embeds(self):
         pass
 
@@ -213,21 +213,21 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel does not have the usual `attention` logic")
+    @unittest.skip(reason="Qwen3TTSTokenizerModel does not have the usual `attention` logic")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel does not have the usual `attention` logic")
+    @unittest.skip(reason="Qwen3TTSTokenizerModel does not have the usual `attention` logic")
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel does not have the usual `hidden_states` logic")
+    @unittest.skip(reason="Qwen3TTSTokenizerModel does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
         pass
 
 
 @require_torch
-class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
+class Qwen3TTSTokenizerIntegrationTest(unittest.TestCase):
     """
     Slow integration tests against the original checkpoint.
     """
@@ -247,7 +247,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _load_fixture(self, name):
-        path = Path(__file__).parent.parent.parent / f"fixtures/qwen3_tts_tokenizer_multi_codebook/{name}"
+        path = Path(__file__).parent.parent.parent / f"fixtures/qwen3_tts_tokenizer/{name}"
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
 
@@ -290,7 +290,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
         set_seed(42)
         expected = self._load_fixture("expected_results_single.json")
 
-        model = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(
+        model = Qwen3TTSTokenizerModel.from_pretrained(
             self.checkpoint, dtype=torch.float32, device_map=torch_device
         ).eval()
 
@@ -330,7 +330,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
         set_seed(42)
         expected = self._load_fixture("expected_results_batch.json")
 
-        model = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(
+        model = Qwen3TTSTokenizerModel.from_pretrained(
             self.checkpoint, dtype=torch.float32, device_map=torch_device
         ).eval()
 

@@ -30,13 +30,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Qwen3TTSTokenizerMultiCodebookConfig,
-        Qwen3TTSTokenizerMultiCodebookModel,
+        Qwen3TTSTokenizerConfig,
+        Qwen3TTSTokenizerModel,
     )
 
 
 def _build_tiny_audio_tokenizer(num_quantizers=4):
-    """Build a tiny Qwen3TTSTokenizerMultiCodebookModel for decode/save_audio tests."""
+    """Build a tiny Qwen3TTSTokenizerModel for decode/save_audio tests."""
     encoder_config = {
         "hidden_size": 16,
         "num_hidden_layers": 1,
@@ -71,12 +71,12 @@ def _build_tiny_audio_tokenizer(num_quantizers=4):
         "upsample_rates": [2, 2],
         "upsampling_ratios": [2, 2],
     }
-    config = Qwen3TTSTokenizerMultiCodebookConfig(
+    config = Qwen3TTSTokenizerConfig(
         encoder_config=encoder_config,
         decoder_config=decoder_config,
         encoder_valid_num_quantizers=num_quantizers,
     )
-    return Qwen3TTSTokenizerMultiCodebookModel(config).eval()
+    return Qwen3TTSTokenizerModel(config).eval()
 
 
 @require_torch
