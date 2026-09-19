@@ -30,7 +30,7 @@ The model checkpoints can be found [here](https://huggingface.co/collections/Qwe
 <!-- TODO: contact Qwen to add checkpoints to their org! -->
 
 Qwen3-TTS generates codes for a separate audio codec, which decodes them to a waveform. That codec is its own
-model, documented in [Qwen3-TTS Multi-Codebook Tokenizer](./qwen3_tts_tokenizer_multi_codebook); the processor
+model, documented in [Qwen3-TTS Tokenizer](./qwen3_tts_tokenizer); the processor
 loads it alongside the text tokenizer and the feature extractor, so [`~Qwen3TTSProcessor.decode`] works
 without setting it up yourself.
 
