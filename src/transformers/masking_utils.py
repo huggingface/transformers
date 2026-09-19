@@ -291,7 +291,7 @@ def _can_skip_bidirectional_mask_xpu(
     - Skip if no padding and no local attention constraint
     """
 
-    if is_tracing(padding_mask):
+    if padding_mask is not None and is_tracing(padding_mask):
         return False
 
     # Check local attention constraint (same as CUDA)
