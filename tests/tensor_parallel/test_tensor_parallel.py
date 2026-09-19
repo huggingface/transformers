@@ -105,7 +105,7 @@ class TestParallelPlanResolution(TestCasePlus):
         ):
             with self.subTest(config=config):
                 tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-                self.assertEqual(tp_plan, TP_DENSE_PLAN | TP_EXPERT_PLAN)
+                self.assertEqual(tp_plan, TP_DENSE_PLAN)
                 self.assertEqual(ep_plan, EP_PLAN)
 
     def test_legacy_flag_is_an_alias_for_ep_size(self):
