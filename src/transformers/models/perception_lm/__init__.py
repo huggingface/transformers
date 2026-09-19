@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .image_processing_perception_lm import *
     from .modeling_perception_lm import *
     from .processing_perception_lm import *
+    from .video_processing_perception_lm import *
 else:
     import sys
 

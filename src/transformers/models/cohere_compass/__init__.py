@@ -19,8 +19,11 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_cohere_compass import *
+    from .image_processing_cohere_compass import *
+    from .image_processing_pil_cohere_compass import *
     from .modeling_cohere_compass import *
     from .processing_cohere_compass import *
+    from .video_processing_cohere_compass import *
 else:
     import sys
 

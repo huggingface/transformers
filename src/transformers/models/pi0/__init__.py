@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_pi0 import *
     from .image_processing_pi0 import *
     from .modeling_pi0 import *
+    from .processing_pi0 import *
 else:
     import sys
 
