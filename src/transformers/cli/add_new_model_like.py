@@ -595,7 +595,9 @@ def _add_new_model_like_internal(
 
     # 7. Add doc file
     doc_file = create_doc_file(new_model_paper_name, public_classes)
-    with open(repo_path / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w", encoding="utf-8") as f:
+    with open(
+        repo_path / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w", encoding="utf-8"
+    ) as f:
         f.write(doc_file)
     insert_model_in_doc_toc(repo_path, old_lowercase_name, new_lowercase_name, new_model_paper_name)
 
