@@ -384,9 +384,19 @@ class LlamaModel(LlamaPreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
+            if (
+                self.training
+                and (past_key_values is None or past_key_values.get_seq_length() == 0)
+                and attention_mask is not None
+                and attention_mask.ndim == 2
+                and attention_mask.shape[-1] == inputs_embeds.shape[1]
+            ):
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 0)
+            else:
+                past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+                position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+                position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,

@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch LLaMA model."""
 
 import unittest
+from unittest.mock import patch
 
 import pytest
 
@@ -59,6 +60,23 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
+
+    def test_left_padding_position_ids(self):
+        config = self.model_tester.get_config()
+        model = LlamaModel(config).to(torch_device)
+        model.train()
+
+        input_ids = torch.tensor([[0, 0, 5, 6], [0, 7, 8, 9]], device=torch_device)
+        attention_mask = torch.tensor([[0, 0, 1, 1], [0, 1, 1, 1]], device=torch_device)
+        position_ids = attention_mask.long().cumsum(-1) - 1
+        position_ids.masked_fill_(attention_mask == 0, 0)
+
+        # Keep caching enabled so the model creates an empty DynamicCache before
+        # deriving position IDs, matching the normal training call.
+        with patch.object(model.rotary_emb, "forward", wraps=model.rotary_emb.forward) as rotary_emb_forward:
+            model(input_ids=input_ids, attention_mask=attention_mask, use_cache=True)
+
+        torch.testing.assert_close(rotary_emb_forward.call_args.kwargs["position_ids"], position_ids)
 
 
 @require_torch_accelerator
