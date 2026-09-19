@@ -17,9 +17,6 @@ import unittest
 import numpy as np
 
 from transformers import Dots3NoteFeatureExtractor, is_torch_available
-from transformers.models.dots3_note.feature_extraction_dots3_note import (
-    compute_audio_token_length,
-)
 from transformers.testing_utils import require_torch
 
 
@@ -35,17 +32,19 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
             sampling_rate=32,
             n_fft=16,
             hop_length=4,
-            chunk_seconds=2,
-            conv_temporal_stride=8,
+            chunk_length=2,
         )
 
     def test_audio_token_length_boundaries(self):
-        cases = [(0, 0), (1, 1), (31, 1), (32, 1), (33, 2), (64, 2), (65, 3)]
+        extractor = self.get_feature_extractor()
+        with self.assertRaisesRegex(ValueError, "at least one sample"):
+            extractor(torch.zeros(0), sampling_rate=32)
+        cases = [(1, 1), (31, 1), (32, 1), (33, 2), (64, 2), (65, 3)]
         for num_samples, expected_tokens in cases:
             with self.subTest(num_samples=num_samples):
                 self.assertEqual(
-                    compute_audio_token_length(num_samples, chunk_samples=64, token_stride=32),
-                    expected_tokens,
+                    extractor(torch.zeros(num_samples), sampling_rate=32).num_audio_tokens.tolist(),
+                    [expected_tokens],
                 )
 
     def test_mono_chunking_and_lengths(self):
@@ -54,9 +53,11 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
 
         self.assertEqual(mono_output.input_features.shape, (2, 8, 16))
         self.assertEqual(mono_output.chunk_sample_lengths.tolist(), [64, 1])
-        self.assertEqual(mono_output.chunk_token_lengths.tolist(), [2, 1])
-        self.assertEqual(mono_output.audio_token_lengths.tolist(), [3])
-        self.assertEqual(mono_output.audio_chunk_counts.tolist(), [2])
+        self.assertEqual(mono_output.feature_attention_mask.sum(-1).tolist(), [2, 1])
+        self.assertEqual(mono_output.num_audio_tokens.tolist(), [3])
+        short_output = extractor(torch.zeros(1), sampling_rate=32)
+        self.assertEqual(short_output.chunk_sample_lengths.tolist(), [1])
+        self.assertEqual(short_output.feature_attention_mask.tolist(), [[True]])
 
     def test_rejects_multichannel_waveform(self):
         with self.assertRaisesRegex(ValueError, "must be mono"):
@@ -77,9 +78,8 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
         extractor = self.get_feature_extractor()
         output = extractor([torch.zeros(64), torch.zeros(65)], sampling_rate=32)
 
-        self.assertEqual(output.audio_token_lengths.tolist(), [2, 3])
-        self.assertEqual(output.audio_chunk_counts.tolist(), [1, 2])
-        self.assertEqual(output.chunk_audio_indices.tolist(), [0, 1, 1])
+        self.assertEqual(output.num_audio_tokens.tolist(), [2, 3])
+        self.assertEqual(output.feature_attention_mask.sum(-1).tolist(), [2, 2, 1])
 
     def test_save_and_reload(self):
         extractor = self.get_feature_extractor()
@@ -91,7 +91,7 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
         self.assertTrue(np.array_equal(extractor.mel_filters, reloaded.mel_filters))
 
     def test_rejects_wrong_sample_rate(self):
-        with self.assertRaisesRegex(ValueError, "resample"):
+        with self.assertRaisesRegex(ValueError, "sampling rate"):
             self.get_feature_extractor()(torch.zeros(64), sampling_rate=16)
 
 

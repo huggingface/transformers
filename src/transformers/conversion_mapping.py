@@ -44,6 +44,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "minimax": "mixtral",
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
+    "Dots3NoteTextModel": "qwen2_moe",
     "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
@@ -1063,40 +1064,24 @@ def _build_checkpoint_conversion_mapping():
         "dots3_note_vision_encoder": [
             WeightRenaming(r"(blocks\.\d+)\.norm_1\.", r"\1.norm1."),
             WeightRenaming(r"(blocks\.\d+)\.norm_2\.", r"\1.norm2."),
-            WeightRenaming(r"\.fc1\.", ".gate_proj."),
-            WeightRenaming(r"\.fc2\.", ".down_proj."),
-            WeightRenaming(r"\.fc3\.", ".up_proj."),
+            WeightRenaming(r"(blocks\.\d+\.mlp)\.fc1\.", r"\1.gate_proj."),
+            WeightRenaming(r"(blocks\.\d+\.mlp)\.fc2\.", r"\1.down_proj."),
+            WeightRenaming(r"(blocks\.\d+\.mlp)\.fc3\.", r"\1.up_proj."),
+            WeightRenaming(r"\.mlp\.gate_weight$", ".mlp.gate.weight"),
+            WeightRenaming(r"\.mlp\.router_bias$", ".mlp.gate.e_score_correction_bias"),
+            WeightConverter(
+                source_patterns=[".mlp.experts.*.fc1.weight", ".mlp.experts.*.fc3.weight"],
+                target_patterns=".mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=".mlp.experts.*.fc2.weight",
+                target_patterns=".mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
         ],
         "Dots3NoteModel": [
             WeightRenaming(r"^(embed_tokens|layers|norm)\.", r"language_model.\1."),
-        ],
-        "Dots3NoteTextModel": [
-            WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight$",
-                    "mlp.experts.*.up_proj.weight$",
-                ],
-                target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight$",
-                target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight_scale_inv$",
-                    "mlp.experts.*.up_proj.weight_scale_inv$",
-                ],
-                target_patterns="mlp.experts.gate_up_proj_scale_inv",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight_scale_inv$",
-                target_patterns="mlp.experts.down_proj_scale_inv",
-                operations=[MergeModulelist(dim=0)],
-            ),
         ],
         "qwen3_vl_moe": [
             WeightConverter(

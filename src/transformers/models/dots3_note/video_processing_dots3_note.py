@@ -18,29 +18,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import base64
-import binascii
-import hashlib
-import io
 import math
-import random
-from pathlib import Path
-from urllib.request import urlopen
 
 import numpy as np
-import torch
-import torchvision.transforms.v2.functional as tvF
 from PIL import Image
+from torchvision.transforms.v2 import functional as tvF
 
-from ...image_processing_utils import BatchFeature
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...tokenization_utils_base import LARGE_INTEGER
-from ...utils import TensorType, auto_docstring, logging, requires_backends
-from ...utils.generic import to_numpy
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_vision_available,
+    logging,
+)
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-from .feature_extraction_dots3_note import compute_audio_token_length
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -48,37 +47,29 @@ logger = logging.get_logger(__name__)
 
 class Dots3NoteVideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
-    min_pixels (`int`, *optional*, defaults to `56 * 56`):
-        The min pixels of the image to resize the image.
-    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-        The max pixels of the image to resize the image.
-    patch_size (`int`, *optional*, defaults to 14):
+    patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 1):
+    temporal_patch_size (`int`, *optional*, defaults to 2):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     min_frames (`int`, *optional*, defaults to 4):
-        The minimum number of frames that can be sampled.
+        The minimum number of frames to sample from video.
     max_frames (`int`, *optional*, defaults to 768):
-        The maximum number of frames that can be sampled.
-    use_token_compression (`bool`, *optional*, defaults to `True`):
-        Whether to compress videos when processing or not.
+        The maximum number of frames to sample from video.
     cap_pixels_per_frame (`bool`, *optional*):
-        Whether to bound a video's total pixel cost the way the reference implementation
-        (qwen-vl-utils) does: on top of the per-frame `size["longest_edge"]` cap, each frame is
-        limited to an even share of the total-video pixel budget (`max_video_tokens` tokens'
-        worth of pixels), floored at `1.05 * size["shortest_edge"]`, so densely sampled videos
-        cannot grow without bound. If unset, the current behavior (no total bound) is kept and a
-        warning is emitted: the default will change to `True` in v5.22, after which the argument
-        will be removed.
-    max_video_tokens (`int`, *optional*, defaults to 128000):
-        The model context length assumed when deriving the total-video pixel budget used by
-        `cap_pixels_per_frame` (the budget is 90% of this many tokens.
+        Whether to cap each frame's pixel cost the way the reference implementation (qwen-vl-utils) does:
+        per-frame pixels are limited to `min(max_video_tokens * factor**2, size["longest_edge"] / num_frames)`
+        and floored at `1.05 * size["shortest_edge"]`, so token cost scales with clip duration. Without the
+        cap, videos that sample few frames spend the whole `size["longest_edge"]` budget on those frames and
+        keep near-native per-frame resolution, so a short clip can cost almost as many tokens as a long
+        video. If unset, the current uncapped behavior is kept and a warning is emitted: the default will
+        change to `True` in v5.22, after which the argument will be removed.
+    max_video_tokens (`int`, *optional*, defaults to 768):
+        The per-frame token ceiling applied by `cap_pixels_per_frame`, in vision tokens per frame
+        (qwen-vl-utils' `VIDEO_MAX_TOKEN_NUM`).
     """
 
-    min_pixels: int
-    max_pixels: int
     patch_size: int
     temporal_patch_size: int
     merge_size: int
@@ -89,448 +80,63 @@ class Dots3NoteVideoProcessorInitKwargs(VideosKwargs, total=False):
 
 
 def smart_resize(
-    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
+    num_frames: int,
+    height: int,
+    width: int,
+    temporal_factor: int = 2,
+    factor: int = 28,
+    min_pixels: int = 112 * 112,
+    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
 ):
-    """Rescales the image so that the following conditions are met:
+    if num_frames < temporal_factor:
+        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
+    if height < factor or width < factor:
+        scale = max(factor / height, factor / width)
+        height = int(height * scale)
+        width = int(width * scale)
 
-    1. Both dimensions (height and width) are divisible by 'factor'.
-
-    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
-
-    3. The aspect ratio of the image is maintained as closely as possible.
-
-    """
     if max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
-    if h_bar * w_bar > max_pixels:
-        beta = math.sqrt((height * width) / max_pixels)
+    t_bar = round(num_frames / temporal_factor) * temporal_factor
+
+    if t_bar * h_bar * w_bar > max_pixels:
+        beta = math.sqrt((num_frames * height * width) / max_pixels)
         h_bar = max(factor, math.floor(height / beta / factor) * factor)
         w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
+    elif t_bar * h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (num_frames * height * width))
         h_bar = math.ceil(height * beta / factor) * factor
         w_bar = math.ceil(width * beta / factor) * factor
+
     return h_bar, w_bar
 
 
-_ALIGN = 28
-_MIN_FRAMES = 4
-_PF_FLOOR = 128
-_PF_CEIL = 1024
-_FPS_CAP = 1.0
-_FPS_MIN = 0.2
-_FRAME_OVERHEAD = 15
-_BUDGET_OVERHEAD = 2240
-_INTERLEAVE_MIN_SECONDS = 1.0
-_AUDIO_SAMPLE_RATE = 16_000
-_AUDIO_SAMPLES_PER_TOKEN = 1_280
-_AUDIO_CHUNK_SECONDS = 30
-_DEFAULT_SEQUENCE_LENGTH = 524_288
+# Adapted from transformers.models.dots3_note.image_processing_dots3_note.convert_to_rgb
+def convert_to_rgb(image: ImageInput) -> ImageInput:
+    """
+    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+    as is.
+    """
+    if not is_vision_available() or not isinstance(image, Image.Image):
+        return image
 
+    if image.mode == "RGB":
+        return image
 
-def _resolve_video_budget(
-    tokenizer, sequence_length: int | None, output_reserve: int | None, max_new_tokens: int
-) -> tuple[int, int]:
-    tokenizer_max_length = getattr(tokenizer, "model_max_length", None)
-    if tokenizer_max_length is None or tokenizer_max_length > LARGE_INTEGER:
-        tokenizer_max_length = _DEFAULT_SEQUENCE_LENGTH
-    if sequence_length is None:
-        sequence_length = tokenizer_max_length
-    elif sequence_length > tokenizer_max_length:
-        raise ValueError(
-            f"sequence_length must not exceed tokenizer.model_max_length ({tokenizer_max_length}), "
-            f"got {sequence_length}"
-        )
-    if sequence_length <= 0:
-        raise ValueError(f"sequence_length must be positive, got {sequence_length}")
-    if output_reserve is not None and output_reserve < 0:
-        raise ValueError(f"output_reserve must be non-negative, got {output_reserve}")
-    if max_new_tokens < 0:
-        raise ValueError(f"max_new_tokens must be non-negative, got {max_new_tokens}")
-    effective_reserve = max(sequence_length // 4 if output_reserve is None else output_reserve, max_new_tokens)
-    if effective_reserve >= sequence_length:
-        raise ValueError("output_reserve/max_new_tokens must leave room for video input")
-    return sequence_length, effective_reserve
-
-
-def _compute_target_size(
-    orig_height: int, orig_width: int, min_pixels: int, max_pixels: int, factor: int = 28
-) -> tuple[int, int]:
-    height, width = smart_resize(orig_height, orig_width, factor=factor, min_pixels=min_pixels, max_pixels=max_pixels)
-    if height * width > max_pixels:
-        height, width = smart_resize(height, width, factor=factor, min_pixels=0, max_pixels=max_pixels)
-    return height, width
-
-
-def _real_patches_at(orig_height: int, orig_width: int, patch_cap: int) -> int:
-    height, width = _compute_target_size(
-        orig_height,
-        orig_width,
-        _PF_FLOOR * _ALIGN * _ALIGN,
-        max(_PF_FLOOR, patch_cap) * _ALIGN * _ALIGN,
-    )
-    return (height // _ALIGN) * (width // _ALIGN)
-
-
-def _solve_degrade(
-    visual_budget: int,
-    duration: float,
-    orig_height: int,
-    orig_width: int,
-    orig_fps: float,
-    sequence_length: int,
-) -> tuple[int, int]:
-    aligned_height = max(_ALIGN, round(orig_height / _ALIGN) * _ALIGN)
-    aligned_width = max(_ALIGN, round(orig_width / _ALIGN) * _ALIGN)
-    original_patch_cap = (aligned_height // _ALIGN) * (aligned_width // _ALIGN)
-    fps_cap = min(_FPS_CAP, max(orig_fps, 1e-6))
-    patch_cap = min(_PF_CEIL, max(original_patch_cap, _PF_FLOOR))
-    required = max(1, (sequence_length - _BUDGET_OVERHEAD) // (_PF_FLOOR + _FRAME_OVERHEAD))
-    frame_cap = max(1024, 1 << (required - 1).bit_length())
-
-    def usage(scale: float) -> tuple[int, int, int]:
-        fps = _FPS_MIN + scale * (fps_cap - _FPS_MIN)
-        candidate_patch_cap = _PF_FLOOR + scale * (patch_cap - _PF_FLOOR)
-        num_frames = max(_MIN_FRAMES, min(int(round(duration * fps)), frame_cap))
-        patches = _real_patches_at(orig_height, orig_width, int(round(candidate_patch_cap)))
-        return num_frames * (patches + _FRAME_OVERHEAD), int(round(candidate_patch_cap)), num_frames
-
-    cost, candidate_patch_cap, num_frames = usage(1.0)
-    if cost <= visual_budget:
-        return num_frames, candidate_patch_cap
-
-    floor_cost = _real_patches_at(orig_height, orig_width, _PF_FLOOR) + _FRAME_OVERHEAD
-    if usage(0.0)[0] > visual_budget:
-        return max(_MIN_FRAMES, min(visual_budget // floor_cost, frame_cap)), _PF_FLOOR
-
-    low, high = 0.0, 1.0
-    for _ in range(50):
-        middle = (low + high) / 2
-        if usage(middle)[0] <= visual_budget:
-            low = middle
-        else:
-            high = middle
-    _, candidate_patch_cap, num_frames = usage(low)
-    return num_frames, candidate_patch_cap
-
-
-def _audio_tokens(duration: float, sample_rate: int) -> int:
-    if duration <= 0:
-        return 0
-    return (
-        compute_audio_token_length(
-            int(duration * sample_rate),
-            chunk_samples=_AUDIO_CHUNK_SECONDS * sample_rate,
-            token_stride=_AUDIO_SAMPLES_PER_TOKEN,
-        )
-        + 2
-    )
-
-
-def _decode_audio(video_bytes: bytes, sample_rate: int) -> tuple[np.ndarray | None, float]:
-    requires_backends(_decode_audio, ["torchcodec"])
-    from torchcodec.decoders import AudioDecoder
-
-    try:
-        samples = AudioDecoder(video_bytes, sample_rate=sample_rate, num_channels=1).get_all_samples()
-    except Exception as error:
-        logger.warning("The video audio track could not be decoded and will be omitted: %s", error)
-        return None, 0.0
-    waveform = samples.data
-    if waveform is None or waveform.numel() == 0:
-        logger.warning("The video has no decodable audio samples and will be processed without audio")
-        return None, 0.0
-    if waveform.ndim == 2:
-        waveform = waveform.mean(dim=0) if waveform.shape[0] > 1 else waveform[0]
-    pcm = (np.clip(waveform.cpu().numpy(), -1.0, 1.0) * 32767.0).astype(np.int16)
-    return pcm, float(pcm.shape[0]) / sample_rate
-
-
-def _open_video(video_bytes: bytes):
-    requires_backends(_open_video, ["torchcodec"])
-    from torchcodec.decoders import VideoDecoder
-
-    try:
-        return VideoDecoder(video_bytes, dimension_order="NHWC", num_ffmpeg_threads=1, seek_mode="approximate")
-    except TypeError:
-        return VideoDecoder(video_bytes, dimension_order="NHWC", num_ffmpeg_threads=1)
-
-
-def _jpeg_roundtrip(image: Image.Image, quality: int) -> Image.Image:
-    buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=quality)
-    buffer.seek(0)
-    with Image.open(buffer) as decoded:
-        return decoded.convert("RGB").copy()
-
-
-def _decode_frames(
-    decoder,
-    visual_budget: int,
-    sequence_length: int,
-    jpeg_quality: int,
-) -> tuple[list[tuple[float, Image.Image]], float]:
-    metadata = decoder.metadata
-    duration = float(metadata.duration_seconds or 0)
-    orig_height = int(metadata.height)
-    orig_width = int(metadata.width)
-    total_frames = int(getattr(metadata, "num_frames", 0) or 0)
-    orig_fps = float(getattr(metadata, "average_fps", 0) or 0) or 25.0
-    if duration <= 0 or orig_height <= 0 or orig_width <= 0:
-        raise ValueError(f"Invalid video metadata: duration={duration}, height={orig_height}, width={orig_width}")
-    if total_frames <= 0:
-        total_frames = max(1, int(duration * orig_fps))
-
-    num_frames, patch_cap = _solve_degrade(visual_budget, duration, orig_height, orig_width, orig_fps, sequence_length)
-    aligned_height = max(_ALIGN, round(orig_height / _ALIGN) * _ALIGN)
-    aligned_width = max(_ALIGN, round(orig_width / _ALIGN) * _ALIGN)
-    original_patch_cap = (aligned_height // _ALIGN) * (aligned_width // _ALIGN)
-    target_height, target_width = _compute_target_size(
-        orig_height,
-        orig_width,
-        _PF_FLOOR * _ALIGN * _ALIGN,
-        min(patch_cap, original_patch_cap) * _ALIGN * _ALIGN,
-    )
-    num_frames = max(_MIN_FRAMES, min(num_frames, total_frames))
-    step = (total_frames - 1) / (num_frames - 1) if num_frames > 1 else 0
-    indices = sorted({max(0, min(int(round(index * step)), total_frames - 1)) for index in range(num_frames)})
-
-    try:
-        decoded = decoder.get_frames_at(indices=indices).data
-    except (IndexError, RuntimeError):
-        safe_indices = [index for index in indices if index < total_frames]
-        while safe_indices and safe_indices[-1] > 0:
-            try:
-                decoded = decoder.get_frames_at(indices=safe_indices).data
-                break
-            except (IndexError, RuntimeError):
-                safe_indices = safe_indices[:-1]
-        else:
-            raise
-
-    actual_fps = round(len(decoded) / max(duration, 1e-6), 4)
-    frames = []
-    for frame_number, frame in enumerate(decoded):
-        image = Image.fromarray(np.asarray(to_numpy(frame)))
-        if image.size != (target_width, target_height):
-            image = image.resize((target_width, target_height), Image.Resampling.BICUBIC)
-        # SGLang's train flattener recomputes timestamps from the sampled-frame index
-        # and the rounded effective FPS instead of preserving source-frame timestamps.
-        timestamp = round(frame_number / actual_fps, 3)
-        frames.append((timestamp, _jpeg_roundtrip(image, jpeg_quality)))
-    return frames, duration
-
-
-def _prepare_decoded_frames(
-    video,
-    visual_budget: int,
-    sequence_length: int,
-    jpeg_quality: int,
-) -> tuple[list[tuple[float, Image.Image]], float]:
-    metadata = None
-    if isinstance(video, tuple):
-        video, metadata = video
-    frames = (
-        np.stack([np.asarray(to_numpy(frame)) for frame in video])
-        if isinstance(video, (list, tuple))
-        else np.asarray(to_numpy(video))
-    )
-    if frames.ndim == 4 and frames.shape[1] in (3, 4) and frames.shape[-1] not in (3, 4):
-        frames = frames.transpose(0, 2, 3, 1)
-    if frames.ndim != 4 or frames.shape[-1] not in (3, 4):
-        raise TypeError("Decoded Dots 3 Note Preview video must have shape (frames, height, width, channels)")
-    if not np.issubdtype(frames.dtype, np.integer):
-        frames = np.clip(frames * 255.0 if frames.max(initial=0) <= 1.0 else frames, 0, 255).astype(np.uint8)
-    fps = float((metadata or {}).get("fps", 1.0)) if metadata else 1.0
-    fps = max(fps, 1e-6)
-    duration = len(frames) / fps
-    orig_height, orig_width = frames.shape[1:3]
-    num_frames, patch_cap = _solve_degrade(visual_budget, duration, orig_height, orig_width, fps, sequence_length)
-    num_frames = min(max(1, num_frames), len(frames))
-    indices = np.linspace(0, len(frames) - 1, num_frames).round().astype(int)
-    target_height, target_width = _compute_target_size(
-        orig_height, orig_width, _PF_FLOOR * _ALIGN * _ALIGN, patch_cap * _ALIGN * _ALIGN
-    )
-    selected_indices = sorted(set(indices.tolist()))
-    actual_fps = round(len(selected_indices) / max(duration, 1e-6), 4)
-    output = []
-    for frame_number, index in enumerate(selected_indices):
-        image = Image.fromarray(frames[index]).convert("RGB")
-        if image.size != (target_width, target_height):
-            image = image.resize((target_width, target_height), Image.Resampling.BICUBIC)
-        output.append((round(frame_number / actual_fps, 3), _jpeg_roundtrip(image, jpeg_quality)))
-    return output, duration
-
-
-def _format_timestamp(seconds: float) -> str:
-    centiseconds = int(round(max(seconds, 0.0) * 100))
-    hours = centiseconds // 360_000
-    minutes = (centiseconds // 6_000) % 60
-    secs = (centiseconds // 100) % 60
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{centiseconds % 100:02d}"
-
-
-def _group_bounds(num_frames: int, duration: float, mode: str, rng: random.Random) -> list[int]:
-    if num_frames <= 1 or duration <= 0:
-        return [0, num_frames]
-    max_groups = min(num_frames, max(1, int(duration // _INTERLEAVE_MIN_SECONDS)))
-    if mode == "whole" or max_groups <= 1:
-        groups = 1
-    elif mode == "eval30":
-        groups = round(math.sqrt(max_groups))
-    elif mode == "eval_ek":
-        groups = round((max_groups - 1) / math.log(max_groups))
-    elif mode == "logk":
-        groups = round(math.exp(rng.uniform(0.0, math.log(max_groups))))
-    else:
-        raise ValueError(f"Unsupported video k_mode: {mode}")
-    groups = max(1, min(max_groups, groups))
-    if groups == 1:
-        return [0, num_frames]
-    if mode == "logk":
-        cuts = sorted(rng.sample(range(1, num_frames), groups - 1))
-    else:
-        cuts = sorted(
-            {
-                round(index * num_frames / groups)
-                for index in range(1, groups)
-                if 0 < round(index * num_frames / groups) < num_frames
-            }
-        )
-    return [0, *cuts, num_frames]
-
-
-def _read_video_bytes(video) -> bytes | None:
-    if isinstance(video, (bytes, bytearray)):
-        return bytes(video)
-    if isinstance(video, Path):
-        return video.read_bytes()
-    if not isinstance(video, str):
-        return None
-    if video.startswith(("http://", "https://")):
-        with urlopen(video, timeout=30) as response:
-            return response.read()
-    if video.startswith("data:"):
-        return base64.b64decode(video.split(",", 1)[1])
-    path = Path(video)
-    if path.is_file():
-        return path.read_bytes()
-    try:
-        return base64.b64decode(video, validate=True)
-    except (ValueError, binascii.Error) as error:
-        raise ValueError("video string must be a path, URL, data URI, or base64 payload") from error
-
-
-def preprocess_dots3_note_video(
-    video,
-    *,
-    tokenizer,
-    question: str = "",
-    sequence_length: int | None = None,
-    output_reserve: int | None = None,
-    audio_cap: float = 1.0,
-    audio_sample_rate: int = _AUDIO_SAMPLE_RATE,
-    k_mode: str = "eval_ek",
-    max_new_tokens: int = 0,
-    jpeg_quality: int = 85,
-) -> list[dict]:
-    """Expand one video into SGLang-compatible timestamped image/audio parts."""
-    sequence_length, effective_reserve = _resolve_video_budget(
-        tokenizer, sequence_length, output_reserve, max_new_tokens
-    )
-    if audio_cap < 0:
-        raise ValueError(f"audio_cap must be non-negative, got {audio_cap}")
-    if audio_sample_rate <= 0:
-        raise ValueError(f"audio_sample_rate must be positive, got {audio_sample_rate}")
-    if k_mode not in {"logk", "eval30", "eval_ek", "whole"}:
-        raise ValueError(f"Unsupported video k_mode: {k_mode}")
-
-    input_length = sequence_length - effective_reserve
-    minimum_input_length = _BUDGET_OVERHEAD + _MIN_FRAMES * (_PF_FLOOR + _FRAME_OVERHEAD)
-    if input_length < minimum_input_length:
-        raise ValueError(
-            f"output_reserve/max_new_tokens must leave at least {minimum_input_length} tokens for video input"
-        )
-    video_bytes = _read_video_bytes(video)
-    decoder = _open_video(video_bytes) if video_bytes is not None else None
-    video_duration_hint = float(decoder.metadata.duration_seconds or 0) if decoder is not None else 0.0
-    pcm = None
-    audio_duration = 0.0
-    if video_bytes is not None and audio_cap > 0:
-        pcm, audio_duration = _decode_audio(video_bytes, audio_sample_rate)
-
-    audio_token_count = _audio_tokens(audio_duration, audio_sample_rate) if pcm is not None else 0
-    precheck_frame_bound = max(1, int(audio_duration * _FPS_CAP))
-    precheck_groups = min(precheck_frame_bound, max(1, int(audio_duration // _INTERLEAVE_MIN_SECONDS)))
-    precheck_audio_tokens = audio_token_count + 3 * precheck_groups if pcm is not None else 0
-    minimum_visual_tokens = _MIN_FRAMES * (_PF_FLOOR + _FRAME_OVERHEAD)
-    if audio_token_count > audio_cap * input_length:
-        logger.warning("The video audio track exceeds audio_cap and will be omitted")
-        pcm = None
-        audio_duration = 0.0
-    elif precheck_audio_tokens + minimum_visual_tokens + _BUDGET_OVERHEAD > input_length:
-        logger.warning("The video audio track does not fit alongside the minimum visual input and will be omitted")
-        pcm = None
-        audio_duration = 0.0
-
-    frame_upper_bound = max(1, int(video_duration_hint * _FPS_CAP))
-    max_groups = min(frame_upper_bound, max(1, int(audio_duration // _INTERLEAVE_MIN_SECONDS)))
-    reserved_audio_tokens = audio_token_count + 3 * max_groups if pcm is not None else 0
-
-    overhead = (
-        len(tokenizer.encode("<|system|>You are a helpful assistant.<|endofsystem|>\n", add_special_tokens=False))
-        + 2
-        + len(tokenizer.encode("<video_0>", add_special_tokens=False))
-        + 64
-    )
-    visual_budget = max(_PF_FLOOR + _FRAME_OVERHEAD, input_length - overhead - reserved_audio_tokens)
-    if video_bytes is not None:
-        frames, _ = _decode_frames(decoder, visual_budget, input_length, jpeg_quality)
-    else:
-        frames, _ = _prepare_decoded_frames(video, visual_budget, input_length, jpeg_quality)
-
-    if pcm is None:
-        output = []
-        for timestamp, image in frames:
-            output.append({"type": "text", "text": f"<{_format_timestamp(timestamp)}>"})
-            output.append({"type": "image", "image": image})
-        return output
-
-    video_id = hashlib.sha1(video_bytes, usedforsecurity=False).hexdigest()
-    record_key = hashlib.sha1(f"{video_id}|{question}".encode(), usedforsecurity=False).hexdigest()
-    seed = hashlib.sha1(f"42|flatten|{record_key}".encode(), usedforsecurity=False).hexdigest()
-    rng = random.Random(int(seed[:8], 16))
-    bounds = _group_bounds(len(frames), audio_duration, k_mode, rng)
-    output = []
-    for group in range(len(bounds) - 1):
-        start, end = bounds[group], bounds[group + 1]
-        if end <= start:
-            continue
-        start_time = 0.0 if group == 0 else frames[start][0]
-        end_time = audio_duration if group == len(bounds) - 2 else frames[end][0]
-        if end_time <= start_time:
-            end_time = start_time + audio_duration / max(1, len(bounds) - 1)
-        for timestamp, image in frames[start:end]:
-            output.append({"type": "text", "text": f"<{_format_timestamp(timestamp)}>"})
-            output.append({"type": "image", "image": image})
-        sample_start = max(0, int(round(start_time * audio_sample_rate)))
-        sample_end = min(len(pcm), int(round(end_time * audio_sample_rate)))
-        if sample_end > sample_start:
-            waveform = np.ascontiguousarray(pcm[sample_start:sample_end].astype(np.float32) / 32768.0)
-            output.append({"type": "audio", "audio": waveform})
-    return output
+    image_rgba = image.convert("RGBA")
+    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
+    alpha_composite = Image.alpha_composite(background, image_rgba)
+    alpha_composite = alpha_composite.convert("RGB")
+    return alpha_composite
 
 
 @auto_docstring
 class Dots3NoteVideoProcessor(BaseVideoProcessor):
-    """Video processor providing the native Dots 3 Note Preview timestamped image/audio expansion."""
-
     resample = PILImageResampling.BICUBIC
-
     size = {"shortest_edge": 56 * 56, "longest_edge": (36 * 28) ** 2}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -543,102 +149,65 @@ class Dots3NoteVideoProcessor(BaseVideoProcessor):
     merge_size = 2
     min_frames = 4
     max_frames = 768
-    do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
+    do_sample_frames = True
     cap_pixels_per_frame = None
-    max_video_tokens = 128000
+    max_video_tokens = 768
     valid_kwargs = Dots3NoteVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
+    max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
+    max_duration = None
+    num_frames = None
+    fps = 1
 
     def __init__(self, **kwargs: Unpack[Dots3NoteVideoProcessorInitKwargs]):
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        size = kwargs.pop("size", None)
-        size = self.size if size is None else size
-        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
-        super().__init__(size=size, **kwargs)
-
-    def _standardize_kwargs(
-        self,
-        size: SizeDict | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        **kwargs,
-    ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
-        return super()._standardize_kwargs(size=size, **kwargs)
+        super().__init__(**kwargs)
 
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        temporal_patch_size: int | None = None,
-        min_frames: int | None = None,
-        max_frames: int | None = None,
         num_frames: int | None = None,
         fps: int | float | None = None,
         **kwargs,
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
-        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
         and `fps` are mutually exclusive.
 
         Args:
+            video (`torch.Tensor`):
+                Video that need to be sampled.
             metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
-            temporal_patch_size (`int`, *optional*):
-                The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
-            min_frames (`int`, *optional*):
-                The minimum number of frames that can be sampled.
-            max_frames (`int`, *optional*):
-                The maximum number of frames that can be sampled.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
             fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
-
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor:
+                Sampled video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
 
-        num_frames = num_frames if num_frames is not None else self.num_frames
-        fps = fps if fps is not None else self.fps
-        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
-        min_frames = min_frames if min_frames is not None else self.min_frames
-        max_frames = max_frames if max_frames is not None else self.max_frames
         total_num_frames = metadata.total_num_frames
+        fps = fps if fps is not None else self.fps
 
         # If num_frames is not given but fps is, calculate num_frames from fps
-        if num_frames is not None:
-            num_frames = round(num_frames / temporal_patch_size) * temporal_patch_size
-        elif fps is not None:
-            if metadata is None or metadata.fps is None:
-                raise ValueError(
+        if num_frames is None and fps is not None:
+            if metadata.fps is None:
+                metadata.fps = 24
+                logger.warning_once(
                     "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
-                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
+                    "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
                 )
-            max_frames = math.floor(min(max_frames, total_num_frames) / temporal_patch_size) * temporal_patch_size
-            num_frames = total_num_frames / metadata.fps * fps
-            num_frames = min(max(num_frames, min_frames), max_frames, total_num_frames)
-            num_frames = math.floor(num_frames / temporal_patch_size) * temporal_patch_size
+            num_frames = int(total_num_frames / metadata.fps * fps)
+            num_frames = min(max(num_frames, self.min_frames), self.max_frames, total_num_frames)
 
-        if num_frames > total_num_frames:
-            raise ValueError(
-                f"Video can't be sampled. The inferred `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
-                "Decrease `num_frames` or `fps` for sampling."
-            )
+        if num_frames is None:
+            num_frames = min(max(total_num_frames, self.min_frames), self.max_frames)
 
-        if num_frames is not None:
-            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
-        else:
-            indices = torch.arange(0, total_num_frames).int()
+        indices = np.linspace(0, total_num_frames - 1, num_frames).round().astype(int)
 
         return indices
 
@@ -648,7 +217,7 @@ class Dots3NoteVideoProcessor(BaseVideoProcessor):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
-        temporal_factor: int = 2,
+        temporal_factor: int,
         cap_pixels_per_frame: bool | None = None,
         **kwargs,
     ) -> "torch.Tensor":
@@ -656,20 +225,21 @@ class Dots3NoteVideoProcessor(BaseVideoProcessor):
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 
+        num_frames = videos.shape[1]
         max_pixels = size.longest_edge
         if cap_pixels_per_frame:
-            # the per-frame cap (`size.longest_edge`) is bounded by an even share of the `max_video_tokens`
-            num_frames = videos.shape[1]
-            total_pixels = int(self.max_video_tokens * factor * factor * 0.9)
-            max_pixels = max(
-                min(max_pixels, total_pixels * temporal_factor // num_frames), int(size.shortest_edge * 1.05)
-            )
+            # per-frame pixels are capped at `max_video_tokens` patches or the budget's even share per frame
+            frame_cap = self.max_video_tokens * factor * factor
+            pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
+            max_pixels = pixels_per_frame * num_frames
 
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
-            height,
-            width,
+            height=height,
+            width=width,
+            num_frames=num_frames,
             factor=factor,
+            temporal_factor=temporal_factor,
             min_pixels=size.shortest_edge,
             max_pixels=max_pixels,
         )
@@ -812,22 +382,33 @@ class Dots3NoteVideoProcessor(BaseVideoProcessor):
         Returns:
             `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
         """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
         min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
         max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
         merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None) or self.cap_pixels_per_frame
 
         factor = patch_size * merge_size
+        if cap_pixels_per_frame:
+            # Keep the count in sync with `resize` when the per-frame cap is active.
+            frame_cap = self.max_video_tokens * factor * factor
+            pixels_per_frame = max(min(frame_cap, max_pixels // num_frames), int(min_pixels * 1.05))
+            max_pixels = pixels_per_frame * num_frames
+
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            num_frames,
+            height,
+            width,
+            temporal_factor=temporal_patch_size,
+            factor=factor,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = num_frames // temporal_patch_size
         return grid_t * grid_h * grid_w
-
-    def preprocess_native(self, video, **kwargs) -> list[dict]:
-        return preprocess_dots3_note_video(video, **kwargs)
 
 
 __all__ = ["Dots3NoteVideoProcessor"]

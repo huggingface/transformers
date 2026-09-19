@@ -999,6 +999,7 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("cohere_compass", "CohereCompassVideoProcessor"),
         ("cosmos3_edge", "Cosmos3EdgeVideoProcessor"),
+        ("dots3_note", "Dots3NoteVideoProcessor"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeVideoProcessor"),
         ("gemma4", "Gemma4VideoProcessor"),
         ("gemma4_unified", "Gemma4UnifiedVideoProcessor"),
@@ -1242,6 +1243,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("depth_pro", {"torchvision": "DepthProImageProcessor"}),
         ("detr", {"pil": "DetrImageProcessorPil", "torchvision": "DetrImageProcessor"}),
         ("dinov3_vit", {"torchvision": "DINOv3ViTImageProcessor"}),
+        ("dots3_note", {"pil": "Dots3NoteImageProcessorPil"}),
         ("dpt", {"pil": "DPTImageProcessorPil", "torchvision": "DPTImageProcessor"}),
         ("efficientloftr", {"pil": "EfficientLoFTRImageProcessorPil", "torchvision": "EfficientLoFTRImageProcessor"}),
         ("efficientnet", {"pil": "EfficientNetImageProcessorPil", "torchvision": "EfficientNetImageProcessor"}),

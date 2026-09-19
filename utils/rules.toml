@@ -606,8 +606,7 @@ diff = '''
 [rules.TRF029]
 description = "A module taking `config` must not also take arguments that live on the config."
 default_enabled = true
-# Dots 3 Note uses per-instance intermediate sizes for its shared text expert and routed vision experts.
-allowlist_models = ["dots3_note", "kosmos2"]
+allowlist_models = ["kosmos2"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF029.explanation]
@@ -932,8 +931,7 @@ default_enabled = true
 # model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
 # kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
 # model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
-# Dots 3 Note retains explicit output controls for its custom DSA, audio, and vision outputs.
-allowlist_models = ["dots3_note", "kosmos2", "openai", "timm_backbone", "timm_wrapper"]
+allowlist_models = ["kosmos2", "openai", "timm_backbone", "timm_wrapper"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF045.explanation]
@@ -1128,9 +1126,8 @@ diff = '''
 [rules.TRF056]
 description = "forward() must not materialize tensors with .item() or .tolist()."
 default_enabled = true
-# Dots 3 Note materializes dynamic audio/video lengths required by its variable-length multimodal adapter.
 # `kimi_k25` was dropped: no `.item()`/`.tolist()` left in its forward, verified against its source.
-allowlist_models = ["dots3_note", "hunyuan_vl"]
+allowlist_models = ["hunyuan_vl"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF056.explanation]

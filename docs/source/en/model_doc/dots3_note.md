@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-09.*
+*This model was contributed to Hugging Face Transformers on 2026-09-19.*
 
 # Dots 3 Note Preview
 
@@ -21,8 +21,7 @@ Dots 3 Note Preview is a mixture-of-experts causal language model with native te
 a shared vision encoder for images and videos and a Whisper-style audio encoder. Both encoders project their outputs
 into the language model's hidden space before autoregressive text generation.
 
-Dots 3 Note Preview checkpoints are available with BF16 weights or with fine-grained FP8 language-model weights and BF16
-vision, audio, and language-model-head weights. Both formats load through the standard Transformers APIs.
+This integration supports BF16 checkpoints.
 
 ## Usage
 
@@ -67,16 +66,15 @@ conversation = [{"role": "user", "content": [
     {"type": "text", "text": "Transcribe this recording."},
 ]}]
 
-# Native video, including its audio track when present.
+# Video frames. Pass audio separately to include the soundtrack.
 conversation = [{"role": "user", "content": [
     {"type": "video", "path": "concert.mp4"},
-    {"type": "text", "text": "Describe what you see and hear."},
+    {"type": "text", "text": "Describe what you see."},
 ]}]
 ```
 
 `Dots3NoteModel` combines the text, vision and audio encoders. `Dots3NoteForConditionalGeneration` adds the
-language-model head and generation interface. `Dots3NoteTextForCausalLM` provides the text-only variant;
-`Dots3NoteForCausalLM` remains a compatibility name for the original multimodal checkpoints.
+language-model head and generation interface. `Dots3NoteForCausalLM` is the text-only variant.
 
 ## Dots3NoteConfig
 
@@ -109,11 +107,6 @@ language-model head and generation interface. `Dots3NoteTextForCausalLM` provide
 [[autodoc]] Dots3NoteTextModel
     - forward
 
-## Dots3NoteTextForCausalLM
-
-[[autodoc]] Dots3NoteTextForCausalLM
-    - forward
-
 ## Dots3NoteVisionModel
 
 [[autodoc]] Dots3NoteVisionModel
@@ -129,9 +122,9 @@ language-model head and generation interface. `Dots3NoteTextForCausalLM` provide
 [[autodoc]] Dots3NoteProcessor
     - __call__
 
-## Dots3NoteImageProcessor
+## Dots3NoteImageProcessorPil
 
-[[autodoc]] Dots3NoteImageProcessor
+[[autodoc]] Dots3NoteImageProcessorPil
 
 ## Dots3NoteVideoProcessor
 

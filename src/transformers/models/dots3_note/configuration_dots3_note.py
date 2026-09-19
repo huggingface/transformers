@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from copy import copy
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -27,25 +25,12 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
 
     embed_dim (`int`, *optional*, defaults to 1536):
         Width of the patch embeddings and transformer blocks.
-    use_bias (`bool`, *optional*, defaults to `False`):
-        Whether linear projections in the vision encoder use a bias.
-    is_causal (`bool`, *optional*, defaults to `False`):
-        Whether vision self-attention uses a causal mask.
-    post_norm (`bool`, *optional*, defaults to `True`):
-        Whether the released vision tower applies its final normalization.
-    pre_pixel_shuffle (`bool`, *optional*, defaults to `True`):
-        Whether spatial tokens are rearranged before the vision adapter.
     pyramid_num_routed (`list[int]` or `tuple[int, ...]`, *optional*):
-        Number of routed tokens kept by each vision transformer layer. A value of `-1` disables routing for that
-        layer.
+        Number of routed experts in each vision transformer layer. A non-positive value selects a dense MLP.
     capacity_factor (`int`, *optional*, defaults to 2):
-        Capacity multiplier used by the vision token router.
-    router_scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-        Scoring function used by the vision token router. Supported values are `"sigmoid"` and `"softmax"`.
+        Number of experts selected per token, capped by the layer's expert count.
     router_scale (`float`, *optional*, defaults to 1.0):
         Scale applied to the vision router scores.
-    adapter_type (`str`, *optional*, defaults to `"patch_merger"`):
-        Type of adapter that projects vision tokens into the language-model width.
     adapter_in_dim (`int`, *optional*, defaults to 1536):
         Input width of the vision adapter. It must match `embed_dim`.
     adapter_out_dim (`int`, *optional*, defaults to 5120):
@@ -56,7 +41,7 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
 
     model_type = "dots3_note_vision_encoder"
     base_config_key = "vision_config"
-    attribute_map = {"num_heads": "num_attention_heads"}
+    attribute_map = {"num_heads": "num_attention_heads", "use_bias": "attention_bias"}
 
     embed_dim: int = 1536
     hidden_size: int = 5120
@@ -67,21 +52,16 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
     num_channels: int = 3
     patch_size: int = 14
     spatial_merge_size: int = 2
-    temporal_patch_size: int = 1
     rms_norm_eps: float = 1e-5
-    use_bias: bool = False
-    use_qk_norm: bool = True
+    attention_bias: bool = False
+    mlp_bias: bool = False
+    hidden_act: str = "silu"
     attention_dropout: float = 0.0
     rope_parameters: dict | None = None
     initializer_range: float = 0.02
-    is_causal: bool = False
-    post_norm: bool = True
-    pre_pixel_shuffle: bool = True
     pyramid_num_routed: list[int] | tuple[int, ...] | None = None
     capacity_factor: int = 2
-    router_scoring_func: str = "sigmoid"
     router_scale: float = 1.0
-    adapter_type: str = "patch_merger"
     adapter_in_dim: int = 1536
     adapter_out_dim: int = 5120
     adapter_merge_size: int = 2
@@ -100,17 +80,25 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
             raise ValueError("embed_dim must be divisible by num_attention_heads")
         if self.adapter_in_dim != self.embed_dim:
             raise ValueError("adapter_in_dim must match embed_dim")
-        if self.adapter_out_dim != self.hidden_size:
-            raise ValueError("adapter_out_dim must match hidden_size")
+        if self.hidden_size not in (self.embed_dim, self.adapter_out_dim):
+            raise ValueError("legacy hidden_size must match adapter_out_dim")
+        self.hidden_size = self.embed_dim
+        self.attention_bias = kwargs.pop("use_bias", self.attention_bias)
+        self.mlp_bias = self.attention_bias
+        if self.mlp_bias and any(num_experts > 0 for num_experts in self.pyramid_num_routed):
+            raise ValueError("Dots3 vision stacked experts require mlp_bias=False")
+        self.hidden_act = "silu"
         if self.adapter_merge_size != self.spatial_merge_size:
             raise ValueError("adapter_merge_size must match spatial_merge_size")
-        if self.router_scoring_func not in {"sigmoid", "softmax"}:
-            raise ValueError("router_scoring_func must be 'sigmoid' or 'softmax'")
-        if self.temporal_patch_size != 1:
+        if kwargs.pop("router_scoring_func", "sigmoid") != "sigmoid":
+            raise ValueError("Dots 3 Note Preview vision routing requires router_scoring_func='sigmoid'")
+        if kwargs.pop("temporal_patch_size", 1) != 1:
             raise ValueError("Dots 3 Note Preview vision preprocessing requires temporal_patch_size=1")
-        if self.is_causal:
+        if not kwargs.pop("use_qk_norm", True) or not kwargs.pop("post_norm", True):
+            raise ValueError("Dots 3 Note Preview vision requires Q/K and post-trunk normalization")
+        if kwargs.pop("is_causal", False):
             raise ValueError("Dots 3 Note Preview vision attention requires is_causal=False")
-        if not self.pre_pixel_shuffle or self.adapter_type != "patch_merger":
+        if not kwargs.pop("pre_pixel_shuffle", True) or kwargs.pop("adapter_type", "patch_merger") != "patch_merger":
             raise ValueError("Dots 3 Note Preview requires pre_pixel_shuffle=True and adapter_type='patch_merger'")
         super().__post_init__(**kwargs)
 
@@ -121,47 +109,16 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
     r"""
     Configuration of the Dots 3 Note Preview audio encoder and adapter.
 
-    encoder_type (`str`, *optional*, defaults to `"dots"`):
-        Identifier of the audio encoder architecture stored in the released checkpoint.
-    whisper_config (`dict`, *optional*):
-        Configuration of the Whisper-style audio transformer. When omitted, the released 32-layer configuration is
-        used.
     feature_size (`int`, *optional*, defaults to 128):
         Number of log-mel filter-bank channels.
-    n_fft (`int`, *optional*, defaults to 400):
-        FFT window size used by the audio feature extractor.
     hop_length (`int`, *optional*, defaults to 160):
         Number of waveform samples between adjacent log-mel frames.
-    chunk_seconds (`int`, *optional*, defaults to 60):
-        Maximum duration, in seconds, of each audio encoder chunk.
-    use_conv2d_stem (`bool`, *optional*, defaults to `True`):
-        Whether to use the released two-dimensional convolutional subsampling stem.
-    use_rope (`bool`, *optional*, defaults to `True`):
-        Whether the audio transformer uses rotary position embeddings.
-    use_rms_norm (`bool`, *optional*, defaults to `True`):
-        Whether the audio transformer uses RMS normalization.
-    use_causal (`bool`, *optional*, defaults to `False`):
-        Whether audio self-attention uses a causal mask.
     downsample_hidden_size (`int`, *optional*, defaults to 480):
         Hidden width of the temporal downsampling projection.
-    conv_bucket_step (`int`, *optional*, defaults to 10):
-        Length step used to bucket variable-length audio chunks. Set to `None` to disable bucketing.
-    conv_bucket_max_elements (`int`, *optional*, defaults to 20000):
-        Maximum number of elements assigned to one convolution bucket. Set to `None` to disable the limit.
-    attention_backend (`str`, *optional*, defaults to `"sdpa"`):
-        Attention backend used by the audio encoder.
-    merge_factor (`int`, *optional*, defaults to 1):
-        Additional temporal merge factor applied after convolutional subsampling.
     adapter_input_size (`int`, *optional*, defaults to 1280):
         Input width of the audio-to-text adapter.
     adapter_output_size (`int`, *optional*, defaults to 5120):
         Output width of the audio-to-text adapter. It must match the text hidden size.
-    audio_start_token (`str`, *optional*, defaults to `"<|audio_comp_start|>"`):
-        Token delimiting the start of an audio span.
-    audio_pad_token (`str`, *optional*, defaults to `"<|audio_comp_pad|>"`):
-        Placeholder token replaced with encoded audio features.
-    audio_end_token (`str`, *optional*, defaults to `"<|audio_comp_end|>"`):
-        Token delimiting the end of an audio span.
     """
 
     model_type = "dots3_note_audio_encoder"
@@ -173,8 +130,6 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
         "encoder_ffn_dim": "intermediate_size",
     }
 
-    encoder_type: str = "dots"
-    whisper_config: dict | None = None
     hidden_size: int = 1280
     intermediate_size: int = 5120
     num_attention_heads: int = 20
@@ -182,90 +137,69 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
     max_position_embeddings: int = 6000
     dropout: float = 0.0
     attention_dropout: float = 0.0
-    activation_dropout: float = 0.0
     sampling_rate: int = 16_000
     feature_size: int = 128
-    n_fft: int = 400
     hop_length: int = 160
-    chunk_seconds: int = 60
-    use_conv2d_stem: bool = True
-    use_rope: bool = True
-    use_rms_norm: bool = True
-    use_causal: bool = False
     downsample_hidden_size: int = 480
-    conv_bucket_step: int | None = 10
-    conv_bucket_max_elements: int | None = 20_000
     rope_parameters: dict | None = None
-    attention_backend: str = "sdpa"
-    merge_factor: int = 1
+    head_dim: int | None = None
+    num_key_value_heads: int | None = None
+    attention_bias: bool = True
+    hidden_act: str = "silu"
     adapter_input_size: int = 1280
     adapter_output_size: int = 5120
-    audio_start_token: str = "<|audio_comp_start|>"
-    audio_pad_token: str = "<|audio_comp_pad|>"
-    audio_end_token: str = "<|audio_comp_end|>"
 
     def __post_init__(self, **kwargs):
-        # Aliases used by the released configuration.
         self.adapter_input_size = kwargs.pop("whisper_adapter_in_dim", self.adapter_input_size)
         self.adapter_output_size = kwargs.pop("whisper_adapter_out_dim", self.adapter_output_size)
-        self.audio_start_token = kwargs.pop("audio_comp_start", self.audio_start_token)
-        self.audio_pad_token = kwargs.pop("audio_comp_span", self.audio_pad_token)
-        self.audio_end_token = kwargs.pop("audio_comp_end", self.audio_end_token)
-
-        if self.whisper_config is None:
-            self.whisper_config = {
-                "d_model": self.hidden_size,
-                "encoder_attention_heads": self.num_attention_heads,
-                "encoder_ffn_dim": self.intermediate_size,
-                "encoder_layers": self.num_hidden_layers,
-                "num_mel_bins": self.feature_size,
-                "max_source_positions": self.max_position_embeddings,
-                "activation_function": "swiglu",
-            }
-        # Released checkpoints store the encoder dimensions in this legacy dictionary.
-        for legacy_name, name in self.attribute_map.items():
-            setattr(self, name, self.whisper_config[legacy_name])
-        self.max_position_embeddings = self.whisper_config["max_source_positions"]
-        for name in ("dropout", "attention_dropout", "activation_dropout"):
-            setattr(self, name, self.whisper_config.get(name, getattr(self, name)))
-        if self.activation_dropout != 0:
-            raise ValueError(f"Dots 3 Note Preview requires activation_dropout=0, got {self.activation_dropout!r}")
-        if self.rope_parameters is None:
-            self.rope_parameters = {"partial_rotary_factor": 0.5, "rope_theta": 10_000.0}
-
-        if min(self.sampling_rate, self.feature_size, self.n_fft, self.hop_length) <= 0:
-            raise ValueError("audio sampling and feature dimensions must be positive")
-        if self.chunk_seconds <= 0 or self.merge_factor <= 0:
-            raise ValueError("chunk_seconds and merge_factor must be positive")
-        if self.encoder_type != "dots":
-            raise ValueError("Dots 3 Note Preview only supports encoder_type='dots'")
-        if not self.use_conv2d_stem:
-            raise ValueError("the released Dots 3 Note Preview audio encoder requires use_conv2d_stem=True")
-        if not self.use_rope or self.use_causal:
-            raise ValueError("Dots 3 Note Preview audio inference requires use_rope=True and use_causal=False")
-        if self.whisper_config.get("activation_function") != "swiglu":
-            raise ValueError("the released Dots 3 Note Preview audio encoder requires activation_function='swiglu'")
-        if self.adapter_input_size != self.whisper_config["d_model"]:
-            raise ValueError("adapter_input_size must match whisper_config.d_model")
-        if self.attention_backend not in {"sdpa", "flash_attention_2", "flash_attention_3"}:
-            raise ValueError("unsupported audio attention backend")
+        # Released checkpoints store encoder dimensions in a Whisper-style dictionary.
+        whisper_config = kwargs.pop("whisper_config", None) or {}
+        for legacy_name, name in {
+            **self.attribute_map,
+            "num_mel_bins": "feature_size",
+            "max_source_positions": "max_position_embeddings",
+        }.items():
+            if legacy_name in whisper_config:
+                setattr(self, name, whisper_config[legacy_name])
+        self.dropout = whisper_config.get("dropout", self.dropout)
+        self.attention_dropout = whisper_config.get("attention_dropout", self.attention_dropout)
+        if whisper_config.get("activation_function", "swiglu") != "swiglu":
+            raise ValueError("Dots 3 Note Preview audio requires activation_function='swiglu'")
+        if whisper_config.get("activation_dropout", kwargs.pop("activation_dropout", 0.0)) != 0:
+            raise ValueError("Dots 3 Note Preview audio requires activation_dropout=0")
+        for name, expected in (
+            ("encoder_type", "dots"),
+            ("use_conv2d_stem", True),
+            ("use_rope", True),
+            ("use_rms_norm", True),
+            ("use_causal", False),
+            ("merge_factor", 1),
+        ):
+            if kwargs.pop(name, expected) != expected:
+                raise ValueError(f"Dots 3 Note Preview audio requires {name}={expected!r}")
+        if (attention_backend := kwargs.pop("attention_backend", None)) is not None:
+            kwargs.setdefault("attn_implementation", attention_backend)
+        self.head_dim = self.hidden_size // self.num_attention_heads
+        self.num_key_value_heads = self.num_attention_heads
+        self.hidden_act = "silu"
+        self.attention_bias = True
+        self.rope_parameters = {
+            "rope_type": "default",
+            "partial_rotary_factor": 0.5,
+            "rope_theta": 10_000.0,
+            **(self.rope_parameters or {}),
+        }
+        rotary_dim = int(self.head_dim * self.rope_parameters["partial_rotary_factor"]) // 2 * 2
+        self.rope_parameters["partial_rotary_factor"] = rotary_dim / self.head_dim
         super().__post_init__(**kwargs)
 
-    @property
-    def conv_temporal_stride(self) -> int:
-        return 8 if self.use_conv2d_stem else 2
-
-    @property
-    def token_stride(self) -> int:
-        return self.hop_length * self.conv_temporal_stride * self.merge_factor
-
-    @property
-    def chunk_samples(self) -> int:
-        return self.chunk_seconds * self.sampling_rate
-
-    @property
-    def chunk_mel_frames(self) -> int:
-        return self.chunk_seconds * 100
+    def validate_architecture(self):
+        if self.hidden_size % self.num_attention_heads:
+            raise ValueError("audio hidden_size must be divisible by num_attention_heads")
+        if self.adapter_input_size != self.hidden_size:
+            raise ValueError("adapter_input_size must match hidden_size")
+        if min(self.sampling_rate, self.feature_size, self.hop_length) <= 0:
+            raise ValueError("audio sampling and feature dimensions must be positive")
 
 
 @auto_docstring(checkpoint="dots-studio/dots3-note-prev")
@@ -274,86 +208,20 @@ class Dots3NoteConfig(PreTrainedConfig):
     r"""
     Configuration for the Dots 3 Note Preview multimodal causal language model.
 
-    seq_length (`int`, *optional*, defaults to 393216):
-        Sequence length used during pretraining. This is retained for checkpoint compatibility.
     rope_theta (`float`, *optional*, defaults to 80000000.0):
         Base period of the rotary position embeddings used by full-attention layers.
-    rope_scaling (`dict`, *optional*):
-        Legacy rotary scaling parameters retained for compatibility with the released configuration.
-    normalization (`str`, *optional*, defaults to `"RMSNorm"`):
-        Normalization type used inside decoder layers.
-    final_norm (`str`, *optional*, defaults to `"RMSNorm"`):
-        Normalization type used after the final decoder layer.
-    multi_latent_attention (`bool`, *optional*, defaults to `True`):
-        Whether full-attention layers use multi-head latent attention.
-    k_rope_only_layernorm (`bool`, *optional*, defaults to `True`):
-        Whether to normalize the rotary portion of compressed keys independently.
-    apply_mla_qkv_lora_rescale (`bool`, *optional*, defaults to `True`):
-        Whether to apply the checkpoint-compatible scale to low-rank MLA query, key, and value projections.
-    attention_gate_type (`str`, *optional*, defaults to `"headwise"`):
-        Granularity of output gates in full-attention layers.
-    softmax_type (`str`, *optional*, defaults to `"vanilla"`):
-        Softmax variant used by full-attention layers.
-    sliding_window_size (`int`, *optional*, defaults to 512):
-        Window length used by sliding-attention layers.
-    swa_num_attention_heads (`int`, *optional*, defaults to 64):
-        Number of query heads in sliding-window attention.
-    swa_num_key_value_heads (`int`, *optional*, defaults to 64):
-        Number of key/value heads in sliding-window attention.
-    swa_q_lora_rank (`int`, *optional*, defaults to 1024):
-        Rank of the sliding-attention query projection.
-    swa_kv_lora_rank (`int`, *optional*, defaults to 1024):
-        Rank of the sliding-attention key/value projection.
-    swa_head_dim (`int`, *optional*, defaults to 256):
-        Total per-head width in sliding-window attention.
-    swa_qk_nope_head_dim (`int`, *optional*, defaults to 192):
-        Non-rotary query/key width per sliding-attention head.
-    swa_qk_rope_head_dim (`int`, *optional*, defaults to 64):
-        Rotary query/key width per sliding-attention head.
-    swa_v_head_dim (`int`, *optional*, defaults to 128):
-        Value width per sliding-attention head.
-    swa_rope_theta (`float`, *optional*, defaults to 50000.0):
-        Base period of the rotary position embeddings in sliding-attention layers.
-    swa_attention_gate_type (`str`, *optional*, defaults to `"headwise"`):
-        Granularity of output gates in sliding-attention layers.
     index_n_heads (`int`, *optional*, defaults to 64):
         Number of heads in the dynamic sparse attention indexer.
     index_head_dim (`int`, *optional*, defaults to 128):
         Per-head width of the dynamic sparse attention indexer.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of key positions selected by dynamic sparse attention.
-    use_dsa (`bool`, *optional*, defaults to `True`):
-        Whether full-attention layers use the dynamic sparse attention indexer.
     shared_experts_intermediate_size (`int`, *optional*, defaults to 1536):
         Intermediate width of each shared expert.
-    moe_shared_expert_intermediate_size (`int`, *optional*, defaults to 1536):
-        Compatibility alias for the shared expert intermediate width in the released checkpoint.
-    moe_layer_freq (`int` or `list[int]`, *optional*, defaults to 1):
-        Frequency or explicit pattern of sparse MoE decoder layers.
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of initial decoder layers that use a dense MLP instead of routed experts.
-    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-        Scoring function used by the expert router.
-    topk_method (`str`, *optional*, defaults to `"noaux_tc"`):
-        Expert selection method used by the router.
-    moe_topk (`int`, *optional*, defaults to 8):
-        Compatibility alias for the number of experts selected per token.
-    moe_gating_fp32 (`bool`, *optional*, defaults to `False`):
-        Whether to compute expert router logits in float32.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer `"dense"` or `"sparse"` MLP types, derived from the released MoE schedule when omitted.
     n_group (`int`, *optional*, defaults to 1):
         Number of groups into which routed experts are partitioned during selection.
-    use_dynamic_rsf (`bool`, *optional*, defaults to `False`):
-        Whether to derive the routed scaling factor dynamically from selected expert scores.
-    image_start_token_id (`int`, *optional*, defaults to 151661):
-        Token id delimiting the start of an image span.
-    image_end_token_id (`int`, *optional*, defaults to 151662):
-        Token id delimiting the end of an image span.
-    audio_start_token_id (`int`, *optional*, defaults to 151718):
-        Token id delimiting the start of an audio span.
-    audio_end_token_id (`int`, *optional*, defaults to 151719):
-        Token id delimiting the end of an audio span.
     """
 
     model_type = "dots3_note"
@@ -378,94 +246,59 @@ class Dots3NoteConfig(PreTrainedConfig):
     num_key_value_heads: int | None = 128
     hidden_act: str = "silu"
     max_position_embeddings: int = 524288
-    seq_length: int = 393216
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     pad_token_id: int | None = 151659
     bos_token_id: int | None = 151643
     eos_token_id: int | list[int] | None = 151668
-    pretraining_tp: int = 1
     tie_word_embeddings: bool = False
     rope_theta: float = 80_000_000.0
-    rope_scaling: dict | None = None
     attention_bias: bool = False
     attention_dropout: float = 0.0
     head_dim: int = 256
 
-    normalization: str = "RMSNorm"
-    final_norm: str = "RMSNorm"
-    multi_latent_attention: bool = True
     q_lora_rank: int | None = 1024
     kv_lora_rank: int = 512
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64
     v_head_dim: int = 128
-    k_rope_only_layernorm: bool | None = True
-    apply_mla_qkv_lora_rescale: bool = True
-    qk_layernorm: bool = True
-    attention_gate_type: str = "headwise"
-    softmax_type: str = "vanilla"
 
-    use_sliding_window: bool = True
-    sliding_window_size: int = 512
     sliding_window: int | None = None
     layer_types: list[str] | tuple[str, ...] | None = None
-    swa_num_attention_heads: int = 64
-    swa_num_key_value_heads: int = 64
-    swa_q_lora_rank: int = 1024
-    swa_kv_lora_rank: int = 1024
-    swa_head_dim: int = 256
-    swa_qk_nope_head_dim: int = 192
-    swa_qk_rope_head_dim: int = 64
-    swa_v_head_dim: int = 128
-    swa_rope_theta: float = 50_000.0
-    swa_attention_gate_type: str = "headwise"
 
     index_n_heads: int = 64
     index_head_dim: int = 128
     index_topk: int = 2048
-    use_dsa: bool = True
 
     n_routed_experts: int = 256
     n_shared_experts: int = 1
     num_experts_per_tok: int = 8
     moe_intermediate_size: int = 1536
     shared_experts_intermediate_size: int = 1536
-    moe_shared_expert_intermediate_size: int = 1536
-    moe_layer_freq: int | list[int] = 1
     mlp_layer_types: list[str] | None = None
-    first_k_dense_replace: int = 1
     norm_topk_prob: bool = True
-    scoring_func: str = "sigmoid"
-    topk_method: str = "noaux_tc"
     routed_scaling_factor: float = 1.0
-    moe_topk: int = 8
-    moe_gating_fp32: bool = False
     n_group: int = 1
     topk_group: int = 1
-    use_dynamic_rsf: bool = False
 
     vision_config: dict | Dots3NoteVisionConfig | None = None
     audio_config: dict | Dots3NoteAudioConfig | None = None
     image_token_id: int = 151660
-    image_start_token_id: int = 151661
-    image_end_token_id: int = 151662
     video_token_id: int = 151680
-    audio_start_token_id: int = 151718
-    audio_end_token_id: int = 151719
     audio_token_id: int = 151720
 
     def __post_init__(self, **kwargs):
+        first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+        moe_layer_freq = kwargs.pop("moe_layer_freq", 1)
+        # Legacy checkpoints call DSA layers "full_attention"; canonical configs also store per_layer_config.
+        use_dsa = kwargs.pop("use_dsa", None if "per_layer_config" in kwargs else True)
+        use_sliding_window = kwargs.pop("use_sliding_window", True)
         if self.mlp_layer_types is None:
             self.mlp_layer_types = [
                 "sparse"
-                if i >= self.first_k_dense_replace
-                and (
-                    bool(self.moe_layer_freq[i])
-                    if isinstance(self.moe_layer_freq, (list, tuple))
-                    else i % self.moe_layer_freq == 0
-                )
+                if i >= first_k_dense_replace
+                and (bool(moe_layer_freq[i]) if isinstance(moe_layer_freq, (list, tuple)) else i % moe_layer_freq == 0)
                 else "dense"
                 for i in range(self.num_hidden_layers)
             ]
@@ -475,38 +308,41 @@ class Dots3NoteConfig(PreTrainedConfig):
             raise ValueError(
                 f"Dots 3 Note Preview requires shared experts, got n_shared_experts={self.n_shared_experts!r}"
             )
-        if self.normalization != "RMSNorm" or self.final_norm != "RMSNorm":
-            raise ValueError(
-                f"Dots 3 Note Preview requires RMSNorm, got normalization={self.normalization!r}, final_norm={self.final_norm!r}"
-            )
+        # Validate legacy architecture flags once; the model follows the released architecture.
         for name, expected in (
+            ("normalization", "RMSNorm"),
+            ("final_norm", "RMSNorm"),
+            ("multi_latent_attention", True),
+            ("apply_mla_qkv_lora_rescale", True),
+            ("attention_gate_type", "headwise"),
+            ("swa_attention_gate_type", "headwise"),
+            ("softmax_type", "vanilla"),
             ("scoring_func", "sigmoid"),
             ("topk_method", "noaux_tc"),
             ("moe_gating_fp32", False),
             ("use_dynamic_rsf", False),
         ):
-            if getattr(self, name) != expected:
-                raise ValueError(f"Dots 3 Note Preview requires {name}={expected!r}, got {getattr(self, name)!r}")
+            if kwargs.pop(name, expected) != expected:
+                raise ValueError(f"Dots 3 Note Preview requires {name}={expected!r}")
+        self.shared_experts_intermediate_size = kwargs.pop(
+            "moe_shared_expert_intermediate_size", self.shared_experts_intermediate_size
+        )
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         if self.num_key_value_heads != self.num_attention_heads:
             raise ValueError("Dots 3 Note Preview requires num_key_value_heads to match num_attention_heads")
-        if self.swa_num_key_value_heads != self.swa_num_attention_heads:
-            raise ValueError("Dots 3 Note Preview requires swa_num_key_value_heads to match swa_num_attention_heads")
-        if self.attention_gate_type not in {"headwise", "elementwise"}:
-            raise ValueError(f"Unsupported attention_gate_type: {self.attention_gate_type!r}")
-        if self.swa_attention_gate_type not in {"headwise", "elementwise"}:
-            raise ValueError(f"Unsupported swa_attention_gate_type: {self.swa_attention_gate_type!r}")
+        if self.attention_bias:
+            raise ValueError("Dots 3 Note Preview text attention requires attention_bias=False")
         if self.sliding_window is None:
-            self.sliding_window = self.sliding_window_size
-        if self.k_rope_only_layernorm is None:
-            # The released JSON contains null for this historical field, while the
-            # checkpoint includes the corresponding RMSNorm weights.
-            self.k_rope_only_layernorm = True
+            self.sliding_window = kwargs.pop("sliding_window_size", 512)
+        # Older JSONs store null, but the released checkpoint contains the K-RoPE norm weights.
+        if kwargs.pop("k_rope_only_layernorm", True) not in (True, None):
+            raise ValueError("Dots 3 Note Preview requires K-RoPE normalization")
 
         if self.layer_types is None:
+            full_attention_type = "full_attention" if use_dsa is False else "deepseek_sparse_attention"
             self.layer_types = [
-                "full_attention" if not self.use_sliding_window or i < 2 or i % 4 == 1 else "sliding_attention"
+                full_attention_type if not use_sliding_window or i < 2 or i % 4 == 1 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
         else:
@@ -515,9 +351,9 @@ class Dots3NoteConfig(PreTrainedConfig):
             raise ValueError("layer_types must contain one entry per hidden layer")
         self.layer_types = [
             "deepseek_sparse_attention"
-            if self.use_dsa and layer_type == "full_attention"
+            if use_dsa is True and layer_type == "full_attention"
             else "full_attention"
-            if not self.use_dsa and layer_type == "deepseek_sparse_attention"
+            if use_dsa is False and layer_type == "deepseek_sparse_attention"
             else layer_type
             for layer_type in self.layer_types
         ]
@@ -541,47 +377,60 @@ class Dots3NoteConfig(PreTrainedConfig):
             self.audio_config = Dots3NoteAudioConfig()
         elif isinstance(self.audio_config, dict):
             self.audio_config = Dots3NoteAudioConfig(**self.audio_config)
-        if self.vision_config.hidden_size != self.hidden_size:
+        if self.vision_config.adapter_out_dim != self.hidden_size:
             raise ValueError("vision adapter output width must match the text hidden size")
         if self.audio_config.adapter_output_size != self.hidden_size:
             raise ValueError("audio adapter output width must match the text hidden size")
 
-        quantization_config = kwargs.get("quantization_config")
-        if isinstance(quantization_config, dict) and quantization_config.get("quant_method") == "fp8":
-            for name, expected in (("activation_scheme", "dynamic"), ("fmt", "e4m3")):
-                actual = quantization_config.get(name, expected if name == "fmt" else None)
-                if actual != expected:
-                    raise ValueError(f"Dots 3 Note Preview FP8 requires {name}={expected!r}, got {actual!r}")
-            block_size = quantization_config.get("weight_block_size")
-            if not isinstance(block_size, (list, tuple)) or tuple(block_size) != (128, 128):
-                raise ValueError(f"Dots 3 Note Preview FP8 requires weight_block_size=(128, 128), got {block_size!r}")
-            scale_fmt = quantization_config.get("scale_fmt", "float")
-            if scale_fmt != "float":
-                raise ValueError(f"Dots 3 Note Preview FP8 requires scale_fmt='float', got {scale_fmt!r}")
-            # Distinguish a pre-quantized checkpoint before the generic quantizer runs after model construction.
-            self._is_quantized = True
-            quantization_config.setdefault("modules_to_not_convert", ["vision_encoder", "audio_encoder", "lm_head"])
+        swa_rope_theta = kwargs.pop("swa_rope_theta", 50_000.0)
+        self.rope_parameters = {
+            layer_type: {
+                "rope_type": "default",
+                "rope_theta": swa_rope_theta if layer_type == "sliding_attention" else self.rope_theta,
+            }
+            for layer_type in set(self.layer_types)
+        }
+        # Normalize the released checkpoint's SWA aliases into the shared per-layer configuration.
+        sliding_config = {
+            name: kwargs.pop(f"swa_{name}", default)
+            for name, default in {
+                "num_attention_heads": 64,
+                "num_key_value_heads": 64,
+                "q_lora_rank": 1024,
+                "kv_lora_rank": 1024,
+                "head_dim": 256,
+                "qk_nope_head_dim": 192,
+                "v_head_dim": 128,
+            }.items()
+        }
+        sliding_config["qk_rope_head_dim"] = kwargs.pop(
+            "swa_qk_rope_head_dim", sliding_config["head_dim"] - sliding_config["qk_nope_head_dim"]
+        )
+        kwargs.setdefault(
+            "per_layer_config",
+            {i: sliding_config for i, layer_type in enumerate(self.layer_types) if layer_type == "sliding_attention"},
+        )
         super().__post_init__(**kwargs)
+        for layer_type in set(self.layer_types):
+            layer_config = self.per_layer_config[layer_type]
+            self.rope_parameters[layer_type]["partial_rotary_factor"] = (
+                layer_config.qk_rope_head_dim / layer_config.head_dim
+            )
 
-    def get_layer_config(self, layer_type: str):
-        """Resolve SWA projection dimensions without changing the released checkpoint schema."""
-        config = copy(self)
-        if layer_type == "sliding_attention":
-            for name in (
-                "num_attention_heads",
-                "num_key_value_heads",
-                "q_lora_rank",
-                "kv_lora_rank",
-                "head_dim",
-                "qk_nope_head_dim",
-                "qk_rope_head_dim",
-                "v_head_dim",
-                "rope_theta",
-                "attention_gate_type",
-            ):
-                setattr(config, name, getattr(self, f"swa_{name}"))
-        config.rope_parameters = {"rope_type": "default", "rope_theta": config.rope_theta}
-        return config
+    def convert_rope_params_to_dict(self, **kwargs):
+        # Legacy checkpoints contain null; its compatibility setter would erase the per-layer RoPE parameters.
+        kwargs.pop("rope_scaling", None)
+        return kwargs
+
+    def validate_architecture(self):
+        if any(self.per_layer_config[layer_type].q_lora_rank is None for layer_type in set(self.layer_types)):
+            raise ValueError("Dots 3 Note Preview requires q_lora_rank for MLA queries")
+        if "sliding_attention" in self.layer_types:
+            config = self.per_layer_config["sliding_attention"]
+            if config.num_key_value_heads != config.num_attention_heads:
+                raise ValueError("SWA num_key_value_heads must match num_attention_heads")
+            if config.head_dim != config.qk_nope_head_dim + config.qk_rope_head_dim:
+                raise ValueError("SWA head_dim must equal qk_nope_head_dim + qk_rope_head_dim")
 
 
 __all__ = [
