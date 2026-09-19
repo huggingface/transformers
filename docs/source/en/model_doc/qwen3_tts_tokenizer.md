@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2026-01-22 and added to Hugging Face Transformers on 2026-06-28.*
 
-# Qwen3-TTS Multi-Codebook Tokenizer
+# Qwen3-TTS Tokenizer
 
 ## Overview
 
@@ -39,15 +39,15 @@ This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
 
 ## Usage
 
-The [`Qwen3TTSTokenizerMultiCodebookFeatureExtractor`] turns raw waveforms into the `(batch_size, num_samples)`
-float tensor and `padding_mask` expected by [`~Qwen3TTSTokenizerMultiCodebookModel.encode`], whose codes are then
-reconstructed with [`~Qwen3TTSTokenizerMultiCodebookModel.decode`]:
+The [`Qwen3TTSTokenizerFeatureExtractor`] turns raw waveforms into the `(batch_size, num_samples)`
+float tensor and `padding_mask` expected by [`~Qwen3TTSTokenizerModel.encode`], whose codes are then
+reconstructed with [`~Qwen3TTSTokenizerModel.decode`]:
 
 ```python
 import torch
 from scipy.io import wavfile
 
-from transformers import AutoModel, Qwen3TTSTokenizerMultiCodebookFeatureExtractor
+from transformers import AutoModel, Qwen3TTSTokenizerFeatureExtractor
 from transformers.audio_utils import load_audio_librosa
 
 
@@ -55,7 +55,7 @@ model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 
 # load model and feature extractor
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = Qwen3TTSTokenizerMultiCodebookFeatureExtractor(
+feature_extractor = Qwen3TTSTokenizerFeatureExtractor(
     sampling_rate=model.config.input_sampling_rate
 )
 
@@ -80,7 +80,7 @@ with torch.no_grad():
     # Reconstructed audio shape: torch.Size([222720])
 
 # save audio
-output_fp = "qwen3_tts_tokenizer_multi_codebook_reconstructed.wav"
+output_fp = "qwen3_tts_tokenizer_reconstructed.wav"
 wavfile.write(output_fp, model.config.output_sampling_rate, audio_values.float().cpu().numpy())
 print(f"Reconstructed audio saved to: {output_fp}")
 ```
@@ -91,19 +91,19 @@ The reconstruction is padded up to a whole number of frames, so it can be slight
 ## Batched inputs
 
 The feature extractor pads waveforms of different lengths to a common length and builds the `padding_mask` marking the
-real samples, so trailing padding is not encoded. [`~Qwen3TTSTokenizerMultiCodebookModel.encode`] then returns a *list*
+real samples, so trailing padding is not encoded. [`~Qwen3TTSTokenizerModel.encode`] then returns a *list*
 of code tensors, one per utterance, each already trimmed to its own length:
 
 ```python
 import torch
 
-from transformers import AutoModel, Qwen3TTSTokenizerMultiCodebookFeatureExtractor
+from transformers import AutoModel, Qwen3TTSTokenizerFeatureExtractor
 from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = Qwen3TTSTokenizerMultiCodebookFeatureExtractor(
+feature_extractor = Qwen3TTSTokenizerFeatureExtractor(
     sampling_rate=model.config.input_sampling_rate
 )
 
@@ -139,12 +139,12 @@ model exposes `encode` and `decode` rather than a single forward, compile each o
 
 ```python
 import torch
-from transformers import AutoModel, Qwen3TTSTokenizerMultiCodebookFeatureExtractor
+from transformers import AutoModel, Qwen3TTSTokenizerFeatureExtractor
 from transformers.audio_utils import load_audio_librosa
 
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = Qwen3TTSTokenizerMultiCodebookFeatureExtractor(
+feature_extractor = Qwen3TTSTokenizerFeatureExtractor(
     sampling_rate=model.config.input_sampling_rate
 )
 
@@ -169,20 +169,20 @@ with torch.inference_mode():
 print("Reconstructed audio shape:", audio_values.shape)
 ```
 
-## Qwen3TTSTokenizerMultiCodebookConfig
+## Qwen3TTSTokenizerConfig
 
-[[autodoc]] Qwen3TTSTokenizerMultiCodebookConfig
+[[autodoc]] Qwen3TTSTokenizerConfig
 
-## Qwen3TTSTokenizerMultiCodebookCode2WavConfig
+## Qwen3TTSTokenizerCode2WavConfig
 
-[[autodoc]] Qwen3TTSTokenizerMultiCodebookCode2WavConfig
+[[autodoc]] Qwen3TTSTokenizerCode2WavConfig
 
-## Qwen3TTSTokenizerMultiCodebookFeatureExtractor
+## Qwen3TTSTokenizerFeatureExtractor
 
-[[autodoc]] Qwen3TTSTokenizerMultiCodebookFeatureExtractor
+[[autodoc]] Qwen3TTSTokenizerFeatureExtractor
 
-## Qwen3TTSTokenizerMultiCodebookModel
+## Qwen3TTSTokenizerModel
 
-[[autodoc]] Qwen3TTSTokenizerMultiCodebookModel
+[[autodoc]] Qwen3TTSTokenizerModel
     - encode
     - decode

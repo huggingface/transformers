@@ -129,7 +129,7 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": (
         "HiggsAudioV2TokenizerModel",
         "DacModel",
-        "Qwen3TTSTokenizerMultiCodebookModel",
+        "Qwen3TTSTokenizerModel",
         "Qwen3TTSTokenizerSingleCodebookModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
