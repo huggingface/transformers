@@ -174,8 +174,8 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             past_key_values=None,
             position_ids=position_ids,
         )
-        # should be skipped under compile when padding_mask is None
-        self.assertTrue(causal_mask is None)
+        # cannot be skipped under compile, should result into a triu mask
+        self.assertTrue(torch.equal(~torch.ones(*causal_mask.shape).triu(diagonal=1).bool(), causal_mask))
 
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
         # Make sure we have an attention_chunk_size in the config
