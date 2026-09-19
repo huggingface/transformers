@@ -32,6 +32,7 @@ from torch.nn.utils.rnn import pad_sequence
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -47,6 +48,7 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_qwen3_tts_tokenizer_multi_codebook import (
     Qwen3TTSTokenizerMultiCodebookCode2WavConfig,
     Qwen3TTSTokenizerMultiCodebookConfig,
+    Qwen3TTSTokenizerMultiCodebookQuantizerConfig,
 )
 
 
@@ -574,13 +576,17 @@ class Qwen3TTSTokenizerMultiCodebookSnakeBeta(nn.Module):
 class Qwen3TTSTokenizerMultiCodebookEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
 
-    def __init__(self, config: Qwen3TTSTokenizerMultiCodebookConfig, epsilon: float = 1e-5):
+    def __init__(self, config: PreTrainedConfig, epsilon: float = 1e-5):
         super().__init__()
         embed = torch.zeros(config.codebook_size, config.codebook_dim)
 
         self.codebook_size = config.codebook_size
-
-        self.initialized = nn.Buffer(torch.tensor([True], dtype=torch.float32))
+        # The top-level quantizer flag is absent from the original checkpoint and defaults to the correct loaded state.
+        # The Mimi encoder's flags remain persistent because they are serialized by the original checkpoint.
+        self.initialized = nn.Buffer(
+            torch.tensor([True], dtype=torch.float32),
+            persistent=not isinstance(config, Qwen3TTSTokenizerMultiCodebookQuantizerConfig),
+        )
         self.cluster_usage = nn.Buffer(torch.ones(config.codebook_size))
         self.embed_sum = nn.Buffer(embed)
         self._embed = None
@@ -1178,9 +1184,6 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
         )
 
 
-#  Decoder
-
-
 class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
 
@@ -1363,14 +1366,14 @@ class Qwen3TTSTokenizerMultiCodebookEncoder(nn.Module):
         scaling = 1
 
         # keep track of Qwen3TTSTokenizerMultiCodebookConv1d submodule layer names for easy encoded length computation
-        qwen3_tts_tokenizer_multi_codebookconv1d_layer_names = ["layers.0"]
+        qwen3_tts_tokenizer_12hzconv1d_layer_names = ["layers.0"]
 
         # Downsample to raw audio scale
         for ratio in reversed(config.upsampling_ratios):
             current_scale = scaling * config.num_filters
             # Add residual layers
             for j in range(config.num_residual_layers):
-                qwen3_tts_tokenizer_multi_codebookconv1d_layer_names.extend(
+                qwen3_tts_tokenizer_12hzconv1d_layer_names.extend(
                     [f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"]
                 )
                 model += [
@@ -1380,7 +1383,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoder(nn.Module):
                 ]
             # Add downsampling layers
             model += [nn.ELU()]
-            qwen3_tts_tokenizer_multi_codebookconv1d_layer_names.append(f"layers.{len(model)}")
+            qwen3_tts_tokenizer_12hzconv1d_layer_names.append(f"layers.{len(model)}")
             model += [
                 Qwen3TTSTokenizerMultiCodebookConv1d(
                     config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio
@@ -1389,7 +1392,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoder(nn.Module):
             scaling *= 2
 
         model += [nn.ELU()]
-        qwen3_tts_tokenizer_multi_codebookconv1d_layer_names.append(f"layers.{len(model)}")
+        qwen3_tts_tokenizer_12hzconv1d_layer_names.append(f"layers.{len(model)}")
         model += [
             Qwen3TTSTokenizerMultiCodebookConv1d(
                 config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size
@@ -1397,12 +1400,10 @@ class Qwen3TTSTokenizerMultiCodebookEncoder(nn.Module):
         ]
 
         self.layers = nn.ModuleList(model)
-        self._qwen3_tts_tokenizer_multi_codebookconv1d_layer_names = (
-            qwen3_tts_tokenizer_multi_codebookconv1d_layer_names
-        )
+        self._qwen3_tts_tokenizer_12hzconv1d_layer_names = qwen3_tts_tokenizer_12hzconv1d_layer_names
 
         # initialize layer_idx for Qwen3TTSTokenizerMultiCodebookConv1d submodules, necessary for padding_cache
-        for layer_idx, layername in enumerate(self._qwen3_tts_tokenizer_multi_codebookconv1d_layer_names):
+        for layer_idx, layername in enumerate(self._qwen3_tts_tokenizer_12hzconv1d_layer_names):
             conv_layer = self.get_submodule(layername)
             setattr(conv_layer, "layer_idx", layer_idx)
 
@@ -1731,7 +1732,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(Qwen3TTSTokenizerMultiCodebookP
                 stride=2,
                 bias=False,
                 pad_mode="replicate",
-                layer_idx=len(self.encoder._qwen3_tts_tokenizer_multi_codebookconv1d_layer_names),
+                layer_idx=len(self.encoder._qwen3_tts_tokenizer_12hzconv1d_layer_names),
             )
 
             self.upsample = Qwen3TTSTokenizerMultiCodebookConvTranspose1d(
@@ -1804,7 +1805,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(Qwen3TTSTokenizerMultiCodebookP
         output_length = input_length
 
         # encoder
-        for layer_name in self.encoder._qwen3_tts_tokenizer_multi_codebookconv1d_layer_names:
+        for layer_name in self.encoder._qwen3_tts_tokenizer_12hzconv1d_layer_names:
             output_length = self.encoder.get_submodule(layer_name)._get_output_length(output_length)
 
         # downsample
@@ -1884,7 +1885,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(Qwen3TTSTokenizerMultiCodebookP
 
         if use_streaming and padding_cache is None:
             per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
-            for layer_name in self.encoder._qwen3_tts_tokenizer_multi_codebookconv1d_layer_names:
+            for layer_name in self.encoder._qwen3_tts_tokenizer_12hzconv1d_layer_names:
                 per_layer_padding.append(self.encoder.get_submodule(layer_name).padding_total)
                 per_layer_padding_mode.append(self.encoder.get_submodule(layer_name).pad_mode)
                 per_layer_in_channels.append(self.encoder.get_submodule(layer_name).in_channels)
@@ -1895,7 +1896,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(Qwen3TTSTokenizerMultiCodebookP
             per_layer_in_channels.append(self.downsample.in_channels)
 
             padding_cache = Qwen3TTSTokenizerMultiCodebookConv1dPaddingCache(
-                num_layers=len(self.encoder._qwen3_tts_tokenizer_multi_codebookconv1d_layer_names) + 1,
+                num_layers=len(self.encoder._qwen3_tts_tokenizer_12hzconv1d_layer_names) + 1,
                 per_layer_padding=per_layer_padding,
                 per_layer_padding_mode=per_layer_padding_mode,
                 per_layer_in_channels=per_layer_in_channels,
@@ -2119,7 +2120,7 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
 
         encoded_frames = self.encoder.encode(
             input_values=input_values.unsqueeze(1),
-            num_quantizers=self.config.encoder_config.num_quantizers,
+            num_quantizers=self.config.encoder_config.valid_num_quantizers,
             return_dict=True,
         )
         audio_codes = encoded_frames.audio_codes

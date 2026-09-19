@@ -214,6 +214,36 @@ output = pipe(conversation)
 sf.write("output.wav", output["audio"], output["sampling_rate"])
 ```
 
+### Training
+
+The Qwen3-TTS single-speaker supervised fine-tuning workflow is not a conventional `Trainer` loop. It first
+encodes target audio into 16 codec codebooks, builds the combined text and codec embeddings, and optimizes both
+the primary-codebook and code-predictor losses. [`~Qwen3TTSProcessor.apply_chat_template`] prepares inference
+inputs only, so it cannot prepare this training objective.
+
+Use the [upstream fine-tuning workflow](https://github.com/QwenLM/Qwen3-TTS/tree/main/finetuning) for the
+supported single-speaker procedure. It expects JSONL records with `audio`, `text`, and `ref_audio` fields:
+
+```bash
+git clone https://github.com/QwenLM/Qwen3-TTS.git
+cd Qwen3-TTS/finetuning
+
+python prepare_data.py \
+    --device cuda:0 \
+    --tokenizer_model_path Qwen/Qwen3-TTS-Tokenizer-12Hz \
+    --input_jsonl train_raw.jsonl \
+    --output_jsonl train_with_codes.jsonl
+
+python sft_12hz.py \
+    --init_model_path Qwen/Qwen3-TTS-12Hz-1.7B-Base \
+    --output_model_path output \
+    --train_jsonl train_with_codes.jsonl \
+    --batch_size 32 \
+    --lr 2e-6 \
+    --num_epochs 10 \
+    --speaker_name speaker_test
+```
+
 ### Torch compile
 
 Generation is driven by two autoregressive transformers — the talker (`model.model`) and the code

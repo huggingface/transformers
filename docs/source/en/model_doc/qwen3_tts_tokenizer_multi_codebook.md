@@ -33,7 +33,7 @@ The decoder is the Code2Wav vocoder shared with [Qwen3-Omni-MoE](./qwen3_omni_mo
 followed by a causal-convolution upsampling stack.
 
 A model checkpoint is available at
-[shahvandit/qwen3-tts-tokenizer-multi-codebook-hf](https://huggingface.co/shahvandit/qwen3-tts-tokenizer-multi-codebook-hf).
+[Qwen/Qwen3-TTS-Tokenizer-12Hz](https://huggingface.co/Qwen/Qwen3-TTS-Tokenizer-12Hz).
 
 This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
 
@@ -47,15 +47,17 @@ reconstructed with [`~Qwen3TTSTokenizerMultiCodebookModel.decode`]:
 import torch
 from scipy.io import wavfile
 
-from transformers import AutoFeatureExtractor, AutoModel
+from transformers import AutoModel, Qwen3TTSTokenizerMultiCodebookFeatureExtractor
 from transformers.audio_utils import load_audio_librosa
 
 
-model_id = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
+model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 
 # load model and feature extractor
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+feature_extractor = Qwen3TTSTokenizerMultiCodebookFeatureExtractor(
+    sampling_rate=model.config.input_sampling_rate
+)
 
 # load audio at the sample rate the tokenizer expects
 audio = load_audio_librosa(
@@ -95,13 +97,15 @@ of code tensors, one per utterance, each already trimmed to its own length:
 ```python
 import torch
 
-from transformers import AutoFeatureExtractor, AutoModel
+from transformers import AutoModel, Qwen3TTSTokenizerMultiCodebookFeatureExtractor
 from transformers.audio_utils import load_audio_librosa
 
 
-model_id = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
+model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+feature_extractor = Qwen3TTSTokenizerMultiCodebookFeatureExtractor(
+    sampling_rate=model.config.input_sampling_rate
+)
 
 audios = [
     load_audio_librosa(url, sampling_rate=model.config.input_sampling_rate)
@@ -135,12 +139,14 @@ model exposes `encode` and `decode` rather than a single forward, compile each o
 
 ```python
 import torch
-from transformers import AutoFeatureExtractor, AutoModel
+from transformers import AutoModel, Qwen3TTSTokenizerMultiCodebookFeatureExtractor
 from transformers.audio_utils import load_audio_librosa
 
-model_id = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
+model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
-feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+feature_extractor = Qwen3TTSTokenizerMultiCodebookFeatureExtractor(
+    sampling_rate=model.config.input_sampling_rate
+)
 
 audio = load_audio_librosa(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
