@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 import json
-import tempfile
 import unittest
 from pathlib import Path
 
 import torch
+from torch.nn.utils.rnn import pad_sequence
 
 from transformers import (
     Qwen3TTSTokenizerMultiCodebookConfig,
@@ -44,14 +45,12 @@ class Qwen3TTSTokenizerMultiCodebookModelTester:
         parent,
         batch_size=2,
         num_quantizers=4,
-        seq_length=8,
-        audio_samples=960,  # small audio chunk
+        audio_samples=960,
         is_training=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.num_quantizers = num_quantizers
-        self.seq_length = seq_length
         self.audio_samples = audio_samples
         self.is_training = is_training
 
@@ -88,8 +87,8 @@ class Qwen3TTSTokenizerMultiCodebookModelTester:
             "codebook_dim": 8,
             "latent_dim": 16,
             "decoder_dim": 32,  # must be divisible by upsample groups
-            "upsample_rates": [2, 2],
-            "upsampling_ratios": [2, 2],
+            "upsample_rates": [2, 12],
+            "upsampling_ratios": [2, 12],
         }
 
     def get_config(self):
@@ -100,17 +99,19 @@ class Qwen3TTSTokenizerMultiCodebookModelTester:
 
     def prepare_config_and_inputs(self):
         # top-level encode expects (batch, channels, seq) â€” channels=1
-        input_values = torch.randn([self.batch_size, 1, self.audio_samples], device=torch_device)
-        padding_mask = torch.ones([self.batch_size, 1, self.audio_samples], dtype=torch.bool, device=torch_device)
+        input_values = torch.randn([self.batch_size, self.audio_samples], device=torch_device)
+        padding_mask = torch.ones([self.batch_size, self.audio_samples], dtype=torch.bool, device=torch_device)
         # top-level decode expects (batch, seq_length, num_quantizers)
-        codes = torch.randint(0, 8, [self.batch_size, self.seq_length, self.num_quantizers], device=torch_device)
         config = self.get_config()
-        return config, input_values, padding_mask, codes
+        return config, {"input_values": input_values, "padding_mask": padding_mask}
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_values, padding_mask, codes = self.prepare_config_and_inputs()
-        inputs_dict = {"input_values": input_values}
-        return config, inputs_dict
+        return self.prepare_config_and_inputs()
+
+    def create_and_check_model_forward(self, config, inputs_dict):
+        model = Qwen3TTSTokenizerMultiCodebookModel(config=config).to(torch_device).eval()
+        result = model(**inputs_dict)
+        self.parent.assertEqual(result.audio_values.shape, inputs_dict["input_values"].shape)
 
 
 if is_torch_available():
@@ -121,100 +122,69 @@ if is_torch_available():
 class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Qwen3TTSTokenizerMultiCodebookModel,) if is_torch_available() else ()
     _is_composite = True
+    is_encoder_decoder = True
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     test_missing_keys = False
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict.pop("output_attentions", None)
+        inputs_dict.pop("output_hidden_states", None)
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = Qwen3TTSTokenizerMultiCodebookModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=Qwen3TTSTokenizerMultiCodebookConfig, has_text_modality=False
         )
-        _no_forward_tests = (
-            "test_eager_matches_sdpa_inference",
-            "test_attention_outputs",
-            "test_hidden_states_output",
-            "test_retain_grad_hidden_states_attentions",
-            "test_model_forward_default_config_values",
-            "test_feed_forward_chunking",
-            "test_inputs_embeds",
-            "test_capture_outputs_decorator",
-        )
-        if any(name in self._testMethodName for name in _no_forward_tests):
-            self.skipTest("Qwen3TTSTokenizerMultiCodebookModel forward requires raw audio input, not standard embeds")
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_model_instantiation(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Qwen3TTSTokenizerMultiCodebookModel(config)
-        self.assertIsNotNone(model)
+    def test_model_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    def test_save_load(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).eval().to(torch_device)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                loaded = model_class.from_pretrained(tmpdirname).eval().to(torch_device)
-            for key in model.state_dict():
-                self.assertTrue(
-                    torch.allclose(model.state_dict()[key], loaded.state_dict()[key]),
-                    f"Mismatch in key: {key}",
-                )
+    def test_forward_pads_codes_and_truncates_audio(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        inputs_dict["padding_mask"][0, self.model_tester.audio_samples // 2 :] = False
+        model = Qwen3TTSTokenizerMultiCodebookModel(config).to(torch_device).eval()
 
-    def test_encode_decode_roundtrip(self):
-        """Encode audio to codes then decode back; output should have batch size preserved."""
-        set_seed(42)
-        config, input_values, padding_mask, _ = self.model_tester.prepare_config_and_inputs()
-        model = Qwen3TTSTokenizerMultiCodebookModel(config).eval().to(torch_device)
         with torch.no_grad():
-            # top-level encode expects (batch, seq); it adds the channel dim internally
-            encoded = model.encode(
-                input_values.squeeze(1).to(torch_device),
-                padding_mask=padding_mask.squeeze(1).to(torch_device),
-            )
-            audio_codes = encoded.audio_codes
-        self.assertEqual(len(audio_codes), self.model_tester.batch_size)
+            outputs = model(**inputs_dict)
+            encoded = model.encode(**inputs_dict)
 
-    def test_decode_from_codes(self):
-        """Decode from synthetic codes (batch, seq, num_quantizers); output is a batched waveform tensor."""
-        set_seed(42)
-        config, _, _, codes = self.model_tester.prepare_config_and_inputs()
-        model = Qwen3TTSTokenizerMultiCodebookModel(config).eval().to(torch_device)
-        with torch.no_grad():
-            output = model.decode(codes.to(torch_device))
-        self.assertEqual(output.audio_values.shape[0], self.model_tester.batch_size)
+        expected_codes = pad_sequence(encoded.audio_codes, batch_first=True, padding_value=-1)
+        self.assertIsInstance(outputs.audio_codes, torch.Tensor)
+        self.assertIsInstance(outputs.audio_values, torch.Tensor)
+        torch.testing.assert_close(outputs.audio_codes, expected_codes)
+        self.assertEqual(outputs.audio_values.shape, inputs_dict["input_values"].shape)
 
-    # The model exposes `encode`/`decode` and defines no `forward`, so anything the common tester
-    # routes through `model(**inputs)` reaches `nn.Module._forward_unimplemented`.
-    _no_forward = "model defines `encode`/`decode` and no `forward`, which the common tester calls"
-
-    @unittest.skip(reason=_no_forward)
-    def test_all_tensors_are_parameter_or_buffer(self):
-        pass
-
-    @unittest.skip(reason=_no_forward)
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason=_no_forward)
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason=_no_forward)
     def test_model_outputs_equivalence(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    @unittest.skip(reason=f"{_no_forward}, so `main_input_name` cannot be inferred from its signature")
-    def test_model_main_input_name(self):
-        pass
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                tuple_outputs = model(**inputs_dict, return_dict=False)
+                dict_outputs = model(**inputs_dict, return_dict=True).to_tuple()
 
-    @unittest.skip(reason=_no_forward)
-    def test_torch_export(self):
-        pass
+            self.assertEqual(len(tuple_outputs), len(dict_outputs))
+            for tuple_output, dict_output in zip(tuple_outputs, dict_outputs):
+                torch.testing.assert_close(tuple_output, dict_output)
+
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence(atol=5e-4, rtol=1e-3)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            signature = inspect.signature(model_class(config).forward)
+            arg_names = [*signature.parameters.keys()]
+            self.assertListEqual(arg_names[:2], ["input_values", "padding_mask"])
 
     @unittest.skip(
         reason="`_init_weights` does not cover the EuclideanCodebook buffers (`embed_sum`, `cluster_usage`), "
@@ -230,8 +200,28 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
     def test_config_attn_implementation_setter(self):
         pass
 
+    @unittest.skip(reason="The codec forward method does not expose submodel capture outputs.")
+    def test_capture_outputs_decorator(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel does not have `inputs_embeds` logic")
+    def test_inputs_embeds(self):
+        pass
+
     @unittest.skip(reason="codec model has no token embeddings, so `get_input_embeddings` is not implemented")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel does not have the usual `attention` logic")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel does not have the usual `attention` logic")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel does not have the usual `hidden_states` logic")
+    def test_hidden_states_output(self):
         pass
 
 
