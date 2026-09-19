@@ -103,7 +103,9 @@ class TestImportStructures(unittest.TestCase):
                         backend_agnostic_import_structure[module].extend(objects)
 
                 for module, objects in backend_agnostic_import_structure.items():
-                    with open(self.models_path / architecture / f"{module}.py") as f:
+                    # Model sources are UTF-8; pin the encoding so this read does not depend on
+                    # the locale's preferred encoding (e.g. cp936 on Windows).
+                    with open(self.models_path / architecture / f"{module}.py", encoding="utf-8") as f:
                         content = f.read()
                         _all = fetch__all__(content)
 
