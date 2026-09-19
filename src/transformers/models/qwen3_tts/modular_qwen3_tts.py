@@ -149,7 +149,7 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
     sliding_window: int | None = 4096
     max_window_layers: int | None = 28
     layer_types: list[str] | None = None
-    attention_dropout: float | None = 0.0
+    attention_dropout: float | int | None = 0.0
     num_code_groups: int | None = 32
     pad_token_id: int | None = None
 
@@ -192,12 +192,12 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         The padding token ID for codec tokens.
     codec_bos_id (`int`, *optional*, defaults to 2149):
         The beginning-of-sequence token ID for codec tokens.
-    spk_id (`int`, *optional*):
-        Speaker ID for built-in voice presets.
-    spk_is_dialect (`bool`, *optional*):
-        Whether the speaker uses a dialect variant.
-    codec_language_id (`int`, *optional*):
-        Language ID for codec generation.
+    spk_id (`dict[str, int]`, *optional*):
+        Mapping from speaker names to IDs for built-in voice presets.
+    spk_is_dialect (`dict[str, bool]`, *optional*):
+        Mapping from speaker names to whether they use a dialect variant.
+    codec_language_id (`dict[str, int]`, *optional*):
+        Mapping from language names to codec generation IDs.
     text_vocab_size (`int`, *optional*, defaults to 152064):
         Vocabulary size of the text tokenizer.
     """
@@ -228,7 +228,7 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
     sliding_window: int | None = 4096
     max_window_layers: int | None = 28
     layer_types: list[str] | None = None
-    attention_dropout: float | None = 0.0
+    attention_dropout: float | int | None = 0.0
     num_code_groups: int | None = 32
     text_hidden_size: int | None = 2048
     codec_eos_token_id: int | None = 2150
@@ -238,9 +238,9 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
     codec_think_eos_id: int | None = 4205
     codec_pad_id: int | None = 2148
     codec_bos_id: int | None = 2149
-    spk_id: int | None = None
-    spk_is_dialect: bool | None = None
-    codec_language_id: int | None = None
+    spk_id: dict[str, int] | None = None
+    spk_is_dialect: dict[str, bool] | None = None
+    codec_language_id: dict[str, int] | None = None
     text_vocab_size: int | None = 152064
     pad_token_id: int | None = None
 
