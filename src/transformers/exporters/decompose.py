@@ -829,7 +829,7 @@ def decompose_for_generation(
                 call_inputs.pop(grid_key, None)
         # `mm_token_type_ids` only drives the model's internal M-RoPE (`get_rope_index`); once `position_ids`
         # is captured, the forward never reads it. Drop it from the graph's inputs so the runtime (which
-        # supplies `position_ids` via `modeling_rope_utils.get_mrope_index`) needn't thread a per-step
+        # supplies `position_ids` by running that same `get_rope_index`) needn't thread a per-step
         # token-type tensor.
         if call_inputs.get("position_ids") is not None:
             call_inputs.pop("mm_token_type_ids", None)

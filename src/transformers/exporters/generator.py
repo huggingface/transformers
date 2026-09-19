@@ -46,7 +46,6 @@ import torch
 from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache, StaticLayer
 from ..generation import GenerationConfig, GenerationMixin
 from ..masking_utils import create_masks_for_generate
-from ..modeling_multimodal_utils import get_mrope_index, uses_mrope
 from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ..models.auto import AutoConfig
 from ..utils import GENERATION_CONFIG_NAME, logging
@@ -72,6 +71,7 @@ from .decompose import (
 from .utils import (
     _find_config_attr,
     cast_leaf_tensors,
+    get_rope_index_from_config,
     materialize_cache_layers,
     precompute_export_inputs,
 )
@@ -893,17 +893,12 @@ class ExportedGenerator(GenerationMixin):
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         """Multi-modal M-RoPE: build the `[text; 3 vision]` 4-axis `position_ids` the exported decode graph
-        expects — what `generate` normally gets from a VLM's own override of this method. Mirrors that
-        override from the config alone: the text row from `super()` (GenerationMixin), the 3 vision rows
-        from `modeling_rope_utils.get_mrope_index` — the very call the model's own override makes — and the
-        decode step advances the text row by the cached rope-delta. Models that don't declare M-RoPE (plain
+        expects — what `generate` normally gets from a VLM's own override of this method. Runs that same
+        override without the model: the text row from `super()` (GenerationMixin), the 3 vision rows from
+        the model class's own `get_rope_index` (see `get_rope_index_from_config`), and the decode step
+        advances the text row by the cached rope-delta. Models that lay out no modality spans (plain
         decoders, VLMs with 1D text positions like Llava) keep the standard positions."""
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
-        # Both signals, not just `uses_mrope`: a text config carries `mrope_section` while only the outer
-        # multimodal config declares the `mrope_layout` that says how to lay the spans out (minicpmv4_6 has
-        # the first and not the second, and `get_mrope_index` refuses a `None` layout).
-        if not uses_mrope(self.config) or getattr(self.config, "mrope_layout", None) is None:
-            return text_positions
 
         cache = model_kwargs.get("past_key_values")
         past_length = _cache_length(cache)
@@ -914,20 +909,10 @@ class ExportedGenerator(GenerationMixin):
             inputs_tensor = model_kwargs["input_ids"]
         # No `attention_mask`: unpadded single sequence, and `generate` has already turned the mask into the
         # per-layer form the attention needs, not the 2D form `get_rope_index` wants. `None` = all valid.
-        # An audio-carrying layout (the omni thinkers) places its spans from the mel lengths, which
-        # `generate` carries as the padding mask — derive them the way the eager forward does.
-        audio_seqlens = model_kwargs.get("audio_feature_lengths")
-        if audio_seqlens is None and model_kwargs.get("feature_attention_mask") is not None:
-            audio_seqlens = model_kwargs["feature_attention_mask"].sum(-1)
-        vision_positions, self._rope_deltas = get_mrope_index(
-            self.config,
-            inputs_tensor,
-            # Optional in `get_mrope_index`, and `generate` only carries it for the models whose layout
-            # places spans by token type — minicpmv4_6's does not.
-            model_kwargs.get("mm_token_type_ids"),
-            image_grid_thw=model_kwargs.get("image_grid_thw"),
-            video_grid_thw=model_kwargs.get("video_grid_thw"),
-            second_per_grid_ts=model_kwargs.get("second_per_grid_ts"),
-            audio_seqlens=audio_seqlens,
+        rope_index = get_rope_index_from_config(
+            self.config, {**model_kwargs, "input_ids": inputs_tensor, "attention_mask": None}
         )
+        if rope_index is None:
+            return text_positions
+        vision_positions, self._rope_deltas = rope_index
         return torch.cat([text_positions[None, ...], vision_positions], dim=0)

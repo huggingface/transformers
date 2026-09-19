@@ -462,6 +462,110 @@ def _resolve_modeling_module(config: Any):
     return importlib.import_module(type(config).__module__.replace(".configuration_", ".modeling_"))
 
 
+def _lays_out_modality_spans(config: Any) -> bool:
+    """Whether `config` describes a model that places modality spans, rather than the text model inside it.
+
+    A model's text sub-config is declared in the same module as the multi-modal config it belongs to, so
+    reaching the module is not enough: a component exported from the language model alone carries the text
+    config, and the spans are not its to lay out. Declaring a vision or audio sub-config is what separates
+    the two — including for an omni thinker, which lays out spans under its own config class rather than
+    the outer model's.
+    """
+    return bool({"vision_config", "audio_config"} & set(getattr(config, "sub_configs", {}) or ()))
+
+
+def _rope_index_owner(config: Any):
+    """The class that defines `get_rope_index` for `config`'s model, or `None` if none does.
+
+    A module can hold more than one (qwen3_omni_moe's thinker and talker each define their own). The class
+    whose own `config_class` this is wins; failing that, the config's declared architecture picks, and
+    failing that the first definition.
+    """
+    if not _lays_out_modality_spans(config):
+        return None
+    try:
+        module = _resolve_modeling_module(config)
+    except ImportError:
+        return None
+    owners = [obj for obj in vars(module).values() if inspect.isclass(obj) and "get_rope_index" in obj.__dict__]
+    if len(owners) <= 1:
+        return owners[0] if owners else None
+    for owner in owners:
+        if isinstance(config, getattr(owner, "config_class", ()) or ()):
+            return owner
+    for architecture in getattr(config, "architectures", None) or ():
+        for base in getattr(getattr(module, architecture, None), "__mro__", ()):
+            if base in owners:
+                return base
+    return owners[0]
+
+
+def get_rope_index_from_config(config: Any, inputs: Mapping[str, Any]):
+    """The model's own `get_rope_index`, run without the model: `(position_ids, rope_deltas)` or `None`.
+
+    M-RoPE lays its modality spans out per architecture, and that layout lives on the model class
+    (`Qwen2VLModel.get_rope_index` and its counterparts). Both callers here hold a config and nothing else
+    — the export precompute, and `ExportedGenerator` driving a saved artifact — and the method reads its
+    geometry off `self.config` alone, so it runs on an instance built without `__init__`: no module tree,
+    no weights, no checkpoint.
+
+    `None` means the positions are not this function's to build: the model defines no `get_rope_index`, or
+    the inputs it places spans from are absent. That is the same gate the model's own forward applies, and
+    it leaves the caller on the standard 1-D positions.
+    """
+    owner = _rope_index_owner(config)
+    if owner is None or inputs.get("input_ids") is None:
+        return None
+    parameters = inspect.signature(owner.get_rope_index).parameters
+
+    # The parameter names are the model's, the keys are the processor's; `audio_seqlens` is the one the
+    # omni thinkers derive from the mel padding mask rather than receiving outright.
+    candidates = dict(inputs)
+    candidates.setdefault("second_per_grids", inputs.get("video_second_per_grid"))
+    if inputs.get("audio_feature_lengths") is not None:
+        candidates.setdefault("audio_seqlens", inputs["audio_feature_lengths"])
+    elif inputs.get("feature_attention_mask") is not None:
+        candidates.setdefault("audio_seqlens", inputs["feature_attention_mask"].sum(-1))
+    call_kwargs = {name: value for name, value in candidates.items() if name in parameters and value is not None}
+
+    # `attention_mask` here means the 2-D padding mask the layouts index positions with. `generate`
+    # carries the per-layer form instead (a dict, or a `BlockMask`), which is not that, and some layouts
+    # index the mask unconditionally with no `None` branch (the omni thinkers) — so anything that is not
+    # the 2-D mask becomes the all-valid one, which is what an absent mask meant here all along.
+    if "attention_mask" in parameters:
+        mask = call_kwargs.get("attention_mask")
+        if not (isinstance(mask, torch.Tensor) and mask.dim() == 2):
+            call_kwargs["attention_mask"] = torch.ones_like(inputs["input_ids"])
+
+    # Spans are placed from a grid or from audio lengths; with none of them present there is nothing to
+    # lay out — a text-only prompt through a multi-modal model lands here.
+    if not {"image_grid_thw", "video_grid_thw", "audio_seqlens"} & call_kwargs.keys():
+        return None
+    # There is multi-modal data but nothing saying which tokens it covers. The model raises here rather
+    # than guessing, and so do we: falling back to 1-D positions would run and be quietly wrong.
+    if "mm_token_type_ids" in parameters and "mm_token_type_ids" not in call_kwargs:
+        raise ValueError(
+            "Multi-modal data was passed but `mm_token_type_ids` is missing, so the M-RoPE positions "
+            f"{owner.__name__} expects cannot be built. Pass the `mm_token_type_ids` the processor returns "
+            "alongside `input_ids`."
+        )
+
+    model = owner.__new__(owner)
+    object.__setattr__(model, "config", config)
+    # Most layouts read `self.config` alone, but a few reach for a value the model's `__init__` copies off
+    # it (the omni thinkers' `spatial_merge_size`). Fill those in as the method asks for them; a name the
+    # config does not carry is a genuine error and re-raises, as does one filling did not fix.
+    while True:
+        try:
+            return owner.get_rope_index(model, **call_kwargs)
+        except AttributeError as missing:
+            name = getattr(missing, "name", None)
+            value = _find_config_attr(config, name) if name else None
+            if value is None or hasattr(model, name):
+                raise
+            object.__setattr__(model, name, value)
+
+
 # Marker kwarg tuples -> preparer. A preparer runs when every marker in its key is present in the inputs
 # (`@register_export_input_preparer(*markers)`), so a model gets exactly the precompute its encoder needs.
 _EXPORT_INPUT_PREPARERS: dict[tuple[str, ...], callable] = {}
@@ -679,40 +783,22 @@ def precompute_export_inputs(config: PreTrainedConfig, inputs: Mapping[str, Any]
     come back in a new dict.
 
     Two layers:
-    - Outer LLM M-RoPE positions, via [`~modeling_rope_utils.get_mrope_index`] — the same layout the
-      model's own `get_rope_index` runs, read off `config.mrope_layout`.
+    - Outer LLM M-RoPE positions, via [`get_rope_index_from_config`] — the model's own `get_rope_index`,
+      called without the model.
     - Per-encoder preparer dispatched by marker kwargs present in `inputs` (e.g. `grid_thw`,
       `target_sizes`, `(input_features, feature_lens)`) — see `register_export_input_preparer`.
       A preparer fires only when every one of its markers is present in `inputs`.
     """
-    from ..modeling_multimodal_utils import get_mrope_index
-
     inputs = dict(inputs)
 
-    # Outer-model M-RoPE positions, for a config that declares a layout. The layout reads the token ids to
-    # place modality spans, so this must not run on encoder-only components (an exported
-    # `get_image_features`) that carry no `input_ids`, nor on a text config — which carries `mrope_section`
-    # but not the layout, since laying out the spans is the multimodal model's job.
-    declares_mrope_layout = getattr(config, "mrope_layout", None) is not None
-    if inputs.get("position_ids") is None and inputs.get("input_ids") is not None and declares_mrope_layout:
-        input_ids = inputs["input_ids"]
+    # Outer-model M-RoPE positions. Placing the spans reads the token ids, so this is a no-op on
+    # encoder-only components (an exported `get_image_features`) that carry no `input_ids`, and on a
+    # text-only model, whose class defines no `get_rope_index`.
+    if inputs.get("position_ids") is None and inputs.get("input_ids") is not None:
         attn_mask = inputs.get("attention_mask")
-        is_prefill = attn_mask is None or input_ids.shape[1] == attn_mask.shape[1]
-        if is_prefill:
-            rope_inputs = {
-                key: inputs[key]
-                for key in ("attention_mask", "image_grid_thw", "video_grid_thw", "second_per_grid_ts")
-                if inputs.get(key) is not None
-            }
-            # An audio-carrying layout (the omni thinkers) places its spans from the mel lengths, which
-            # arrive as the padding mask — derive them the way the eager forward does.
-            if inputs.get("audio_feature_lengths") is not None:
-                rope_inputs["audio_seqlens"] = inputs["audio_feature_lengths"]
-            elif inputs.get("feature_attention_mask") is not None:
-                rope_inputs["audio_seqlens"] = inputs["feature_attention_mask"].sum(-1)
-            inputs["position_ids"] = get_mrope_index(
-                config, input_ids, inputs.get("mm_token_type_ids"), **rope_inputs
-            )[0]
+        is_prefill = attn_mask is None or inputs["input_ids"].shape[1] == attn_mask.shape[1]
+        if is_prefill and (rope_index := get_rope_index_from_config(config, inputs)) is not None:
+            inputs["position_ids"] = rope_index[0]
 
     # Encoder-level: dispatch by marker kwargs (preparer fires when every marker is in `inputs`
     # with a non-`None` value).

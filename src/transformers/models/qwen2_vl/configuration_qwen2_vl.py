@@ -157,8 +157,6 @@ class Qwen2VLConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151655
-    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
-    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 151656
     vision_start_token_id: int = 151652
     vision_end_token_id: int = 151653

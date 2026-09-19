@@ -590,7 +590,8 @@ ids = runtime.generate(**inputs, max_new_tokens=32)
 The `generation_config` travels with the artifacts, which matters here: it declares the cache the graphs
 were traced against, so a load that guessed a different one would build the wrong cache.
 
-This covers decoder-only text, VLMs (including the multi-axis M-RoPE position ids, rebuilt from the config),
+This covers decoder-only text, VLMs (including the multi-axis M-RoPE position ids, which the runtime
+builds by running the model class's own `get_rope_index` on the saved config, with no weights loaded),
 and encoder-decoder models.
 
 <details>

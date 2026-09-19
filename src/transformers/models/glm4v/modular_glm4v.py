@@ -106,10 +106,6 @@ class Glm4vVisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     rms_norm_eps: float = 1e-05
     spatial_merge_size: int = 2
-    # Whether the processor separates video frames with timestamp text, making each frame its own visual
-    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
-    # (`modeling_rope_utils.get_mrope_index`).
-    timestamped_video_frames: bool = True
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 4096
     intermediate_size: int = 13696
@@ -209,8 +205,6 @@ class Glm4vConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151343
-    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
-    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 151344
     image_start_token_id: int = 151339
     image_end_token_id: int = 151340
@@ -856,6 +850,43 @@ class Glm4vModel(Qwen2VLModel):
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
+
+    def get_rope_index(
+        self,
+        video_grid_thw: torch.LongTensor | None = None,
+        **super_kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
+        - GLM4V uses timestamps to separate each video frame, so the video_grid_thw should also be split too.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+
+        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
+
+        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
 
     @auto_docstring
     @can_return_tuple
