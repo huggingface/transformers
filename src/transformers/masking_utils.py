@@ -1,4 +1,4 @@
-# Copyright 2025 HuggingFace Inc. team. All rights reserved.
+﻿# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
-from .utils.import_utils import (
+from .utils.import_utils import (\n    is_torchdynamo_exporting,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_tracing,
@@ -256,8 +256,8 @@ def _ignore_causal_mask_sdpa(
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
-    # `ignore_causal_mask = True` if we are not tracing
-    if padding_mask is not None and is_tracing(padding_mask):
+    # `ignore_causal_mask = True` if we are not exporting.
+    if is_torchdynamo_exporting():
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
@@ -291,7 +291,7 @@ def _can_skip_bidirectional_mask_xpu(
     - Skip if no padding and no local attention constraint
     """
 
-    if padding_mask is not None and is_tracing(padding_mask):
+    if is_torchdynamo_exporting():
         return False
 
     # Check local attention constraint (same as CUDA)
@@ -428,12 +428,7 @@ def sdpa_mask(
 
     To create the following causal mask:
 
-        0 ■ ⬚ ⬚ ⬚ ⬚
-        1 ■ ■ ⬚ ⬚ ⬚
-        2 ■ ■ ■ ⬚ ⬚
-        3 ■ ■ ■ ■ ⬚
-        4 ■ ■ ■ ■ ■
-
+        0 鈻?猬?猬?猬?猬?        1 鈻?鈻?猬?猬?猬?        2 鈻?鈻?鈻?猬?猬?        3 鈻?鈻?鈻?鈻?猬?        4 鈻?鈻?鈻?鈻?鈻?
     You can do
 
     ```python
@@ -449,12 +444,7 @@ def sdpa_mask(
 
     To create the following sliding window mask (`sliding_window=3`):
 
-        0 ■ ⬚ ⬚ ⬚ ⬚
-        1 ■ ■ ⬚ ⬚ ⬚
-        2 ■ ■ ■ ⬚ ⬚
-        3 ⬚ ■ ■ ■ ⬚
-        4 ⬚ ⬚ ■ ■ ■
-
+        0 鈻?猬?猬?猬?猬?        1 鈻?鈻?猬?猬?猬?        2 鈻?鈻?鈻?猬?猬?        3 猬?鈻?鈻?鈻?猬?        4 猬?猬?鈻?鈻?鈻?
     You can do
 
     ```python
@@ -470,12 +460,7 @@ def sdpa_mask(
 
     To create the following chunked attention mask (`chunk_size=3`):
 
-        0 ■ ⬚ ⬚ ⬚ ⬚
-        1 ■ ■ ⬚ ⬚ ⬚
-        2 ■ ■ ■ ⬚ ⬚
-        3 ⬚ ⬚ ⬚ ■ ⬚
-        4 ⬚ ⬚ ⬚ ■ ■
-
+        0 鈻?猬?猬?猬?猬?        1 鈻?鈻?猬?猬?猬?        2 鈻?鈻?鈻?猬?猬?        3 猬?猬?猬?鈻?猬?        4 猬?猬?猬?鈻?鈻?
     You can do
 
     ```python
@@ -1479,7 +1464,7 @@ def create_recurrent_attention_mask(
     - the input mask is missing or is already a custom 4D attention mask (no 2D padding signal);
     - the current forward is a single-token decode step (a generated token is never padding; this
       also keeps the growing 2D mask out of the compiled decode graph);
-    - the mask is all-ones (un-padded batch — the masking multiply would be a no-op), skipped
+    - the mask is all-ones (un-padded batch 鈥?the masking multiply would be a no-op), skipped
       only outside trace/compile so the graph specialisation stays stable.
 
     Otherwise we trim the mask to the trailing ``inputs_embeds.shape[1]`` positions so it aligns
