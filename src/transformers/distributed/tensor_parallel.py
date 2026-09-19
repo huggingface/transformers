@@ -16,7 +16,6 @@ from __future__ import annotations
 import contextlib
 import re
 from collections.abc import Callable
-from fnmatch import fnmatchcase
 from typing import TYPE_CHECKING
 
 from ..utils import logging
@@ -51,6 +50,14 @@ def replace_layer_number_by_wildcard(name: str) -> str:
     numbers in a parameter name itself, e.g. if the param is named `"w1"` or `"w2"`.
     """
     return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
+
+
+def _plan_pattern_to_regex(pattern: str) -> str:
+    """
+    Translate a plan key into a regex, where `*` stands for any run of characters (typically a layer index, e.g.
+    `"model.layers.*.mlp.experts"`). Every other character is matched literally.
+    """
+    return ".*".join(re.escape(part) for part in pattern.split("*"))
 
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
@@ -1010,7 +1017,8 @@ def resolve_parallel_plans(
         )
 
     def is_expert_path(name: str, paths: list[str]) -> bool:
-        return any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in paths)
+        # An EP path also owns its children, e.g. `...experts.gate_up_proj` under `...experts`.
+        return any(re.fullmatch(rf"{_plan_pattern_to_regex(path)}(\..*)?", name) for path in paths)
 
     expert_paths = list(ep_plan)
     if "ep_dispatch_experts" in ep_plan.values():
