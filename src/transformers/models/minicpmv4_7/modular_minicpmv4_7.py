@@ -229,11 +229,11 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
     def get_rope_index(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: torch.Tensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         target_sizes: torch.LongTensor | None = None,
         target_sizes_videos: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
         downsample_mode: str | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Canvas M-RoPE indices ``(3, B, S)`` plus ``rope_deltas``.
