@@ -18,7 +18,7 @@ import queue
 import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from datetime import timedelta
 from time import perf_counter
 from typing import Any
