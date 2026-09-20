@@ -319,26 +319,6 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_get_audio_features_attentions(self):
         pass
 
-    # The vision quantizer reads `self.embedding.weight` directly instead of calling the `nn.Embedding`, so
-    # the offload hook that would restore that weight never fires and the codebook stays on the meta device.
-    @unittest.skip(
-        reason="Apertus1p5 does not work with offload: the vision quantizer reads its codebook weight directly"
-    )
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(
-        reason="Apertus1p5 does not work with offload: the vision quantizer reads its codebook weight directly"
-    )
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(
-        reason="Apertus1p5 does not work with offload: the vision quantizer reads its codebook weight directly"
-    )
-    def test_disk_offload_safetensors(self):
-        pass
-
     @unittest.skip(
         reason="`nn.DataParallel` replicas expose no `Parameter`s, so reading `self.audio_tokenizer.dtype` "
         "in `get_audio_tokens` raises `StopIteration`; use DDP instead"

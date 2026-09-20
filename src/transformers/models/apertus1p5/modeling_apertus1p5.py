@@ -253,17 +253,17 @@ class Apertus1p5VisionTokenizerEncoder(nn.Module):
 
 
 class Apertus1p5VisionTokenizerVectorQuantizer(nn.Module):
-    """Inference-only IBQ codebook lookup using dot-product similarity and `argmax`."""
+    """Inference-only IBQ codebook scoring using dot-product similarity and `argmax`."""
 
     def __init__(self, config: Apertus1p5VisionTokenizerConfig):
         super().__init__()
-        self.embedding = nn.Embedding(config.codebook_size, config.embed_dim)
+        self.embedding = nn.Linear(config.embed_dim, config.codebook_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.LongTensor:
         batch_size, _, height, width = hidden_states.shape
-        hidden_states = hidden_states.flatten(2)
-        logits = torch.matmul(self.embedding.weight, hidden_states)
-        return logits.argmax(dim=1).reshape(batch_size, height, width)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        logits = self.embedding(hidden_states)
+        return logits.argmax(dim=-1).reshape(batch_size, height, width)
 
 
 @auto_docstring
@@ -275,6 +275,8 @@ class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
     # code assignment is an argmax over codebook logits: half precision flips ~10% of codes (bf16, 131k codebook),
     # so the tokenizer is kept in fp32 even when the model is loaded in fp16/bf16
     _keep_in_fp32_modules_strict = ["encoder", "quant_conv", "quantize"]
+    # Quantizers use this separate list to exclude the codebook projection from weight quantization.
+    _keep_in_fp32_modules = ["quantize.embedding"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -284,7 +286,7 @@ class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.GroupNorm):
             init.ones_(module.weight)
             init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
+        elif isinstance(module, nn.Linear):
             init.normal_(module.weight)
 
 
@@ -306,8 +308,6 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
         self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, kernel_size=1)
 
         self.vision_spatial_factor = config.spatial_scale_factor
-        # The pretrained tokenizer starts in evaluation mode. This does not freeze parameters or add `no_grad`.
-        self.eval()
 
         self.post_init()
 
