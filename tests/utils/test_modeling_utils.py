@@ -167,6 +167,30 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
+    class HugeTable(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.empty(1024, 256))
+
+    class BaseModelWithNoPlacementParams(PreTrainedModel):
+        """A small backbone plus a `table` module that dwarfs it, excluded from placement
+        (like Qwen4-Exp's n-gram embedding)."""
+
+        base_model_prefix = "base"
+        config_class = PreTrainedConfig
+        _no_split_modules = ["HugeTable"]
+        _no_placement_params = ["weight"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.table = HugeTable()
+            self.linear = nn.Linear(8, 8)
+            self.linear_2 = nn.Linear(8, 8)
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
     class BaseModelWithMissingKeys(PreTrainedModel):
         base_model_prefix = "base"
         config_class = PreTrainedConfig
@@ -2298,6 +2322,37 @@ class ModelUtilsTest(TestCasePlus):
         # Make sure the skipped missing key is not still on meta device!
         for k, v in model.state_dict().items():
             self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
+
+    @require_accelerate
+    def test_get_balanced_memory_excludes_no_placement_params(self):
+        """`_no_placement_params` are excluded from the balanced per-device budget: a table
+        that `infer_auto_device_map` will never place must not inflate every accelerator's
+        share (up to its physical limit), which leaves no headroom for loading temporaries."""
+        from transformers.integrations.accelerate import compute_module_sizes, get_balanced_memory
+
+        model = BaseModelWithNoPlacementParams(PreTrainedConfig())
+        sizes, _ = compute_module_sizes(model)
+        table_size = sizes["table"]
+        backbone_size = sizes[""] - table_size
+        self.assertGreater(table_size, 100 * backbone_size)
+        # three fake accelerators that each fit the table, plus cpu
+        max_memory = {0: 4 * table_size, 1: 4 * table_size, 2: 4 * table_size, "cpu": 100 * table_size}
+
+        naive = get_balanced_memory(
+            model, max_memory=dict(max_memory), no_split_module_classes=model._no_split_modules
+        )
+        aware = get_balanced_memory(
+            model,
+            max_memory=dict(max_memory),
+            no_split_module_classes=model._no_split_modules,
+            no_placement_params=model._no_placement_params,
+        )
+        # without the exclusion the table dominates every device's budget
+        self.assertGreater(naive[0], table_size)
+        # with it, the budget is the backbone's share plus the no-split buffer of the
+        # remaining (tiny) modules — far below the table
+        self.assertLess(aware[0], table_size)
+        self.assertLess(aware[0], naive[0])
 
     def test_device_map_works_with_unexpected_keys(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually

@@ -243,6 +243,7 @@ def get_balanced_memory(
     no_split_module_classes: set[str] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
     low_zero: bool = False,
+    no_placement_params: set[str] | None = None,
 ):
     """
     Compute a `max_memory` dictionary for [`infer_auto_device_map`] that will balance the use of each available GPU.
@@ -268,6 +269,11 @@ def get_balanced_memory(
         low_zero (`bool`, *optional*):
             Minimizes the number of weights on GPU 0, which is convenient when it's used for other operations (like the
             Transformers generate function).
+        no_placement_params (`set[str]`, *optional*):
+            Parameter names (relative to their no-split module, see `_no_placement_params`) that
+            [`infer_auto_device_map`] will exclude from placement when they do not fit an accelerator. They are
+            excluded from the per-device budget here too: counting a ~100 GB table that will never be placed inflates
+            every GPU's share up to its physical limit and leaves no headroom for loading temporaries.
     """
     # Get default / clean up max_memory
     user_not_set_max_memory = max_memory is None
@@ -295,7 +301,6 @@ def get_balanced_memory(
                     break  # only one device
 
     module_sizes, leave_modules_sizes = compute_module_sizes(model, hf_quantizer)
-    per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
 
     # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
     # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
@@ -307,14 +312,45 @@ def get_balanced_memory(
     elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
+    # Identify ALL modules matching a _no_split_module class once, as they are needed both for the no-placement
+    # sizes below and for the buffer
+    all_no_split_modules = {k for k, v in model.named_modules() if v.__class__.__name__ in no_split_module_classes}
+
+    # Params in `no_placement_params` escape the `device_map` placement entirely (`infer_auto_device_map` skips them),
+    # so they should not inflate the budgets: subtract their sizes from the total, as well as from the sizes of the
+    # no-split modules and leaf modules holding them (e.g. Qwen4Exp's ~100 GB n-gram embedding table)
+    no_placement_module_sizes: dict[str, int] = defaultdict(int)
+    no_placement_param_sizes: dict[str, int] = {}
+    if no_placement_params:
+        for module_name in all_no_split_modules:
+            for param_name, param in model.get_submodule(module_name).named_parameters():
+                if param_name not in no_placement_params:
+                    continue
+                full_name = f"{module_name}.{param_name}" if module_name else param_name
+                dtype_size = (
+                    hf_quantizer.param_element_size(model, full_name, param)
+                    if hf_quantizer is not None
+                    else param.element_size()
+                )
+                size = param.numel() * dtype_size
+                no_placement_module_sizes[module_name] += size
+                # `named_parameters` of nested no-split modules yield the same param several times, so we make sure
+                # to only count it once towards the total and its leaf module
+                if full_name not in no_placement_param_sizes:
+                    no_placement_param_sizes[full_name] = size
+                    leaf_name = full_name.rsplit(".", 1)[0]
+                    leave_modules_sizes[leaf_name] = max(0, leave_modules_sizes[leaf_name] - size)
+
+    total_size = module_sizes[""] - sum(no_placement_param_sizes.values())
+    per_gpu = total_size // (num_devices - 1 if low_zero else num_devices)
+
     # Identify the size of the biggest no_split_block modules. Note that a single _no_split_module class, i.e. XXXDecoderLayer,
     # may have different sizes depending on the layer idx, even if it's the same class (e.g. if we have either mlp or moe inside
     # the DecoderLayer depending on the layer idx). For this reason, we have to find ALL layers matching the _no_split_module class
     # and take the max, not just the first layer matching the class (as it may be smaller than future layers)
-    biggest_no_split_module = 0
-    if len(no_split_module_classes) > 0:
-        all_no_split_modules = {k for k, v in model.named_modules() if v.__class__.__name__ in no_split_module_classes}
-        biggest_no_split_module = max(module_sizes[k] for k in all_no_split_modules)
+    biggest_no_split_module = max(
+        (module_sizes[k] - no_placement_module_sizes[k] for k in all_no_split_modules), default=0
+    )
 
     biggest_leaf = max(leave_modules_sizes.values(), default=0)
     buffer = int(1.25 * max(biggest_no_split_module, biggest_leaf))
@@ -329,7 +365,7 @@ def get_balanced_memory(
         max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
-        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        min_zero = max(0, total_size - sum([max_memory[i] for i in range(1, num_devices)]))
         max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory
@@ -355,6 +391,7 @@ def _get_device_map(
                 no_split_module_classes=no_split_modules,
                 hf_quantizer=hf_quantizer,
                 low_zero=(device_map == "balanced_low_0"),
+                no_placement_params=no_placement_params,
             )
         else:
             inferred_max_memory = get_max_memory(max_memory)
