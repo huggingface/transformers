@@ -3893,6 +3893,10 @@ class PreTrainedModel(
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
                 Whether or not to also return a dictionary containing missing keys, unexpected keys and error messages.
+            strict (`bool`, *optional*, defaults to `False`):
+                If `True`, raise if the checkpoint is missing keys expected by the model or contains unexpected keys.
+                The default stays `False` so loading a base checkpoint into a `For*` head still works. Same contract as
+                `torch.nn.Module.load_state_dict(strict=True)` for missing/unexpected keys.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             token (`str` or `bool`, *optional*):
@@ -4063,6 +4067,7 @@ class PreTrainedModel(
         proxies = kwargs.pop("proxies", None)
         tqdm_class = kwargs.pop("tqdm_class", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        strict = kwargs.pop("strict", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         dtype = kwargs.pop("dtype", None)
@@ -4312,6 +4317,8 @@ class PreTrainedModel(
         )
         loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
         loading_info = cls._finalize_model_loading(model, load_config, loading_info)
+        if strict:
+            cls._raise_if_strict_loading_mismatch(loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
@@ -4347,6 +4354,8 @@ class PreTrainedModel(
                 load_config=load_config,
                 adapter_kwargs=adapter_kwargs,
             )
+            if strict:
+                cls._raise_if_strict_loading_mismatch(loading_info)
 
         if output_loading_info:
             return model, loading_info.to_dict()
@@ -4504,6 +4513,19 @@ class PreTrainedModel(
             )
 
         return loading_info
+
+    @staticmethod
+    def _raise_if_strict_loading_mismatch(loading_info: LoadStateDictInfo) -> None:
+        missing = sorted(loading_info.missing_keys)
+        unexpected = sorted(loading_info.unexpected_keys)
+        if not missing and not unexpected:
+            return
+        parts = ["`from_pretrained(..., strict=True)` failed because the checkpoint does not match the model."]
+        if missing:
+            parts.append(f"Missing keys: {missing}")
+        if unexpected:
+            parts.append(f"Unexpected keys: {unexpected}")
+        raise RuntimeError("\n".join(parts))
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = {".".join(key.split(".")[:-1]) for key in names}

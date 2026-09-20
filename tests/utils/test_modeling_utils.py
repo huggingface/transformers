@@ -1755,6 +1755,38 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIn(expected_output, cl.out)
             self.assertEqual(loading_info["unexpected_keys"], {"added_key"})
 
+    @require_torch
+    def test_strict_from_pretrained_raises_on_key_mismatch(self):
+        model = BaseModel(PreTrainedConfig())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
+            loaded = BaseModel.from_pretrained(tmp_dir, strict=True)
+            self.assertIsInstance(loaded, BaseModel)
+            _, info = BaseModel.from_pretrained(tmp_dir, strict=True, output_loading_info=True)
+            self.assertEqual(len(info["missing_keys"]), 0)
+            self.assertEqual(len(info["unexpected_keys"]), 0)
+
+            state_dict = model.state_dict()
+            missing_state_dict = {k: v for k, v in state_dict.items() if k != "linear.weight"}
+            safe_save_file(missing_state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
+            with self.assertRaises(RuntimeError) as cm:
+                BaseModel.from_pretrained(tmp_dir, strict=True)
+            self.assertIn("Missing keys", str(cm.exception))
+            self.assertIn("linear.weight", str(cm.exception))
+
+            # Default stays permissive so For* / extra-head loads keep working.
+            permissive = BaseModel.from_pretrained(tmp_dir)
+            self.assertIsInstance(permissive, BaseModel)
+
+            extra_state_dict = dict(state_dict)
+            extra_state_dict["added_key"] = copy.deepcopy(state_dict["linear.weight"])
+            safe_save_file(extra_state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
+            with self.assertRaises(RuntimeError) as cm:
+                BaseModel.from_pretrained(tmp_dir, strict=True)
+            self.assertIn("Unexpected keys", str(cm.exception))
+            self.assertIn("added_key", str(cm.exception))
+
     def test_warn_if_padding_and_no_attention_mask(self):
         logger = logging.get_logger("transformers.modeling_utils")
 
