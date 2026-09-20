@@ -1693,7 +1693,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # 3. compilation-specific setup and generation parameterization
             torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
-            compile_config = CompileConfig(fullgraph=True, dynamic=False)  # Error out on dynamic shapes
+            # The model knows which backend compiles on the device it sits on; only the options the
+            # test is about are overridden here.
+            compile_config = model._default_compile_config()
+            compile_config.fullgraph = True
+            compile_config.dynamic = False  # Error out on dynamic shapes
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
@@ -1800,7 +1804,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # BLIP is the only exception with custom generate which call `self.lm.generate()`
             # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
             # compatible with multimodality
-            compile_config = CompileConfig()
+            compile_config = model._default_compile_config()
             compile_config._compile_all_devices = True
             if "blip" in model.__class__.__name__.lower():
                 model.language_model.generation_config.compile_config = compile_config
@@ -1864,7 +1868,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if "blip" in model.__class__.__name__.lower():
                 self.skipTest("Blip overwrite `generate` for some reason making it interact weirdly")
 
-            compile_config = CompileConfig()
+            compile_config = model._default_compile_config()
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
             generation_kwargs = {
                 "use_cache": True,
