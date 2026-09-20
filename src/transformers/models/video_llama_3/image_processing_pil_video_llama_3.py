@@ -105,6 +105,8 @@ class VideoLlama3ImageProcessorPil(PilBackend):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
         size = self.size if size is None else size
+        if isinstance(size, dict):
+            size = dict(size)
         if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
             size["shortest_edge"] = min_pixels
             size.pop("min_pixels", None)

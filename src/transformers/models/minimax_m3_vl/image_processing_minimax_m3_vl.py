@@ -107,6 +107,8 @@ class MiniMaxM3VLImageProcessor(TorchvisionBackend):
         # Override with the correct, new default value in that case
         if size == [672, 672]:
             size = self.size
+        if isinstance(size, dict):
+            size = dict(size)
         if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
             size["shortest_edge"] = min_pixels
             size.pop("min_pixels", None)

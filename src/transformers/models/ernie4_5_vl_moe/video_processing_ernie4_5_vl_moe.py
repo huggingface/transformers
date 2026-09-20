@@ -121,6 +121,8 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
 
         size = kwargs.pop("size", None)
         size = self.size if size is None else size
+        if isinstance(size, dict):
+            size = dict(size)
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
