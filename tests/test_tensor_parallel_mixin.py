@@ -23,6 +23,7 @@ from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
 from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
+    backend_torch_accelerator_module,
     is_tensor_parallel_test,
     is_torch_available,
 )
@@ -115,6 +116,13 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
 
     world_size = tp
     setup_dist_env(rank, world_size, port)
+
+    # Bind this rank's accelerator before creating the process group, the way
+    # `transformers.distributed.utils` does: the group is then created with a device bound, and some
+    # backends cannot create it at all until the process has opened a device.
+    accelerator_module = backend_torch_accelerator_module(torch._C._get_accelerator().type)
+    if accelerator_module is not None and hasattr(accelerator_module, "set_device"):
+        accelerator_module.set_device(rank)
 
     dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
