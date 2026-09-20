@@ -162,8 +162,10 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
     os.environ["MASTER_PORT"] = str(port)
 
     _set_determinism(SEED)
-    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
+    # rank has to be set before initializing the process group, as done in `transformers.distributed.utils`, because
+    # some backends, e.g. tpu, require the rank to be set before initializing the process group.
     _set_rank_device(rank)
+    dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
 
     if rank == 0:
         start_time = time.perf_counter()
