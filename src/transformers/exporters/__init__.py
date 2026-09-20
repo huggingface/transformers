@@ -24,13 +24,12 @@ from .auto import (
     register_exporter,
     register_runner,
 )
-from .base import ExporterOutput, HfExporter, ModelRunner
+from .base import ExportedModel, ExporterOutput, HfExporter, ModelRunner
 from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .exporter_executorch import ExecutorchExporter
 from .exporter_onnx import OnnxExporter
 from .generator import ExportedGenerator, Modality
-from .model import ExportedModel
 from .runner_dynamo import DynamoModelRunner
 from .runner_executorch import ExecutorchModelRunner
 from .runner_onnx import OnnxModelRunner

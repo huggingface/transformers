@@ -31,7 +31,6 @@ class DynamoModelRunner(ModelRunner):
             export_metadata,
             lambda: ExportMetadata.from_dict(getattr(module, "meta", {}).get(EXPORT_METADATA_KEY)),
         )
-        self.kv_geometry = self.export_metadata.kv_geometry
         # The one thing the metadata cannot give: this module rejects any kwarg set but the one it was traced
         # with, *including* baked scalars (`max_seqlen`) that never became graph placeholders — so the
         # recorded graph inputs are too few, and its own pytree spec is the contract.
@@ -40,6 +39,13 @@ class DynamoModelRunner(ModelRunner):
         weight = next(self._module.parameters(), None)
         if weight is not None:
             self.device, self.dtype = weight.device, weight.dtype
+
+    def to(self, device) -> DynamoModelRunner:
+        """Move the unlifted module -- a `torch.export` program is a module, so this is the ordinary move."""
+        self._module.to(device)
+        weight = next(self._module.parameters(), None)
+        self.device = weight.device if weight is not None else torch.device(device)
+        return self
 
     @classmethod
     def from_artifact(cls, artifact, export_metadata=None, device=None, **kwargs) -> DynamoModelRunner:

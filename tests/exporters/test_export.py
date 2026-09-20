@@ -118,14 +118,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "TODO: carry a model's own per-step audio kwargs through the decomposition, the way "
             "`PerceptionLMForConditionalGeneration` needs for its video path — the same shape of gap."
         ),
-        "CohereAsrForConditionalGeneration": (
-            "Its decoder reads `encoder_outputs.attention_mask` (the encoder's own frame mask), but the "
-            "exporter normalizes `encoder_outputs` to a `BaseModelOutput` so every backend's runtime can "
-            "rebuild one. `ModelOutput` flattens by its dict, and parakeet attaches that mask after "
-            "construction, so it never survives into the traced forward — and being `None` here it cannot "
-            "ride in the dict either. TODO: carry the encoder's own output class through export and have "
-            "`_ExportedEncoder` rebuild it."
-        ),
         "DiaForConditionalGeneration": (
             "Decodes several audio codebooks at once, so its decoder inputs carry a channel axis "
             "(`decoder_input_ids` is 3-D) and its `decoder_attention_mask` is shaped to match. The runtime "
@@ -133,12 +125,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "mask — which is the right thing for every other encoder-decoder and the wrong rank here "
             "(`upper bound and lower bound inconsistent with step sign`). TODO: shape the decoder mask "
             "from the graph's own declared rank, the way `_mask_feed` already does for mixed attention."
-        ),
-        "UdopForConditionalGeneration": (
-            "Same cause as `CohereAsrForConditionalGeneration`, measured: both die on `AttributeError: "
-            "'BaseModelOutput' object has no attribute 'attention_mask'` before anything is exported "
-            "(neither reaches the runtime drive — 0 drive entries, failing in seconds). One fix — carrying "
-            "the encoder's own output class through export — covers both."
         ),
         "Gemma3nForConditionalGeneration": (
             "Its text model takes an extra `per_layer_inputs` tensor that the multi-modal decomposition does "
@@ -956,7 +942,7 @@ def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
     applies; ``"dynamic"`` adds the dynamic-only entries.
     """
     name = model_class.__name__
-    scopes = ["all"] + (["dynamic"] if dynamic else [])
+    scopes = ["all", "dynamic" if dynamic else "static"]
     return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
 
 
@@ -1192,6 +1178,7 @@ class ExportTesterMixin:
             "do_sample": False,
             "eos_token_id": -1,
             "max_new_tokens": 2,
+            "min_new_tokens": 2,
             "output_scores": True,
             "return_dict_in_generate": True,
             "generation_config": generation_config,
@@ -1207,15 +1194,19 @@ class ExportTesterMixin:
             if backend == "executorch" and _is_executorch_runtime_limit(e):
                 return
             raise
-        # Ids step by step, and only while eager's own top-2 gap says the choice is not a coin flip. This
-        # check is about *wiring* — numeric fidelity is asserted per component above
-        # (`_check_outputs_close`) — so it deliberately does not put a score bar on an fp32 export: how
-        # far a backend's kernels drift is model-specific (an ONNX chameleon drifts past 1e-3 where
-        # kosmos2_5 stays at 6e-5, a dynamo export lands at ~1e-9), and a tiny random model routinely has
-        # top-2 gaps of a few 1e-3, so its argmax flips on that drift while saying nothing about
-        # correctness. Half precision, whose rounding scale is uniform and knowable, still compares the
-        # scores themselves. A real wiring bug (wrong cache / mask / positions) diverges early and at a
-        # confident step, which the id comparison still catches.
+        # Both sides are pinned to exactly `min_new_tokens` steps, so a runtime that produced a different
+        # number of them is a wiring failure of its own -- and one the `zip` below would quietly absorb.
+        self.assertEqual(
+            len(exported_out.scores), len(eager_out.scores), "exported runtime generated a different number of steps"
+        )
+        # Ids step by step, for as long as the two runs stay on the same prefix. This check is about
+        # *wiring* — numeric fidelity is asserted per component above (`_check_outputs_close`) — so it
+        # deliberately puts no score bar on an fp32 export: how far a backend's kernels drift is
+        # model-specific (an ONNX chameleon drifts past 1e-3 where kosmos2_5 stays at 6e-5, a dynamo export
+        # lands at ~1e-9), and a tiny random model routinely has top-2 gaps of a few 1e-3, so its argmax
+        # flips on that drift while saying nothing about correctness. Half precision, whose rounding scale
+        # is uniform and knowable, compares the scores themselves on every step. A real wiring bug (wrong
+        # cache / mask / positions) shows up as a different token while eager was sure of its own.
         half = module_dtype(model) in (torch.float16, torch.bfloat16)
         atol = rtol = 1.6e-2
         tie_threshold = 2 * atol if half else 5e-3
@@ -1223,12 +1214,21 @@ class ExportTesterMixin:
         for step, (eager_scores, exported_scores) in enumerate(zip(eager_out.scores, exported_out.scores)):
             if half:
                 torch.testing.assert_close(exported_scores, eager_scores, atol=atol, rtol=rtol)
+            eager_ids = eager_out.sequences[:, start + step].tolist()
+            exported_ids = exported_out.sequences[:, start + step].tolist()
+            if exported_ids == eager_ids:
+                continue
+            # They picked different tokens. Only eager being on a coin flip excuses that, so say which it
+            # was -- and stop either way: the two runs now carry different prefixes, and every later step
+            # would be comparing different continuations rather than the same one.
             top2 = eager_scores.float().topk(2, dim=-1).values
-            if (top2[:, 0] - top2[:, 1]).min() < tie_threshold:
-                break
-            self.assertEqual(
-                exported_out.sequences[:, start + step].tolist(), eager_out.sequences[:, start + step].tolist()
+            self.assertLess(
+                (top2[:, 0] - top2[:, 1]).min().item(),
+                tie_threshold,
+                f"exported run picked {exported_ids} where eager picked {eager_ids} at step {step}, and eager "
+                "was confident about it",
             )
+            break
 
     def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True):
         """Assert outputs are close, allowing up to 5% element-level mismatch.

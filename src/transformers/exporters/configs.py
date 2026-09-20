@@ -68,9 +68,6 @@ class ExportConfigMixin:
         """
         return copy.deepcopy(self.__dict__)
 
-    def __iter__(self):
-        yield from self.__dict__.items()
-
 
 @dataclass
 class DynamoConfig(ExportConfigMixin):
@@ -133,20 +130,15 @@ class OnnxConfig(DynamoConfig):
         export_params (`bool`, *optional*, defaults to `True`):
             Embed model weights in the ONNX graph. Set to `False` to export
             a weight-free graph (weights must be supplied at runtime).
-        keep_initializers_as_inputs (`bool`, *optional*, defaults to `False`):
-            Expose weight initializers as explicit graph inputs. Required by
-            some older ONNX runtimes (opset < 9).
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
 
     output_path: str | PathLike | None = None
-    dynamic_shapes: dict[str, Any] | None = None
     opset_version: int | None = None
     external_data: bool = True
     optimize: bool = True
     export_params: bool = True
-    keep_initializers_as_inputs: bool = False
 
 
 @dataclass

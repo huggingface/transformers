@@ -26,16 +26,14 @@ from typing import TYPE_CHECKING
 import torch
 from packaging import version
 
+from ..models.auto import AutoConfig
 from ..utils import cached_file, logging
+from ..utils.generic import ModelOutput
 from ..utils.import_utils import _is_package_available, is_torch_available
 from .configs import ExportConfigMixin, ExportFormat
-from .decompose import (
-    decompose_for_generation,
-)
-from .metadata import (
-    EXPORT_METADATA_KEY,
-    ExportMetadata,
-)
+from .decompose import decompose_for_generation
+from .metadata import EXPORT_METADATA_KEY, ExportMetadata
+from .utils import runner_feed
 
 
 logger = logging.get_logger(__name__)
@@ -267,8 +265,6 @@ class ExporterOutput(Mapping):
             from .generator import ExportedGenerator
 
             return ExportedGenerator.from_runners(runners, self.config, self.generation_config)
-
-        from .model import ExportedModel
 
         return ExportedModel(next(iter(runners.values())), self.config)
 
@@ -502,39 +498,25 @@ class ModelRunner(ABC):
     """
 
     # What the exporter recorded about this graph (`build_export_metadata`), parsed — the trace's own
-    # account of itself, and what every accessor below reads. Empty for an artifact written without it;
-    # those runners assign the fields they can answer themselves.
+    # account of itself, and what every accessor below reads. Empty for an artifact written without it.
+    #
+    # Who owns which fact, once, for all of them: the *handle* answers what it can observe about itself —
+    # what it declares, in what order, at what shapes — and a runner states that by assigning the attribute
+    # in `__init__`, which seeds the accessor below. The *metadata* answers what no handle can state: the
+    # precision the graph computes in, the cache's per-layer geometry and sizes, the rank of a mask that
+    # was traced away. Where both could answer, the handle wins, because it is the thing that will refuse
+    # the call. An accessor is the fallback for an artifact whose runner said nothing.
     export_metadata: ExportMetadata = ExportMetadata()
     device: torch.device | str = "cpu"
-
-    @functools.cached_property
-    def mask_dict_ranks(self) -> dict[str, int] | None:
-        """`{attention type: rank}` when the graph took a *dict* of masks instead of one (mixed full/sliding
-        attention), which a model builds inside its forward — so the runtime has to hand one in.
-
-        Recorded at export. A backend whose handle can still recover it for an artifact written before that
-        overrides this — and they do not all read the same place: dynamo takes the dict as one kwarg and keeps
-        the per-type keys in its pytree child spec, while ONNX and ExecuTorch flatten it to one input per
-        type."""
-        return self.export_metadata.mask_ranks
 
     @functools.cached_property
     def input_names(self) -> tuple[str, ...]:
         """What this graph takes, in the flat order it takes them, as recorded at export.
 
-        A runner whose handle names them itself assigns `self.input_names` instead, which seeds this: ONNX
-        exposes a mutated input under the name `generate` uses rather than the `input.`-prefixed one its
-        session declares, and a dynamo module is the program, so its own input spec is the record."""
+        Handles that name their own inputs assign this instead (see the ownership rule above): ONNX exposes
+        a mutated input under the name `generate` uses rather than the `input.`-prefixed one its session
+        declares, and a dynamo module *is* the program, so its input spec is the record."""
         return self.export_metadata.input_names
-
-    @functools.cached_property
-    def input_shapes(self) -> dict[str, tuple[int | None, ...]]:
-        """Shape per input, `None` per symbolic axis — the shapes the *trace* saw, as recorded.
-
-        A runner assigns `self.input_shapes` instead when what its handle *declares* is the load-bearing
-        fact: ONNX sizes a not-yet-created cache entry from the declared shape, and only the session says
-        which axes it left symbolic."""
-        return self.export_metadata.shapes
 
     @functools.cached_property
     def dtype(self) -> torch.dtype:
@@ -591,40 +573,24 @@ class ModelRunner(ABC):
         generation loop asks for this on every step."""
         return self.cache_inputs[0] if self.cache_inputs else None
 
-    @functools.cached_property
-    def text_input(self) -> str:
-        """The graph's text input: `"decoder_input_ids"` (encoder-decoder decode), `"inputs_embeds"`
-        (multi-modal decode) or `"input_ids"`."""
-        return next((n for n in ("decoder_input_ids", "inputs_embeds") if n in self.input_names), "input_ids")
+    @property
+    def kv_geometry(self) -> dict[int, tuple[int, int, int]]:
+        """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` the graph's cache was traced with —
+        empty when it takes none, and missing a layer whose state is not keys and values (a recurrent
+        layer's conv / SSM buffers). What the runtime sizes a cache to, since a config cannot always say."""
+        return self.export_metadata.kv_geometry
 
-    @functools.cached_property
-    def mask_inputs(self) -> tuple[str, ...]:
-        """The graph's attention-mask input name(s) — several for mixed full/sliding attention."""
-        return tuple(
-            n
-            for n in self.input_names
-            if n == "attention_mask" or n.startswith(("attention_mask.", "attention_mask_"))
+    def to(self, device) -> ModelRunner:
+        """The runner to use for `device`, or a refusal saying why this backend has none.
+
+        Returned rather than moved in place because not every backend can move: a `torch.export` program is
+        a module and moves, an ORT session is fixed to the execution provider it was created with and is
+        reopened instead, and a `.pte` is bound to the backend it was lowered for and cannot be either.
+        """
+        raise ValueError(
+            f"{type(self).__name__} is bound to {self.device} by the runtime that loaded it. Load the "
+            f"artifact again with `device={device!r}` to run it elsewhere."
         )
-
-    @functools.cached_property
-    def decoder_mask_input(self) -> str | None:
-        """`"decoder_attention_mask"` when the graph declares one. An encoder-decoder splits the two masks:
-        `attention_mask` covers the *encoder's* sequence (what cross-attention reads) while this one covers
-        the decoder's own — so the causal mask belongs here, and `generate` does not hand it over (the eager
-        model builds it inside the forward the graph starts after)."""
-        return "decoder_attention_mask" if "decoder_attention_mask" in self.input_names else None
-
-    @functools.cached_property
-    def mask_rank(self) -> int | None:
-        """The rank the graph's `attention_mask` was traced with, `None` when it takes none.
-
-        `generate` upgrades a 2D padding mask to the 4D causal mask for any compileable cache, assuming the
-        model's forward wants one — but an exported graph starts *after* whatever mask building its model
-        does, so only the trace can say which it took. An alibi model (bloom) reads the 2D padding mask
-        directly and compares its width to the cache length, so a 4D mask fails a guard rather than
-        mismatching a shape."""
-        shape = self.input_shapes.get("attention_mask")
-        return len(shape) if shape is not None else None
 
     @staticmethod
     def resolve_metadata(injected, from_artifact) -> ExportMetadata:
@@ -650,3 +616,76 @@ class ModelRunner(ABC):
     @abstractmethod
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         """Run the graph on `kwargs`; return its outputs as `{leaf_name: tensor}`."""
+
+
+class ExportedModel:
+    """Call one exported graph the way you would call the model it came from.
+
+    Most exports are not generative: a sequence classifier, a token classifier, an encoder, a feature
+    extractor — one graph, one forward. `ExportedGenerator` is for the decomposed, cache-driven case; this
+    is for everything that is just a forward pass, and it is what [`~HfExporter.export`] produces.
+
+    Example:
+        exported = OnnxExporter().export(model, inputs, OnnxConfig(dynamic=True))
+        exported.save_pretrained("out/")
+
+        classifier = ExportedModel.from_pretrained("out/")
+        logits = classifier(input_ids=ids, attention_mask=mask).logits
+    """
+
+    def __init__(self, runner: ModelRunner, config=None):
+        self.runner = runner
+        self.config = config
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(runner={type(self.runner).__name__})"
+
+    @property
+    def device(self) -> torch.device:
+        return torch.device(self.runner.device)
+
+    @property
+    def dtype(self) -> torch.dtype:
+        return self.runner.dtype
+
+    def can_generate(self) -> bool:
+        """`False`: one graph is one forward. The generative case is `ExportedGenerator`, which drives the
+        component graphs through `generate`."""
+        return False
+
+    @property
+    def input_modalities(self) -> list[str] | str:
+        """What the model this came from takes, for anything that reports on a loaded model (pipelines do).
+        Read off the config, since the graph knows only tensor names."""
+        return getattr(self.config, "input_modalities", "text")
+
+    def to(self, device) -> ExportedModel:
+        """Move to `device` if this graph's backend can; whether it can is the runner's to answer."""
+        if torch.device(device) != self.device:
+            self.runner = self.runner.to(device)
+        return self
+
+    @property
+    def input_names(self) -> tuple[str, ...]:
+        """What the graph takes — the kwargs this accepts, as traced."""
+        return self.runner.input_names
+
+    def __call__(self, **kwargs) -> ModelOutput:
+        """Run the graph. Kwargs the trace never saw are dropped rather than refused, so a caller can pass
+        a processor's whole output the way it would to the eager model."""
+        return ModelOutput(**self.runner(**runner_feed(self.runner, kwargs, warn_unused=True)))
+
+    @classmethod
+    def from_pretrained(cls, save_directory: str | Path, **kwargs) -> ExportedModel:
+        """Load a single-component export — a local directory or a Hub repo — written by
+        [`~ExporterOutput.save_pretrained`]."""
+        download_kwargs, _ = split_download_kwargs(dict(kwargs))
+        runners, _ = load_export_runners(save_directory, **kwargs)
+        if len(runners) != 1:
+            raise ValueError(
+                f"{save_directory} describes {len(runners)} components ({sorted(runners)}); use "
+                "`ExportedGenerator.from_pretrained` for a decomposed export, or "
+                "`AutoExportedModel.from_pretrained` to pick by what was saved."
+            )
+        runner = next(iter(runners.values()))
+        return cls(runner, AutoConfig.from_pretrained(save_directory, **download_kwargs))

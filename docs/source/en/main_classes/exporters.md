@@ -76,7 +76,7 @@ graph is called. [`AutoExportedModel`] reads the manifest and picks between them
 
 ## ExportedModel
 
-[[autodoc]] exporters.model.ExportedModel
+[[autodoc]] exporters.base.ExportedModel
     - from_pretrained
     - __call__
 

@@ -54,7 +54,6 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-    from ..cache_utils import StaticLayer
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
     from ..vision_utils import (
@@ -214,6 +213,157 @@ def apply_fx_node_fixes(backend: str, graph_module) -> None:
             pass
 
 
+# ── Cross-backend patches ─────────────────────────────────────────────────────
+# Registered for more than one backend because the problem is the same one: these used to be two
+# definitions apiece that had drifted in wording and in one case in behaviour.
+
+
+@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
+def _patch_broadcast_mask_expansion(_original):
+    """Replace vmap-based mask expansion with broadcast expansion.
+
+    ONNX has no vmap lowering, and ExecuTorch's `aot_autograd` / `gen_vmap_plumbing` reject a vmap-built
+    mask under its lowering passes.
+    """
+    from ..masking_utils import _non_vmap_expansion_sdpa
+
+    def patch(mask_function):
+        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
+            broadcasted = _non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
+            return mask_function(*broadcasted).expand(
+                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
+            )
+
+        return _expanded
+
+    return patch
+
+
+@register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+def _patch_reshape(original):
+    """Materialise a non-contiguous input before `reshape` / `view`.
+
+    Both lowerings refuse the view a non-contiguous tensor would need: `torch.export` raises `Cannot view
+    a tensor with shape ... and strides ...` for ONNX (whose optimizer folds a plain `aten.contiguous`
+    away), and ExecuTorch's edge reshape reference refuses it outright. Cloning first is semantically a
+    no-op -- eager `reshape` already copies in this case -- and only copies when the view would fail.
+
+    `is_contiguous_or_false`, not `is_contiguous()`: under dynamic shapes contiguity is a data-dependent
+    question, and the guard-free form answers "don't know" as "not contiguous", which is the safe side.
+    The clone must force `contiguous_format`, since a bare `.clone()` preserves the input's layout.
+    """
+    from torch._prims_common import is_contiguous_or_false
+
+    def patch(input, *shape, **kwargs):
+        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
+            input = input.clone(memory_format=torch.contiguous_format)
+        return original(input, *shape, **kwargs)
+
+    return patch
+
+
+@register_patch("onnx", "torch.bucketize")
+@register_patch("executorch", "torch.bucketize")
+def _patch_bucketize(_original):
+    """Decompose `bucketize` into a broadcast comparison and a sum.
+
+    Neither backend has a kernel for it (ONNX has no op; the portable runtime ships no
+    `bucketize.Tensor_out`, which VLM vision position ids reach — idefics2/3, smolvlm, phi4_multimodal).
+    `boundaries` is 1-D and sorted, so the bucket index is the count of boundaries below each value.
+    """
+
+    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
+        if boundaries.numel() == 0:
+            result = torch.zeros_like(input, dtype=torch.int64)
+        else:
+            below = boundaries <= input.unsqueeze(-1) if right else boundaries < input.unsqueeze(-1)
+            result = below.sum(dim=-1)
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.searchsorted")
+@register_patch("executorch", "torch.searchsorted")
+def _patch_searchsorted(_original):
+    """Decompose `searchsorted` the same way as `bucketize`: for a sorted sequence the insertion index is
+    the count of entries below each value. O(N*M) rather than a real binary search, but only ops both
+    backends can lower."""
+
+    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
+        if side is not None:
+            right = side == "right"
+        seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
+        below = seq <= val if right else seq < val
+        result = below.sum(dim=-1)
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.cummax", "torch.Tensor.cummax")
+@register_patch("executorch", "torch.cummax", "torch.Tensor.cummax")
+def _patch_cummax(original):
+    """`cummax` via a triangular-masked reduction — see `_cumulative_reduce`."""
+    return _cumulative_reduce(mode="max")
+
+
+@register_patch("onnx", "torch.cummin", "torch.Tensor.cummin")
+@register_patch("executorch", "torch.cummin", "torch.Tensor.cummin")
+def _patch_cummin(original):
+    """`cummin` via a triangular-masked reduction — see `_cumulative_reduce`."""
+    return _cumulative_reduce(mode="min")
+
+
+def _cumulative_reduce(*, mode: str):
+    """Replace `cummax` / `cummin` with a triangular-masked reduction: neither backend has a
+    cumulative-scan kernel. Output `[..., i]` reduces over `j <= i`.
+
+    The reduction is the two-output `max`/`min` so the real argmax comes back with it — a caller reading
+    `.indices` gets the same answer it would from the op.
+    """
+
+    def patch(input, dim):
+        sequence = input.movedim(dim, -1)
+        positions = torch.arange(sequence.shape[-1], device=input.device)
+        keep = positions.unsqueeze(0) <= positions.unsqueeze(1)
+        if input.dtype == torch.bool:
+            fill = mode != "max"
+        else:
+            info = torch.finfo if input.is_floating_point() else torch.iinfo
+            fill = info(input.dtype).min if mode == "max" else info(input.dtype).max
+        windows = torch.where(
+            keep, sequence.unsqueeze(-2), torch.full((), fill, dtype=input.dtype, device=input.device)
+        )
+        reduced = windows.max(dim=-1) if mode == "max" else windows.min(dim=-1)
+        # The op returns a named tuple, and callers read it by field (`torch.cummax(x, -1).values`).
+        return getattr(torch.return_types, f"cum{mode}")(
+            (reduced.values.movedim(-1, dim), reduced.indices.movedim(-1, dim))
+        )
+
+    return patch
+
+
+def runner_feed(runner, kwargs: dict, *, warn_unused: bool = False) -> dict:
+    """The subset of `kwargs` this graph takes, keyed the way it names them.
+
+    The rule is the same wherever a graph is called -- an encoder component, the decode step, a
+    single-graph `ExportedModel` -- so it is written once: a graph refuses a kwarg it was never traced
+    with, and a caller should be free to pass a processor's whole output. `warn_unused` says so out loud,
+    which only the single-graph case wants (the loop drops `generate`'s bookkeeping every step).
+    """
+    declared = set(runner.input_names)
+    if not declared:
+        return dict(kwargs)
+    if warn_unused and (unused := [name for name in kwargs if name not in declared]):
+        logger.warning_once(f"Ignoring {unused}, which this graph was not traced with (it takes {sorted(declared)}).")
+    return {name: value for name, value in kwargs.items() if name in declared}
+
+
 # ── Recursive structure traversal ──────────────────────────────────────────
 # All tensor utilities share this traversal. _map_leaf_tensors applies a function
 # to every tensor leaf; _iter_leaf_tensors yields (path, tensor) pairs.
@@ -238,7 +388,7 @@ def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
         return obj
     if isinstance(obj, torch.Tensor):
         return fn(obj)
-    if isinstance(obj, (list, tuple, set)):
+    if isinstance(obj, (list, tuple, set, frozenset)):
         return type(obj)(_map_leaf_tensors(item, fn) for item in obj)
     if isinstance(obj, dict):
         for k in list(obj):
@@ -262,7 +412,7 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
         # Only bites a container flattened at the top level: nested under a name the path is already a
         # non-empty string.
         yield prefix if prefix != "" else "output", obj
-    elif isinstance(obj, (list, tuple, set)):
+    elif isinstance(obj, (list, tuple, set, frozenset)):
         for index, item in enumerate(obj):
             path = f"{prefix}.{index}" if prefix else str(index)
             yield from _iter_leaf_tensors(item, path)
@@ -280,6 +430,23 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
 
 # ── Public tensor utilities ────────────────────────────────────────────────
 # Extract or cast tensors from nested model outputs.
+
+
+def _class_to_path(cls: type) -> str:
+    """A class as `module:qualname` — how a graph's pytree contexts and its recorded metadata both name a
+    type they cannot hold a reference to."""
+    return f"{cls.__module__}:{cls.__qualname__}"
+
+
+def _path_to_class(path: str) -> type:
+    """The class `_class_to_path` wrote, importing its module. That import is the point as much as the
+    class is: importing a modeling module is what registers its `ModelOutput` types as pytree nodes, which
+    a graph loaded from disk needs before it can be called with one."""
+    module_name, qualname = path.split(":", 1)
+    obj = importlib.import_module(module_name)
+    for part in qualname.split("."):
+        obj = getattr(obj, part)
+    return obj
 
 
 def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
@@ -331,26 +498,29 @@ def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any
     return _map_leaf_tensors(obj, _cast)
 
 
-def module_device(model: PreTrainedModel | torch.nn.Module) -> torch.device | None:
-    """`.device` for any `nn.Module`. `PreTrainedModel` exposes it directly via `ModuleUtilsMixin`;
-    for plain submodules (e.g. a `Linear` or `MultiModalProjector` from a decomposed multimodal model)
-    we fall back to the first parameter. Returns `None` if the module has no parameters at all."""
-    if hasattr(model, "device"):
-        return model.device
+def _module_attr(model: PreTrainedModel | torch.nn.Module, name: str):
+    """`.device` / `.dtype` for any `nn.Module`.
+
+    `PreTrainedModel` exposes both directly via `ModuleUtilsMixin`; a plain submodule (a `Linear` or a
+    `MultiModalProjector` split out of a multi-modal model) does not, so fall back to its first parameter.
+    `None` when the module has no parameters at all.
+    """
+    if hasattr(model, name):
+        return getattr(model, name)
     try:
-        return next(model.parameters()).device
+        return getattr(next(model.parameters()), name)
     except StopIteration:
         return None
+
+
+def module_device(model: PreTrainedModel | torch.nn.Module) -> torch.device | None:
+    """Where this module's parameters live — see `_module_attr`."""
+    return _module_attr(model, "device")
 
 
 def module_dtype(model: PreTrainedModel | torch.nn.Module) -> torch.dtype | None:
-    """`.dtype` for any `nn.Module`. Same fallback story as `module_device`."""
-    if hasattr(model, "dtype"):
-        return model.dtype
-    try:
-        return next(model.parameters()).dtype
-    except StopIteration:
-        return None
+    """The precision this module's parameters are in — see `_module_attr`."""
+    return _module_attr(model, "dtype")
 
 
 # Output flags that should be set on `model.config`, not passed as forward() kwargs.
@@ -795,8 +965,11 @@ def precompute_export_inputs(config: PreTrainedConfig, inputs: Mapping[str, Any]
     # encoder-only components (an exported `get_image_features`) that carry no `input_ids`, and on a
     # text-only model, whose class defines no `get_rope_index`.
     if inputs.get("position_ids") is None and inputs.get("input_ids") is not None:
+        # Prefill is the step whose ids span the whole mask. A model that takes a *dict* of per-type masks
+        # (t5gemma2, the mixed full/sliding models) states no single width to compare against, so it is read
+        # the way a missing mask is: nothing there contradicts the prompt.
         attn_mask = inputs.get("attention_mask")
-        is_prefill = attn_mask is None or inputs["input_ids"].shape[1] == attn_mask.shape[1]
+        is_prefill = not isinstance(attn_mask, torch.Tensor) or inputs["input_ids"].shape[1] == attn_mask.shape[1]
         if is_prefill and (rope_index := get_rope_index_from_config(config, inputs)) is not None:
             inputs["position_ids"] = rope_index[0]
 
@@ -814,225 +987,6 @@ def precompute_export_inputs(config: PreTrainedConfig, inputs: Mapping[str, Any]
 # `decompose_multimodal` runs a single forward and captures per-submodule kwargs (one
 # entry per encoder / projector / language model). Both rely on `_capture_forward` to
 # wrap a target submodule and record every call's kwargs.
-
-
-# Model types whose latent attention caches the *compressed* latent as a single head; the others sharing
-# those config fields (axk, deepseek_v32, glm_moe_dsa) cache decompressed keys, one per KV head. Listing a
-# model here only selects between two readings of `kv_lora_rank` / `qk_rope_head_dim` — a config without
-# those fields is not caching a latent at all, whatever its model type, and derives its geometry the
-# ordinary way.
-_COMPRESSED_LATENT_ATTENTIONS = {
-    "axk1",
-    "deepseek_v2",
-    "deepseek_v3",
-    "glm4_moe_lite",
-    "kimi_k25",
-    "minicpm3",
-    "youtu",
-}
-
-
-def _cache_kv_geometry(config: Any, layer_idx: int | None = None) -> tuple[int, int, int] | None:
-    """`(num_kv_heads, key_head_dim, value_head_dim)` of the KV cache a model writes, from its config.
-
-    `None` for a model with no attention at all (mamba, rwkv, …): its cache holds only recurrent states,
-    which the graph carries and the write-back fills in, so there is no key/value geometry to derive.
-
-    A heterogeneous config (gemma4, …) declares geometry fields like `head_dim` as *per-layer*, and
-    reading them off the global config raises rather than silently returning a value that may be wrong
-    for some layers. Pass `layer_idx` to read that layer's own config — the geometry is per layer, so
-    the callers that allocate or check a specific layer resolve it that way.
-    """
-    text_config = config.get_text_config()
-    if layer_idx is not None and getattr(text_config, "is_heterogeneous", False):
-        text_config = text_config.per_layer_config[layer_idx]
-    if getattr(text_config, "num_attention_heads", None) is None:
-        return None
-    # Latent attention (deepseek_v2/v3, kimi_k25, minicpm3, axk, …) caches something other than one entry
-    # per KV head, and in two styles their configs cannot tell apart — identical `kv_lora_rank` /
-    # `qk_*_head_dim` fields, but one caches the *compressed* latent and the other the decompressed keys,
-    # so the model type is the only discriminator.
-    kv_lora_rank = getattr(text_config, "kv_lora_rank", None)
-    if kv_lora_rank is not None and getattr(text_config, "model_type", None) in _COMPRESSED_LATENT_ATTENTIONS:
-        # one head holding the compressed latent as keys and the shared rope part as values — so the key
-        # and value head dims differ, unlike standard attention
-        num_kv_heads = 1
-        key_dim = kv_lora_rank
-        value_dim = getattr(text_config, "qk_rope_head_dim", None) or key_dim
-    else:
-        num_kv_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-        default_dim = (
-            getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-        )
-        # decompressed latent attention keys are `qk_nope + qk_rope` wide against `v_head_dim` values
-        qk_nope = getattr(text_config, "qk_nope_head_dim", None)
-        qk_rope = getattr(text_config, "qk_rope_head_dim", None)
-        key_dim = qk_nope + qk_rope if qk_nope and qk_rope else default_dim
-        value_dim = getattr(text_config, "v_head_dim", None) or default_dim
-    return num_kv_heads, key_dim, value_dim
-
-
-def _cache_halves(cache: Any, reference: Any = None) -> list[tuple[Any, Any]]:
-    """The `(cache, reference)` pairs to walk. An `EncoderDecoderCache` keeps its layers in the two caches
-    it pairs rather than on itself, and each half has to be matched with the same half of the reference."""
-    if hasattr(cache, "self_attention_cache"):
-        return [
-            (getattr(cache, half), getattr(reference, half, None))
-            for half in ("self_attention_cache", "cross_attention_cache")
-        ]
-    return [(cache, reference)]
-
-
-def check_cache_geometry(config: Any, cache: Any) -> None:
-    """Raise if the geometry `_cache_kv_geometry` derives disagrees with what the model really cached.
-
-    Called on a post-prefill cache, whose layers hold real tensors. The derivation cannot be read off
-    the config values alone for latent attention — a compressed and a decompressed model carry
-    identical `kv_lora_rank` / `qk_*_head_dim` fields — so this turns the resulting mismatch into a
-    message naming the fix, instead of an `index_copy_()` shape error deep in a later forward.
-
-    Raises only when the derivation matches *no* layer. A model may cache different geometries across
-    layers (deepseek_v32's sparse-indexer layers next to its latent ones), and the exporter fills only the
-    layers that reach it uninitialized — so a layer disagreeing is normal, and none agreeing is the
-    failure: whatever the exporter would have materialized fits nothing the model actually writes.
-    """
-    cached, derived_any = [], None
-    for cache_half, _ in _cache_halves(cache):
-        for layer_idx, layer in enumerate(cache_half.layers):
-            if getattr(layer, "keys", None) is None:
-                continue
-            derived = _cache_kv_geometry(config, layer_idx)
-            if derived is None:
-                continue
-            actual = (layer.keys.shape[1], layer.keys.shape[3], layer.values.shape[3])
-            if actual == derived:
-                return
-            cached.append(actual)
-            derived_any = derived
-    if cached:
-        model_type = getattr(config.get_text_config(), "model_type", type(config).__name__)
-        raise ValueError(
-            f"`{model_type}` caches (heads, key_dim, value_dim)={sorted(set(cached))} but the exporter "
-            f"derives {derived_any} for every layer, so the runtime would build a cache the exported "
-            "graph rejects. If this model caches a compressed latent (one head), add its model type to "
-            "`_COMPRESSED_LATENT_ATTENTIONS`; otherwise `_cache_kv_geometry` needs to learn its layout."
-        )
-
-
-def kv_geometry_of(cache: Any) -> dict[int, tuple[int, int, int]]:
-    """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` of a cache the model itself filled."""
-    return {
-        index: (layer.keys.shape[1], layer.keys.shape[3], layer.values.shape[3])
-        for index, layer in enumerate(getattr(cache, "layers", []) or [])
-        if getattr(layer, "keys", None) is not None and layer.keys.dim() == 4
-    }
-
-
-def materialize_cache_layers(
-    cache: Any,
-    batch_size: int,
-    config: Any,
-    dtype: Any,
-    device: Any,
-    kv_geometry: dict[int, tuple[int, int, int]] | None = None,
-) -> None:
-    """Give every lazily-uninitialized cache layer real tensors — `torch.export` can't trace lazy
-    allocation, so both the traced (prefill) cache and the cache the runtime builds must be materialized,
-    and identically (dynamo bakes the cache pytree into the graph's input spec). Static layers allocate
-    their full buffers (the same `lazy_initialization` path `Cache.early_initialization` takes); growing
-    layers get rank-4 zero-length `[batch, kv_heads, 0, head_dim]` tensors the graph can `cat` onto — NOT
-    the 1-D empty tensor their own lazy init makes, which would bake a rank-1 guard into the graph.
-
-    `kv_geometry` is the per-layer geometry read off the graph (`ModelRunner.kv_geometry`) or off a cache the
-    model filled (`kv_geometry_of`). It wins where present, because a config cannot always give it —
-    mimo_v2_flash caches 2 KV heads on its sliding layers and 4 on its full ones — and the config derivation
-    covers the layers it does not reach.
-    """
-    kv_geometry = kv_geometry or {}
-    for cache_half, _ in _cache_halves(cache):
-        # A model-specific cache may keep its state in fields of its own rather than a `layers` list
-        # (xLSTM's `rnn_state`); there is nothing layer-shaped to fill in that case.
-        if not hasattr(cache_half, "layers"):
-            continue
-        # `Cache.early_initialization` is the API's own answer to "export needs everything in advance": it
-        # feeds each layer a rank-4 zero-length hint, which is exactly the shape a growing layer must be given
-        # (its own lazy init would make a rank-1 empty and bake a rank-1 guard). Let it do the layers, and let
-        # a cache with state of its own size that state by overriding it (`MiniMaxCache.linear_cache`).
-        geometry = [
-            kv_geometry.get(index) or _cache_kv_geometry(config, index) for index in range(len(cache_half.layers))
-        ]
-        if all(entry is not None for entry in geometry) and geometry:
-            cache_half.early_initialization(
-                batch_size,
-                [entry[0] for entry in geometry],
-                [entry[1] for entry in geometry],
-                dtype,
-                device,
-                value_head_dim=[entry[2] for entry in geometry],
-            )
-        _materialize_layers(cache_half, batch_size, config, dtype, device, kv_geometry)
-
-
-def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry) -> None:
-    """`materialize_cache_layers` for one flat cache — see there."""
-    for layer_idx, layer in enumerate(cache.layers):
-        # Every tensor the layer built in `__init__` goes to the target device first, before any skip
-        # below can `continue` past it. A layer relies on its own lazy initialization to move these, which
-        # either never runs (the growing branch below skips it — its rank-1 empties would bake a rank-1
-        # guard) or moves only the counters it knows about: `StaticLayer.lazy_initialization` moves
-        # `cumulative_length`, not a sparse-index layer's `idx_cumulative_length` (minimax_m3_vl), and
-        # `early_initialization` marks the layer initialized before either gets the chance. Left behind,
-        # they are cpu leaves among cuda ones and the graph's input spec mismatches on device. Dtypes stay
-        # as they are — those counters are `long`, not the cache dtype.
-        for attribute, value in vars(layer).items():
-            if isinstance(value, torch.Tensor) and attribute not in ("keys", "values"):
-                setattr(layer, attribute, value.to(device))
-        # A sparse-indexer layer (deepseek_v32, axk2, glm_moe_dsa) caches a *third* tensor beside keys and
-        # values, and it is a graph input like the others — leave it lazy and every later cache leaf shifts
-        # by one. Its own `lazy_initialization` covers only the main K/V, so this cannot wait behind the
-        # `is_initialized` skip below: `early_initialization` marks the layer initialized while the indexer
-        # (and its cpu `indexer_cumulative_length` counter) is still untouched. Rank-3 zero-length for the
-        # same reason the others are rank-4: the indexer's lazy init makes a 1-D empty, which would bake a
-        # rank-1 guard into the graph.
-        if hasattr(layer, "is_indexer_initialized") and not layer.is_indexer_initialized:
-            index_head_dim = config.get_text_config().index_head_dim
-            empty_indexer_keys = torch.zeros(batch_size, 0, index_head_dim, dtype=dtype, device=device)
-            if layer.get_max_length() == -1:
-                layer.indexer_dtype, layer.indexer_device = dtype, device
-                layer.indexer_keys = empty_indexer_keys
-                layer.is_indexer_initialized = True
-            else:
-                # allocates the full `[batch, max_cache_len, index_head_dim]` buffer from the hint's shape,
-                # and puts the layer's own `indexer_cumulative_length` counter on the right device
-                layer.lazy_initialization_indexer(empty_indexer_keys)
-        # `is_initialized` is not enough on its own: a layer whose own lazy init already ran holds a *rank-1*
-        # empty, and the graph was traced against the rank-4 `[batch, kv_heads, 0, head_dim]` form this
-        # helper builds. Feeding the rank-1 one indexes an axis that isn't there, inside the graph.
-        keys = getattr(layer, "keys", None)
-        rank_1_empty = keys is not None and keys.dim() < 4 and keys.numel() == 0
-        if getattr(layer, "is_initialized", True) and not rank_1_empty:
-            continue
-        geometry = kv_geometry.get(layer_idx) or _cache_kv_geometry(config, layer_idx)
-        if geometry is None:
-            return
-        num_kv_heads, key_dim, value_dim = geometry
-        # A static layer also *records* its head count, and that record is compared as part of the graph's
-        # input spec — so it has to come from the same place the buffers do, not from the config's single
-        # value (mimo_v2_flash caches 2 heads on sliding layers and 4 on full ones).
-        if hasattr(layer, "num_heads"):
-            layer.num_heads = num_kv_heads
-        empty_keys = torch.zeros(batch_size, num_kv_heads, 0, key_dim, dtype=dtype, device=device)
-        empty_values = torch.zeros(batch_size, num_kv_heads, 0, value_dim, dtype=dtype, device=device)
-        # Growing vs fixed-size is the layer's *kind*, not what `get_max_length` reports: a
-        # `DynamicSlidingWindowLayer` grows and crops, yet reports its window as a max length — read that way
-        # it goes through its own `lazy_initialization` and ends up with the rank-1 empties the graph cannot
-        # index, which surfaces as `IndexError: tuple index out of range` inside the graph.
-        if not isinstance(layer, StaticLayer):
-            layer.dtype, layer.device = dtype, device
-            layer.keys, layer.values = empty_keys, empty_values
-            layer.is_initialized = True
-        else:
-            layer.lazy_initialization(empty_keys, empty_values)
 
 
 if is_torch_available():

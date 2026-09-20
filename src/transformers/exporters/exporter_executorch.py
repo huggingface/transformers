@@ -72,7 +72,6 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
-    from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -90,7 +89,6 @@ if is_executorch_available():
     )
     from executorch.backends.xnnpack.utils.utils import get_input_node
     from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
-    from executorch.exir.dialects._ops import ops as exir_ops
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.passes.memory_planning_pass import MemoryPlanningPass
     from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _is_view_copy, _ViewSpec
@@ -129,7 +127,7 @@ class ExecutorchExporter(DynamoExporter):
     artifact_suffix = ".pte"
 
     required_packages = ["torch", "executorch"]
-    tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
+    tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}
 
     def export_artifact(
         self,
@@ -413,6 +411,16 @@ def _patch_mamba_selective_scan(original):
     return patch
 
 
+def _has_unbacked_sizes(split_size_or_sections) -> bool:
+    """Whether a `split` sections argument carries a data-dependent size."""
+    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
+
+    return isinstance(split_size_or_sections, (list, tuple)) and any(
+        isinstance(size, torch.SymInt) and bool(free_unbacked_symbols(size.node.expr))
+        for size in split_size_or_sections
+    )
+
+
 @register_patch("executorch", "torch.split", "torch.Tensor.split")
 def _patch_unbacked_split(original):
     """Keep a split whose *sizes are data-dependent* out of the graph.
@@ -433,13 +441,9 @@ def _patch_unbacked_split(original):
     operation returned a tensor that is the same as the input base tensor" — that would fail every
     `.split(int)` / `.chunk()` taken over a dynamic dim (qwen3_omni_moe chunks its audio conv that way).
     """
-    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
 
     def patch(input, split_size_or_sections, dim=0):
-        if isinstance(split_size_or_sections, (list, tuple)) and any(
-            isinstance(size, torch.SymInt) and bool(free_unbacked_symbols(size.node.expr))
-            for size in split_size_or_sections
-        ):
+        if _has_unbacked_sizes(split_size_or_sections):
             return (input,)
         return original(input, split_size_or_sections, dim)
 
@@ -464,6 +468,11 @@ def _patch_split(original):
         elif isinstance(split_size_or_sections, torch.SymInt):
             # Dynamic split size: `range(0, total, sym_int)` needs a concrete step, so
             # the narrow-based loop above doesn't apply. Defer to the original torch.split.
+            return original(input, split_size_or_sections, dim)
+        elif _has_unbacked_sizes(split_size_or_sections):
+            # Data-dependent section sizes: narrowing to them puts the unbacked symbol in the graph, which
+            # is what `_patch_unbacked_split` -- the patch this one is layered over on CUDA -- exists to
+            # prevent. Defer to it rather than reimplementing the half of the decision this branch can see.
             return original(input, split_size_or_sections, dim)
         else:
             splits = []
@@ -646,42 +655,6 @@ def _patch_avg_pool2d(original):
     return patch
 
 
-@register_patch("executorch", "torch.bucketize")
-def _patch_bucketize(original):
-    """Decompose bucketize into a broadcasted comparison + sum.
-
-    The portable runtime ships no `bucketize.Tensor_out` kernel (used by VLM vision position ids —
-    idefics2/3, smolvlm, phi4_multimodal). `boundaries` is 1-D and sorted, so the bucket index is
-    just the count of boundaries below each value — comparison and sum, both portable ops.
-    """
-
-    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
-        below = (boundaries <= input.unsqueeze(-1)) if right else (boundaries < input.unsqueeze(-1))
-        result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("executorch", "torch.searchsorted")
-def _patch_searchsorted(original):
-    """Decompose searchsorted into a broadcasted comparison + sum (no portable kernel; same idea as
-    bucketize). ``sorted_sequence`` is sorted, so the insertion index is the count of entries below.
-    """
-
-    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
-        if side is not None:
-            right = side == "right"
-        seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
-        below = (seq <= val) if right else (seq < val)
-        result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
-
-    return patch
-
-
 @register_patch("executorch", "torch.nn.functional.pad")
 def _patch_pad(original):
     """Split a negative pad into the crop it means plus the non-negative remainder — torch treats a negative
@@ -781,45 +754,6 @@ def _patch_adaptive_avg_pool2d(original):
     return patch
 
 
-def _cumulative_reduce(input: torch.Tensor, dim: int, maximum: bool) -> torch.Tensor:
-    """``cummax``/``cummin`` values via a triangular-masked ``amax``/``amin`` (no portable scan
-    kernel). Output ``[..., i]`` reduces over ``j <= i``: broadcast the sequence against a
-    lower-triangular keep-mask, fill the rest with the dtype's min/max, then reduce."""
-    seq = input.transpose(dim, -1)
-    length = seq.shape[-1]
-    positions = torch.arange(length, device=input.device)
-    keep = positions.unsqueeze(0) <= positions.unsqueeze(1)  # [i, j] = j <= i
-    info = torch.finfo if input.is_floating_point() else torch.iinfo
-    fill = info(input.dtype).min if maximum else info(input.dtype).max
-    windows = torch.where(keep, seq.unsqueeze(-2), fill)
-    reduced = windows.amax(dim=-1) if maximum else windows.amin(dim=-1)
-    return reduced.transpose(dim, -1)
-
-
-@register_patch("executorch", "torch.cummax", "torch.Tensor.cummax")
-def _patch_cummax(_original):
-    """Decompose ``cummax`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
-    Returns ``(values, indices)`` like ``torch.cummax``; indices are zeros (callers use the values)."""
-
-    def patch(input, dim):
-        values = _cumulative_reduce(input, dim, maximum=True)
-        return torch.return_types.cummax((values, torch.zeros_like(values, dtype=torch.long)))
-
-    return patch
-
-
-@register_patch("executorch", "torch.cummin", "torch.Tensor.cummin")
-def _patch_cummin(_original):
-    """Decompose ``cummin`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
-    Returns ``(values, indices)`` like ``torch.cummin``; indices are zeros (callers use the values)."""
-
-    def patch(input, dim):
-        values = _cumulative_reduce(input, dim, maximum=False)
-        return torch.return_types.cummin((values, torch.zeros_like(values, dtype=torch.long)))
-
-    return patch
-
-
 @register_patch("executorch", "torch.bernoulli", "torch.Tensor.bernoulli")
 def _patch_bernoulli(_original):
     """Rewrite ``bernoulli`` as ``rand_like`` + comparison (no portable ``bernoulli`` out-variant).
@@ -840,23 +774,6 @@ def _patch_bernoulli(_original):
         probs = input if p is None else p
         result = (torch.rand_like(input) < probs).to(input.dtype)
         return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion. `aot_autograd` and
-    `gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering passes."""
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            return mask_function(*broadcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-
-        return _expanded
 
     return patch
 
@@ -980,37 +897,6 @@ def _patch_expand(original):
     return patch
 
 
-@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
-def _patch_reshape(original):
-    """Materialise a non-contiguous input before ``reshape``.
-
-    ExecuTorch's edge-lowering reshape reference refuses a non-contiguous input (e.g. the
-    ``transpose(1, 2).reshape(...)`` in the packed vision-attention forward). A plain
-    ``.contiguous()`` gets folded away by functionalization, but a ``.clone()`` survives. Eager
-    ``reshape`` already copies a non-contiguous tensor, so this adds no extra work — it just moves
-    the copy where ExecuTorch's lowering needs it.
-
-    The clone must force ``contiguous_format``: a bare ``.clone()`` defaults to
-    ``preserve_format``, keeping a transposed dim-order (e.g. ``[0, 2, 1]``) that ExecuTorch's
-    clone lowering can't map to a ``torch.memory_format`` (``Failed to map a given dim_order`` —
-    hit by xcodec2's ISTFT head).
-    """
-
-    from torch._prims_common import is_contiguous_or_false
-
-    def patch(input, *shape, **kwargs):
-        # `is_contiguous_or_false`, not `is_contiguous()`: deciding contiguity compares the strides
-        # against the products of the sizes, which has no answer on a tensor sized by *unbacked* symbols
-        # (a NaViT packer's data-dependent patch count) — plain `is_contiguous()` raises
-        # `GuardOnDataDependentSymNode` there and fails the export on a check meant only to pick a fast
-        # path. "Not provably contiguous" lands on the copy, which is the safe direction anyway.
-        if not is_contiguous_or_false(input):
-            input = input.clone(memory_format=torch.contiguous_format)
-        return original(input, *shape, **kwargs)
-
-    return patch
-
-
 # ── Stage 3: ExecuTorch patches ───────────────────────────────────────────────
 # Reversible swaps of ExecuTorch internals (passes, verifiers, op dicts) that crash
 # on legitimate dynamic-shape patterns: `SpecPropPass.update_placeholder_tensor_specs`,
@@ -1056,38 +942,6 @@ def _patch_eval_upper_bound(original):
     return patch
 
 
-@register_patch(
-    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
-)
-def _patch_remove_empty_tensors_from_cat(_original):
-    """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
-
-    The original checks ``input.numel() != 0`` directly; for tensors with
-    unbacked dynamic shapes (e.g. ``74 * u176``) that raises
-    ``GuardOnDataDependentSymNode`` because ``Ne(74*u176, 0)`` can't be proved
-    either way at trace time. Using ``guard_or_true`` keeps unbacked-shape
-    inputs conservatively (the pass is purely an optimisation).
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_true
-
-    def patch(self, graph_module, cat_node):
-        pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
-        cat_node.args = (pruned,) + cat_node.args[1:]
-        if not pruned:
-            cat_tensor = cat_node.meta["val"]
-            with graph_module.graph.inserting_after(cat_node):
-                full_like = graph_module.graph.create_node(
-                    "call_function",
-                    target=exir_ops.edge.aten.full.default,
-                    args=(tuple(cat_tensor.shape), 0),
-                    kwargs={"dtype": cat_tensor.dtype},
-                )
-                full_like.meta = cat_node.meta
-                cat_node.replace_all_uses_with(full_like)
-
-    return patch
-
-
 @register_patch("executorch", "executorch.exir.verification.verifier._check_tensor_args_matching_op_allowed_dtype")
 def _patch_check_tensor_args_dtype(original):
     """Suppress complex-dtype violations in
@@ -1108,45 +962,6 @@ def _patch_check_tensor_args_dtype(original):
             if "mismatched dtypes" in msg and ("complex64" in msg or "complex128" in msg):
                 return
             raise
-
-    return patch
-
-
-@register_patch(
-    "executorch",
-    "executorch.exir.tensor.dim_order_from_stride",
-    "executorch.exir.tensor_layout.dim_order_from_stride",
-    "executorch.exir.emit._emitter.dim_order_from_stride",
-    "executorch.exir.passes.replace_view_copy_with_view_pass.dim_order_from_stride",
-)
-def _patch_dim_order_from_stride(_original):
-    """Replacement for ``executorch.exir.tensor.dim_order_from_stride``.
-
-    The upstream version compares strides with ``guard_size_oblivious`` to sort
-    them. When the strides are unbacked SymInts (e.g. ``splinter`` slicing on a
-    data-dependent index), the comparison raises ``GuardOnDataDependentSymNode``
-    deep inside ``spec_prop_pass``. Use ``guard_or_true`` / ``guard_or_false``
-    so the sort still produces *a* dim order when the comparison is unbacked —
-    the exact order on unbacked dims doesn't affect correctness, just memory layout.
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
-
-    def patch(stride):
-        for s in stride:
-            if guard_or_false(s == 0):
-                raise ValueError("0 in strides is not supported for ExecuTorch.")
-
-        class K:
-            __slots__ = ("stride",)
-
-            def __init__(self, stride):
-                self.stride = stride
-
-            def __lt__(self, other):
-                return guard_or_true(self.stride < other.stride)
-
-        sorted_dims = [i[0] for i in sorted(enumerate(stride), key=lambda x: K(x[1]), reverse=True)]
-        return tuple(sorted_dims)
 
     return patch
 
@@ -1702,10 +1517,12 @@ def _fix_missing_placeholder_vals(exported_program: ExportedProgram) -> None:
 
 # `a % b` and the ops that rebuild it, per level: symbolic ints go through `operator`, tensors through the
 # aten schemas `torch.export` records for `tensor % int`.
-_FLOORED_MOD_OPS = {
-    operator.mod: (operator.add, operator.mod),
-    torch.ops.aten.remainder.Scalar: (torch.ops.aten.add.Tensor, torch.ops.aten.remainder.Scalar),
-}
+_FLOORED_MOD_OPS = {operator.mod: (operator.add, operator.mod)}
+if is_torch_available():
+    _FLOORED_MOD_OPS[torch.ops.aten.remainder.Scalar] = (
+        torch.ops.aten.add.Tensor,
+        torch.ops.aten.remainder.Scalar,
+    )
 
 
 @register_fx_node_fix("executorch")

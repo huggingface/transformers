@@ -71,8 +71,6 @@ if is_torch_available():
     import torch
     from torch.onnx import ONNXProgram
 
-    from .. import masking_utils
-
 
 if is_onnxscript_available():
     import onnx_ir
@@ -109,7 +107,7 @@ class OnnxExporter(DynamoExporter):
     artifact_suffix = ".onnx"
 
     required_packages = ["torch", "onnx", "onnxscript"]
-    tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
+    tested_versions = {"torch": "2.13.0", "onnx": "1.22.0", "onnxscript": "0.7.1"}
 
     def export_artifact(
         self,
@@ -280,23 +278,6 @@ def _patch_unsqueeze(original):
     return patch
 
 
-@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion."""
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            brodcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            result = mask_function(*brodcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-            return result
-
-        return _expanded
-
-    return patch
-
-
 @register_patch("onnx", "torch.nn.RMSNorm.forward")
 def _patch_rms_norm_forward(original):
     """Use non-fused RMS normalization when elementwise_affine is False."""
@@ -370,38 +351,6 @@ def _patch_opset13_constant(original):
     return patch
 
 
-def _patch_cummax_or_cummin(original, *, mode: str):
-    """Decompose cummax/cummin via triangular-mask reduction (O(N^2) memory)."""
-
-    def patch(input, dim):
-        n = input.shape[dim]
-        x = input.movedim(dim, -1)  # (..., n)
-        x_grid = x.unsqueeze(-2).expand(*x.shape[:-1], n, n)  # (..., n, n)
-        include = torch.ones(n, n, dtype=torch.bool, device=input.device).tril()
-        if input.dtype == torch.bool:
-            fill_val = mode != "max"
-        elif input.is_floating_point():
-            fill_val = torch.finfo(input.dtype).min if mode == "max" else torch.finfo(input.dtype).max
-        else:
-            fill_val = torch.iinfo(input.dtype).min if mode == "max" else torch.iinfo(input.dtype).max
-        fill = torch.full((), fill_val, dtype=input.dtype, device=input.device)
-        masked = torch.where(include, x_grid, fill)
-        out = masked.max(dim=-1) if mode == "max" else masked.min(dim=-1)
-        return out.values.movedim(-1, dim), out.indices.movedim(-1, dim)
-
-    return patch
-
-
-@register_patch("onnx", "torch.cummax", "torch.Tensor.cummax")
-def _patch_cummax(original):
-    return _patch_cummax_or_cummin(original, mode="max")
-
-
-@register_patch("onnx", "torch.cummin", "torch.Tensor.cummin")
-def _patch_cummin(original):
-    return _patch_cummax_or_cummin(original, mode="min")
-
-
 @register_patch("onnx", "torch.chunk", "torch.Tensor.chunk")
 def _patch_chunk(original):
     """Lower `chunk` via `narrow` (→ ONNX `Slice`) under dynamic shapes.
@@ -429,33 +378,6 @@ def _patch_chunk(original):
             splits.append(input.narrow(dim, start, length))
             start = start + chunk_size
         return tuple(splits)
-
-    return patch
-
-
-@register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
-def _patch_reshape(original):
-    """Materialise a non-contiguous input before `reshape`/`view`.
-
-    `reshape`/`view` on a permuted/non-contiguous tensor lowers to `aten.view`, which torch.export
-    rejects (`Cannot view a tensor with shape ... and strides ... as ...`) because the ONNX optimizer
-    folds away a plain `aten.contiguous`. Cloning to contiguous first is semantically a no-op — a
-    contiguous view holds the same data reshaped — and only copies when the view would otherwise fail
-    (e.g. WavLM's gated relative-position attention does `permute(...).view(...)`).
-
-    The check must be `is_contiguous_or_false`, not `is_contiguous()`: deciding contiguity compares the
-    strides against the products of the sizes, and on a tensor sized by *unbacked* symbols (a NaViT
-    packer's data-dependent patch count) that question has no answer, so plain `is_contiguous()` raises
-    `GuardOnDataDependentSymNode` — the whole export failing on a check meant only to pick a fast path.
-    The guard-free form answers "not provably contiguous", which lands on the copy: always correct, and
-    the copy is what makes the view legal anyway.
-    """
-    from torch._prims_common import is_contiguous_or_false
-
-    def patch(input, *shape, **kwargs):
-        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
-            input = input.clone(memory_format=torch.contiguous_format)
-        return original(input, *shape, **kwargs)
 
     return patch
 
@@ -488,46 +410,6 @@ def _patch_irfft(original):
         slc[dim] = slice(1, -1)
         full = torch.cat([input, input[tuple(slc)].flip(dims=[dim]).conj()], dim=dim)
         return torch.fft.ifft(full, n=n, dim=dim, norm=norm).real
-
-    return patch
-
-
-@register_patch("onnx", "torch.bucketize")
-def _patch_bucketize(original):
-    """Vectorized bucketize avoiding scalar-constant tensors that cause alias/detach issues."""
-
-    def patch(input, boundaries, *, out_int32=False, right=False):
-        if boundaries.numel() == 0:
-            result = torch.zeros_like(input, dtype=torch.int64)
-            return result.to(torch.int32) if out_int32 else result
-        if right:
-            mask = boundaries <= input.unsqueeze(-1)
-        else:
-            mask = boundaries < input.unsqueeze(-1)
-        result = mask.sum(-1)
-        return result.to(torch.int32) if out_int32 else result
-
-    return patch
-
-
-@register_patch("onnx", "torch.searchsorted")
-def _patch_searchsorted(original):
-    """Decompose searchsorted via broadcast comparison + sum — no ONNX op for searchsorted.
-
-    For sorted inputs the insertion index equals the count of elements satisfying
-    the comparison (< for left, <= for right). This is O(N*M) instead of the
-    real binary-search O(M log N) but only uses ops with ONNX translations.
-    """
-
-    def patch(sorted_sequence, values, *, out_int32=False, right=False, side=None, out=None, sorter=None):
-        if side is not None:
-            right = side == "right"
-        if right:
-            mask = sorted_sequence.unsqueeze(-1) <= values.unsqueeze(-2)
-        else:
-            mask = sorted_sequence.unsqueeze(-1) < values.unsqueeze(-2)
-        result = mask.sum(-2)
-        return result.to(torch.int32) if out_int32 else result
 
     return patch
 
@@ -707,25 +589,46 @@ def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return True
 
 
-@register_fx_node_fix("onnx")
-def _fix_detach_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place detach_ with out-of-place detach."""
-    if node.target is not torch.ops.aten.detach_.default:
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.detach.default, args=node.args, kwargs=node.kwargs)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
+# Overloads torch.export emits that ONNX cannot take, each with a drop-in twin: the in-place ops
+# (`aot_autograd` rejects them in a functional graph) and the `.Scalar` forms whose "scalar" arrives as a
+# graph node after decomposition, where torchlib either has no translation or calls `int()` on it
+# (pytorch/pytorch#194382). The rewrite is one shape -- insert the twin, forward the uses, erase -- so it
+# is written once and the table says which op maps to which.
+_FUNCTIONAL_TWINS = {}
+_TENSOR_OVERLOAD_TWINS = {}
+if is_torch_available():
+    _FUNCTIONAL_TWINS.update(
+        {
+            torch.ops.aten.detach_.default: torch.ops.aten.detach.default,
+            torch.ops.aten.index_put_.default: torch.ops.aten.index_put.default,
+            torch.ops.aten.triu_.default: torch.ops.aten.triu.default,
+        }
+    )
+    _TENSOR_OVERLOAD_TWINS.update(
+        {
+            torch.ops.aten.mul.Scalar: torch.ops.aten.mul.Tensor,
+            torch.ops.aten.remainder.Scalar: torch.ops.aten.remainder.Tensor,
+        }
+    )
 
 
 @register_fx_node_fix("onnx")
-def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place index_put_ with out-of-place index_put."""
-    if node.target is not torch.ops.aten.index_put_.default:
-        return False
+def _fix_overload_with_twin(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Swap an unexportable overload for its twin, per `_FUNCTIONAL_TWINS` / `_TENSOR_OVERLOAD_TWINS`.
+
+    A `.Scalar` form is only swapped when its second argument really is a graph node holding a tensor or
+    symbolic value -- with a Python literal there, the original overload is the right one.
+    """
+    if (replacement := _FUNCTIONAL_TWINS.get(node.target)) is None:
+        replacement = _TENSOR_OVERLOAD_TWINS.get(node.target)
+        if replacement is None or len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
+            return False
+        if not isinstance(node.args[1].meta.get("val"), (torch.Tensor, torch.SymFloat, torch.SymInt, torch.SymBool)):
+            return False
+
     with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.index_put.default, args=node.args, kwargs=node.kwargs)
+        new = gm.graph.call_function(replacement, args=node.args, kwargs=node.kwargs)
+    new.meta.update(node.meta)
     node.replace_all_uses_with(new)
     gm.graph.erase_node(node)
     return True
@@ -768,18 +671,6 @@ def _fix_fill_diagonal_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) ->
         eye_bool = gm.graph.call_function(torch.ops.aten.to.dtype, args=(eye, torch.bool))
         fill_tensor = gm.graph.call_function(torch.ops.aten.full_like.default, args=(tensor_arg, fill_value))
         new = gm.graph.call_function(torch.ops.aten.where.self, args=(eye_bool, fill_tensor, tensor_arg))
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_triu_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place triu_ with out-of-place triu."""
-    if node.target is not torch.ops.aten.triu_.default:
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.triu.default, args=node.args, kwargs=node.kwargs)
     node.replace_all_uses_with(new)
     gm.graph.erase_node(node)
     return True
@@ -865,60 +756,6 @@ def _fix_integral_tensor_float_scalar(gm: torch.fx.GraphModule, node: torch.fx.N
         )
     promoted.meta.update(node.meta)
     node.replace_input_with(tensor_arg, promoted)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_mul_scalar_symbolic(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Rewrite `mul.Scalar` to `mul.Tensor` when its 'scalar' is a graph node.
-
-    The other half of pytorch/pytorch#194382: torchlib registers no real-valued `aten.mul.Scalar`
-    translation at all, and decomposition also produces that overload with a *symbolic* second operand — a
-    division result rather than a literal (`mul.Scalar(x, %truediv_1)`) — which the promotion fix above
-    cannot address, since there is no Python constant to promote against. `mul.Tensor` has the two-operand
-    translation, which is the same rewrite `_fix_remainder_scalar` makes for the same reason.
-
-    That operand is a `SymFloat`, not a tensor: across the affected families every one of the 33 sites is
-    an `operator.truediv` result. `mul.Tensor`'s translation takes a symbolic scalar there — it becomes a
-    graph value like any other — so the rewrite is sound, but the guard below names both accepted forms
-    rather than trusting that a `Node` implies a tensor. Anything else (a nested list, an unbacked value
-    with no `val`) is left as `mul.Scalar` to fail visibly in translation instead of silently here.
-
-    Reached because the FX fixes run a second time right after `run_decompositions`, where this overload
-    appears.
-    """
-    if node.target is not torch.ops.aten.mul.Scalar:
-        return False
-    if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
-        return False
-    other = node.args[1].meta.get("val")
-    if not isinstance(other, (torch.Tensor, torch.SymFloat, torch.SymInt, torch.SymBool)):
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.mul.Tensor, args=node.args)
-    new.meta.update(node.meta)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Rewrite remainder.Scalar to remainder.Tensor when the 'scalar' arg is actually a tensor.
-
-    After decomposition the second operand of ``aten.remainder.Scalar`` can be a graph
-    node (SymbolicTensor) rather than a Python scalar.  The ONNX torchlib translation for
-    ``remainder.Scalar`` calls ``int()`` on it and crashes.  Rewriting to
-    ``remainder.Tensor`` uses the two-tensor ONNX translation which handles this correctly.
-    """
-    if node.target is not torch.ops.aten.remainder.Scalar:
-        return False
-    if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.remainder.Tensor, args=node.args)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
     return True
 
 

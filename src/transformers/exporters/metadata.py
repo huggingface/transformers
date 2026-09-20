@@ -29,7 +29,8 @@ from typing import Any
 from .. import __version__
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
-from .utils import get_leaf_tensors
+from .cache import _self_attention_layers
+from .utils import _class_to_path, _path_to_class, get_leaf_tensors
 
 
 logger = logging.get_logger(__name__)
@@ -46,13 +47,26 @@ EXPORT_METADATA_KEY = "transformers_export_metadata"
 def _traced_kwarg(value: Any) -> dict[str, Any]:
     """How one traced kwarg was shaped, as JSON: rank and dtype for a tensor, the same per leaf for a
     mapping of them (a per-attention-type mask dict), and the container's kind for anything else — a cache
-    is the one a runner has to recognise, since it feeds it as an object rather than a tensor."""
+    is the one a runner has to recognise, since it feeds it as an object rather than a tensor.
+
+    A container also records the class it was, as `module:qualname`. The graph takes such a kwarg as that
+    *type* (dynamo bakes it into the input spec, and the other backends name their leaves by its fields),
+    so a runtime assembling one has to build the same class rather than something shaped like it — an
+    encoder output carrying more than hidden states (parakeet's frame mask) only survives as its own type.
+    """
     if isinstance(value, torch.Tensor):
         return {"rank": value.dim(), "dtype": str(value.dtype).removeprefix("torch.")}
     if isinstance(value, Mapping):
-        return {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
+        recorded = {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
+        # A per-attention-type mask is a plain dict and is rebuilt as one. An encoder's output is a mapping
+        # too — `ModelOutput` subclasses `OrderedDict` — but the graph takes it as its own class, so that is
+        # recorded here rather than under `container`, which this branch already claimed.
+        if type(value) is not dict:
+            recorded["class"] = _class_to_path(type(value))
+        return recorded
 
-    return {"container": "cache" if isinstance(value, Cache) else type(value).__name__}
+    kind = "cache" if isinstance(value, Cache) else type(value).__name__
+    return {"container": kind, "class": _class_to_path(type(value))}
 
 
 def traced_output_names(exported_program) -> list[str]:
@@ -85,15 +99,6 @@ def _package_versions(packages: Iterable[str]) -> dict[str, str]:
     return versions
 
 
-def _traced_input_shapes(module) -> dict[str, tuple[int | None, ...]]:
-    """`{input name: shape}` from the traced graph's placeholders, `None` per symbolic axis."""
-    return {
-        node.name: tuple(int(dim) if isinstance(dim, int) else None for dim in node.meta["val"].shape)
-        for node in getattr(getattr(module, "graph", None), "nodes", [])
-        if node.op == "placeholder" and hasattr(node.meta.get("val"), "shape")
-    }
-
-
 def _traced_cache_leaf_shapes(module) -> dict[int, tuple[int | None, ...]]:
     """`{leaf index: shape}` for the graph's cache inputs, keyed by the index in the placeholder's own name.
 
@@ -111,8 +116,13 @@ def _traced_cache_leaf_shapes(module) -> dict[int, tuple[int | None, ...]]:
     return shapes
 
 
-def _traced_kv_geometry(module) -> dict[int, tuple[int, int, int]]:
-    """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` from the traced cache.
+def _traced_cache_layout(module) -> dict[int, dict[str, int]]:
+    """`{layer index: {"heads", "key_dim", "value_dim", "length", "indexer"}}` from the traced cache — what
+    the metadata records about each layer, in the shape it records it.
+
+    Each key is present only where the trace stated it: a recurrent layer keeps conv / SSM buffers rather
+    than keys and values and has no geometry, and a length belongs to a layer that was *sized* rather than
+    grown (the sizes need not be uniform across one cache).
 
     The serialized context records which leaf *each* layer's `keys` / `values` occupy, so the shapes are
     matched by name. Matching by position instead cannot work: a hybrid model's recurrent states are rank-4
@@ -127,18 +137,30 @@ def _traced_kv_geometry(module) -> dict[int, tuple[int, int, int]]:
         return {}
     context = kwargs_spec.children_specs[names.index(cache_name)].context
     state = context.get("s", {}) if isinstance(context, dict) else {}
-    geometry = {}
+    layout = {}
     for index, layer in enumerate(state.get("layers", []) or []):
         entries = layer.get("s", {}) if isinstance(layer, dict) else {}
         keys, values = entries.get("keys"), entries.get("values")
-        if not (isinstance(keys, dict) and keys.get("_t") == "tensor" and isinstance(values, dict)):
-            continue
-        key_shape, value_shape = shapes.get(keys["i"]), shapes.get(values["i"])
-        if key_shape is None or value_shape is None:
-            continue
-        if len(key_shape) == 4 and None not in (key_shape[1], key_shape[3], value_shape[3]):
-            geometry[index] = (key_shape[1], key_shape[3], value_shape[3])
-    return geometry
+        key_shape = shapes.get(keys["i"]) if isinstance(keys, dict) and keys.get("_t") == "tensor" else None
+        value_shape = shapes.get(values["i"]) if isinstance(values, dict) and values.get("_t") == "tensor" else None
+        recorded = {}
+        if key_shape is not None and value_shape is not None and len(key_shape) == 4:
+            heads, key_dim, value_dim = key_shape[1], key_shape[3], value_shape[3]
+            if None not in (heads, key_dim, value_dim):
+                recorded = {"heads": heads, "key_dim": key_dim, "value_dim": value_dim}
+        # A fixed-size layer carries the length it was built for in its own context, and layers of one
+        # cache need not agree: mllama sizes its cross-attention layers to the vision sequence and its
+        # self-attention ones to the generation length.
+        if isinstance(entries.get("max_cache_len"), int):
+            recorded["length"] = entries["max_cache_len"]
+        # A sparse-indexer layer keeps a third tensor beside keys and values, but not every layer of such a
+        # cache writes one: hy_v4's "shared" indexer layers reuse the last full layer's, so their slot stays
+        # empty and the graph has one leaf fewer there. Only the trace says which is which.
+        if "indexer_keys" in entries:
+            recorded["indexer"] = isinstance(entries["indexer_keys"], dict)
+        if recorded:
+            layout[index] = recorded
+    return layout
 
 
 @dataclass(frozen=True)
@@ -206,11 +228,6 @@ class ExportMetadata:
         return count if isinstance(count, int) else None
 
     @property
-    def shapes(self) -> dict[str, tuple[int | None, ...]]:
-        """Shape per input, `None` per symbolic axis — the shapes the *trace* saw."""
-        return {name: tuple(shape) for name, shape in self.raw.get("shapes", {}).items()}
-
-    @property
     def dtype(self) -> torch.dtype | None:
         """The precision the graph was exported at — not sniffed off whichever tensor is float."""
         dtype = getattr(torch, self.raw.get("dtype") or "", None)
@@ -230,6 +247,13 @@ class ExportMetadata:
         kwargs = self.raw.get("kwargs")
         return kwargs if isinstance(kwargs, dict) else {}
 
+    def kwarg_class(self, name: str) -> type | None:
+        """The class a container kwarg was traced as, imported — `None` when the trace recorded none (an
+        artifact written before this, or a kwarg that was a plain tensor). Importing it is also what
+        registers that class as a pytree node, which a graph loaded from disk needs before it is called."""
+        path = self.kwargs.get(name, {}).get("class")
+        return _path_to_class(path) if path else None
+
     @property
     def mask_ranks(self) -> dict[str, int | None] | None:
         """`{attention type: rank}` when the graph was traced with a *dict* of masks, else `None`.
@@ -243,6 +267,24 @@ class ExportMetadata:
         spec either way."""
         leaves = self.kwargs.get("attention_mask", {}).get("leaves")
         return {name: leaf.get("rank") for name, leaf in leaves.items()} if leaves else None
+
+    @property
+    def cross_layer_classes(self) -> tuple[str, ...]:
+        """Class names of the traced cross-attention cache layers; empty when the trace had no cross half."""
+        return tuple((self.raw.get("cache") or {}).get("cross_layers") or ())
+
+    @property
+    def cache_lengths(self) -> dict[int, int]:
+        """`{layer index: length}` for the traced cache's fixed-size layers; empty for a growing cache."""
+        layers = (self.raw.get("cache") or {}).get("layers") or []
+        return {index: layer["length"] for index, layer in enumerate(layers) if "length" in layer}
+
+    @property
+    def indexer_layers(self) -> dict[int, bool]:
+        """`{layer index: whether the traced layer carried an indexer tensor}`, for the layers whose class
+        keeps one at all. A layer absent here was not traced with an indexer slot to speak of."""
+        layers = (self.raw.get("cache") or {}).get("layers") or []
+        return {index: layer["indexer"] for index, layer in enumerate(layers) if "indexer" in layer}
 
     @property
     def kv_geometry(self) -> dict[int, tuple[int, int, int]]:
@@ -323,25 +365,28 @@ def build_export_metadata(
     # otherwise has to put to whatever cache object it happens to hold, and a `DynamicSlidingWindowLayer`
     # answers it misleadingly (it grows, yet reports its window as a maximum length). The geometry comes
     # from the graph's own cache inputs, because a config cannot always give it.
-    geometry = _traced_kv_geometry(module) if module is not None else {}
+    layout = _traced_cache_layout(module) if module is not None else {}
     cache = next((value for value in inputs.values() if isinstance(value, Cache)), None)
-    layers = getattr(getattr(cache, "self_attention_cache", cache), "layers", []) if cache is not None else []
+    layers = _self_attention_layers(cache)
     if cache is not None:
         metadata["cache"] = {
             "class": type(cache).__name__,
             "layers": [
-                {
-                    "class": type(layer).__name__,
-                    **dict(zip(("heads", "key_dim", "value_dim"), geometry.get(index, ()))),
-                }
+                # Plus what the trace says about the layer's own state: its geometry, and the length it
+                # was sized for when it was sized at all. The runtime builds to that length rather than
+                # re-deriving a size, because `generate` sizes a fixed cache from the prompt in front of it
+                # and from per-model facts (mllama's vision length), so the same config gives a different
+                # cache elsewhere -- and a graph carries its cache's sizes in the input spec it refuses to
+                # be called against anything else.
+                {"class": type(layer).__name__, **layout.get(index, {})}
                 for index, layer in enumerate(layers)
             ],
+            # The cross half's layer kinds too: `generate` builds that half from the decoder's config, so
+            # a model whose decoder is sliding gets sliding layers where the trace had full ones, and the
+            # layer classes are part of the graph's input spec. Recording them lets the runtime compare
+            # rather than recognise a class by the end of its name.
+            "cross_layers": [
+                type(layer).__name__ for layer in getattr(getattr(cache, "cross_attention_cache", None), "layers", [])
+            ],
         }
-    # The shapes the trace *saw*, `None` per symbolic axis. This is not the same fact as the shape an
-    # artifact *declares*, which is why the runners still read that off their own handle: ONNX reports
-    # symbolic dims however it spells them, and a `.pte` reports the capacity its memory planner reserved —
-    # inflated by the exporter's own caps, so a dim traced at 4 can be declared 1024. Recording the trace's
-    # account keeps "what was this graph built for" answerable in one place, and identically per backend.
-    shapes = _traced_input_shapes(module) if module is not None else {}
-    metadata["shapes"] = {name: list(shape) for name, shape in shapes.items()}
     return metadata

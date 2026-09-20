@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from ..models.auto import AutoConfig
 from ..utils import logging
-from .base import HfExporter, ModelRunner
+from .base import ExportedModel, HfExporter, ModelRunner
 from .configs import ExportConfigMixin, ExportFormat
 from .exporter_dynamo import DynamoConfig, DynamoExporter
 from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
@@ -63,6 +63,8 @@ def export_backend(export_format, part: str | None = None):
     `export_format` takes an [`ExportFormat`] or its string value, since a manifest carries the string and
     a config carries the enum.
     """
+    if export_format is None:
+        raise ValueError(f"No export format given — registered formats are {sorted(EXPORT_BACKENDS)}.")
     name = export_format.value if isinstance(export_format, ExportFormat) else export_format
     backend = EXPORT_BACKENDS.get(name)
     if backend is None:
@@ -89,13 +91,9 @@ class AutoExportConfig:
 
     @classmethod
     def from_dict(cls, export_config_dict: dict):
-        export_format = export_config_dict.get("export_format")
-
-        if export_format is None:
-            raise ValueError("export_config_dict must contain key 'export_format' set to exporter name")
-
-        # `export_backend` takes the enum or its string value, and says what is missing if anything is
-        return export_backend(export_format, "config").from_dict(export_config_dict)
+        # `export_backend` takes the enum or its string value, and says what is missing if anything is --
+        # including the key itself, so the absent case is not re-checked here.
+        return export_backend(export_config_dict.get("export_format"), "config").from_dict(export_config_dict)
 
 
 class AutoHfExporter:
@@ -106,13 +104,8 @@ class AutoHfExporter:
 
     @classmethod
     def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter:
-        # Normalize to a dict so ``supports_export_format`` can act as the single gate.
         export_config_dict = export_config.to_dict() if isinstance(export_config, ExportConfigMixin) else export_config
-        if not cls.supports_export_format(export_config_dict):
-            raise ValueError(
-                f"Unsupported export config: {export_config_dict!r}. Registered formats: {sorted(EXPORT_BACKENDS)}."
-            )
-        return export_backend(export_config_dict["export_format"], "exporter")(**kwargs)
+        return export_backend(export_config_dict.get("export_format"), "exporter")(**kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter:
@@ -132,11 +125,6 @@ class AutoHfExporter:
         config_dict = cls._load_export_config_dict(pretrained_model_name_or_path, **kwargs)
         overrides = {key: kwargs.pop(key) for key in list(kwargs) if key in config_dict}
         config_dict = {**config_dict, **overrides}
-        if not cls.supports_export_format(config_dict):
-            raise ValueError(
-                f"The export recipe in {pretrained_model_name_or_path} names an `export_format` this "
-                "version cannot build an exporter for."
-            )
         return cls.from_config(AutoExportConfig.from_dict(config_dict), **kwargs)
 
     @staticmethod
@@ -161,34 +149,6 @@ class AutoHfExporter:
             )
         return dict(export_config)
 
-    @staticmethod
-    def supports_export_format(export_config_dict: dict) -> bool:
-        """Return True if the provided dict describes an ``export_format`` that has both a
-        registered config class and a registered exporter class. Warns with an actionable message
-        when the format is missing entirely, unknown, or only half-registered."""
-        export_fmt = export_config_dict.get("export_format")
-        if export_fmt is None:
-            logger.warning(
-                f"No 'export_format' key in export config — supported values are: {sorted(EXPORT_BACKENDS)}. Skipping."
-            )
-            return False
-
-        name = export_fmt.value if isinstance(export_fmt, ExportFormat) else export_fmt
-        backend = EXPORT_BACKENDS.get(name)
-        if backend is None:
-            logger.warning(
-                f"Unknown export format {export_fmt!r} — supported values are: {sorted(EXPORT_BACKENDS)}. Skipping."
-            )
-            return False
-        for part in ("config", "exporter"):
-            if getattr(backend, part) is None:
-                logger.warning(
-                    f"Export format {name!r} has no registered {part}. Register one via "
-                    f"``@register_{part}({name!r})``. Skipping."
-                )
-                return False
-        return True
-
 
 class AutoExportedModel:
     """Load a saved export as whatever it was exported as.
@@ -206,7 +166,6 @@ class AutoExportedModel:
         """Load a saved export from a local directory or a Hub repo."""
         from .base import read_export_manifest, split_download_kwargs
         from .generator import ExportedGenerator
-        from .model import ExportedModel
 
         download_kwargs, _ = split_download_kwargs(dict(kwargs))
         manifest = read_export_manifest(save_directory, **download_kwargs)

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 import torch
 
 from .base import ModelRunner
-from .caches import _read_cache_entry
+from .cache import _read_cache_entry
 from .metadata import (
     EXPORT_METADATA_KEY,
     ExportMetadata,
@@ -88,8 +89,14 @@ class OnnxModelRunner(ModelRunner):
     `output.<name>` graph inputs/outputs, so a `past_key_values` kwarg is flattened into the feed and the
     `output.` prefix stripped from the results (back to plain leaf names)."""
 
-    def __init__(self, session, export_metadata=None):
+    def __init__(self, session, export_metadata=None, source=None):
         self._session = session
+        # What `to()` reopens: the `.onnx` path or the `ONNXProgram` this session was made from. ORT fixes a
+        # session's execution provider when the session is created, so moving device means creating another
+        # one over the same model -- and a session does not hand its own model back. A program kept here
+        # stays in memory alongside ORT's own copy of it; a session built elsewhere has no source and cannot
+        # move.
+        self._source = source
         self._output_names = [o.name for o in session.get_outputs()]
         self.export_metadata = self.resolve_metadata(
             export_metadata,
@@ -97,7 +104,6 @@ class OnnxModelRunner(ModelRunner):
         )
         # Where the session runs, and so where `__call__` lands its outputs.
         self.device = "cuda" if any("CUDA" in p for p in session.get_providers()) else "cpu"
-        self.kv_geometry = self.export_metadata.kv_geometry
 
         # The graph names its *mutated* inputs with an `input.` prefix — the cache leaves always, and any
         # plain kwarg the graph writes to (a merged multi-token decode mutates its `attention_mask`).
@@ -203,7 +209,7 @@ class OnnxModelRunner(ModelRunner):
 
         providers = providers or cls._providers_for(device)
         session = onnxruntime.InferenceSession(artifact.model_proto.SerializeToString(), providers=providers)
-        return cls(session, export_metadata=export_metadata, **kwargs)
+        return cls(session, export_metadata=export_metadata, source=artifact, **kwargs)
 
     @classmethod
     def from_pretrained(cls, path, export_metadata=None, device=None, providers=None, **kwargs) -> OnnxModelRunner:
@@ -213,8 +219,27 @@ class OnnxModelRunner(ModelRunner):
 
         providers = providers or cls._providers_for(device)
         return cls(
-            onnxruntime.InferenceSession(str(path), providers=providers), export_metadata=export_metadata, **kwargs
+            onnxruntime.InferenceSession(str(path), providers=providers),
+            export_metadata=export_metadata,
+            source=path,
+            **kwargs,
         )
+
+    def to(self, device) -> OnnxModelRunner:
+        """Another runner over the same model, opened on `device`'s providers.
+
+        Not a move: a session's execution provider is fixed when it is created, so this opens a second one.
+        That costs an ORT session load -- small next to the export, not free -- and it is why the runner is
+        returned rather than mutated."""
+        # A session knows only the device *type* it was opened for, so `cuda` and `cuda:0` name the same one
+        # and reopening for the difference would only pay the load again.
+        if torch.device(device).type == torch.device(self.device).type:
+            return self
+        if self._source is None:
+            return super().to(device)
+        loader = self.from_pretrained if isinstance(self._source, (str, Path)) else self.from_artifact
+        # The recorded payload, not the parsed object: what a load injects is the raw mapping.
+        return loader(self._source, export_metadata=self.export_metadata.raw, device=device)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         feed = self._flattened(kwargs)

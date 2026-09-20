@@ -40,7 +40,6 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
-import importlib
 import inspect
 import json
 import sys
@@ -58,6 +57,8 @@ from .metadata import (
     build_export_metadata,
 )
 from .utils import (
+    _class_to_path,
+    _path_to_class,
     apply_patches,
     patch_attributes,
     prepare_for_export,
@@ -95,7 +96,7 @@ class DynamoExporter(HfExporter):
 
     required_packages = ["torch"]
     min_versions = {"torch": "2.11.0"}
-    tested_versions = {"torch": "2.12.0"}
+    tested_versions = {"torch": "2.13.0"}
 
     def export_artifact(
         self,
@@ -496,10 +497,25 @@ def varlen_attn_masked_sdpa(
 ):
     """Block-diagonal masked SDPA over the packed `(total, heads, dim)` sequence (`cu_seq_q` marks the
     segment boundaries) — the device/dtype-agnostic, exportable equivalent of `torch_attn::_varlen_attn`.
-    Returns the attention output `(total, heads, dim)`."""
+    Returns the attention output `(total, heads, dim)`.
+
+    This is registered as the op's CPU kernel, so it answers for every caller on that device, not only an
+    export. The arguments it cannot express are refused rather than ignored: a silently dropped
+    `window_size` or `seqused_k` returns a plausible tensor computed against the wrong keys.
+    """
+    unsupported = {"window_size": window_size, "seqused_k": seqused_k, "block_table": block_table}
+    if named := [name for name, value in unsupported.items() if value is not None]:
+        raise NotImplementedError(
+            f"`varlen_attn_masked_sdpa` has no implementation for {named}; it masks whole segments only. "
+            "Run this attention on a device with the flash kernel, or extend the mask built below."
+        )
     positions = torch.arange(query.shape[0], device=query.device)
     segment_id = (positions[:, None] >= cu_seq_q[1:][None, :]).sum(-1)
     block_mask = (segment_id[:, None] == segment_id[None, :])[None, None]
+    if is_causal:
+        # Packed self-attention: positions run across the whole batch, so a global lower-triangular mask
+        # is per-segment causality once the block mask has confined attention to its own segment.
+        block_mask = block_mask & (positions[:, None] >= positions[None, :])[None, None]
     q, k, v = (tensor.transpose(0, 1)[None] for tensor in (query, key, value))
     out = torch.nn.functional.scaled_dot_product_attention(
         q, k, v, attn_mask=block_mask, scale=scale, enable_gqa=enable_gqa
@@ -543,18 +559,6 @@ if is_torch_available():
 #
 # To register a new type: it should be handled automatically by the generic
 # flattener. If not, add a branch in _flatten_to_context / _unflatten_from_context.
-
-
-def _class_to_path(cls: type) -> str:
-    return f"{cls.__module__}:{cls.__qualname__}"
-
-
-def _path_to_class(path: str) -> type:
-    module_name, qualname = path.split(":", 1)
-    obj = importlib.import_module(module_name)
-    for part in qualname.split("."):
-        obj = getattr(obj, part)
-    return obj
 
 
 def _maybe_sym_constant(sym: Any) -> Any:
@@ -638,12 +642,12 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         # step it was traced at. `_patch_sliding_window_length` makes the traced arithmetic read the length off
         # the keys tensor instead, so the counter is no longer load-bearing — normalise it and a graph traced
         # at one step accepts a cache at another.
-        # A *scalar* counter is normalised before the walk, not after: while tracing it is a dynamic `SymInt`,
-        # which the walk would collect as a graph leaf (and so a graph output), leaving that leaf orphaned
-        # once the context is zeroed — flatten then reports one more leaf than unflatten consumes. Dynamo
+        # Normalised before the walk, never after: while tracing, a scalar counter is a dynamic `SymInt`
+        # that the walk would collect as a graph leaf (and so a graph output), and zeroing the context
+        # afterwards would orphan it — flatten then reports one more leaf than unflatten consumes. Dynamo
         # carries the stray symbolic output regardless; ExecuTorch's lowering has no symbolic-int output to
         # put it in and drops it, surfacing the gap as a `treespec.unflatten` length mismatch. A tensor
-        # counter still rides along as a leaf, exactly as before.
+        # counter is left alone and rides along as a leaf, which is why the zeroing cannot be unconditional.
         if "sliding_window" in attributes and not isinstance(attributes.get("cumulative_length", 0), torch.Tensor):
             attributes["cumulative_length"] = 0
         # A *static* sliding layer keeps the same counter under `cumulative_length_int` (its
@@ -651,10 +655,11 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         # way: the traced branch is baked either way, so the counter is regime metadata, not structure.
         if "cumulative_length_int" in attributes:
             attributes["cumulative_length_int"] = 0
-        state = {k: _flatten_to_context(v, tensors) for k, v in attributes.items()}
-        if "sliding_window" in state and "cumulative_length" in state:
-            state["cumulative_length"] = 0
-        return {"_t": "obj", "p": _class_to_path(cls), "s": state}
+        return {
+            "_t": "obj",
+            "p": _class_to_path(cls),
+            "s": {k: _flatten_to_context(v, tensors) for k, v in attributes.items()},
+        }
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
 

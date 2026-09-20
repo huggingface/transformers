@@ -37,13 +37,14 @@ nothing is introspected from the graphs. Two public pieces:
 from __future__ import annotations
 
 import copy
+import dataclasses
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import torch
 
-from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache, StaticLayer
+from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
 from ..generation import GenerationConfig, GenerationMixin
 from ..masking_utils import create_masks_for_generate
 from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
@@ -55,11 +56,13 @@ from .base import (
     resolve_export_file,
     split_download_kwargs,
 )
-from .caches import (
+from .cache import (
     _advance_cache,
     _cache_length,
     _empty_container,
     _self_attention_layers,
+    mask_width,
+    materialize_cache_layers,
 )
 from .decompose import (
     _MODALITY_AUX_SUFFIXES,
@@ -72,8 +75,8 @@ from .utils import (
     _find_config_attr,
     cast_leaf_tensors,
     get_rope_index_from_config,
-    materialize_cache_layers,
     precompute_export_inputs,
+    runner_feed,
 )
 
 
@@ -171,12 +174,17 @@ class _ExportedEncoder:
     """`get_encoder()` stand-in over the exported encoder graph. `generate` filters its kwargs by
     `forward`'s signature (a wildcard here, so nothing is dropped), always adds the `output_*` /
     `return_dict` flags, and expects a `ModelOutput` back — the wrapper feeds the graph only what it
-    declares and wraps its features as `BaseModelOutput.last_hidden_state`, the form the decoder graphs
-    were traced with."""
+    declares and returns its outputs as the class the decoder graphs were traced with.
 
-    def __init__(self, runner: ModelRunner, merge=None):
+    That class is the encoder's own (`ExportMetadata.kwarg_class`), not a normalized `BaseModelOutput`:
+    an encoder that returns more than hidden states — parakeet's frame mask, which the canary and
+    cohere_asr decoders read off `encoder_outputs.attention_mask` — has nowhere else to put it, and the
+    decode graphs take the kwarg as that type anyway."""
+
+    def __init__(self, runner: ModelRunner, merge=None, output_class: type | None = None):
         self._runner = runner
         self._merge = merge
+        self._output_class = output_class or BaseModelOutput
 
     def forward(self, **kwargs):
         # A multi-modal encoder-decoder merges its features once, in front of the text encoder — the graph
@@ -187,10 +195,17 @@ class _ExportedEncoder:
             # The merge keys its primary entry by the embed graph's own output name; this graph declares it
             # under its text input, the way the decode feed maps it.
             primary, *extra = merged
-            kwargs[self._runner.text_input] = merged[primary]
+            kwargs[text_input(self._runner)] = merged[primary]
             kwargs.update({name: merged[name] for name in extra})
-        feed = {k: v for k, v in kwargs.items() if k in set(self._runner.input_names)}
-        return BaseModelOutput(last_hidden_state=next(iter(self._runner(**feed).values())))
+        feed = runner_feed(self._runner, kwargs)
+        outputs = self._runner(**feed)
+        # By name when the graph's outputs are the class's own fields, which is what a `ModelOutput`
+        # encoder gives. An encoder that returned a bare tensor names its output whatever the trace named
+        # it, and that tensor is the hidden states — the first field, and all a decoder reads from it.
+        fields = {field.name for field in dataclasses.fields(self._output_class)}
+        if outputs.keys() <= fields:
+            return self._output_class(**outputs)
+        return self._output_class(next(iter(outputs.values())))
 
     def __call__(self, **kwargs):
         return self.forward(**kwargs)
@@ -221,6 +236,82 @@ def _declares(runner, name: str, value) -> bool:
     return not isinstance(value, torch.Tensor) and any(
         declared.removeprefix("input.").startswith((f"{name}.", f"{name}_")) for declared in runner.input_names
     )
+
+
+def _resize_to_traced_lengths(cache, lengths: dict[int, int]) -> None:
+    """Size each fixed-size layer to the length the trace recorded for it, before its buffers are made.
+
+    `generate` sizes a fixed cache from the prompt in front of it and from per-model facts — mllama's
+    cross-attention layers hold the vision sequence, not the generation length — so re-deriving a size here
+    gives a different cache for a different prompt. A graph carries its cache's sizes in the input spec and
+    refuses to be called against any other, so the trace's own account is the one that fits.
+    """
+    if not lengths:
+        return
+    layers = _self_attention_layers(cache)
+    for index, length in lengths.items():
+        if index < len(layers) and getattr(layers[index], "max_cache_len", None) not in (None, length):
+            layers[index].max_cache_len = length
+
+
+# ── What a graph's inputs mean to a generation loop ──────────────────────────
+# Derivations from what a runner declares, kept here rather than on `ModelRunner`: they answer questions
+# only this loop asks ("which input carries the text", "where does the causal mask go"), and a runner
+# stays what it is -- the thing that runs a graph.
+
+
+def text_input(runner) -> str:
+    """The graph's text input: `"decoder_input_ids"` (encoder-decoder decode), `"inputs_embeds"`
+    (multi-modal decode) or `"input_ids"`."""
+    return next((n for n in ("decoder_input_ids", "inputs_embeds") if n in runner.input_names), "input_ids")
+
+
+def mask_inputs(runner) -> tuple[str, ...]:
+    """The graph's attention-mask input name(s) — several for mixed full/sliding attention."""
+    return tuple(
+        n for n in runner.input_names if n == "attention_mask" or n.startswith(("attention_mask.", "attention_mask_"))
+    )
+
+
+def decoder_mask_input(runner) -> str | None:
+    """`"decoder_attention_mask"` when the graph declares one. An encoder-decoder splits the two masks:
+    `attention_mask` covers the *encoder's* sequence (what cross-attention reads) while this one covers
+    the decoder's own — so the causal mask belongs here, and `generate` does not hand it over (the eager
+    model builds it inside the forward the graph starts after)."""
+    return "decoder_attention_mask" if "decoder_attention_mask" in runner.input_names else None
+
+
+def mask_rank(runner) -> int | None:
+    """The rank the graph's `attention_mask` was traced with, `None` when it takes none.
+
+    `generate` upgrades a 2D padding mask to the 4D causal mask for any compileable cache, assuming the
+    model's forward wants one — but an exported graph starts *after* whatever mask building its model
+    does, so only the trace can say which it took. An alibi model (bloom) reads the 2D padding mask
+    directly and compares its width to the cache length, so a 4D mask fails a guard rather than
+    mismatching a shape.
+
+    From the rank the trace recorded for the kwarg, not from a shape the artifact declares: ONNX reports
+    the session's declared shapes, which is a different fact and gave this a different answer per backend.
+    """
+    return runner.export_metadata.kwargs.get("attention_mask", {}).get("rank")
+
+
+def mask_dtype(runner) -> torch.dtype | None:
+    """The dtype the graph's `attention_mask` was traced with, `None` when it takes none. A model reads a
+    bool mask and a float one differently (a keep-mask vs an additive bias), so a mask built here is built
+    as the one the graph took."""
+    name = runner.export_metadata.kwargs.get("attention_mask", {}).get("dtype")
+    return getattr(torch, name, None) if name else None
+
+
+def mask_dict_ranks(runner) -> dict[str, int] | None:
+    """`{attention type: rank}` when the graph took a *dict* of masks instead of one (mixed full/sliding
+    attention), which a model builds inside its forward — so the runtime has to hand one in.
+
+    Read off what the export recorded, in kwarg space, because the artifacts themselves do not agree on
+    anything else: dynamo takes the dict as one kwarg and keeps the per-type keys in its pytree child spec,
+    while ONNX and ExecuTorch flatten it to one input per type."""
+    return runner.export_metadata.mask_ranks
 
 
 class ExportedGenerator(GenerationMixin):
@@ -278,7 +369,20 @@ class ExportedGenerator(GenerationMixin):
         # takes `input_ids`.
         scatters_at_encoder = text_embed is not None and encoder is not None and "inputs_embeds" in encoder.input_names
         self._encoder = (
-            _ExportedEncoder(encoder, merge=self._merge_modalities if scatters_at_encoder else None)
+            _ExportedEncoder(
+                encoder,
+                merge=self._merge_modalities if scatters_at_encoder else None,
+                # From whichever graph takes the object: the prompt's, usually, since a decode graph reads
+                # the cross-attention cache the prefill wrote rather than the encoder's output again.
+                output_class=next(
+                    (
+                        traced
+                        for runner in (self._prefill_runner, decode)
+                        if (traced := runner.export_metadata.kwarg_class("encoder_outputs")) is not None
+                    ),
+                    None,
+                ),
+            )
             if encoder is not None
             else None
         )
@@ -326,7 +430,7 @@ class ExportedGenerator(GenerationMixin):
         # decode graph (decoder-only VLMs) or the encoder graph (a multi-modal encoder-decoder like
         # florence2, whose decode then reads the merged features through `encoder_outputs`). Otherwise it
         # runs as a plain generator even when an embed graph was exported.
-        takes_embeds = runners["decode"].text_input == "inputs_embeds" or (
+        takes_embeds = text_input(runners["decode"]) == "inputs_embeds" or (
             "encoder" in runners and "inputs_embeds" in runners["encoder"].input_names
         )
         text_embed = runners["embed_tokens"] if "embed_tokens" in runners and takes_embeds else None
@@ -466,12 +570,15 @@ class ExportedGenerator(GenerationMixin):
         """Build the cache the exported decode graph expects, so `generate` is called like a normal model
         (`generate(input_ids=..., max_new_tokens=N)` — no hand-rolled cache).
 
-        `generate`'s own builder decides everything (kind, size, `EncoderDecoderCache` pairing, a
-        source-length static cross cache, …) from the generation config — the same config that built the
-        cache at export capture, which is the caller's contract — so the traced and runtime caches match by
-        construction. The one addition is materialization: `torch.export` bakes real tensors into the
-        graph's input spec, so the lazily-uninitialized layers `generate` hands back have to be filled in
-        (`materialize_cache_layers`, the helper the capture uses too)."""
+        `generate`'s own builder decides the kind (`EncoderDecoderCache` pairing, a source-length static
+        cross cache, …) from the generation config — the same config that built the cache at export capture.
+        The *size* does not come from there: `generate` sizes a fixed-size cache from the prompt in front of
+        it, so the same config gives a different length for a different prompt, and a graph traced against
+        one refuses the other (`max_cache_len` is part of its input spec). The trace recorded the length it
+        held, so build to that when the artifact says so. The other addition is materialization:
+        `torch.export` bakes real tensors into the graph's input spec, so the lazily-uninitialized layers
+        `generate` hands back have to be filled in (`materialize_cache_layers`, the helper the capture uses
+        too)."""
         super()._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
@@ -505,7 +612,16 @@ class ExportedGenerator(GenerationMixin):
         cache = model_kwargs.get("past_key_values")
         if isinstance(cache, EncoderDecoderCache):
             cross = cache.cross_attention_cache
-            if any(type(layer).__name__.endswith("SlidingWindowLayer") for layer in cross.layers):
+            traced_classes = self._decode_runner.export_metadata.cross_layer_classes
+            built_classes = tuple(type(layer).__name__ for layer in cross.layers)
+            # Against the recorded classes when the artifact carries them; an older one that does not falls
+            # back to recognising the kind that is wrong here, which is what this did before it could ask.
+            needs_rebuild = (
+                built_classes != traced_classes
+                if traced_classes
+                else any(name.endswith("SlidingWindowLayer") for name in built_classes)
+            )
+            if needs_rebuild:
                 cross_config = copy.deepcopy(self.config.get_text_config(decoder=True))
                 cross_config.sliding_window = None
                 cross_config.layer_types = ["full_attention"] * cross_config.num_hidden_layers
@@ -517,6 +633,7 @@ class ExportedGenerator(GenerationMixin):
 
         for cache_name in ("past_key_values", "cache_params"):
             if (cache := model_kwargs.get(cache_name)) is not None:
+                _resize_to_traced_lengths(cache, self._decode_runner.export_metadata.cache_lengths)
                 # The traced prototype is a cache the model filled, so it carries the real per-layer
                 # geometry — the config can't always say (see `materialize_cache_layers`).
                 materialize_cache_layers(
@@ -525,7 +642,8 @@ class ExportedGenerator(GenerationMixin):
                     self.config,
                     self._dtype,
                     self._device,
-                    kv_geometry=getattr(self._decode_runner, "kv_geometry", None),
+                    kv_geometry=self._decode_runner.kv_geometry,
+                    indexer_layers=self._decode_runner.export_metadata.indexer_layers,
                 )
 
     # ── decode orchestration ──
@@ -537,7 +655,7 @@ class ExportedGenerator(GenerationMixin):
         mask — the 4D one then fails an internal guard rather than a shape check. The trace is the authority
         (`_mask_rank`), so defer to it and only fall back to the generic builder otherwise.
         """
-        if self._decode_runner.mask_rank == 2 and attention_mask is not None:
+        if mask_rank(self._decode_runner) == 2 and attention_mask is not None:
             return attention_mask
         return create_masks_for_generate(
             config=config, inputs_embeds=inputs_embeds, attention_mask=attention_mask, **kwargs
@@ -551,7 +669,7 @@ class ExportedGenerator(GenerationMixin):
         # A mixed-attention model (nemotron_h, jamba, …) builds its per-layer-type mask dict *inside* its
         # forward, which the graph starts after — so when the graph takes one mask per type and `generate`
         # handed us a single tensor, build the dict here, keyed the way the config declares its layers.
-        mask_ranks = runner.mask_dict_ranks
+        mask_ranks = mask_dict_ranks(runner)
         if mask_ranks and not isinstance(attention_mask, dict):
             padding_mask = attention_mask if getattr(attention_mask, "dim", lambda: 0)() == 2 else None
             attention_mask = {
@@ -572,7 +690,7 @@ class ExportedGenerator(GenerationMixin):
             # `attention_mask` pytree kwarg.
             # ONNX flattens the dict into one input per type. Feed exactly the names it declares: keying
             # off our own layer types instead offers ones the graph never took and omits ones it needs.
-            if declared := [name for name in runner.mask_inputs if name != "attention_mask"]:
+            if declared := [name for name in mask_inputs(runner) if name != "attention_mask"]:
                 fallback = None
                 feed = {}
                 for name in declared:
@@ -585,10 +703,20 @@ class ExportedGenerator(GenerationMixin):
             return {"attention_mask": attention_mask}
         # A graph may take no explicit mask — e.g. a prefill graph builds the causal mask internally from
         # positions on an empty, unpadded cache. Nothing to feed then.
-        if not runner.mask_inputs:
+        if not mask_inputs(runner):
             return {}
         if attention_mask is None:
-            return {runner.mask_inputs[0]: self._causal_mask(position_ids, cache_len)}
+            # `generate` drops the mask when nothing is padded, leaving the runtime to build the one the
+            # graph took — and which that is, is the graph's own rank. A graph traced on the 2-D padding
+            # mask compares its *width* against the query and the cache, so handing it the 4-D causal mask
+            # puts the head axis where the width belongs and trips that comparison as a guard. Everything is
+            # attendable either way: the mask is missing precisely because nothing was padded.
+            name = mask_inputs(runner)[0]
+            if mask_rank(runner) == 2:
+                dtype = mask_dtype(runner) or torch.long
+                batch = position_ids.shape[-2] if position_ids.dim() == 3 else position_ids.shape[0]
+                return {name: torch.ones(batch, cache_len, dtype=dtype, device=self._device)}
+            return {name: self._causal_mask(position_ids, cache_len)}
         # A graph traced on the 2D padding mask was traced against a *cache-width* mask: `generate` pads the
         # mask out to a static cache's length, and the model compares the two (bloom's alibi). The runtime's
         # mask tracks the real sequence instead, so pad the tail back — zeros, i.e. the unfilled cache slots
@@ -597,11 +725,11 @@ class ExportedGenerator(GenerationMixin):
         # *encoder* sequence and its width is tied to the encoder output's, not to the decoder cache — and it
         # stays under that name whether or not the graph also takes a `decoder_attention_mask`, so the config
         # is what settles it rather than the presence of the decoder mask input.
-        pads_to_cache = runner.mask_rank == 2 and not self.config.is_encoder_decoder
+        pads_to_cache = mask_rank(runner) == 2 and not self.config.is_encoder_decoder
         if pads_to_cache and attention_mask.dim() == 2:
             if (padding_length := cache_len - attention_mask.shape[-1]) > 0:
                 attention_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
-        return {runner.mask_inputs[0]: attention_mask}
+        return {mask_inputs(runner)[0]: attention_mask}
 
     def _causal_mask(self, position_ids, cache_len):
         """Full causal mask `[batch, 1, query, cache_len]` from the positions (per batch row) — what the
@@ -625,12 +753,12 @@ class ExportedGenerator(GenerationMixin):
         it once the anyres packing moved here, so `generate` would otherwise reject it — and goes only to the
         merge, since putting it in `kwargs` would expose an `(images, 2)` tensor to the per-step slicing.
         """
-        if self._text_embed is None or runner.text_input != "inputs_embeds":
-            return {runner.text_input: text_ids}
+        if self._text_embed is None or text_input(runner) != "inputs_embeds":
+            return {text_input(runner): text_ids}
         merge_kwargs = kwargs if image_sizes is None else {**kwargs, "image_sizes": image_sizes}
         embedded = self._merge_modalities(text_ids, merge_kwargs)
         primary, *extra = embedded
-        feed = {runner.text_input: embedded[primary]}
+        feed = {text_input(runner): embedded[primary]}
         feed.update({name: embedded[name] for name in extra if name in runner.input_names})
         return feed
 
@@ -654,15 +782,14 @@ class ExportedGenerator(GenerationMixin):
         # every step re-feeds the whole sequence — that is a prefill each time.
         # A recurrent model (mamba, rwkv, …) carries its fixed-size state under `cache_params` instead;
         # it is the same thing to the graphs, so the loop below treats them alike.
-        cache_name = "cache_params" if cache_params is not None else "past_key_values"
         past_key_values = past_key_values if past_key_values is not None else cache_params
-        if past_key_values is None:
-            runner = self._prefill_runner
-        else:
-            runner = self._prefill_runner if _cache_length(past_key_values) == 0 else self._decode_runner
+        # How much the cache already holds decides which graph runs and, below, how wide the mask and the
+        # streamed-modality window are. One answer per step: every reader here means the same thing by it.
+        past_len = _cache_length(past_key_values) if past_key_values is not None else 0
+        runner = self._prefill_runner if past_len == 0 else self._decode_runner
         text_ids = decoder_input_ids if decoder_input_ids is not None else input_ids
         feed = self._text_feed(runner, text_ids, kwargs, image_sizes)
-        text = feed[runner.text_input]
+        text = feed[text_input(runner)]
         if position_ids is not None and "position_ids" in runner.input_names:
             feed["position_ids"] = position_ids
         if encoder_outputs is not None and any(n.startswith("encoder_outputs") for n in runner.input_names):
@@ -671,7 +798,12 @@ class ExportedGenerator(GenerationMixin):
         # `generate`'s kwargs. `generate` slices sequence kwargs to the current step only for the ones named
         # on the real model's `forward` — ours takes them generically, so trim them here the same way.
         for name, value in kwargs.items():
-            if name in runner.input_names and name not in feed:
+            # `_declares`, not a plain name lookup: a backend that flattens a pytree kwarg declares only its
+            # leaves, so the kwarg's own name is never in `input_names` — which is how t5gemma's *dict* of
+            # per-type decoder masks (`decoder_attention_mask.full_attention`, `.sliding_attention`, built by
+            # `generate` and handed to us whole) went unfed on ONNX while dynamo, which takes the dict under
+            # one name, got it.
+            if name not in feed and _declares(runner, name, value):
                 # Rank 2 or 3 only — those have the sequence at axis 1 (higgs_audio_v2's audio ids carry a
                 # codebook axis after it). A 4-D mask is `[batch, 1, query, key]`, where axis 1 is heads.
                 # A modality's own tensors (`pixel_values`, packed patches, …) are features, not per-token
@@ -686,23 +818,18 @@ class ExportedGenerator(GenerationMixin):
         # query. Growing vs fixed-size is the layer's *kind*, not what `get_max_length` reports — a
         # `DynamicSlidingWindowLayer` grows and crops, yet reports its whole window (4096 on a gemma2 text
         # config), padding the mask to a width the graph never declared (`set_inputs` then refuses it).
-        cache_len = (
-            past_key_values.get_max_length()
-            if any(isinstance(layer, StaticLayer) for layer in _self_attention_layers(past_key_values))
-            else _cache_length(past_key_values) + text.shape[1]
-        )
+        cache_len = mask_width(past_key_values, text.shape[1])
         # A modality that advances with the text: embed the whole prompt's features once, then hand this step
         # the window its own tokens span (`past_seen * stride` onwards) — what the model's own
         # `prepare_inputs_for_generation` slices out before each call.
         if self._embedder is not None and self._embedder.produces in runner.input_names:
-            decoded = _cache_length(past_key_values)
             features = kwargs.get(self._embedder.source)
-            if features is not None and (self._embedded is None or decoded == 0):
+            if features is not None and (self._embedded is None or past_len == 0):
                 self._embedded = next(iter(self._embedder.runner(**{self._embedder.source: features}).values()))
             if self._embedded is not None:
                 stride = self._embedder.stride
                 feed[self._embedder.produces] = self._embedded[
-                    :, decoded * stride : (decoded + text.shape[1]) * stride
+                    :, past_len * stride : (past_len + text.shape[1]) * stride
                 ]
         # Containers the graph declares besides its own cache, and that the trace saw *empty*: a fresh empty
         # one each step is exactly the structure it was traced with (voxtral_realtime's decode re-derives its
@@ -724,21 +851,16 @@ class ExportedGenerator(GenerationMixin):
         # A graph that names the decoder's mask separately gets the causal one here — `attention_mask` is
         # the *encoder's* on those models. `generate` supplies neither this nor decoder positions (the
         # eager forward derives both inside), so count the positions off the cache.
-        if runner.decoder_mask_input is not None and runner.decoder_mask_input not in feed:
-            decoded = _cache_length(past_key_values)
+        decoder_mask = decoder_mask_input(runner)
+        if decoder_mask is not None and decoder_mask not in feed:
             decoder_positions = (
-                torch.arange(text.shape[1], device=self._device).unsqueeze(0).expand(text.shape[0], -1) + decoded
+                torch.arange(text.shape[1], device=self._device).unsqueeze(0).expand(text.shape[0], -1) + past_len
             )
-            feed[runner.decoder_mask_input] = self._causal_mask(decoder_positions, cache_len)
+            feed[decoder_mask] = self._causal_mask(decoder_positions, cache_len)
         # Under the name this graph declares, and only if it declares one: a model whose `generate` hands
         # back a cache the exported graph does not take (xlstm) would otherwise be fed an input it never had.
         if past_key_values is not None and runner.cache_input is not None:
             feed[runner.cache_input] = past_key_values
-        # Inputs of the graph's own beyond the text / mask / cache set: csm's decode takes the audio
-        # (`input_values`, `input_values_cutoffs`) directly rather than through a modality component. Dynamo
-        # wants the exact kwarg set it was traced with, so pass through whatever `generate` still carries
-        # under a name this graph declares — never overwriting what the feed already resolved.
-
         # Only what this graph declares: a model whose decode graph takes its text some other way
         # (higgs_audio_v2 embeds it upstream) would otherwise be handed an `input_ids` it never had. Pytree
         # kwargs are the exception — see `_declares`, which knows a graph naming only their leaves still takes
@@ -746,9 +868,10 @@ class ExportedGenerator(GenerationMixin):
         outputs = runner(**{name: value for name, value in feed.items() if _declares(runner, name, value)})
         if past_key_values is not None:
             past_key_values = _advance_cache(past_key_values, outputs, num_new_tokens=text.shape[1])
-        if cache_name == "cache_params":
-            return CausalLMOutputWithPast(logits=outputs["logits"], past_key_values=None)
-        return CausalLMOutputWithPast(logits=outputs["logits"], past_key_values=past_key_values)
+        # A recurrent model's state is not a KV cache and `generate` must not carry it back as one; which
+        # kind the graphs hold is `_is_recurrent`, read off the kwarg the decode graph takes it under.
+        returned_cache = None if self._is_recurrent else past_key_values
+        return CausalLMOutputWithPast(logits=outputs["logits"], past_key_values=returned_cache)
 
     def _merge_modalities(self, input_ids, kwargs) -> dict[str, torch.Tensor]:
         """Embed `input_ids` and scatter each present modality's features into its placeholder rows.
@@ -756,9 +879,7 @@ class ExportedGenerator(GenerationMixin):
         Returns every per-token input the embed graph produces, keyed by the decode graph's input name —
         `inputs_embeds` plus, for a decoder with per-layer embeddings, `per_layer_inputs`. Only the
         embeddings take the scattered features; the rest pass through as embedded.
-        Presence keys on the primary input (`input_keys[0]`: pixel_values / input_features); `generate`
-        drops it after prefill but may keep a stale grid kwarg, so don't trigger on the aux keys. Which
-        *other* inputs a modality takes varies per model (`image_position_ids`, `input_features_mask`, …),
+        Which inputs a modality takes besides its features varies per model (`image_position_ids`, `input_features_mask`, …),
         so they come from the names its graph declares rather than a fixed list per modality. The eager
         `get_<modality>_features` computes its grid-derived tensors (`cu_seqlens` / `window_index` / …)
         internally; the export moved them out of the graph, so they're injected here from `self.config`
@@ -890,6 +1011,27 @@ class ExportedGenerator(GenerationMixin):
             if (value := _find_config_attr(self.config, name)) is not None:
                 feed[name] = value
         return feed
+
+    def prepare_inputs_for_generation(self, *args, **kwargs):
+        """Per-step inputs, with every kwarg the trace took at the step's own width trimmed to it.
+
+        A cross-attention mask grows a row per token generated, and the model that takes one slices it to
+        the tokens being processed in its own `prepare_inputs_for_generation` (mllama). This runtime
+        inherits no such hook -- it stands in for the model rather than subclassing it, and cannot call the
+        model's own, whose zero-argument `super()` refuses a foreign `self` -- so it does the same cut here.
+
+        Named rather than derived from the recorded widths: the merged multi-token decode is a synthetic
+        call, built by concatenating single-token steps, and it concatenates the text while leaving this
+        mask at one row. Widths read off that capture say the opposite of what the graph wants.
+        """
+        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        text = model_inputs.get("input_ids")
+        if text is None:
+            text = model_inputs.get("inputs_embeds")
+        mask = model_inputs.get("cross_attention_mask")
+        if isinstance(mask, torch.Tensor) and text is not None:
+            model_inputs["cross_attention_mask"] = mask[:, -text.shape[1] :]
+        return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         """Multi-modal M-RoPE: build the `[text; 3 vision]` 4-axis `position_ids` the exported decode graph

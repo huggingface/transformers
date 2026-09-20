@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 
 from .base import ModelRunner
-from .caches import _cache_tensors
+from .cache import _cache_tensors
 from .metadata import (
     EXPORT_METADATA_KEY,
     ExportMetadata,
@@ -100,7 +100,6 @@ class ExecutorchModelRunner(ModelRunner):
             cache_input: [name for name in self.input_names if re.fullmatch(rf"{re.escape(cache_input)}_\d+", name)]
             for cache_input in self.cache_inputs
         }
-        self.kv_geometry = self.export_metadata.kv_geometry
         # Same contract as the other runners': a graph that took a *dict* of masks declares one input per
         # attention type, so the generation loop has the ranks to build it rather than assuming a single mask.
 
