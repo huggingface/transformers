@@ -67,15 +67,90 @@ torch.nn.functional.ctc_loss(
 """,
     ),
     "compile": (
-        "torch.compile does not work, so every compiled-forward test fails. The error moves "
-        "around between inductor internals, so the probe reports whatever it hits rather than "
-        "matching on one message.",
+        "torch.compile does not work with the default inductor backend, so anything that compiles "
+        "without asking the model which backend suits its device fails. The backend this device "
+        "registers with TorchDynamo does work. The error moves around between inductor internals, "
+        "so the probe reports whatever it hits rather than matching on one message.",
         """
 def f(x):
     return x + 1
 
 compiled = torch.compile(f, backend="inductor")
 compiled(torch.randn(4, device=DEVICE))
+""",
+    ),
+    "weight_tying": (
+        "Moving a module to the device replaces its parameters rather than swapping their data, so "
+        "parameters that were tied to one another come back as two separate tensors. "
+        "`nn.Module._apply` only keeps them tied when `torch._has_compatible_shallow_copy_type` "
+        "holds for the moved tensor, and it does not here.",
+        """
+import torch.nn as nn
+
+embedding = nn.Embedding(5, 4)
+head = nn.Linear(4, 5, bias=False)
+head.weight = embedding.weight  # the tied lm_head every causal LM has
+model = nn.Sequential(embedding, head).to(DEVICE)
+if embedding.weight is not head.weight:
+    raise RuntimeError("the move untied the two parameters")
+""",
+    ),
+    "interpolate_same_size": (
+        "torch.nn.functional.interpolate in 'linear' mode aborts the process when the size asked "
+        "for is the size the input already has. Resizing to any other size is fine, as are the "
+        "other modes, so the models that hit it are the ones running at their native resolution.",
+        """
+x = torch.randn(1, 8, 27, device=DEVICE)
+torch.nn.functional.interpolate(x, size=27, mode="linear").cpu()
+""",
+    ),
+    "attention_precision": (
+        "Scaled dot product attention computes in bfloat16 whatever "
+        "`torch.set_float32_matmul_precision` asks for, while a plain matmul honours it. A float32 "
+        "model's attention therefore disagrees with its eager equivalent at bfloat16 accuracy, and "
+        "the tests that compare the two need bfloat16 tolerances in every dtype.",
+        """
+torch.set_float32_matmul_precision("highest")
+torch.manual_seed(0)
+query, key, value = (torch.randn(2, 4, 16, 32) for _ in range(3))
+reference = torch.nn.functional.scaled_dot_product_attention(query.double(), key.double(), value.double())
+attention = torch.nn.functional.scaled_dot_product_attention(
+    *(tensor.to(DEVICE) for tensor in (query, key, value))
+)
+error = ((attention.cpu().double() - reference).abs().mean() / reference.abs().mean()).item()
+# float32 rounding lands around 1e-7 here, bfloat16 rounding around 1e-3.
+if error > 1e-5:
+    raise RuntimeError(f"float32 attention carries {error:.1e} relative error")
+""",
+    ),
+    "device_index": (
+        "`Tensor.to(<int>)` ignores the index and lands on device 0. An integer-keyed device map -- "
+        "which is what `accelerate` builds -- therefore places every submodule on the same chip "
+        "instead of spreading them. Needs more than one chip to be visible to show up.",
+        """
+last = torch.tpu.device_count() - 1
+moved = torch.zeros(2).to(last)
+if moved.device.index != last:
+    raise RuntimeError(f"to({last}) returned a tensor on {moved.device}")
+""",
+    ),
+    "visible_devices": (
+        "TPU_VISIBLE_DEVICES restricts the chips a process opens but not what "
+        "`torch.tpu.device_count()` reports, so a run pinned to one chip still looks like a "
+        "multi-chip run to every test that gates on the device count.",
+        """
+import os
+import subprocess as sp
+
+child = sp.run(
+    [sys.executable, "-c", "import torch, torch_tpu; print(torch.tpu.device_count())"],
+    capture_output=True,
+    text=True,
+    env={**os.environ, "TPU_VISIBLE_DEVICES": "0"},
+)
+count = int(child.stdout.strip().splitlines()[-1])
+if count != 1:
+    raise RuntimeError(f"one chip made visible, device_count() reports {count}")
 """,
     ),
     "device_sharing": (
