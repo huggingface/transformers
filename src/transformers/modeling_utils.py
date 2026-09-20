@@ -4748,10 +4748,12 @@ class PreTrainedModel(
                     requires_grad=param.requires_grad,
                 )
             _load_parameter_into_model(self, key, value)
-        # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
+        # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway.
+        # Materialize them with zeros rather than uninitialized memory: buffers that `_init_weights`
+        # does not rewrite must never ship garbage values to the user.
         for key, buffer in self.named_non_persistent_buffers():
             buffer_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(buffer, device=buffer_device)
+            value = torch.zeros_like(buffer, device=buffer_device)
             _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
@@ -4789,6 +4791,24 @@ class PreTrainedModel(
                 self.initialize_weights()
         else:
             self.initialize_weights()
+
+        # Non-persistent buffers are absent from the checkpoint; they are only rewritten when the
+        # model's `_init_weights` covers them (e.g. BatchNorm running stats, rotary `inv_freq`).
+        # Buffers that are still all-zero after `initialize_weights` were most likely left at the
+        # materialized default rather than deliberately zero-initialized — surface them once so a
+        # silent wrong value becomes an actionable signal instead.
+        unwritten_buffers = [
+            key
+            for key, buffer in self.named_non_persistent_buffers()
+            if buffer.numel() > 0 and not (buffer != 0).any()
+        ]
+        if unwritten_buffers:
+            logger.warning_once(
+                f"The following non-persistent buffers are not covered by `_init_weights` and were "
+                f"materialized as zeros when loading `{self.__class__.__name__}`: {unwritten_buffers}. "
+                "If any of them require a specific initialization, please initialize them in the model's "
+                "`_init_weights`."
+            )
 
     def _adjust_missing_and_unexpected_keys(self, loading_info: LoadStateDictInfo) -> None:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
