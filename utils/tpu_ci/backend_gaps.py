@@ -95,6 +95,19 @@ if embedding.weight is not head.weight:
     raise RuntimeError("the move untied the two parameters")
 """,
     ),
+    "boolean_mask_indexing": (
+        "Indexing trailing dimensions with a multi-dimensional boolean mask -- `x[:, :, mask]` -- "
+        "tries to broadcast the mask instead of selecting with it, and raises a shape error. "
+        "`masked_select` with the same mask works, and a mask covering every dimension works too.",
+        """
+x = torch.randn(2, 3, 7, 7, device=DEVICE)
+mask = torch.zeros(7, 7, dtype=torch.bool, device=DEVICE)
+mask[0, 0] = True
+selected = x[:, :, mask]
+if selected.shape != (2, 3, 1):
+    raise RuntimeError(f"selected {tuple(selected.shape)}, expected (2, 3, 1)")
+""",
+    ),
     "interpolate_same_size": (
         "torch.nn.functional.interpolate in 'linear' mode aborts the process when the size asked "
         "for is the size the input already has. Resizing to any other size is fine, as are the "
