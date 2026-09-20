@@ -1076,26 +1076,23 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
-            Processor-produced RGB image tensors, normalized to `[-1, 1]` and padded. Requires `image_sizes`;
-            rows must follow expanded image-placeholder order.
+            Padded RGB images in `[-1, 1]`, in image-placeholder order. Requires `image_sizes`.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            True `(height, width)` per image, required with `pixel_values` to remove batch padding.
+            Unpadded `(height, width)` per image, required with `pixel_values`.
         input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`, *optional*):
-            Processor-produced mono 24 kHz waveforms, peak-normalized and padded. Requires
-            `feature_attention_mask`; rows must follow expanded audio-placeholder order.
+            Padded, peak-normalized mono 24 kHz waveforms in audio-placeholder order. Requires `feature_attention_mask`.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
-            Right-padded mask with 1 for valid samples and 0 for padding, required with `input_features`.
+            Audio sample mask: 1 for valid samples, 0 for right padding. Required with `input_features`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Input embeddings instead of `input_ids`. With modality inputs, placeholder positions must contain
-            their exact token embeddings so the model can detect them.
+            Embeddings instead of `input_ids`. With media inputs, placeholders must retain their exact token embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Target token ids. `-100` ignores a position; other values must be within the physical LM-head range.
-            With a pruned head, mask multimodal/input-only ids with `-100`.
+            Next-token labels in `[0, output_vocab_size)` (or `[0, text_config.vocab_size)` when unset).
+            Use `-100` for input-only multimodal tokens and other ignored positions.
 
         Returns:
             [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`:
-                Logits use the physical LM-head width (`config.text_config.output_vocab_size` when set,
-                otherwise `config.text_config.vocab_size`), with or without `labels`.
+                Logits have width `text_config.output_vocab_size`, or `text_config.vocab_size` when unset,
+                with or without `labels`.
         """
         outputs = self.model(
             input_ids=input_ids,

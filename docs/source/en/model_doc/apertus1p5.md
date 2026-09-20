@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-17.*
+*This model was contributed to Hugging Face Transformers on 2026-09-20.*
 
 
 # Apertus 1.5
@@ -41,8 +41,8 @@ Apertus 1.5 is a multimodal model (image + audio + text → text) by the
 [Swiss AI Initiative](https://huggingface.co/swiss-ai) that extends the [Apertus](./apertus) language model
 ([Apertus: Democratizing Open and Compliant LLMs for Global Language Environments](https://huggingface.co/papers/2509.14233)) by continued pretraining
 with discrete-token early fusion: frozen tokenizers turn images and audio into discrete codes that are mapped
-into an enlarged text vocabulary by fixed offsets, so all modalities share the backbone's embedding table and
-are modeled as a single token stream.
+to non-overlapping ranges in an enlarged input vocabulary by fixed offsets, so all modalities share the
+backbone's embedding table and are modeled as a single token stream.
 
 The model composes three parts:
 
@@ -54,10 +54,12 @@ The model composes three parts:
   [EMU3.5 Vision Tokenizer](https://huggingface.co/BAAI/Emu3.5-VisionTokenizer) by BAAI
   ([Emu3.5: Native Multimodal Models are World Learners](https://huggingface.co/papers/2510.26583), with
   [IBQ](https://huggingface.co/papers/2412.02692) quantization): 16× spatial downsampling, one code per 16×16
-  patch,
+  patch. The port includes the encoder, quantizer, and codebook-scoring path; it omits the EMU3.5 decoder
+  and backbone,
 - the encoder and quantizer of **[WavTokenizer](./wavtokenizer)**
   ([paper](https://huggingface.co/papers/2408.16532)) as the audio tokenizer: 40 codes per second of 24 kHz mono
-  audio. The reconstruction decoder is omitted from the joint checkpoint.
+  audio. It reuses the standalone Transformers WavTokenizer implementation. The reconstruction decoder is
+  omitted from the joint checkpoint.
 
 > [!NOTE]
 > Returned logits always use the physical LM-head width: `output_vocab_size` when set, otherwise `vocab_size`.
