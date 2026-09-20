@@ -22,9 +22,9 @@ from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
-    is_torchdynamo_exporting,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
+    is_torchdynamo_exporting,
     is_tracing,
 )
 
