@@ -54,6 +54,13 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
         kwargs.setdefault("image_token_id", 100)
+        kwargs.setdefault("video_token_id", 101)
+        # Canvas M-RoPE reads the visual span from these markers, so they must be real ids everywhere.
+        kwargs.setdefault("image_start_id", 10)
+        kwargs.setdefault("image_end_id", 11)
+        kwargs.setdefault("slice_start_id", 12)
+        kwargs.setdefault("slice_end_id", 13)
+        kwargs.setdefault("newline_id", 14)
         # patch_size=8, image_size=32 → 4×4 grid → vit_merger [2×2] → merger [1×1] = 1 token
         kwargs.setdefault("image_size", 32)
         kwargs.setdefault("patch_size", 8)
@@ -86,6 +93,34 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("insert_layer_id", 0)
         super().__init__(parent, **kwargs)
 
+    @property
+    def _canvas_marker_ids(self):
+        return {
+            "image_start_id": self.image_start_id,
+            "image_end_id": self.image_end_id,
+            "slice_start_id": self.slice_start_id,
+            "slice_end_id": self.slice_end_id,
+            "newline_id": self.newline_id,
+        }
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.video_token_id} | set(self._canvas_marker_ids.values())
+
+    def place_image_tokens(self, input_ids, config):
+        """Wrap the image tokens in `<image>...</image>`, the layout `get_rope_index` expects."""
+        input_ids = super().place_image_tokens(input_ids, config)
+        input_ids = torch.cat(
+            [
+                torch.full_like(input_ids[:, :1], self.image_start_id),
+                input_ids[:, : self.num_image_tokens],
+                torch.full_like(input_ids[:, :1], self.image_end_id),
+                input_ids[:, self.num_image_tokens + 2 :],
+            ],
+            dim=1,
+        )
+        return input_ids
+
     def _navit_pixel_values(self, batch_size):
         """Build NaViT-packed pixel_values: (1, C, patch_size, total_L)."""
         C = self.num_channels
@@ -100,11 +135,45 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
         w_patches = self.image_size // self.patch_size
         return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
 
+    def _mm_token_type_ids(self, input_ids):
+        """What the processor emits: 0 for text, 1 for image tokens, 2 for video tokens."""
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
+        mm_token_type_ids[input_ids == self.video_token_id] = 2
+        return mm_token_type_ids
+
+    def _mrope_model(self):
+        """Tiny model whose config carries the five canvas marker ids `get_rope_index` needs."""
+        config, _ = self.prepare_config_and_inputs_for_common()
+        return self.base_model_class(config).to(torch_device).eval()
+
+    def _get_rope_index(self, input_ids, grids=None, grids_videos=None):
+        """Run `get_rope_index` on plain nested lists, so the tests read as token sequences."""
+        model = self._mrope_model()
+        input_ids = torch.tensor(input_ids, device=torch_device)
+        attention_mask = torch.ones_like(input_ids)
+        grids = None if grids is None else torch.tensor(grids, dtype=torch.int32, device=torch_device).view(-1, 2)
+        grids_videos = (
+            None
+            if grids_videos is None
+            else torch.tensor(grids_videos, dtype=torch.int32, device=torch_device).view(-1, 2)
+        )
+        return model.get_rope_index(
+            input_ids,
+            attention_mask=attention_mask,
+            target_sizes=grids,
+            target_sizes_videos=grids_videos,
+            mm_token_type_ids=self._mm_token_type_ids(input_ids),
+        )
+
     def create_pixel_values(self):
         return self._navit_pixel_values(self.batch_size)
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
-        return {"target_sizes": self._target_sizes(self.batch_size)}
+        return {
+            "target_sizes": self._target_sizes(self.batch_size),
+            "mm_token_type_ids": self._mm_token_type_ids(input_ids),
+        }
 
     def get_config(self):
         text_config = {
@@ -144,9 +213,11 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
             text_config=text_config,
             vision_config=vision_config,
             image_token_id=self.image_token_id,
+            video_token_id=self.video_token_id,
             image_size=self.image_size,
             drop_vision_last_layer=False,
             insert_layer_id=self.insert_layer_id,
+            **self._canvas_marker_ids,
         )
 
 
@@ -360,46 +431,14 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     # Canvas M-RoPE. `get_rope_index` is cheap and pure, so it is covered here with the same tiny
     # model the rest of the suite uses. Tokens 100/101 are the image/video placeholders; 10/11 wrap
     # an image, 12/13 wrap a slice. `target_sizes_mrope` carries one `(h, w)` patch grid per visual
-    # crop -- images, slices and video frames all go through this single list.
-    @staticmethod
-    def _mm_token_type_ids(input_ids):
-        """What the processor emits: 0 for text, 1 for image tokens, 2 for video tokens."""
-        mm_token_type_ids = torch.zeros_like(input_ids)
-        mm_token_type_ids[input_ids == 100] = 1
-        mm_token_type_ids[input_ids == 101] = 2
-        return mm_token_type_ids
-
-    def _mrope_model(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.image_start_id = 10
-        config.image_end_id = 11
-        config.slice_start_id = 12
-        config.slice_end_id = 13
-        config.newline_id = 14
-        return self.model_tester.base_model_class(config).to(torch_device).eval()
-
-    def _get_rope_index(self, input_ids, grids=None, grids_videos=None):
-        model = self._mrope_model()
-        input_ids = torch.tensor(input_ids, device=torch_device)
-        attention_mask = torch.ones_like(input_ids)
-        grids = None if grids is None else torch.tensor(grids, dtype=torch.int32, device=torch_device).view(-1, 2)
-        grids_videos = (
-            None
-            if grids_videos is None
-            else torch.tensor(grids_videos, dtype=torch.int32, device=torch_device).view(-1, 2)
-        )
-        return model.get_rope_index(
-            input_ids,
-            attention_mask=attention_mask,
-            target_sizes=grids,
-            target_sizes_videos=grids_videos,
-            mm_token_type_ids=self._mm_token_type_ids(input_ids),
-        )
-
+    # crop -- images, slices and video frames all go through this single list. The helpers that build
+    # these inputs live on `MiniCPMV4_7VisionText2TextModelTester`.
     def test_get_rope_index_image_lays_out_canvas(self):
         """A single 2x2 image: time is frozen over the span while H/W walk the patch grid."""
         # [bos, im_start, 4 visual patches, im_end, eos]
-        position_ids, rope_deltas = self._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[8, 8]])
+        position_ids, rope_deltas = self.model_tester._get_rope_index(
+            [[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[8, 8]]
+        )
 
         self.assertEqual(tuple(position_ids.shape), (3, 1, 8))
         temporal, height, width = position_ids[:, 0]
@@ -415,8 +454,8 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         """Slices belong to the same picture, so they reuse its timestep and restart H/W."""
         # [bos, im_start, 4 patches, im_end, slice_start, 4 patches, slice_end, eos]
         input_ids = [[1, 10, 100, 100, 100, 100, 11, 12, 100, 100, 100, 100, 13, 2]]
-        sliced, _ = self._get_rope_index(input_ids, grids=[[8, 8], [8, 8]])
-        unsliced, _ = self._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[8, 8]])
+        sliced, _ = self.model_tester._get_rope_index(input_ids, grids=[[8, 8], [8, 8]])
+        unsliced, _ = self.model_tester._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[8, 8]])
 
         self.assertEqual(tuple(sliced.shape), (3, 1, 14))
         temporal, height, width = sliced[:, 0]
@@ -428,7 +467,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_get_rope_index_separate_images_advance_time(self):
         """Two crops in their own im_start/im_end spans are different timesteps, unlike slices."""
         input_ids = [[1, 10, 100, 100, 100, 100, 11, 10, 100, 100, 100, 100, 11, 2]]
-        position_ids, _ = self._get_rope_index(input_ids, grids=[[8, 8], [8, 8]])
+        position_ids, _ = self.model_tester._get_rope_index(input_ids, grids=[[8, 8], [8, 8]])
 
         temporal = position_ids[0, 0]
         self.assertEqual(temporal[2:6].unique().numel(), 1)
@@ -437,7 +476,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 
     def test_get_rope_index_left_padding_matches_unpadded(self):
         """Left padding must shift nothing: the canvas is built on the unpadded tokens."""
-        model = self._mrope_model()
+        model = self.model_tester._mrope_model()
         grids = torch.tensor([[8, 8]], dtype=torch.int32, device=torch_device)
 
         unpadded = torch.tensor([[1, 10, 100, 100, 100, 100, 11, 2]], device=torch_device)
@@ -445,7 +484,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
             unpadded,
             attention_mask=torch.ones_like(unpadded),
             target_sizes=grids,
-            mm_token_type_ids=self._mm_token_type_ids(unpadded),
+            mm_token_type_ids=self.model_tester._mm_token_type_ids(unpadded),
         )
 
         padded = torch.tensor([[0, 0, 1, 10, 100, 100, 100, 100, 11, 2]], device=torch_device)
@@ -454,7 +493,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
             padded,
             attention_mask=padded_mask,
             target_sizes=grids,
-            mm_token_type_ids=self._mm_token_type_ids(padded),
+            mm_token_type_ids=self.model_tester._mm_token_type_ids(padded),
         )
 
         self.assertTrue(torch.equal(padded_positions[:, 0, 2:], baseline[:, 0]))
@@ -464,7 +503,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 
     def test_compute_3d_position_ids_keeps_decoding_on_the_canvas(self):
         """Every decoding step must get the cached-delta positions back, not `None`."""
-        model = self._mrope_model()
+        model = self.model_tester._mrope_model()
         model.rope_deltas = torch.tensor([[-3]], device=torch_device)
 
         past_key_values = DynamicCache()
@@ -575,7 +614,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 
     def test_get_rope_index_golden_canvas_layouts(self):
         """Exact canvas coordinates for every layout the processor can emit."""
-        model = self._mrope_model()
+        model = self.model_tester._mrope_model()
         for layout, case in self.GOLDEN_CANVAS_LAYOUTS.items():
             with self.subTest(layout=layout):
                 input_ids = torch.tensor(case["input_ids"], device=torch_device)
@@ -600,7 +639,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
                     attention_mask=attention_mask,
                     target_sizes=grids,
                     target_sizes_videos=grids_videos,
-                    mm_token_type_ids=self._mm_token_type_ids(input_ids),
+                    mm_token_type_ids=self.model_tester._mm_token_type_ids(input_ids),
                 )
 
                 self.assertEqual(position_ids.tolist(), case["positions"])

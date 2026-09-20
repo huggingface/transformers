@@ -140,6 +140,23 @@ class MiniCPMV4_7Processor(ProcessorMixin):
             raise ValueError("You have to specify `text` input to process.")
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
+        # `get_text_with_replacements` consumes one replacement per placeholder occurrence, so a visual
+        # without a matching placeholder is dropped from the prompt while its patches still reach
+        # `pixel_values`/`target_sizes`. That mismatch is invisible in `input_ids`, so reject it here.
+        num_inputs = {
+            "image": 0 if images is None else len(make_flat_list_of_images(images)),
+            "video": 0 if videos is None else len(make_batched_videos(videos)),
+        }
+        placeholders = {"image": self.image_token, "video": self.video_token}
+        for modality, expected in num_inputs.items():
+            num_placeholders = sum(sample.count(placeholders[modality]) for sample in text)
+            if num_placeholders != expected:
+                raise ValueError(
+                    f"Number of `{modality}` placeholders does not match the number of `{modality}` inputs: "
+                    f"found {num_placeholders} placeholder(s) in `text` but received {expected} input(s). "
+                    "Every placeholder must have a matching input."
+                )
+
     def _process_images(self, images, **kwargs):
         img_downsample = kwargs.get("downsample_mode", self.image_processor.downsample_mode)
         image_token_divisor = 4 if img_downsample == "4x" else 16

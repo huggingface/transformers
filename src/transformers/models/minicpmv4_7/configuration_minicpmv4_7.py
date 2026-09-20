@@ -76,18 +76,25 @@ class MiniCPMV4_7Config(PreTrainedConfig):
     merger_times (`int`, *optional*, defaults to 1):
         Number of iterative merge rounds in the Merger.
     image_start_id (`int`, *optional*):
-        Token id of the image-start marker (`<image>`) used by canvas M-RoPE. Resolved from the
-        tokenizer by the conversion script and stored in `config.json`. Required for any
-        checkpoint that is used with images or videos.
+        Token id of the image-start marker (`<image>`). Canvas M-RoPE pins it to the halo just
+        outside the top-left corner of the image canvas. Resolved from the tokenizer by the
+        conversion script and stored in `config.json`; required for image or video inputs.
     image_end_id (`int`, *optional*):
-        Token id of the image-end marker (`</image>`) used by canvas M-RoPE. See `image_start_id`.
+        Token id of the image-end marker (`</image>`). Canvas M-RoPE pins it to the far corner of
+        the image canvas. Resolved from the tokenizer by the conversion script and stored in
+        `config.json`; required for image or video inputs.
     slice_start_id (`int`, *optional*):
-        Token id of the slice-start marker (`<slice>`) used by canvas M-RoPE. See `image_start_id`.
+        Token id of the slice-start marker (`<slice>`). Canvas M-RoPE pins it to the top-left
+        corner of the slice it opens. Resolved from the tokenizer by the conversion script and
+        stored in `config.json`; required for image or video inputs.
     slice_end_id (`int`, *optional*):
-        Token id of the slice-end marker (`</slice>`) used by canvas M-RoPE. See `image_start_id`.
+        Token id of the slice-end marker (`</slice>`). Canvas M-RoPE pins it to the bottom-right
+        corner of the slice it closes. Resolved from the tokenizer by the conversion script and
+        stored in `config.json`; required for image or video inputs.
     newline_id (`int`, *optional*):
-        Token id of the newline (`"\n"`) separating slice rows for canvas M-RoPE. See
-        `image_start_id`.
+        Token id of the newline (`"\n"`) that separates slice rows. Canvas M-RoPE pins it just
+        past the right edge of the row it ends. Resolved from the tokenizer by the conversion
+        script and stored in `config.json`; required for image or video inputs.
     """
 
     model_type = "minicpmv4_7"

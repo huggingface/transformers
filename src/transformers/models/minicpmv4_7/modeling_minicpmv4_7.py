@@ -29,6 +29,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN, gelu_pytorch_tanh
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -254,13 +255,17 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
         )
         hidden_states = residual[:, window_index, :] + hidden_states
 
+        # This is where 4.7 parts ways with 4.6. 4.6 un-permutes the stream with `argsort(window_index)`
+        # and then walks `target_sizes` image by image to reshape each one on its own. Here the stream is
+        # left in window order, where `window_index` already puts the patches of one window next to each
+        # other, so a single reshape merges every window at once and a batch whose images have different
+        # patch grids no longer needs a Python loop. `target_sizes` is only read for the guard below.
         window_h, window_w = self.window_kernel_size
         window_size = window_h * window_w
         embed_dim = hidden_states.shape[-1]
         if window_cu_seqlens.numel() - 1 != hidden_states.shape[1] // window_size:
             raise ValueError(
-                f"Patch grids {target_sizes.tolist()} must be divisible by window kernel size "
-                f"{self.window_kernel_size}"
+                f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}"
             )
 
         patch = hidden_states.reshape(-1, window_size, embed_dim)
@@ -600,7 +605,7 @@ def _crop_end(crop, input_ids: torch.LongTensor, structural_ids: set, limit: int
 
 def _group_visual_frames(
     input_ids: torch.LongTensor, mm_token_type_ids: torch.IntTensor, special_token_ids: dict
-) -> list[list[dict]]:
+) -> list[dict]:
     """Split one sequence into visual groups, each a list of ``thumbnail + slices`` frames.
 
     ``mm_token_type_ids`` labels every token with its modality (``0`` text, ``1`` image, ``2``
@@ -611,16 +616,37 @@ def _group_visual_frames(
     picture can end up sitting right against one -- share a group. Grouping them matters: the next
     frame then starts one step past the tokens in between, so its halo cannot land on the last of
     them.
+
+    Args:
+        input_ids: `(seq_len,)` token ids of one unpadded sequence.
+        mm_token_type_ids: `(seq_len,)` modality label per token (0 text, 1 image, 2 video).
+        special_token_ids: The five canvas marker ids, keyed by `im_start_id`, `im_end_id`,
+            `slice_start_id`, `slice_end_id` and `newline_id`.
+
+    Returns:
+        One dict per visual group, in sequence order, each holding the span indices the caller
+        needs so that it never has to rescan `input_ids` itself:
+        - `start`: index of the `<image>` marker opening the group.
+        - `end`: index one past the last marker closing the group.
+        - `frames`: the group's frames, each `{"thumbnail", "slices", "modality", "end"}` where
+          `thumbnail` and every entry of `slices` is a `(start, end, crop_index)` triple and
+          `end` is one past the markers that close that frame.
     """
     slice_start_id = special_token_ids["slice_start_id"]
-    gap_ids = {
-        special_token_ids["im_start_id"],
-        special_token_ids["im_end_id"],
-        slice_start_id,
-        special_token_ids["slice_end_id"],
-        special_token_ids["newline_id"],
-    }
+    structural_ids = set(special_token_ids.values())
+    gap_ids = torch.tensor(
+        [
+            special_token_ids["im_start_id"],
+            special_token_ids["im_end_id"],
+            slice_start_id,
+            special_token_ids["slice_end_id"],
+            special_token_ids["newline_id"],
+        ],
+        dtype=input_ids.dtype,
+        device=input_ids.device,
+    )
 
+    seq_len = input_ids.shape[0]
     groups = []
     crop_index = 0
     previous_end = 0
@@ -632,17 +658,21 @@ def _group_visual_frames(
         crop_index += 1
 
         if groups and input_ids[crop[0] - 1].item() == slice_start_id:
-            groups[-1][-1]["slices"].append(crop)
+            groups[-1]["frames"][-1]["slices"].append(crop)
         else:
             frame = {"thumbnail": crop, "slices": [], "modality": modality}
-            adjacent = groups and all(
-                input_ids[position].item() in gap_ids for position in range(previous_end, crop[0] - 1)
-            )
+            gap = input_ids[previous_end : crop[0] - 1]
+            adjacent = bool(groups) and bool(torch.isin(gap, gap_ids).all())
             if adjacent:
-                groups[-1].append(frame)
+                groups[-1]["frames"].append(frame)
             else:
-                groups.append([frame])
+                groups.append({"start": crop[0] - 1, "frames": [frame]})
         previous_end = crop[1]
+
+    for group in groups:
+        for frame in group["frames"]:
+            frame["end"] = _crop_end(frame, input_ids, structural_ids, seq_len)
+        group["end"] = group["frames"][-1]["end"]
     return groups
 
 
@@ -676,7 +706,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             When set to `"4x"` the intermediate `vit_merger` is skipped so that each image keeps
             `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
         """
-        downsample_mode = downsample_mode or self.config.downsample_mode
+        downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
         use_vit_merger = downsample_mode != "4x"
         pixel_values = pixel_values.to(dtype=self.vision_tower.dtype)
 
@@ -845,6 +875,29 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         - thumbnail *with* slices:  canvas = full slice canvas, offsets = 0
         - thumbnail *without* slices: canvas defaults to own grid -> arange, offsets = 0
         - a slice's interior grid: canvas defaults to own grid -> arange, offsets = its (h, w) placement
+
+        Args:
+            start_position (`int`):
+                Canvas origin in the position-id sequence. The `t` channel is frozen to it and the
+                `h`/`w` channels are counted from it.
+            grid_thw (`list[int]` or `torch.Tensor`):
+                Patch grid of this crop; only `[0]` (height) and `[1]` (width) are read.
+            canvas_height (`int`, *optional*, defaults to 0):
+                Height of the canvas in LLM tokens. 0 falls back to this grid's own height.
+            canvas_width (`int`, *optional*, defaults to 0):
+                Width of the canvas in LLM tokens. 0 falls back to this grid's own width.
+            h_offset (`int`, *optional*, defaults to 0):
+                Row of the canvas where this grid's top-left corner sits, in LLM tokens.
+            w_offset (`int`, *optional*, defaults to 0):
+                Column of the canvas where this grid's top-left corner sits, in LLM tokens.
+            spatial_merge_size (`int`, *optional*, defaults to 1):
+                Patch-to-LLM-token merge factor (4 in `"16x"` mode, 2 in `"4x"` mode).
+            device (`str` or `torch.device`, *optional*):
+                Device the returned tensor is allocated on.
+
+        Returns:
+            `torch.Tensor`: `(3, llm_grid_h * llm_grid_w)` position ids `[T, H, W]`, row-major over
+            this crop's LLM tokens.
         """
         llm_grid_h = grid_thw[0].item() // spatial_merge_size
         llm_grid_w = grid_thw[1].item() // spatial_merge_size
@@ -855,9 +908,9 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         h_coords = torch.linspace(0, canvas_height - 1, llm_grid_h, device=device).round().long() + h_offset
         w_coords = torch.linspace(0, canvas_width - 1, llm_grid_w, device=device).round().long() + w_offset
 
-        H, W = torch.meshgrid(h_coords, w_coords, indexing="ij")
-        T = torch.zeros_like(H)
-        position_ids = torch.stack([T, H, W], dim=0).reshape(3, -1)
+        H_grid, W_grid = torch.meshgrid(h_coords, w_coords, indexing="ij")
+        T_grid = torch.zeros_like(H_grid)
+        position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
         position_ids += start_position
         return position_ids
 
@@ -875,6 +928,28 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
 
         ``mm_token_type_ids`` marks the crops, so the canvas is laid out per sequence on the
         tokens ``attention_mask`` keeps. Padding stays at zero and never shifts the canvas.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Token ids of the prompt. The canvas is anchored on the markers around each crop,
+                so it cannot be derived from `inputs_embeds` alone.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, seq_len)`, *optional*):
+                Modality label per token (0 text, 1 image, 2 video), as emitted by the processor.
+            target_sizes (`torch.LongTensor` of shape `(num_image_crops, 2)`, *optional*):
+                Patch grid `(h, w)` of every image crop, in the order the crops appear.
+            target_sizes_videos (`torch.LongTensor` of shape `(num_video_crops, 2)`, *optional*):
+                Patch grid `(h, w)` of every video crop, in the order the crops appear.
+            downsample_mode (`str`, *optional*):
+                Per-call override of `config.downsample_mode`. It has to match the mode the vision
+                tower runs with, otherwise the placeholder count and the canvas disagree.
+            attention_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                Padding mask. The canvas is laid out over the kept tokens only.
+
+        Returns:
+            `tuple[torch.Tensor, torch.Tensor]`:
+            - **position_ids** of shape `(3, batch_size, seq_len)` holding `[T, H, W]`.
+            - **rope_deltas** of shape `(batch_size, 1)`, the offset generation adds to the 1-D
+              positions of the tokens appended after the prompt.
         """
         # `16x` merges 4x4 patches into one LLM token (window merger 2x2, then merger 2x2), `4x`
         # skips the window merger and merges 2x2. Same divisor the processor counts placeholders
@@ -888,7 +963,6 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             "slice_end_id": self.config.slice_end_id,
             "newline_id": self.config.newline_id,
         }
-        structural_ids = set(special_token_ids.values())
 
         device = input_ids.device
         position_ids = torch.zeros(3, *input_ids.size(), dtype=torch.long, device=input_ids.device)
@@ -905,21 +979,27 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                 valid_mask = attention_mask[batch_idx].bool()
                 current_input_ids = current_input_ids[valid_mask]
                 current_mm_token_type_ids = current_mm_token_type_ids[valid_mask]
+            else:
+                # Nothing to unpad, so the canvas is scattered back over the whole row.
+                valid_mask = slice(None)
 
             seq_len = current_input_ids.shape[0]
             curr_position_ids = torch.arange(seq_len, device=device, dtype=torch.long).expand(3, -1).clone()
 
-            pos = 0
-            cursor = 0
-            for frames in _group_visual_frames(current_input_ids, current_mm_token_type_ids, special_token_ids):
-                group_start = frames[0]["thumbnail"][0] - 1
-                group_end = _crop_end(frames[-1], current_input_ids, structural_ids, seq_len)
+            current_pos = 0
+            current_cursor = 0
+            for group in _group_visual_frames(current_input_ids, current_mm_token_type_ids, special_token_ids):
+                frames = group["frames"]
+                group_start = group["start"]
+                group_end = group["end"]
 
                 # Text in front of the group is plain 1-D.
-                if group_start > cursor:
-                    text_len = group_start - cursor
-                    curr_position_ids[:, cursor:group_start] = torch.arange(text_len, device=device) + pos
-                    pos += text_len
+                if group_start > current_cursor:
+                    text_len = group_start - current_cursor
+                    curr_position_ids[:, current_cursor:group_start] = (
+                        torch.arange(text_len, device=device) + current_pos
+                    )
+                    current_pos += text_len
 
                 frame_cursor = group_start
                 for frame in frames:
@@ -932,11 +1012,13 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                     # next frame's halo from landing on the last of them.
                     if frame_start > frame_cursor:
                         gap_len = frame_start - frame_cursor
-                        curr_position_ids[:, frame_cursor:frame_start] = torch.arange(gap_len, device=device) + pos
-                        pos += gap_len + 1
+                        curr_position_ids[:, frame_cursor:frame_start] = (
+                            torch.arange(gap_len, device=device) + current_pos
+                        )
+                        current_pos += gap_len + 1
 
-                    frame_end = min(_crop_end(frame, current_input_ids, structural_ids, group_end), group_end)
-                    canvas_origin = pos
+                    frame_end = min(frame["end"], group_end)
+                    canvas_origin = current_pos
                     halo_before_canvas = max(canvas_origin - 1, 0)
 
                     llm_slice_h, llm_slice_w = 0, 0
@@ -1023,32 +1105,34 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                             curr_position_ids[1, newline_pos] = canvas_origin + boundary_h
                             curr_position_ids[2, newline_pos] = canvas_origin + right_edge_w
 
-                    pos = canvas_origin + max(canvas_height, canvas_width) + 1
+                    current_pos = canvas_origin + max(canvas_height, canvas_width) + 1
                     frame_cursor = frame_end
 
                 if frame_cursor < group_end:
                     trail_len = group_end - frame_cursor
-                    curr_position_ids[:, frame_cursor:group_end] = torch.arange(trail_len, device=device) + pos
-                    pos += trail_len
-                cursor = group_end
+                    curr_position_ids[:, frame_cursor:group_end] = torch.arange(trail_len, device=device) + current_pos
+                    current_pos += trail_len
+                current_cursor = group_end
 
-            if cursor < seq_len:
-                curr_position_ids[:, cursor:seq_len] = torch.arange(seq_len - cursor, device=device) + pos
+            if current_cursor < seq_len:
+                curr_position_ids[:, current_cursor:seq_len] = (
+                    torch.arange(seq_len - current_cursor, device=device) + current_pos
+                )
             position_ids[:, batch_idx, valid_mask] = curr_position_ids
 
         if attention_mask is not None:
             seq_lens = attention_mask.sum(-1)
         else:
             seq_lens = torch.full((input_ids.shape[0],), input_ids.shape[1], device=input_ids.device, dtype=torch.long)
-        deltas = position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - seq_lens.unsqueeze(1)
-        return position_ids, deltas.long()
+        rope_deltas = position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - seq_lens.unsqueeze(1)
+        return position_ids, rope_deltas.long()
 
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
         inputs_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values=None,
+        past_key_values: Cache | None = None,
         target_sizes: torch.LongTensor | None = None,
         target_sizes_videos: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -1060,12 +1144,16 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         model reads that fourth row only when it is there.
         """
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        has_multimodal = target_sizes is not None or target_sizes_videos is not None
+        if has_multimodal and mm_token_type_ids is None and input_ids is not None:
+            raise ValueError(
+                "Multimodal data was passed (via `target_sizes` or `target_sizes_videos`) but `mm_token_type_ids` "
+                "is missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
+            )
+        can_compute_mrope = input_ids is not None and mm_token_type_ids is not None and has_multimodal
 
-        if (
-            input_ids is not None
-            and (target_sizes_videos is not None or target_sizes is not None)
-            and (self.rope_deltas is None or past_key_values_length == 0)
-        ):
+        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
             mrope_position_ids, rope_deltas = self.get_rope_index(
                 input_ids,
                 attention_mask=attention_mask,
@@ -1162,7 +1250,9 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1219,9 +1309,12 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         input_ids: torch.LongTensor | None = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # `target_sizes*` are indexed by crop, not by batch item, so they must sit out the dim-0
+        # `repeat_interleave` that `super()` applies to every tensor in `model_kwargs`. Note that
+        # `mm_token_type_ids` is deliberately *not* saved here: it is `(batch, seq)`, so the default
+        # dim-0 expansion is exactly what it needs.
         ts_keys = ("target_sizes", "target_sizes_videos")
-        mrope_keys = "mm_token_type_ids"
-        saved = {k: model_kwargs.pop(k) for k in (*ts_keys, *mrope_keys) if model_kwargs.get(k) is not None}
+        saved = {k: model_kwargs.pop(k) for k in ts_keys if model_kwargs.get(k) is not None}
 
         expanded_position_ids = None
         if (pos := model_kwargs.get("position_ids")) is not None and pos.ndim == 3:
@@ -1254,10 +1347,16 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             mrope_positions = mrope_positions + delta.to(device=text_positions.device)
             return torch.cat([text_positions.unsqueeze(0), mrope_positions], dim=0)
 
+        # `input_ids` is empty when generating from `inputs_embeds`, and canvas M-RoPE needs the ids to locate
+        # the visual spans, so fall back to plain 1-D text positions whenever they are unavailable.
+        input_ids = model_kwargs.get("input_ids", inputs_tensor)
+        has_input_ids = input_ids.dim() == 2 and input_ids.dtype in (torch.int, torch.long) and input_ids.shape[1] > 0
+
         if (
-            model_kwargs.get("target_sizes") is not None or model_kwargs.get("target_sizes_videos") is not None
-        ) and model_kwargs.get("mm_token_type_ids") is not None:
-            input_ids = model_kwargs.get("input_ids", inputs_tensor)
+            has_input_ids
+            and (model_kwargs.get("target_sizes") is not None or model_kwargs.get("target_sizes_videos") is not None)
+            and model_kwargs.get("mm_token_type_ids") is not None
+        ):
             mrope_positions, self.model.rope_deltas = self.model.get_rope_index(
                 input_ids,
                 attention_mask=model_kwargs.get("attention_mask"),
