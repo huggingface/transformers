@@ -123,7 +123,7 @@ class Dots3NoteProcessorTest(unittest.TestCase):
         self.assertEqual(input_ids.count(processor.audio_start_token_id), 1)
         self.assertEqual(input_ids.count(processor.audio_token_id), 2)
         self.assertEqual(input_ids.count(processor.audio_end_token_id), 1)
-        self.assertEqual(output.feature_attention_mask.sum().item(), 2)
+        self.assertEqual(output.chunk_sample_lengths.tolist(), [33])
         self.assertNotIn("num_audio_tokens", output)
 
     def test_expands_image_placeholder(self):

@@ -53,11 +53,10 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
 
         self.assertEqual(mono_output.input_features.shape, (2, 8, 16))
         self.assertEqual(mono_output.chunk_sample_lengths.tolist(), [64, 1])
-        self.assertEqual(mono_output.feature_attention_mask.sum(-1).tolist(), [2, 1])
         self.assertEqual(mono_output.num_audio_tokens.tolist(), [3])
         short_output = extractor(torch.zeros(1), sampling_rate=32)
         self.assertEqual(short_output.chunk_sample_lengths.tolist(), [1])
-        self.assertEqual(short_output.feature_attention_mask.tolist(), [[True]])
+        self.assertEqual(short_output.input_features.shape, (1, 8, 8))
 
     def test_rejects_multichannel_waveform(self):
         with self.assertRaisesRegex(ValueError, "must be mono"):
@@ -79,7 +78,7 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
         output = extractor([torch.zeros(64), torch.zeros(65)], sampling_rate=32)
 
         self.assertEqual(output.num_audio_tokens.tolist(), [2, 3])
-        self.assertEqual(output.feature_attention_mask.sum(-1).tolist(), [2, 2, 1])
+        self.assertEqual(output.chunk_sample_lengths.tolist(), [64, 64, 1])
 
     def test_save_and_reload(self):
         extractor = self.get_feature_extractor()

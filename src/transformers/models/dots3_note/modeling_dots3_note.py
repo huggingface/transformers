@@ -1154,7 +1154,7 @@ class Dots3NoteSpeechEncoder(nn.Module):
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        inputs_embeds = self.conv_stem(input_features, audio_sample_lens)[:, : attention_mask.shape[-1]]
+        inputs_embeds = self.conv_stem(input_features, audio_sample_lens)
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None, :]
         kwargs["position_embeddings"] = self.rotary_embedding(inputs_embeds, position_ids)
         inputs_embeds = F.dropout(inputs_embeds, p=self.dropout, training=self.training)
@@ -1198,6 +1198,33 @@ class Dots3NoteAudioPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {"hidden_states": Dots3NoteAudioEncoderLayer, "attentions": Dots3NoteAudioAttention}
 
 
+def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
+    """
+    Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
+    stops at the corresponding element in `seq_lens`.
+
+    Args:
+        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
+            The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
+        seq_lens (`torch.Tensor` of shape `(batch)`:
+            Each element represents the length of the sequence at the same index in `hidden_states`
+
+    Returns:
+        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
+    """
+    batch_size, mask_seq_len = hidden_states.shape[:2]
+
+    indices = torch.arange(mask_seq_len, device=seq_lens.device).expand(batch_size, -1)
+
+    bool_mask = indices >= seq_lens.unsqueeze(1).expand(-1, mask_seq_len)
+
+    mask = hidden_states.new_ones((batch_size, mask_seq_len))
+
+    mask = mask.masked_fill(bool_mask, 0)
+
+    return mask
+
+
 @auto_docstring
 class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
     def __init__(self, config: Dots3NoteAudioConfig):
@@ -1215,22 +1242,23 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
         self,
         input_features: torch.Tensor,
         chunk_sample_lengths: torch.Tensor,
-        feature_attention_mask: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutput:
         """
         Args:
             chunk_sample_lengths (`torch.Tensor`): Number of waveform samples represented by each feature chunk.
-            feature_attention_mask (`torch.Tensor`): Valid encoder positions for each audio chunk.
         """
+        stride = self.config.hop_length * 8
+        token_lengths = (chunk_sample_lengths + stride - 1) // stride
+        attention_mask = _compute_new_attention_mask(input_features.transpose(1, 2)[:, ::8], token_lengths)
         encoder_output = self.speech_encoder(
             input_features=input_features,
             audio_sample_lens=chunk_sample_lengths,
-            attention_mask=feature_attention_mask,
+            attention_mask=attention_mask,
             return_dict=True,
         ).last_hidden_state
 
-        encoder_output = self.speech_encoder.layer_norm(encoder_output)[feature_attention_mask.bool()]
+        encoder_output = self.speech_encoder.layer_norm(encoder_output)[attention_mask.bool()]
         embeddings = self.audio_adapter(encoder_output)
         return BaseModelOutput(last_hidden_state=embeddings)
 
@@ -1650,18 +1678,15 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         self,
         input_features: torch.Tensor,
         chunk_sample_lengths: torch.Tensor,
-        feature_attention_mask: torch.Tensor,
     ) -> BaseModelOutput:
         """
         Args:
             chunk_sample_lengths (`torch.Tensor`): Number of waveform samples represented by each feature chunk.
-            feature_attention_mask (`torch.Tensor`): Valid encoder positions for each audio chunk.
         """
         parameter = next(self.audio_encoder.parameters())
         return self.audio_encoder(
             input_features=input_features.to(device=parameter.device, dtype=parameter.dtype),
             chunk_sample_lengths=chunk_sample_lengths.to(parameter.device),
-            feature_attention_mask=feature_attention_mask.to(parameter.device),
             return_dict=True,
         )
 
@@ -1688,13 +1713,11 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         video_grid_thw: torch.Tensor | None = None,
         input_features: torch.Tensor | None = None,
         chunk_sample_lengths: torch.Tensor | None = None,
-        feature_attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPast | tuple:
         """
         Args:
             chunk_sample_lengths (`torch.Tensor`, *optional*): Waveform sample count for each audio feature chunk.
-            feature_attention_mask (`torch.Tensor`, *optional*): Valid encoder positions for each audio chunk.
         """
         has_multimodal_inputs = any(value is not None for value in (pixel_values, pixel_values_videos, input_features))
         if has_multimodal_inputs:
@@ -1721,13 +1744,9 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
                 inputs_embeds = inputs_embeds.masked_scatter(mask, video_embeddings.to(inputs_embeds))
 
             if input_features is not None:
-                if chunk_sample_lengths is None or feature_attention_mask is None:
-                    raise ValueError("input_features requires chunk_sample_lengths and feature_attention_mask")
-                audio_embeddings = self.get_audio_features(
-                    input_features,
-                    chunk_sample_lengths,
-                    feature_attention_mask,
-                ).last_hidden_state
+                if chunk_sample_lengths is None:
+                    raise ValueError("input_features requires chunk_sample_lengths")
+                audio_embeddings = self.get_audio_features(input_features, chunk_sample_lengths).last_hidden_state
                 mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds, audio_embeddings, self.config.audio_token_id, "audio"
                 )
@@ -1779,14 +1798,12 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixi
         video_grid_thw: torch.LongTensor | None = None,
         input_features: torch.Tensor | None = None,
         chunk_sample_lengths: torch.Tensor | None = None,
-        feature_attention_mask: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         """
         Args:
             chunk_sample_lengths (`torch.Tensor`, *optional*): Number of waveform samples in each audio chunk.
-            feature_attention_mask (`torch.Tensor`, *optional*): Valid encoder positions for each audio chunk.
         """
         kwargs.update(
             pixel_values=pixel_values,
@@ -1795,7 +1812,6 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixi
             video_grid_thw=video_grid_thw,
             input_features=input_features,
             chunk_sample_lengths=chunk_sample_lengths,
-            feature_attention_mask=feature_attention_mask,
         )
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,

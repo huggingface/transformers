@@ -403,8 +403,7 @@ class Dots3NoteModelTest(unittest.TestCase):
         model = Dots3NoteAudioModel(config).eval()
         inputs = {
             "input_features": torch.randn(3, config.feature_size, 32),
-            "chunk_sample_lengths": torch.tensor([64, 128, 96]),
-            "feature_attention_mask": torch.tensor([[1, 1, 0, 0], [1, 1, 1, 1], [1, 1, 1, 0]]),
+            "chunk_sample_lengths": torch.tensor([33, 128, 65]),
         }
         with (
             torch.no_grad(),
@@ -433,7 +432,6 @@ class Dots3NoteModelTest(unittest.TestCase):
             "video_grid_thw": torch.tensor([[1, 2, 2]]),
             "input_features": torch.randn(1, config.audio_config.feature_size, 16),
             "chunk_sample_lengths": torch.tensor([64]),
-            "feature_attention_mask": torch.ones(1, 2, dtype=torch.bool),
         }
 
         with torch.no_grad():
@@ -480,7 +478,6 @@ class Dots3NoteModelTest(unittest.TestCase):
                 {
                     "input_features": torch.randn(1, config.audio_config.feature_size, 16),
                     "chunk_sample_lengths": torch.tensor([64]),
-                    "feature_attention_mask": torch.ones(1, 2, dtype=torch.bool),
                 },
             ),
         }

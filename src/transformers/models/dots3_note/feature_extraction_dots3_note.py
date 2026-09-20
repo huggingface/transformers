@@ -37,11 +37,7 @@ if is_torch_available():
 class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
     """Convert 16 kHz mono waveforms into Dots 3 Note Preview log-mel chunks."""
 
-    model_input_names = [
-        "input_features",
-        "feature_attention_mask",
-        "chunk_sample_lengths",
-    ]
+    model_input_names = ["input_features", "chunk_sample_lengths"]
 
     def __init__(
         self,
@@ -124,7 +120,7 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
         device: str = "cpu",
         **kwargs,
     ) -> BatchFeature:
-        """Extract chunked log-mel features and the encoder's two-dimensional validity mask."""
+        """Extract chunked log-mel features and their waveform sample lengths."""
         if sampling_rate is not None and sampling_rate != self.sampling_rate:
             raise ValueError(f"Expected sampling rate {self.sampling_rate}, got {sampling_rate}")
         if isinstance(raw_speech, (list, tuple)):
@@ -164,12 +160,9 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=False,
         )
         input_features = self._torch_extract_fbank_features(inputs["input_features"].squeeze(-1), device)
+        input_features = input_features[..., : max(chunk_token_lengths) * 8]
         data = {
             "input_features": torch.from_numpy(input_features).to(device),
-            "feature_attention_mask": (
-                torch.arange(max(chunk_token_lengths), device=device)[None, :]
-                < torch.tensor(chunk_token_lengths, device=device)[:, None]
-            ),
             "chunk_sample_lengths": torch.tensor(chunk_sample_lengths, dtype=torch.long, device=device),
             "num_audio_tokens": torch.tensor(audio_token_lengths, dtype=torch.long, device=device),
         }
