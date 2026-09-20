@@ -1197,11 +1197,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
         "pp_doclayout_v4": [
-            WeightRenaming("decoder_roor_order_head.", "decoder.successor_order_head."),
-            WeightRenaming("decoder_roor_global_pointer.", "decoder.successor_global_pointer."),
-            WeightRenaming("decoder_order_head.", "decoder.order_head."),
-            WeightRenaming("decoder_global_pointer.", "decoder.global_pointer."),
-            WeightRenaming("s2r_fusion.a", "decoder.s2r_fusion.closure_weight"),
+            WeightRenaming("decoder_roor_order_head.", "decoder.successor_order_head.proj."),
+            WeightRenaming("decoder_roor_global_pointer.", "decoder.successor_order_head.global_pointer."),
+            WeightRenaming("decoder_order_head.", "decoder.relative_order_head.proj."),
+            WeightRenaming("decoder_global_pointer.", "decoder.relative_order_head.global_pointer."),
+            WeightRenaming("s2r_fusion.a", "decoder.relative_order_head.s2r_fusion.closure_weight"),
         ],
         "RfDetrModel": [
             # RfDetrConvEncoder — backbone checkpoint layout + projector stages

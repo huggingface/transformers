@@ -317,13 +317,6 @@ class PPDocLayoutV4MLPPredictionHead(nn.Module):
         return x
 
 
-class PPDocLayoutV4ClassificationHead(nn.Linear):
-    """
-    A plain `nn.Linear` under a dedicated name, so that `_init_weights` can recognize the classification heads and
-    give them their prior biased initialization without reaching into the modules that own them.
-    """
-
-
 class PPDocLayoutV4GlobalPointer(nn.Module):
     """
     Pairwise scorer shared by both reading order heads.
@@ -389,10 +382,32 @@ class PPDocLayoutV4S2RFusion(nn.Module):
         return self.closure_weight * (closure - closure.transpose(-2, -1)) + self.relative_weight * relative_logits
 
 
+class PPDocLayoutV4SuccessorOrderHead(nn.Module):
+    def __init__(self, config: PPDocLayoutV4Config):
+        super().__init__()
+        self.proj = nn.Linear(config.d_model, config.d_model)
+        self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.global_pointer(self.proj(hidden_states))
+
+
+class PPDocLayoutV4RelativeOrderHead(nn.Module):
+    def __init__(self, config: PPDocLayoutV4Config):
+        super().__init__()
+        self.proj = nn.Linear(config.d_model, config.d_model)
+        self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
+        self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
+
+    def forward(self, hidden_states: torch.Tensor, successor_logits: torch.Tensor) -> torch.Tensor:
+        relative_logits = self.global_pointer(self.proj(hidden_states))
+        return self.s2r_fusion(relative_logits, successor_logits)
+
+
 @auto_docstring
 class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
     config: PPDocLayoutV4Config
-    base_model_prefix = "pp_doclayout_v4"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"PPDocLayoutV4HybridEncoder", r"PPDocLayoutV4DecoderLayer"]
@@ -428,11 +443,11 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.output_proj.weight)
             init.constant_(module.output_proj.bias, 0.0)
 
-        elif isinstance(module, PPDocLayoutV4ClassificationHead):
-            # The class heads are untied, so `enc_score_head` and the decoder head are visited separately.
+        elif isinstance(module, (PPDocLayoutV4Model, PPDocLayoutV4Decoder)):
+            class_head = module.enc_score_head if isinstance(module, PPDocLayoutV4Model) else module.class_embed
             prior_prob = self.config.initializer_bias_prior_prob
-            init.xavier_uniform_(module.weight)
-            init.constant_(module.bias, float(-math.log((1 - prior_prob) / prior_prob)))
+            init.xavier_uniform_(class_head.weight)
+            init.constant_(class_head.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.closure_weight, self.config.s2r_closure_weight_init)
@@ -1152,14 +1167,11 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
         # Only the bbox head runs per layer, to refine the reference points handed to the next one. PaddleDetection
         # also carries a class and a reading order head per layer for its auxiliary losses, but scores the last layer
         # alone, so a single head of each is enough here and the conversion keeps only the last layer's weights.
-        self.class_embed = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
+        self.class_embed = nn.Linear(config.d_model, config.num_labels)
 
         self.num_queries = config.num_queries
-        self.order_head = nn.Linear(config.d_model, config.d_model)
-        self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
-        self.successor_order_head = nn.Linear(config.d_model, config.d_model)
-        self.successor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
-        self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
+        self.successor_order_head = PPDocLayoutV4SuccessorOrderHead(config)
+        self.relative_order_head = PPDocLayoutV4RelativeOrderHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1226,9 +1238,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
                 **kwargs,
             )
 
-            # One untied bbox head per layer, so unlike the single head PP-DocLayoutV3 shares with the encoder there
-            # is no `None` branch to guard here. The refined quads are also handed to the next layer without the
-            # `.detach()` PP-DocLayoutV3 applies, which only affects gradients -- and this model does not train.
+            # Each layer refines the quads with its own untied bbox head.
             reference_points = F.sigmoid(self.bbox_embed[idx](hidden_states) + inverse_sigmoid(reference_points))
 
             intermediate += (hidden_states,)
@@ -1239,9 +1249,8 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
         logits = self.class_embed(hidden_states)
         valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
         # The direct successor branch and its fusion into the relative order logits are new in PP-DocLayoutV4.
-        successor_order_logits = self.successor_global_pointer(self.successor_order_head(valid_query))
-        relative_order_logits = self.global_pointer(self.order_head(valid_query))
-        relative_order_logits = self.s2r_fusion(relative_order_logits, successor_order_logits)
+        successor_order_logits = self.successor_order_head(valid_query)
+        relative_order_logits = self.relative_order_head(valid_query, successor_order_logits)
 
         return PPDocLayoutV4DecoderOutput(
             last_hidden_state=hidden_states,
@@ -1324,8 +1333,7 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         self.backbone = PPDocLayoutV4ConvEncoder(config)
         intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
-        # Create encoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/PPDocLayoutV4_pytorch/src/zoo/PPDocLayoutV4/hybrid_encoder.py#L212
+        # Preserve the RT-DETR projection names for checkpoint compatibility.
         num_backbone_outs = len(intermediate_channel_sizes)
 
         # The backbone emits exactly the three levels the encoder consumes, so unlike PP-DocLayoutV3 there is no
@@ -1334,7 +1342,7 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         for i in range(num_backbone_outs):
             in_channels = intermediate_channel_sizes[i]
             encoder_input_proj_list.append(
-                nn.Sequential(
+                nn.Sequential(  # trf-ignore: TRF036
                     nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
                     nn.BatchNorm2d(config.encoder_hidden_dim),
                 )
@@ -1344,22 +1352,12 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         # Create encoder
         self.encoder = PPDocLayoutV4HybridEncoder(config)
 
-        # denoising part
-        if config.num_denoising > 0:
-            self.denoising_class_embed = nn.Embedding(
-                config.num_labels + 1, config.d_model, padding_idx=config.num_labels
-            )
-
-        # decoder embedding
-        if config.learn_initial_query:
-            self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
-
         # encoder head
-        self.enc_output = nn.Sequential(
+        self.enc_output = nn.Sequential(  # trf-ignore: TRF036
             nn.Linear(config.d_model, config.d_model),
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
-        self.enc_score_head = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
+        self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
 
         self.enc_bbox_head = PPDocLayoutV4MLPPredictionHead(
             config.d_model, config.d_model, config.num_coords, num_layers=3
@@ -1370,20 +1368,19 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
             self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
 
         # Create decoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/PPDocLayoutV4_pytorch/src/zoo/PPDocLayoutV4/PPDocLayoutV4_decoder.py#L412
         num_backbone_outs = len(config.decoder_in_channels)
         decoder_input_proj_list = []
         for i in range(num_backbone_outs):
             in_channels = config.decoder_in_channels[i]
             decoder_input_proj_list.append(
-                nn.Sequential(
+                nn.Sequential(  # trf-ignore: TRF036
                     nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )
             )
         for _ in range(config.num_feature_levels - num_backbone_outs):
             decoder_input_proj_list.append(
-                nn.Sequential(
+                nn.Sequential(  # trf-ignore: TRF036
                     nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )

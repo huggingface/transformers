@@ -135,12 +135,12 @@ DECODER_MAPPING = [
     (r"^transformer\.query_pos_head\.", r"decoder.query_pos_head."),
     (r"^transformer\.dec_bbox_head\.", r"decoder.bbox_embed."),
     (r"^transformer\.dec_score_head\.\d+\.", r"decoder.class_embed."),
-    (r"^transformer\.dec_roor_order_head\.\d+\.", r"decoder.successor_order_head."),
-    (r"^transformer\.dec_roor_global_pointer\.", r"decoder.successor_global_pointer."),
-    (r"^transformer\.dec_order_head\.\d+\.", r"decoder.order_head."),
-    (r"^transformer\.dec_global_pointer\.", r"decoder.global_pointer."),
-    (r"^transformer\.s2r_fusion\.a$", r"decoder.s2r_fusion.closure_weight"),
-    (r"^transformer\.s2r_fusion\.", r"decoder.s2r_fusion."),
+    (r"^transformer\.dec_roor_order_head\.\d+\.", r"decoder.successor_order_head.proj."),
+    (r"^transformer\.dec_roor_global_pointer\.", r"decoder.successor_order_head.global_pointer."),
+    (r"^transformer\.dec_order_head\.\d+\.", r"decoder.relative_order_head.proj."),
+    (r"^transformer\.dec_global_pointer\.", r"decoder.relative_order_head.global_pointer."),
+    (r"^transformer\.s2r_fusion\.a$", r"decoder.relative_order_head.s2r_fusion.closure_weight"),
+    (r"^transformer\.s2r_fusion\.", r"decoder.relative_order_head.s2r_fusion."),
     (r"^transformer\.(enc_bbox_head|enc_score_head|enc_output|denoising_class_embed)\.", r"\1."),
 ]
 

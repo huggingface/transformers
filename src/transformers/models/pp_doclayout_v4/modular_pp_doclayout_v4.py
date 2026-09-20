@@ -14,7 +14,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
@@ -193,9 +192,7 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
         if self.num_coords != 10:
             raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
 
-    # Not a config field: kept as a class attribute so the `__init__` code inherited from
-    # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
-    learn_initial_query: ClassVar[bool] = False
+    learn_initial_query = AttributeError()
 
 
 def quad_to_rect(quad: torch.Tensor) -> torch.Tensor:
@@ -224,13 +221,6 @@ class PPDocLayoutV4ConvEncoder(PPDocLayoutV3ConvEncoder):
 
 class PPDocLayoutV4MLPPredictionHead(PPDocLayoutV3MLPPredictionHead):
     pass
-
-
-class PPDocLayoutV4ClassificationHead(nn.Linear):
-    """
-    A plain `nn.Linear` under a dedicated name, so that `_init_weights` can recognize the classification heads and
-    give them their prior biased initialization without reaching into the modules that own them.
-    """
 
 
 class PPDocLayoutV4GlobalPointer(nn.Module):
@@ -298,6 +288,28 @@ class PPDocLayoutV4S2RFusion(nn.Module):
         return self.closure_weight * (closure - closure.transpose(-2, -1)) + self.relative_weight * relative_logits
 
 
+class PPDocLayoutV4SuccessorOrderHead(nn.Module):
+    def __init__(self, config: PPDocLayoutV4Config):
+        super().__init__()
+        self.proj = nn.Linear(config.d_model, config.d_model)
+        self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.global_pointer(self.proj(hidden_states))
+
+
+class PPDocLayoutV4RelativeOrderHead(nn.Module):
+    def __init__(self, config: PPDocLayoutV4Config):
+        super().__init__()
+        self.proj = nn.Linear(config.d_model, config.d_model)
+        self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
+        self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
+
+    def forward(self, hidden_states: torch.Tensor, successor_logits: torch.Tensor) -> torch.Tensor:
+        relative_logits = self.global_pointer(self.proj(hidden_states))
+        return self.s2r_fusion(relative_logits, successor_logits)
+
+
 @auto_docstring
 class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
     @torch.no_grad()
@@ -327,11 +339,11 @@ class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
             init.xavier_uniform_(module.output_proj.weight)
             init.constant_(module.output_proj.bias, 0.0)
 
-        elif isinstance(module, PPDocLayoutV4ClassificationHead):
-            # The class heads are untied, so `enc_score_head` and the decoder head are visited separately.
+        elif isinstance(module, (PPDocLayoutV4Model, PPDocLayoutV4Decoder)):
+            class_head = module.enc_score_head if isinstance(module, PPDocLayoutV4Model) else module.class_embed
             prior_prob = self.config.initializer_bias_prior_prob
-            init.xavier_uniform_(module.weight)
-            init.constant_(module.bias, float(-math.log((1 - prior_prob) / prior_prob)))
+            init.xavier_uniform_(class_head.weight)
+            init.constant_(class_head.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.closure_weight, self.config.s2r_closure_weight_init)
@@ -418,12 +430,9 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         # Only the bbox head runs per layer, to refine the reference points handed to the next one. PaddleDetection
         # also carries a class and a reading order head per layer for its auxiliary losses, but scores the last layer
         # alone, so a single head of each is enough here and the conversion keeps only the last layer's weights.
-        self.class_embed = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
-        self.order_head = nn.Linear(config.d_model, config.d_model)
-        self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
-        self.successor_order_head = nn.Linear(config.d_model, config.d_model)
-        self.successor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
-        self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
+        self.class_embed = nn.Linear(config.d_model, config.num_labels)
+        self.successor_order_head = PPDocLayoutV4SuccessorOrderHead(config)
+        self.relative_order_head = PPDocLayoutV4RelativeOrderHead(config)
 
     def forward(
         self,
@@ -484,9 +493,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
                 **kwargs,
             )
 
-            # One untied bbox head per layer, so unlike the single head PP-DocLayoutV3 shares with the encoder there
-            # is no `None` branch to guard here. The refined quads are also handed to the next layer without the
-            # `.detach()` PP-DocLayoutV3 applies, which only affects gradients -- and this model does not train.
+            # Each layer refines the quads with its own untied bbox head.
             reference_points = F.sigmoid(self.bbox_embed[idx](hidden_states) + inverse_sigmoid(reference_points))
 
             intermediate += (hidden_states,)
@@ -497,9 +504,8 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         logits = self.class_embed(hidden_states)
         valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
         # The direct successor branch and its fusion into the relative order logits are new in PP-DocLayoutV4.
-        successor_order_logits = self.successor_global_pointer(self.successor_order_head(valid_query))
-        relative_order_logits = self.global_pointer(self.order_head(valid_query))
-        relative_order_logits = self.s2r_fusion(relative_order_logits, successor_order_logits)
+        successor_order_logits = self.successor_order_head(valid_query)
+        relative_order_logits = self.relative_order_head(valid_query, successor_order_logits)
 
         return PPDocLayoutV4DecoderOutput(
             last_hidden_state=hidden_states,
@@ -568,34 +574,75 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
     _tied_weights_keys = {}
 
     def __init__(self, config: PPDocLayoutV4Config):
-        super().__init__(config)
+        PPDocLayoutV4PreTrainedModel.__init__(self, config)
+
+        # Create backbone
+        self.backbone = PPDocLayoutV4ConvEncoder(config)
+        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
+
+        # Preserve the RT-DETR projection names for checkpoint compatibility.
+        num_backbone_outs = len(intermediate_channel_sizes)
 
         # The backbone emits exactly the three levels the encoder consumes, so unlike PP-DocLayoutV3 there is no
         # leading projection to drop here.
         encoder_input_proj_list = []
+        for i in range(num_backbone_outs):
+            in_channels = intermediate_channel_sizes[i]
+            encoder_input_proj_list.append(
+                nn.Sequential(  # trf-ignore: TRF036
+                    nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.encoder_hidden_dim),
+                )
+            )
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
+
+        # Create encoder
+        self.encoder = PPDocLayoutV4HybridEncoder(config)
+
+        # encoder head
+        self.enc_output = nn.Sequential(  # trf-ignore: TRF036
+            nn.Linear(config.d_model, config.d_model),
+            nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
+        )
+        self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
 
         self.enc_bbox_head = PPDocLayoutV4MLPPredictionHead(
             config.d_model, config.d_model, config.num_coords, num_layers=3
         )
-        self.enc_score_head = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
+
+        # init encoder output anchors and valid_mask
+        if config.anchor_image_size:
+            self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
+
+        # Create decoder input projection layers
+        num_backbone_outs = len(config.decoder_in_channels)
+        decoder_input_proj_list = []
+        for i in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[i]
+            decoder_input_proj_list.append(
+                nn.Sequential(  # trf-ignore: TRF036
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            decoder_input_proj_list.append(
+                nn.Sequential(  # trf-ignore: TRF036
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+            in_channels = config.d_model
+        self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
+
+        self.decoder = PPDocLayoutV4Decoder(config)
 
         # No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
         self.denoising_class_embed = (
             nn.Embedding(config.num_labels, config.d_model) if config.num_denoising > 0 else None
         )
 
-        self.decoder = PPDocLayoutV4Decoder(config)
-        del self.decoder.class_embed
-        del self.decoder.bbox_embed
-        # [`PPDocLayoutV3Model`] keeps its reading order heads at the model level and passes them into the decoder
-        # `forward`. PP-DocLayoutV4 instead owns them on the decoder, next to the other prediction heads.
-        del self.decoder_order_head
-        del self.decoder_global_pointer
-
-        del self.decoder_norm
-        del self.mask_enhanced
-        del self.mask_query_head
+        self.post_init()
 
     def _cached_generate_anchors(
         spatial_shapes: tuple[tuple[int, int], ...],

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-13.*
+*This model was contributed to Hugging Face Transformers on 2026-09-20.*
 
 # PP-DocLayoutV4
 
@@ -84,7 +84,7 @@ model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg")
-inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+inputs = image_processor(images=image, return_tensors="pt").to(device=model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
 results = image_processor.post_process_object_detection(outputs, target_sizes=[image.size[::-1]])
@@ -114,7 +114,7 @@ model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg")
-inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
+inputs = image_processor(images=[image, image], return_tensors="pt").to(device=model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
 results = image_processor.post_process_object_detection(outputs, target_sizes=[image.size[::-1]] * 2)

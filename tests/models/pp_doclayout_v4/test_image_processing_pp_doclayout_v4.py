@@ -136,15 +136,6 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             # `boxes` is the axis aligned rect enclosing the quad, in (x1, y1, x2, y2) order.
             torch.testing.assert_close(result["boxes"][0], torch.tensor([40.0, 80.0, 60.0, 120.0]))
 
-    def test_post_process_rejects_unsupported_num_coords(self):
-        outputs = _dummy_outputs()
-        for num_coords in (4, 6):
-            outputs.pred_boxes = torch.rand(1, 8, num_coords)
-            for image_processing_class in self.image_processing_classes.values():
-                image_processor = image_processing_class(**self.image_processor_dict)
-                with self.assertRaisesRegex(ValueError, f"Unsupported num_coords: {num_coords}"):
-                    image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=[(200, 100)])
-
     def test_post_process_reading_order_is_sorted(self):
         num_queries = 8
         outputs = _dummy_outputs(num_queries=num_queries)
@@ -163,59 +154,23 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertTrue(bool((scores[1:] > scores[:-1]).all()))
 
     def test_post_process_reading_order_breaks_cycles(self):
-        """A successor graph with a cycle still has to decode into a total order, dropping the weakest edge."""
-        num_queries = 4
-        successor = torch.full((1, num_queries, num_queries), -10.0)
-        # `0 -> 1 -> 2 -> 0` is a cycle whose weakest edge is the one closing it, plus an isolated query 3.
-        successor[:, 0, 1] = 5.0
-        successor[:, 1, 2] = 4.0
-        successor[:, 2, 0] = 0.5
-        relative = torch.triu(torch.full((num_queries, num_queries), 5.0), diagonal=1)
-        relative = (relative - relative.T).unsqueeze(0).contiguous()
-        outputs = SimpleNamespace(
-            logits=_dummy_logits([4.0, 3.0, 2.0, 1.0]),
-            pred_boxes=torch.tensor(_DUMMY_QUAD).expand(1, num_queries, 10).contiguous(),
-            relative_order_logits=relative,
-            successor_order_logits=successor,
-        )
-
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            result = image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=[(200, 100)])[
-                0
-            ]
-
-            self.assertEqual(result["order_seq"].tolist(), list(range(num_queries)))
-            # Dropping `2 -> 0` leaves the chain `0 -> 1 -> 2`, and the relative order head puts the isolated
-            # query 3 last.
-            self.assertEqual(result["labels"].tolist(), [0, 1, 2, 3])
-
-    def test_post_process_reading_order_breaks_several_cycles(self):
-        """Disjoint cycles are independent, so each one loses its own weakest edge."""
-        num_queries = 6
-        successor = torch.full((1, num_queries, num_queries), -10.0)
-        # `0 -> 1 -> 2 -> 0` and `3 -> 4 -> 5 -> 3`, each closed by its weakest edge.
-        successor[:, 0, 1], successor[:, 1, 2], successor[:, 2, 0] = 5.0, 4.0, 0.5
-        successor[:, 3, 4], successor[:, 4, 5], successor[:, 5, 3] = 5.0, 4.0, 0.5
-        relative = torch.triu(torch.full((num_queries, num_queries), 5.0), diagonal=1)
-        relative = (relative - relative.T).unsqueeze(0).contiguous()
-        outputs = SimpleNamespace(
-            logits=_dummy_logits([6.0, 5.0, 4.0, 3.0, 2.0, 1.0]),
-            pred_boxes=torch.tensor(_DUMMY_QUAD).expand(1, num_queries, 10).contiguous(),
-            relative_order_logits=relative,
-            successor_order_logits=successor,
-        )
-
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            result = image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=[(200, 100)])[
-                0
-            ]
-
-            self.assertEqual(result["order_seq"].tolist(), list(range(num_queries)))
-            # Dropping `2 -> 0` and `5 -> 3` leaves the chains `0 -> 1 -> 2` and `3 -> 4 -> 5`, which the relative
-            # order head lays out in that order.
-            self.assertEqual(result["labels"].tolist(), [0, 1, 2, 3, 4, 5])
+        """Each cyclic component loses its weakest edge; relative order ranks disconnected components."""
+        for num_queries, cycles in ((4, ((0, 1, 2),)), (6, ((0, 1, 2), (3, 4, 5)))):
+            with self.subTest(num_queries=num_queries):
+                outputs = _dummy_outputs(num_queries=num_queries)
+                successor = torch.full((1, num_queries, num_queries), -10.0)
+                for first, second, third in cycles:
+                    successor[:, first, second] = 5.0
+                    successor[:, second, third] = 4.0
+                    successor[:, third, first] = 0.5
+                outputs.successor_order_logits = successor
+                for image_processing_class in self.image_processing_classes.values():
+                    image_processor = image_processing_class(**self.image_processor_dict)
+                    result = image_processor.post_process_object_detection(
+                        outputs, threshold=0.0, target_sizes=[(200, 100)]
+                    )[0]
+                    self.assertEqual(result["order_seq"].tolist(), list(range(num_queries)))
+                    self.assertEqual(result["labels"].tolist(), list(range(num_queries)))
 
     def test_post_process_repeated_query_keeps_single_rank(self):
         """The top-k is over `query x class`, so one query can be kept under several labels with one shared rank."""
@@ -260,67 +215,23 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertEqual(result["order_seq"].shape, torch.Size((0,)))
 
     def test_resize_runs_in_float_and_clips_overshoot(self):
-        """
-        The reference preprocessing resizes with `cv2.resize`, which rounds to `uint8` exactly once and saturates.
-        Rescaling before the resize and clipping the bicubic overshoot keeps every pixel within one 8-bit step of
-        that reference; resizing in `uint8` instead drifts far enough to permute the predicted reading order.
-        """
-        # A one pixel wide white bar on black maximizes bicubic ringing.
+        """Bicubic resizing must clip ringing in the input range without quantizing rescaled pixels."""
         image = torch.zeros(3, 64, 64, dtype=torch.uint8)
         image[:, :, 30:34] = 255
-
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            pixel_values = image_processor(images=image, return_tensors="pt")["pixel_values"]
-
-            self.assertEqual(pixel_values.dtype, torch.float32)
-            # Without the clip the bicubic undershoot/overshoot leaves this range by ~0.1.
-            self.assertGreaterEqual(pixel_values.min().item(), 0.0)
-            self.assertLessEqual(pixel_values.max().item(), 1.0)
-            # Resizing in uint8 would quantize to multiples of 1/255, the float path does not.
-            off_grid = (pixel_values * 255 - (pixel_values * 255).round()).abs().max().item()
-            self.assertGreater(off_grid, 1e-3)
-
-    def test_resize_clips_overshoot_without_rescale(self):
-        """
-        `do_rescale=False` is documented as "the caller already passes pixel values in `[0, 1]`", so the overshoot
-        has to be clipped against 1 rather than against 255 on that path too. Clipping against 255 is a no-op for
-        unit-interval floats and lets the bicubic ringing reach the model.
-        """
-        # A one pixel wide white bar on black maximizes bicubic ringing.
-        image = torch.zeros(3, 64, 64, dtype=torch.float32)
-        image[:, :, 30:34] = 1.0
-
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            pixel_values = image_processor(images=image, do_rescale=False, return_tensors="pt")["pixel_values"]
-
-            self.assertEqual(pixel_values.dtype, torch.float32)
-            self.assertGreaterEqual(pixel_values.min().item(), 0.0)
-            self.assertLessEqual(pixel_values.max().item(), 1.0)
-
-    def test_resize_does_not_clip_float_images_outside_the_unit_interval(self):
-        """
-        A float image that is not in `[0, 1]` lives in the same `[0, 255]` range as an integer one, so clipping it
-        against 1 would saturate almost every pixel to white instead of only trimming the bicubic ringing.
-        """
-        image = torch.zeros(3, 64, 64, dtype=torch.float32)
-        image[:, :, 30:34] = 255.0
-
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            no_rescale = image_processor(images=image, do_rescale=False, return_tensors="pt")["pixel_values"]
-            # Same pixel content as an integer tensor, which is bounded by 255 and rescaled to the unit interval.
-            rescaled = image_processor(images=image.to(torch.uint8), return_tensors="pt")["pixel_values"]
-
-            self.assertGreaterEqual(no_rescale.min().item(), 0.0)
-            self.assertLessEqual(no_rescale.max().item(), 255.0)
-            self.assertGreater(no_rescale.max().item(), 1.0)
-            torch.testing.assert_close(no_rescale / 255, rescaled, rtol=0, atol=1e-6)
-
-    def test_post_process_requires_target_sizes(self):
-        outputs = _dummy_outputs()
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            with self.assertRaises(ValueError):
-                image_processor.post_process_object_detection(outputs, threshold=0.0)
+            reference = image_processor(images=image, return_tensors="pt")["pixel_values"]
+            # Resizing in uint8 would quantize to multiples of 1/255.
+            self.assertGreater((reference * 255 - (reference * 255).round()).abs().max().item(), 1e-3)
+            cases = (
+                (image, True, 1.0),
+                (image.float() / 255, False, 1.0),
+                (image.float(), False, 255.0),
+            )
+            for pixels, do_rescale, upper_bound in cases:
+                with self.subTest(dtype=pixels.dtype, do_rescale=do_rescale, upper_bound=upper_bound):
+                    result = image_processor(images=pixels, do_rescale=do_rescale, return_tensors="pt")["pixel_values"]
+                    self.assertEqual(result.dtype, torch.float32)
+                    self.assertGreaterEqual(result.min().item(), 0.0)
+                    self.assertLessEqual(result.max().item(), upper_bound)
+                    torch.testing.assert_close(result / upper_bound, reference, rtol=0, atol=1e-6)

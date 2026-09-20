@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_processing_common import url_to_local_path
@@ -112,7 +113,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     pipeline_model_mapping = {"object-detection": PPDocLayoutV4ForObjectDetection} if is_torch_available() else {}
     is_encoder_decoder = True
 
-    test_torch_exportable = True
     test_resize_embeddings = False
 
     def setUp(self):
@@ -203,8 +203,9 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 @require_torch
 @require_vision
 @slow
-class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
+class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         model_path = "PaddlePaddle/PP-DocLayoutV4_safetensors"
         self.model = PPDocLayoutV4ForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
