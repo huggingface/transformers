@@ -18,7 +18,14 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    CompileConfig,
+    is_torch_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -112,6 +119,31 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
+
+    @pytest.mark.generate
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_static_cache(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = self.all_generative_model_classes[0](config).to(torch_device).eval()
+
+        torch.compiler.reset()
+
+        compile_config = CompileConfig(mode="default", fullgraph=False, dynamic=True)
+        compile_config._compile_all_devices = True
+
+        input_ids = inputs_dict["input_ids"][:1].to(torch_device)
+
+        with torch.no_grad():
+            output = model.generate(
+                input_ids=input_ids,
+                max_new_tokens=2,
+                do_sample=False,
+                use_cache=True,
+                cache_implementation="static",
+                compile_config=compile_config,
+            )
+
+        self.assertEqual(output.shape[-1], input_ids.shape[-1] + 2)
 
     @unittest.skip(reason="Past key values are not returned")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
