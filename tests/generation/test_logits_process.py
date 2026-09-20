@@ -273,12 +273,13 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # seen tokens are penalized in log-probability space
         log_probs = torch.log_softmax(scores, dim=-1)
-        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() * 2, places=4)
-        self.assertAlmostEqual(processed_scores[0, 1].item(), log_probs[0, 1].item() * 2, places=4)
-        self.assertAlmostEqual(processed_scores[1, 5].item(), log_probs[1, 5].item() * 2, places=4)
+        lse = torch.logsumexp(scores, dim=-1)
+        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() * 2 + lse[0].item(), places=4)
+        self.assertAlmostEqual(processed_scores[0, 1].item(), log_probs[0, 1].item() * 2 + lse[0].item(), places=4)
+        self.assertAlmostEqual(processed_scores[1, 5].item(), log_probs[1, 5].item() * 2 + lse[1].item(), places=4)
 
-        # unseen tokens keep their log-probability
-        self.assertAlmostEqual(processed_scores[0, 2].item(), log_probs[0, 2].item(), places=4)
+        # unseen tokens keep their scores
+        self.assertEqual(processed_scores[0, 2].item(), scores[0, 2].item())
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
@@ -295,11 +296,12 @@ class LogitsProcessorTest(unittest.TestCase):
         processed_scores = rep_penalty_proc(input_ids, scores)
 
         log_probs = torch.log_softmax(scores, dim=-1)
-        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() * 0.5, places=4)
-        self.assertAlmostEqual(processed_scores[0, 1].item(), log_probs[0, 1].item() * 0.5, places=4)
+        lse = torch.logsumexp(scores, dim=-1)
+        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() * 0.5 + lse[0].item(), places=4)
+        self.assertAlmostEqual(processed_scores[0, 1].item(), log_probs[0, 1].item() * 0.5 + lse[0].item(), places=4)
 
         # rewarded tokens move toward 0 in log-probability space, i.e. their probability increases
-        self.assertGreater(processed_scores[0, 0].item(), log_probs[0, 0].item())
+        self.assertGreater(processed_scores[0, 0].item(), scores[0, 0].item())
 
     def test_repetition_penalty_normalized_3d_scores(self):
         # the continuous-batching (3D scores) path must match the standard 2D path on the last position
@@ -382,11 +384,12 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # prompt tokens are rewarded in log-probability space, regardless of the sign of their raw logit
         log_probs = torch.log_softmax(scores, dim=-1)
-        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() / 2, places=4)
-        self.assertAlmostEqual(processed_scores[1, 5].item(), log_probs[1, 5].item() / 2, places=4)
+        lse = torch.logsumexp(scores, dim=-1)
+        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() / 2 + lse[0].item(), places=4)
+        self.assertAlmostEqual(processed_scores[1, 5].item(), log_probs[1, 5].item() / 2 + lse[1].item(), places=4)
 
-        # tokens not in the encoder ids keep their log-probability
-        self.assertAlmostEqual(processed_scores[0, 2].item(), log_probs[0, 2].item(), places=4)
+        # tokens not in the encoder ids keep their scores
+        self.assertEqual(processed_scores[0, 2].item(), scores[0, 2].item())
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
