@@ -6218,9 +6218,14 @@ class ModelTesterMixin(ExportTesterMixin):
             torch.testing.assert_close(ntk_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        # CHeck each layer type for nested RoPE configs
+        # CHeck each layer type for nested RoPE configs.
+        # Until a longer input is seen, the dynamic parameters reduce to the default ones, so the two
+        # `inv_freq` are the same computation reached by different arithmetic and can differ by a
+        # last bit on devices that round `pow` differently. The check is that the frequencies do not
+        # grow, so allow one float32 epsilon of slack.
+        slack = 1 + torch.finfo(torch.float32).eps
         if not is_nested_rope:
-            self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+            self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq * slack).all())
         else:
             layer_types = getattr(text_config, "_rope_type_labels", getattr(text_config, "layer_types"))
             for layer_type in layer_types:
@@ -6228,7 +6233,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     self.assertTrue(
                         (
                             getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
-                            <= getattr(original_rope, f"{layer_type}_inv_freq")
+                            <= getattr(original_rope, f"{layer_type}_inv_freq") * slack
                         ).all()
                     )
 
