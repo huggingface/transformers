@@ -52,6 +52,7 @@ if is_torch_available():
         Gemma2Config,
         GenerationConfig,
         LlamaConfig,
+        PreTrainedConfig,
         QuantizedCache,
         StaticCache,
         convert_and_export_with_cache,
@@ -188,6 +189,43 @@ class CacheTest(unittest.TestCase):
         for layer_idx in attention_indices:
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
+
+    @require_torch_accelerator
+    def test_offloaded_hybrid_layers_keep_linear_states_resident(self):
+        """
+        Regression test for #48947: hybrid cache layers (combined linear-attention + attention, e.g. Zamba/Falcon-H1
+        style `"hybrid"`/`"hybrid_sliding"` layer types) must only offload their KV states. The conv/recurrent states
+        are consumed through `update_conv_state`/`update_recurrent_state` and direct `cache.layers[i].conv_states[0]`
+        reads, none of which have any offload synchronization — so offloading them leaves stale CPU copies that make
+        the next update fail with a cpu/accelerator device mismatch (or silently corrupt the state).
+        """
+        config = PreTrainedConfig(
+            layer_types=["hybrid", "hybrid_sliding"], num_hidden_layers=2, sliding_window=16, number_of_conv_states=1
+        )
+        cache = DynamicCache(config=config, offloading=True, offload_only_non_sliding=False)
+
+        def _kv(seq_len):
+            states = torch.rand(1, 4, seq_len, 16, device=torch_device)
+            return states, states.clone()
+
+        # Prefill: KV, conv and recurrent state updates for both layers.
+        for layer_idx in range(2):
+            cache.update(*_kv(5), layer_idx)
+            cache.update_conv_state(torch.rand(1, 16, 4, device=torch_device), layer_idx)
+            cache.update_recurrent_state(torch.rand(1, 4, 16, 16, device=torch_device), layer_idx)
+
+        # Decode: `update` offloads each layer and prefetches the next. Conv/recurrent states must stay resident
+        # on the accelerator, while the KV states are offloaded to CPU.
+        recurrent_update = torch.rand(1, 4, 16, 16, device=torch_device)
+        for layer_idx in range(2):
+            cache.update(*_kv(1), layer_idx)
+            cache.update_conv_state(torch.rand(1, 16, 1, device=torch_device), layer_idx)
+            cache.update_recurrent_state(recurrent_update, layer_idx)
+
+        for layer in cache.layers:
+            self.assertEqual(layer.conv_states[0].device.type, torch.device(torch_device).type)
+            self.assertEqual(layer.recurrent_states[0].device.type, torch.device(torch_device).type)
+            self.assertTrue(torch.equal(layer.recurrent_states[0], recurrent_update))
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """

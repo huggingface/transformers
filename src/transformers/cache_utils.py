@@ -1137,12 +1137,14 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
             LinearAttentionLayer.lazy_initialization(self, **kwargs)
 
     def offload(self):
+        # Only the KV states are offloaded: `conv_states`/`recurrent_states` are small,
+        # fixed-shape, and consumed through `update_conv_state`/`update_recurrent_state`,
+        # which have no offload/stream-synchronization machinery — moving them would leave
+        # stale or racy CPU copies read on the default stream.
         DynamicLayer.offload(self)
-        LinearAttentionLayer.offload(self)
 
     def prefetch(self):
         DynamicLayer.prefetch(self)
-        LinearAttentionLayer.prefetch(self)
 
     def reset(self) -> None:
         LinearAttentionLayer.reset(self)
@@ -1166,6 +1168,16 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
     def __init__(self, sliding_window: int, number_of_states: int = 1, **kwargs):
         DynamicSlidingWindowLayer.__init__(self, sliding_window=sliding_window)
         LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
+
+    def offload(self):
+        # Same as `LinearAttentionAndFullAttentionLayer`: only the KV states are offloaded,
+        # conv/recurrent states stay resident (they are consumed without any offload-aware
+        # synchronization). This also makes the sliding-KV part offloadable at all — MRO
+        # previously resolved `offload`/`prefetch` to `LinearAttentionLayer` only.
+        DynamicSlidingWindowLayer.offload(self)
+
+    def prefetch(self):
+        DynamicSlidingWindowLayer.prefetch(self)
 
     def lazy_initialization(self, *args, **kwargs) -> None:
         # When the Attention cache is used with `update`, `lazy_initialization` is called with 2 positional args
@@ -1206,12 +1218,11 @@ class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLay
             LinearAttentionLayer.lazy_initialization(self, **kwargs)
 
     def offload(self):
+        # Only the KV states are offloaded — see `LinearAttentionAndFullAttentionLayer.offload`.
         StaticLayer.offload(self)
-        LinearAttentionLayer.offload(self)
 
     def prefetch(self):
         StaticLayer.prefetch(self)
-        LinearAttentionLayer.prefetch(self)
 
     def reset(self) -> None:
         LinearAttentionLayer.reset(self)
@@ -1236,6 +1247,13 @@ class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, 
         # always called with 1, 2 or 3 kwarg(s) (cause it needs to know if it's for the conv or ssm states)
         if len(args) == 0 and len(kwargs) in (1, 2, 3):
             LinearAttentionLayer.lazy_initialization(self, **kwargs)
+
+    def offload(self):
+        # Only the KV states are offloaded — see `LinearAttentionAndFullAttentionLayer.offload`.
+        StaticSlidingWindowLayer.offload(self)
+
+    def prefetch(self):
+        StaticSlidingWindowLayer.prefetch(self)
 
     def reset(self) -> None:
         LinearAttentionLayer.reset(self)
@@ -1706,7 +1724,15 @@ class Cache:
         both linear and full attention states will return False by this function"""
         return [
             isinstance(layer, LinearAttentionCacheLayerMixin)
-            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            and not isinstance(
+                layer,
+                (
+                    LinearAttentionAndFullAttentionLayer,
+                    LinearAttentionAndSlidingWindowAttentionLayer,
+                    LinearAttentionAndStaticFullAttentionLayer,
+                    LinearAttentionAndStaticSlidingWindowAttentionLayer,
+                ),
+            )
             for layer in self.layers
         ]
 
