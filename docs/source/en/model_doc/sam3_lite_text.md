@@ -49,7 +49,7 @@ SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder.
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import AutoModel, AutoProcessor

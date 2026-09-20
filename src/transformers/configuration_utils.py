@@ -97,7 +97,16 @@ _LEGACY_LAYER_TYPE_REMAP = {
 
 
 def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
-    """Apply legacy → current layer-type name mapping."""
+    """Apply legacy → current layer-type name mapping.
+
+    Converts names in `_LEGACY_LAYER_TYPE_REMAP` to their current equivalents like `attention` → `full_attention`. Names not in that dict are returned unchanged.
+
+    Args:
+        layer_types (list[str]): Layer type names that may include legacy values.
+
+    Returns:
+        list[str]: Remapped names in the same order.
+    """
     return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
 
 
@@ -215,6 +224,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
         per_layer_config (`dict[int | str, dict[str, Any]]`, *optional*):
             A sparse mapping from layer indices to configuration attribute overrides. Each key is a layer index, and each value contains the attributes that differ from the global config for that layer.
+        tie_last_hidden_states (`bool`, *optional*):
+            Whether `hidden_states[-1]` should be the post-final-norm `last_hidden_state` rather than the pre-final-norm
+            hidden state. If unset, the model's built-in default is used.
 
         > Parameters for fine-tuning tasks
 
@@ -830,7 +842,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         try:
             if gguf_file:
-                config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
+                # A GGUF repo ships no `config.json`: the metadata is the config. Architectures the fast
+                # reader covers rebuild it from those keys; the rest go to the legacy reader.
+                from .integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
+
+                metadata, tensor_names = read_gguf_metadata(resolved_config_file)
+                if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
+                    config_dict = get_gguf_config(metadata, tensor_names)
+                else:
+                    config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
             else:
                 # Load config dict
                 config_dict = cls._dict_from_json_file(resolved_config_file)
@@ -1418,6 +1438,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # In some models this is used to discriminate between MLP or MoE layers, but MTP layers always use MoE -> artifically set to 0
         if hasattr(text_config, "first_k_dense_replace"):
             text_config.first_k_dense_replace = 0
+
+        # MTP uses independent per-layer overrides
+        text_config.per_layer_config = getattr(text_config, "mtp_per_layer_config", None)
 
         return text_config
 

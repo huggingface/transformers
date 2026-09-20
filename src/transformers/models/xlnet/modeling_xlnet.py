@@ -1446,8 +1446,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     @staticmethod
     def _reorder_cache(mems: list[torch.Tensor], beam_idx: torch.Tensor) -> list[torch.Tensor]:
         """
-        This function is used to re-order the `mems` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `mems` with the correct beam_idx at every
+        This function is used to re-order the `mems` cache if beam search is used. This is required to match `mems` with the correct beam_idx at every
         generation step.
         """
         return [layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in mems]
@@ -1519,10 +1518,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             - 0 for tokens that are **not masked**.
 
             You can only uses one of `input_mask` and `attention_mask`.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         use_mems (`bool`, *optional*):
             Whether to use memory states to speed up sequential decoding. If set to `True`, the model will use the hidden
             states from previous forward passes to compute attention, which can significantly improve performance for

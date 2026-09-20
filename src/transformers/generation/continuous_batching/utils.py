@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
+import threading
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
@@ -285,3 +286,8 @@ def graph_capture_ctx(device: torch.device, graph, stream, graph_pool_id):
         kwargs["capture_error_mode"] = "thread_local"
     with device_module.graph(graph, **kwargs):
         yield
+
+
+class ThreadLocalCounter(threading.local):
+    def __init__(self) -> None:
+        self.value = 0
