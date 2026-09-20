@@ -321,8 +321,9 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         prompt_ignore_length (`int`, *optional*):
             The original input ids sequence length, which if provided, will not be used in the penalty calculation.
         normalize (`bool`, *optional*, defaults to `False`):
-            Apply the penalty to normalized log-probabilities instead of raw logits. See [this
-            paper](https://arxiv.org/abs/2607.09791) for more details.
+            Apply the penalty to normalized log-probabilities instead of raw logits. The result is shifted back to the
+            scale of the input scores, so only the penalized tokens change.
+            See [this paper](https://arxiv.org/abs/2607.09791) for more details.
 
     Examples:
 
@@ -383,7 +384,9 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                 last_positions = self.logits_indices
                 last_scores = scores[0, last_positions, :]
                 if self.normalize:
-                    last_scores = torch.log_softmax(last_scores, dim=-1)
+                    last_logits = last_scores
+                    lse = torch.logsumexp(last_logits, dim=-1, keepdim=True)
+                    last_scores = last_logits - lse
 
                 # Prepare token mask
                 token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
@@ -394,12 +397,17 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
                 # Apply penalty
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                if self.normalize:
+                    penalty_scores, last_scores = penalty_scores + lse, last_logits
+
                 scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
             else:
                 batch_size, seq_len, vocab_size = scores.shape
                 last_scores = scores[:, -1, :]
                 if self.normalize:
-                    last_scores = torch.log_softmax(last_scores, dim=-1)
+                    last_logits = last_scores
+                    lse = torch.logsumexp(last_logits, dim=-1, keepdim=True)
+                    last_scores = last_logits - lse
                 token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
                 if input_ids.dim() == 1:
                     unique_tokens = torch.unique(input_ids)
@@ -408,14 +416,13 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                     token_mask.scatter_(1, input_ids, True)
                 # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                if self.normalize:
+                    penalty_scores, last_scores = penalty_scores + lse, last_logits
                 scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
             return scores
 
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(1)
-
-        if self.normalize:
-            scores = torch.log_softmax(scores, dim=-1)
 
         # In some very rare cases, the embedding vocab may be larger than the lm_head output - in those cases, clamp the
         # ids > output vocab_size to a fix index that we drop afterwards (the tokens with id > output_vocab cannot be
@@ -426,8 +433,13 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         scores = torch.nn.functional.pad(scores, (0, 1))
 
         score = torch.gather(scores, 1, input_ids)
+        if self.normalize:
+            lse = torch.logsumexp(scores[..., :vocab_size], dim=-1, keepdim=True)
+            score = score - lse
         # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+        if self.normalize:
+            score = score + lse
         scores_processed = scores.scatter(1, input_ids, score)
         # Drop the last padded index that we mapped to all tokens outside the output vocab_size, since they cannot be generated
         # by the model anyway so no need to apply the penalty
@@ -451,8 +463,9 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         encoder_input_ids (`torch.LongTensor`):
             The encoder_input_ids that should be repeated within the decoder ids.
         normalize (`bool`, *optional*, defaults to `False`):
-            Apply the penalty to the normalized log-probabilities instead of the raw logits.
-            See [`RepetitionPenaltyLogitsProcessor`] and [this paper](https://arxiv.org/abs/2607.09791) for more details.
+            Apply the penalty to the normalized log-probabilities instead of the raw logits, keeping the scale of the
+            input scores. See [`RepetitionPenaltyLogitsProcessor`] and [this paper](https://arxiv.org/abs/2607.09791)
+            for more details.
 
     Examples:
 
@@ -487,13 +500,16 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if self.normalize:
-            scores = torch.log_softmax(scores, dim=-1)
         score = torch.gather(scores, 1, self.encoder_input_ids)
+        if self.normalize:
+            lse = torch.logsumexp(scores, dim=-1, keepdim=True)
+            score = score - lse
 
         # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
+        if self.normalize:
+            score = score + lse
         scores_processed = scores.scatter(1, self.encoder_input_ids, score)
         return scores_processed
 
