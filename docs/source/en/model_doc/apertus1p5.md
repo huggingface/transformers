@@ -27,6 +27,8 @@ limitations under the License.
 > `float32` automatically when the model is loaded with `dtype=torch.float16`/`bfloat16`
 > (`_keep_in_fp32_modules_strict`). The keep applies to `from_pretrained` only: manually casting the loaded
 > model (`.half()`, `.to(dtype)`) or running the tokenizers under `torch.autocast` re-introduces the flips.
+> Weight quantization must also leave the tokenizers in full precision. For backends that do not honor the
+> model's FP32 exclusions, explicitly exclude the vision codebook projection using that backend's module-name syntax.
 
 > [!WARNING]
 > `Apertus1p5VisionTokenizerModel` is an inference-only vision-tokenizer port: it implements only inference-time codebook
