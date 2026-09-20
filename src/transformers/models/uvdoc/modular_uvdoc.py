@@ -472,6 +472,7 @@ class UVDocPointPositions2D(nn.Module):
 
 @auto_docstring
 class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
+    base_model_prefix = "backbone"
     supports_gradient_checkpointing = True
     _can_record_outputs = {
         "hidden_states": UVDocBridgeBlock,

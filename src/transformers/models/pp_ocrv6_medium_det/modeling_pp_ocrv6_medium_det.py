@@ -328,7 +328,7 @@ class PPOCRV6MediumDetPreTrainedModel(PreTrainedModel):
     """
 
     config: PPOCRV6MediumDetConfig
-    base_model_prefix = "pp_ocrv6_medium_det"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True

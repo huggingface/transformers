@@ -1471,11 +1471,12 @@ def rename_source_key(
 
     # 3. check if we need to add or remove base_model_prefix if necessary (only during loading, not saving)
     if base_model_prefix is not None and meta_state_dict is not None:
+        prefix_pattern = f"^{re.escape(base_model_prefix)}\\."
         if (
-            renamed_key.startswith(base_model_prefix)
-            and meta_state_dict.get(re.sub(f"^{base_model_prefix}.", "", renamed_key, count=1)) is not None
+            renamed_key.startswith(base_model_prefix + ".")
+            and meta_state_dict.get(re.sub(prefix_pattern, "", renamed_key, count=1)) is not None
         ):
-            renamed_key = re.sub(f"^{base_model_prefix}.", "", renamed_key, count=1)
+            renamed_key = re.sub(prefix_pattern, "", renamed_key, count=1)
         elif meta_state_dict.get(f"{base_model_prefix}.{renamed_key}") is not None:
             renamed_key = f"{base_model_prefix}.{renamed_key}"
 
