@@ -303,15 +303,6 @@ class TemperatureLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
-def _apply_penalty(score: torch.FloatTensor, penalty: float, normalize: bool) -> torch.FloatTensor:
-    if normalize:
-        # score is log-probs, always negative
-        return score * penalty
-    else:
-        # score is raw logits, positive values have to be divided to move them the right direction
-        return torch.where(score < 0, score * penalty, score / penalty)
-
-
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that prevents the repetition of previous tokens through a penalty. This penalty is applied at
@@ -402,8 +393,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                 token_mask[seq_indices, input_ids] = True
 
                 # Apply penalty
-                penalty_scores = _apply_penalty(last_scores, self.penalty, self.normalize)
-
+                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
                 scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
             else:
                 batch_size, seq_len, vocab_size = scores.shape
@@ -416,7 +406,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                     token_mask.scatter_(1, unique_tokens.unsqueeze(0), True)
                 else:
                     token_mask.scatter_(1, input_ids, True)
-                penalty_scores = _apply_penalty(last_scores, self.penalty, self.normalize)
+                # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
+                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
                 scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
             return scores
 
@@ -435,8 +426,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         scores = torch.nn.functional.pad(scores, (0, 1))
 
         score = torch.gather(scores, 1, input_ids)
-        score = _apply_penalty(score, self.penalty, self.normalize)
-
+        # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
+        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
         scores_processed = scores.scatter(1, input_ids, score)
         # Drop the last padded index that we mapped to all tokens outside the output vocab_size, since they cannot be generated
         # by the model anyway so no need to apply the penalty
@@ -499,8 +490,10 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         if self.normalize:
             scores = torch.log_softmax(scores, dim=-1)
         score = torch.gather(scores, 1, self.encoder_input_ids)
-        # self.penalty = 1/penalty, so applying the "penalty" boosts the encoder tokens
-        score = _apply_penalty(score, self.penalty, self.normalize)
+
+        # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
+        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+
         scores_processed = scores.scatter(1, self.encoder_input_ids, score)
         return scores_processed
 
