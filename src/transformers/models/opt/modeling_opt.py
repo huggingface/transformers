@@ -342,14 +342,21 @@ class OPTDecoder(OPTPreTrainedModel):
 
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
 
+        # The positions below need a concrete 2D padding mask; fabricate an all-ones one
+        # when none was given. The fabricated mask is deliberately NOT fed to
+        # `create_causal_mask`: `padding_mask=None` lets the SDPA path skip mask creation
+        # entirely (is_causal fast path), which is required for flash kernels and under
+        # torch.compile (a data-dependent all-ones check cannot be folded into the graph).
         if attention_mask is None:
             seq_length = past_seen_tokens + inputs_embeds.shape[1]
-            attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
+            position_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
+        else:
+            position_mask = attention_mask
 
         # embed positions
         if position_ids is None:
-            position_ids = torch.cumsum(attention_mask, dim=1)
-            position_ids = (position_ids * attention_mask - 1).long()
+            position_ids = torch.cumsum(position_mask, dim=1)
+            position_ids = (position_ids * position_mask - 1).long()
             # cut positions if `past_seen_tokens` is > 0
             position_ids = position_ids[:, past_seen_tokens:]
 
@@ -360,7 +367,7 @@ class OPTDecoder(OPTPreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        pos_embeds = self.embed_positions(attention_mask, past_seen_tokens, position_ids=position_ids)
+        pos_embeds = self.embed_positions(position_mask, past_seen_tokens, position_ids=position_ids)
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)

@@ -23,6 +23,8 @@ from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
+    is_cuda_stream_capturing,
+    is_jit_tracing,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_tracing,
@@ -257,7 +259,12 @@ def _ignore_causal_mask_sdpa(
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
     # `ignore_causal_mask = True` if we are not tracing
-    if is_tracing(padding_mask):
+    if padding_mask is None:
+        # With no padding mask the decision is purely static (no tensor reads), so it stays
+        # safe under plain `torch.compile`; only strict tracing modes must still block it.
+        if torch.compiler.is_exporting() or is_jit_tracing() or is_cuda_stream_capturing():
+            return False
+    elif is_tracing(padding_mask):
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
@@ -326,15 +333,16 @@ def _ignore_bidirectional_mask_sdpa(
 
     # When using `torch.export` or `torch.onnx.dynamo_export`, we need to avoid to check the contents of the mask;
     # otherwise, we will encounter dynamic control flows
-    if (
-        not is_tracing(padding_mask)
-        and (padding_mask is None or padding_mask.all())
-        # in this case we need to add special patterns to the mask so cannot be skipped otherwise
-        and (local_attention_size is None or kv_length < local_attention_size)
-    ):
-        return True
+    if padding_mask is None:
+        # No padding mask is a purely static decision, safe under plain `torch.compile`;
+        # only strict tracing modes must still block it.
+        if torch.compiler.is_exporting() or is_jit_tracing() or is_cuda_stream_capturing():
+            return False
+    elif is_tracing(padding_mask) or not padding_mask.all():
+        return False
 
-    return False
+    # in this case we need to add special patterns to the mask so cannot be skipped otherwise
+    return local_attention_size is None or kv_length < local_attention_size
 
 
 def _vmap_expansion_sdpa(mask_function: Callable) -> Callable:
