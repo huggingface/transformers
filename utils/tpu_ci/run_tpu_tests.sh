@@ -37,12 +37,16 @@ set -euo pipefail
 
 export TRANSFORMERS_IS_CI=yes NO_COLOR=1 OMP_NUM_THREADS=8
 
-# `TPU_VISIBLE_DEVICES` is torch_tpu's `CUDA_VISIBLE_DEVICES`: the runtime treats it as the source of
-# truth for device visibility, and even overwrites `TPU_VISIBLE_CHIPS` to match it. Restricting the
-# run to one chip is what makes the `single` column mean the same thing it does for the other
-# devices, whose CI runs a single-gpu and a multi-gpu job.
+# `TPU_VISIBLE_DEVICES` is torch_tpu's `CUDA_VISIBLE_DEVICES` and does restrict which chips the
+# process opens, but `torch.tpu.device_count()` keeps reporting every chip on the host (see the
+# `visible_devices` probe in backend_gaps.py). Every test that gates on the device count would
+# therefore still run, and still reach for chips the run is supposed to have given up, so a
+# `single-gpu` run here would be a `multi-gpu` run reported under the other name. Leave that column
+# empty instead: the dashboard reads a missing key as no data.
 if [ "${MACHINE_TYPE:-multi-gpu}" = "single-gpu" ]; then
-    export TPU_VISIBLE_DEVICES="${TPU_VISIBLE_DEVICES:-0}"
+    echo "single-gpu runs are not available on this device: restricting the visible chips does not" >&2
+    echo "restrict what the tests see, so the results would be a multi-gpu run under another name." >&2
+    exit 1
 fi
 
 python3 -m utils.get_test_reports tests/ --suite models \
