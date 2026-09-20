@@ -241,6 +241,33 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertIsInstance(resized_image, np.ndarray)
         self.assertEqual(resized_image.shape, (4, 30, 40))
 
+    def test_resize_after_normalize(self):
+        # After normalize(), values leave [0, 1] / [0, 255]. resize() used to raise ValueError
+        # because the PIL conversion path rejects those ranges (#34920).
+        image = np.random.rand(3, 64, 64).astype(np.float32)
+        normalized = normalize(image, mean=0.5, std=0.5)
+        self.assertTrue(np.any(normalized < 0) or np.any(normalized > 1))
+
+        resized = resize(normalized, (32, 32))
+        self.assertEqual(resized.shape, (3, 32, 32))
+        self.assertTrue(np.isfinite(resized).all())
+        # Still a signed float field (not crushed into [0, 1] / uint8).
+        self.assertLess(float(resized.min()), 0.0)
+        self.assertGreater(float(resized.max()), 0.0)
+
+        # Float images already in [0, 255] must not be min-max remapped.
+        float_255 = np.random.randint(0, 256, (3, 64, 64)).astype(np.float32)
+        resized_255 = resize(float_255, (32, 32))
+        self.assertEqual(resized_255.shape, (3, 32, 32))
+        self.assertTrue(np.all(resized_255 >= 0))
+        self.assertTrue(np.all(resized_255 <= 255))
+
+        # Constant out-of-range image (e.g. all -1.0) should still resize.
+        constant = np.full((3, 16, 16), -1.0, dtype=np.float32)
+        resized_const = resize(constant, (8, 8))
+        self.assertEqual(resized_const.shape, (3, 8, 8))
+        self.assertTrue(np.allclose(resized_const, -1.0, atol=1e-5))
+
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255
 
