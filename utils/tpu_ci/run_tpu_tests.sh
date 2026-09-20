@@ -22,7 +22,8 @@
 #   ONLY_IN=IMPORTANT_MODELS  which models to run, `IMPORTANT_MODELS` or a space-separated list.
 #   RUN_SLOW=1                also run the tests marked slow.
 #   TMP_CACHE=<prefix>        run with a throwaway hub cache under that prefix.
-#   UPLOAD=1                  upload the results to the dataset repo as well as writing them out.
+#   UPLOAD=1                  upload the results as well as writing them out. Needs RESULTS_REPO_ID.
+#   RESULTS_REPO_ID=<repo>    the dataset repo an upload publishes to.
 #
 # Only one process at a time can hold a given TPU chip, and torch_tpu aborts the process rather than
 # raising when it cannot acquire one, so do not run anything else that runs a TPU op alongside.
