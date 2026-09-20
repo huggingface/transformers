@@ -381,6 +381,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
             if self.logits_indices is not None and self.cu_seq_lens_q is not None:
                 last_positions = self.logits_indices
                 last_scores = scores[0, last_positions, :]
+                if self.normalize:
+                    last_scores = torch.log_softmax(last_scores, dim=-1)
 
                 # Prepare token mask
                 token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
@@ -390,19 +392,27 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                 token_mask[seq_indices, input_ids] = True
 
                 # Apply penalty
-                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                if self.normalize:
+                    penalty_scores = last_scores * self.penalty
+                else:
+                    penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+
                 scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
             else:
                 batch_size, seq_len, vocab_size = scores.shape
                 last_scores = scores[:, -1, :]
+                if self.normalize:
+                    last_scores = torch.log_softmax(last_scores, dim=-1)
                 token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
                 if input_ids.dim() == 1:
                     unique_tokens = torch.unique(input_ids)
                     token_mask.scatter_(1, unique_tokens.unsqueeze(0), True)
                 else:
                     token_mask.scatter_(1, input_ids, True)
-                # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
-                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                if self.normalize:
+                    penalty_scores = last_scores * self.penalty
+                else:
+                    penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
                 scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
             return scores
 
@@ -417,9 +427,17 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         # Pad by 1 to absorb all the indices larger than output vocab that were clamped to the vocab
         scores = torch.nn.functional.pad(scores, (0, 1))
 
+        if self.normalize:
+            scores = torch.log_softmax(scores, dim=-1)
+
         score = torch.gather(scores, 1, input_ids)
-        # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
-        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+        if self.normalize:
+            # probs are log
+            score = score * self.penalty
+        else:
+            # if score < 0 then repetition penalty has to be multiplied to reduce token probabilities
+            score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+
         scores_processed = scores.scatter(1, input_ids, score)
         # Drop the last padded index that we mapped to all tokens outside the output vocab_size, since they cannot be generated
         # by the model anyway so no need to apply the penalty
@@ -479,10 +497,15 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.normalize:
+            scores = torch.log_softmax(scores, dim=-1)
         score = torch.gather(scores, 1, self.encoder_input_ids)
 
         # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
-        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+        if self.normalize:
+            score = score * self.penalty
+        else:
+            score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
         scores_processed = scores.scatter(1, self.encoder_input_ids, score)
         return scores_processed
