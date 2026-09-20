@@ -445,6 +445,7 @@ class AfmoeForCausalLM(LlamaForCausalLM, AfmoePreTrainedModel, GenerationMixin):
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=None,  # Not used in this model: experts are balanced with a per-expert bias
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
