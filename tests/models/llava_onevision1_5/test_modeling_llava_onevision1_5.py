@@ -16,6 +16,8 @@
 import copy
 import unittest
 
+import pytest
+
 from transformers import (
     LlavaOnevision1_5Config,
     LlavaOnevision1_5ForConditionalGeneration,
@@ -165,6 +167,38 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    # Pixel values are flattened as (batch_size * patch_count, patch_dim), so the generic generation fixture cannot
+    # slice them directly along the first dimension.
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_keys_to_ignore = ["decoder_input_ids", "decoder_attention_mask", "use_cache", "labels"]
+        filtered_inputs_dict = {
+            key: value[:batch_size, ...] if isinstance(value, torch.Tensor) else value
+            for key, value in inputs_dict.items()
+            if key not in input_keys_to_ignore
+        }
+        patch_count = self.model_tester.grid_h * self.model_tester.grid_w
+        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][: batch_size * patch_count]
+
+        text_gen_config = config.get_text_config(decoder=True)
+        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
+            text_gen_config.pad_token_id = (
+                text_gen_config.eos_token_id
+                if isinstance(text_gen_config.eos_token_id, int)
+                else text_gen_config.eos_token_id[0]
+            )
+        text_gen_config.eos_token_id = None
+        text_gen_config.forced_eos_token_id = None
+        return config, filtered_inputs_dict
+
+    @pytest.mark.xfail(reason="Reentrant checkpointing cannot reuse the learned CLS positional embedding graph.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
+
+    @unittest.skip(reason="The generic fullgraph test cannot split flattened vision patches by batch dimension.")
+    def test_generate_compile_model_forward_fullgraph(self):
+        pass
 
     @unittest.skip(reason="LLaVA-OneVision-1.5 does not support assisted decoding with multimodal inputs.")
     def test_assisted_decoding_matches_greedy_search_0_random(self):
