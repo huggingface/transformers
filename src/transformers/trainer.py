@@ -2823,11 +2823,17 @@ class Trainer:
 
         if len(self.accelerator._models) == 0 and model is self.model:
             start_time = time.time()
-            model = (
-                self.accelerator.prepare(model)
-                if self.is_deepspeed_enabled or (self.is_fsdp_enabled and not self.args.torch_compile)
-                else self.accelerator.prepare_model(model, evaluation_mode=True)
-            )
+            # FSDP2 requires the model and the optimizer to be prepared together, because the
+            # optimizer's parameter references are rewritten during FSDP conversion — the same
+            # constraint `_prepare_for_training` already handles on the training path.
+            is_fsdp2 = self.is_fsdp_enabled and (getattr(self.accelerator.state.fsdp_plugin, "fsdp_version", 1) == 2)
+            if is_fsdp2:
+                self.create_optimizer()
+                model, self.optimizer = self.accelerator.prepare(model, self.optimizer)
+            elif self.is_deepspeed_enabled or (self.is_fsdp_enabled and not self.args.torch_compile):
+                model = self.accelerator.prepare(model)
+            else:
+                model = self.accelerator.prepare_model(model, evaluation_mode=True)
             self.model_preparation_time = round(time.time() - start_time, 4)
 
             if self.is_fsdp_enabled:
