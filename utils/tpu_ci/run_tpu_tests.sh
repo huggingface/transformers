@@ -34,6 +34,8 @@
 #   uv pip install --index-url https://download.pytorch.org/whl/cpu \
 #       torchvision torchaudio "torch==$(python3 -c 'import torch; print(torch.__version__.split("+")[0])')"
 # `pyctcdecode` is best left out: it pins numpy < 2 and only gates a handful of CTC decoding tests.
+# The second step reuses the report parsing in `utils/notification_service.py`, which imports
+# `slack_sdk` at module scope, so that has to be installed as well.
 set -euo pipefail
 
 export TRANSFORMERS_IS_CI=yes NO_COLOR=1 OMP_NUM_THREADS=8
