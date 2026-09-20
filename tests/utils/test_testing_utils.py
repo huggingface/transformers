@@ -40,6 +40,8 @@ if is_torch_available():
 
 
 GIB = 1024**3
+MIB = 1024**2
+FOUR_GIB = 4 * GIB
 
 
 class Payload:
@@ -424,11 +426,10 @@ class MemoryCleanupUnderPytestTest(MemoryCleanupMixin, unittest.TestCase):
 class MemoryLeakCheckTest(unittest.TestCase):
     """Opt-in leak reporting: unset means never measured, `warn` reports, `error` fails."""
 
-    MIB = 1024**2
-
     def _run_leaking_class(self, leaked_mib):
-        # `setUp` reads the baseline, `tearDown` reads it again after cleanup.
-        allocations = iter([0, int(leaked_mib * self.MIB)])
+        # Readings: class baseline, `setUp`, `tearDown`, class check. The last is 0 so only the per-test
+        # check fires; the class boundary is `ClassScopeMemoryLeakCheckTest`'s subject.
+        allocations = iter([0, 0, int(leaked_mib * MIB), 0])
 
         class Inner(MemoryCleanupMixin, unittest.TestCase):
             def test_noop(self):
@@ -485,3 +486,171 @@ class MemoryLeakCheckTest(unittest.TestCase):
         with patch.dict("os.environ", env):
             with self.assertRaises(ValueError):
                 test_memory_cleanup_mixin._memory_leak_settings()
+
+
+class ClassScopeMemoryLeakCheckTest(unittest.TestCase):
+    """The per-test check cannot see class-scoped memory, so `tearDownClass` measures it separately."""
+
+    def _run_class(self, readings):
+        """Run a one-test class whose device readings come from `readings`, in order."""
+        allocations = iter([int(mib * MIB) for mib in readings])
+
+        class Inner(MemoryCleanupMixin, unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                cls.payload = Payload()  # no `super()`, like half the in-tree overrides
+
+            def test_noop(self):
+                pass
+
+        with patch.object(
+            test_memory_cleanup_mixin, "_device_memory_allocated", side_effect=lambda: next(allocations)
+        ):
+            return _run_inner_test_class(Inner)
+
+    def _leak_messages(self, caught):
+        return [str(w.message) for w in caught if "tearDownClass" in str(w.message)]
+
+    def test_a_leaked_class_fixture_is_reported_against_the_class(self):
+        with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10"}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self._run_class([0, 4096, 4096, 4096])
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        messages = self._leak_messages(caught)
+        self.assertEqual(len(messages), 1, caught)
+        self.assertIn("+4096.0 MiB", messages[0])
+        self.assertIn("ClassScopeMemoryLeakCheckTest", messages[0])
+
+    def test_a_class_that_releases_its_fixture_is_silent(self):
+        with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10"}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self._run_class([0, 4096, 4096, 0])
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertEqual(self._leak_messages(caught), [])
+
+    def test_a_resident_class_model_does_not_trip_either_check(self):
+        """A fixture held for the whole class and then released is not a leak, at either scope."""
+        with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10"}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self._run_class([0, 18660, 18660, 0])
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertEqual([str(w.message) for w in caught if "MiB" in str(w.message)], [])
+
+    def test_error_mode_fails_the_class(self):
+        with patch.dict(
+            "os.environ",
+            {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10", "TRANSFORMERS_TEST_MEMORY_LEAK_MODE": "error"},
+        ):
+            result = self._run_class([0, 4096, 4096, 4096])
+        self.assertFalse(result.wasSuccessful())
+        self.assertIn("tearDownClass", str(result.errors + result.failures))
+
+    def test_off_by_default(self):
+        with patch.dict("os.environ", {}, clear=False):
+            testing_utils.os.environ.pop("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", None)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self._run_class([0, 4096])  # no baseline is taken when the check is off
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertEqual(self._leak_messages(caught), [])
+
+    def test_a_subclass_that_calls_super_records_one_baseline(self):
+        """Both wrappers fire; the outer one owns the baseline, so the inner must not overwrite it."""
+        allocations = iter([0, FOUR_GIB, FOUR_GIB, FOUR_GIB])
+
+        class Base(MemoryCleanupMixin, unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                super().setUpClass()
+
+        class Child(Base):
+            @classmethod
+            def setUpClass(cls):
+                super().setUpClass()
+
+            def test_noop(self):
+                pass
+
+        with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10"}):
+            with (
+                patch.object(
+                    test_memory_cleanup_mixin, "_device_memory_allocated", side_effect=lambda: next(allocations)
+                ),
+                warnings.catch_warnings(record=True) as caught,
+            ):
+                warnings.simplefilter("always")
+                result = _run_inner_test_class(Child)
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        # One baseline of 0 consumed, not two, so the class reads +4096 rather than 0.
+        messages = self._leak_messages(caught)
+        self.assertEqual(len(messages), 1, caught)
+        self.assertIn("+4096.0 MiB", messages[0])
+
+    def test_a_class_with_no_setupclass_override_still_gets_a_baseline(self):
+        """Most in-tree users never override `setUpClass`; the hook has to wrap the inherited one."""
+        allocations = iter([0, 0, 0, FOUR_GIB])
+
+        class Inner(MemoryCleanupMixin, unittest.TestCase):
+            def test_noop(self):
+                pass
+
+        with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10"}):
+            with (
+                patch.object(
+                    test_memory_cleanup_mixin, "_device_memory_allocated", side_effect=lambda: next(allocations)
+                ),
+                warnings.catch_warnings(record=True) as caught,
+            ):
+                warnings.simplefilter("always")
+                result = _run_inner_test_class(Inner)
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertEqual(len(self._leak_messages(caught)), 1, caught)
+
+    def test_the_hook_survives_the_class_attribute_drop(self):
+        """`tearDownClass` deletes what the class gained, and the wrapper must not be part of that."""
+        allocations = iter([0, 0, 0, 0] * 2)
+
+        class Inner(MemoryCleanupMixin, unittest.TestCase):
+            def test_noop(self):
+                pass
+
+        wrapped = Inner.__dict__["setUpClass"].__func__
+        self.assertTrue(getattr(wrapped, "_memory_cleanup_reads_baseline", False))
+        with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10"}):
+            with patch.object(
+                test_memory_cleanup_mixin, "_device_memory_allocated", side_effect=lambda: next(allocations)
+            ):
+                _run_inner_test_class(Inner)
+                self.assertIs(Inner.__dict__["setUpClass"].__func__, wrapped)
+                self.assertNotIn("_memory_cleanup_class_baseline", Inner.__dict__)
+                result = _run_inner_test_class(Inner)
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+
+    def test_a_failing_class_teardown_is_not_replaced_by_the_leak(self):
+        allocations = iter([0, FOUR_GIB, FOUR_GIB, FOUR_GIB])
+
+        class Base(unittest.TestCase):
+            @classmethod
+            def tearDownClass(cls):
+                raise RuntimeError("the real failure")
+
+        # Below the mixin in the MRO: this is the `super().tearDownClass()` the mixin itself awaits.
+        class Inner(MemoryCleanupMixin, Base):
+            def test_noop(self):
+                pass
+
+        with patch.dict(
+            "os.environ",
+            {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10", "TRANSFORMERS_TEST_MEMORY_LEAK_MODE": "error"},
+        ):
+            with patch.object(
+                test_memory_cleanup_mixin, "_device_memory_allocated", side_effect=lambda: next(allocations)
+            ):
+                result = _run_inner_test_class(Inner)
+        self.assertFalse(result.wasSuccessful())
+        reported = str(result.errors + result.failures)
+        self.assertIn("the real failure", reported)
+        self.assertNotIn("tearDownClass:", reported)
