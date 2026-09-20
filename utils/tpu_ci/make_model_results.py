@@ -86,8 +86,13 @@ TRIAGE_RULES = [
     # `pytest.fail()` -- which is how `run_test_using_subprocess` reports a child that died -- is a
     # location and nothing else.
     ("backend gap: one process owns the device", r"^\(line \d+\)\s+Failed\s*$|\(subprocess\)"),
+    ("backend gap: attention refuses a differentiable mask", r"not differentiable with respect to argument"),
     ("unsupported on this device", r"only supported on|does not support .* device"),
-    ("tolerance or expectation", r"mean relative difference|Tensor-likes are not close|not equal to tolerance"),
+    (
+        "tolerance or expectation",
+        r"mean relative difference|Tensor-likes are not close|not equal to tolerance"
+        r"|outputs are not equal|yields different results",
+    ),
 ]
 UNTRIAGED = "needs triage"
 
@@ -308,9 +313,10 @@ def self_check() -> None:
     assert entry["failures"]["multi"][0]["trace"] == "(line 42)  AssertionError: nope", entry
     assert entry["failures"]["multi"][1]["trace"] == "(line 99)  ValueError: nope either", entry
 
-    assert triage("RuntimeError: operator 'aten::foo' is not implemented for TPU") == TRIAGE_RULES[0][0]
-    assert triage("(line 3155)  Failed") == TRIAGE_RULES[2][0]
-    assert triage("ValueError: mean relative difference for hidden_states: 2e-04") == TRIAGE_RULES[4][0]
+    # By bucket name, not by position: the rules are a list that grows as runs turn up new shapes.
+    assert triage("RuntimeError: operator 'aten::foo' is not implemented for TPU") == "backend gap: op not implemented"
+    assert triage("(line 3155)  Failed") == "backend gap: one process owns the device"
+    assert triage("ValueError: mean relative difference for hidden_states: 2e-04") == "tolerance or expectation"
     assert triage("AssertionError: something new") == UNTRIAGED
 
     summary = render_summary(results, expected=["bert", "gpt2"])
