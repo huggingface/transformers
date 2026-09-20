@@ -95,6 +95,17 @@ if embedding.weight is not head.weight:
     raise RuntimeError("the move untied the two parameters")
 """,
     ),
+    "differentiable_attention_mask": (
+        "Scaled dot product attention refuses an `attn_mask` that requires grad, blaming the CPU "
+        "flash kernel -- which is not the kernel the tensors are on. Models that fold a learned bias "
+        "into the mask, T5 and its relative attention bias among them, cannot run a forward pass "
+        "outside `no_grad`.",
+        """
+query, key, value = (torch.randn(1, 2, 6, 8, device=DEVICE) for _ in range(3))
+mask = torch.zeros(1, 2, 6, 6, device=DEVICE, requires_grad=True)
+torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=mask)
+""",
+    ),
     "boolean_mask_indexing": (
         "Indexing trailing dimensions with a multi-dimensional boolean mask -- `x[:, :, mask]` -- "
         "tries to broadcast the mask instead of selecting with it, and raises a shape error. "
