@@ -167,13 +167,16 @@ class SamHQVisionAttention(nn.Module):
             Extracted positional embeddings according to relative positions.
         """
         max_rel_dist = int(2 * max(q_size, k_size) - 1)
-        # Interpolate rel pos.
-        rel_pos_resized = F.interpolate(
-            rel_pos.reshape(1, rel_pos.shape[0], -1).transpose(1, 2),
-            size=max_rel_dist,
-            mode="linear",
-        )
-        rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
+        # Interpolate rel pos, if it is not already the size we need.
+        if rel_pos.shape[0] != max_rel_dist:
+            rel_pos_resized = F.interpolate(
+                rel_pos.reshape(1, rel_pos.shape[0], -1).transpose(1, 2),
+                size=max_rel_dist,
+                mode="linear",
+            )
+            rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
+        else:
+            rel_pos_resized = rel_pos
 
         # Scale the coords with short length if shapes for q and k are different.
         q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
