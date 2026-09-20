@@ -22,7 +22,7 @@ from ..utils import (
     logging,
 )
 from .audio_classification import ffmpeg_read
-from .base import Pipeline, build_pipeline_init_args
+from .base import Pipeline, build_pipeline_init_args, validate_hypothesis_template
 
 
 logger = logging.get_logger(__name__)
@@ -82,7 +82,8 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
             hypothesis_template (`str`, *optional*, defaults to `"This is a sound of {}"`):
                 The format used in conjunction with *candidate_labels* to attempt the audio classification by
                 replacing the placeholder with the candidate_labels. Pass "{}" if *candidate_labels* are
-                already formatted.
+                already formatted. Only a bare `{}` placeholder is accepted: a format spec such as `"{:>10}"` is
+                rejected, since it would size the hypothesis rather than insert the label.
         Return:
             A list of dictionaries containing one entry per proposed label. Each dictionary contains the
             following keys:
@@ -124,6 +125,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         )
         inputs = inputs.to(self.dtype)
         inputs["candidate_labels"] = candidate_labels
+        validate_hypothesis_template(hypothesis_template)
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         text_inputs = self.tokenizer(sequences, return_tensors="pt", padding=True)
         inputs["text_inputs"] = [text_inputs]
