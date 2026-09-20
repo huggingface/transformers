@@ -186,3 +186,12 @@ test-results/
 # AI agent local setup artifacts
 /.agents/skills
 /.claude/skills
+
+# Auto-added by github-engineer
+*.pyc
+*.pyd
+*.obj
+*.whl
+nem_stats.c
+*.exp
+*.lib

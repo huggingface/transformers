@@ -171,15 +171,15 @@ class PeftAdapterMixin:
         if hotswap == "auto":
             # if user called model.enable_peft_hotswap and this is not the first adapter, enable hotswap
             hotswap_enabled = getattr(self, "_hotswap_enabled", False)
-            not_first_adapter = bool(self._hf_peft_config_loaded and (adapter_name in self.peft_config))
+            not_first_adapter = bool(self._hf_peft_config_loaded and (adapter_name in getattr(self, "peft_config", {})))
             hotswap = hotswap_enabled and not_first_adapter
 
         if hotswap:
-            if (not self._hf_peft_config_loaded) or (adapter_name not in self.peft_config):
+            if (not self._hf_peft_config_loaded) or (adapter_name not in getattr(self, "peft_config", {})):
                 raise ValueError(
                     "To hotswap an adapter, there must already be an existing adapter with the same adapter name."
                 )
-            if any(conf.peft_type != PeftType.LORA for conf in self.peft_config.values()):
+            if any(conf.peft_type != PeftType.LORA for conf in getattr(self, "peft_config", {}).values()):
                 raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
 
         adapter_name = adapter_name if adapter_name is not None else "default"
@@ -187,9 +187,9 @@ class PeftAdapterMixin:
 
         from peft import PeftConfig, inject_adapter_in_model
 
-        if self._hf_peft_config_loaded and (not hotswap) and (adapter_name in self.peft_config):
+        if self._hf_peft_config_loaded and (not hotswap) and (adapter_name in getattr(self, "peft_config", {})):
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
-        elif hotswap and ((not self._hf_peft_config_loaded) or (adapter_name not in self.peft_config)):
+        elif hotswap and ((not self._hf_peft_config_loaded) or (adapter_name not in getattr(self, "peft_config", {}))):
             raise ValueError(
                 "To hotswap an adapter, there must already be an existing adapter with the same adapter name."
             )
@@ -424,7 +424,7 @@ class PeftAdapterMixin:
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
-        elif adapter_name in self.peft_config:
+        elif adapter_name in getattr(self, "peft_config", {}):
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         if not isinstance(adapter_config, PeftConfig):
@@ -453,15 +453,15 @@ class PeftAdapterMixin:
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
         elif isinstance(adapter_name, list):
-            missing = set(adapter_name) - set(self.peft_config)
+            missing = set(adapter_name) - set(getattr(self, "peft_config", {}))
             if len(missing) > 0:
                 raise ValueError(
                     f"Following adapter(s) could not be found: {', '.join(missing)}. Make sure you are passing the correct adapter name(s)."
-                    f" current loaded adapters are: {list(self.peft_config.keys())}"
+                    f" current loaded adapters are: {list(getattr(self, 'peft_config', {}).keys())}"
                 )
-        elif adapter_name not in self.peft_config:
+        elif adapter_name not in getattr(self, "peft_config", {}):
             raise ValueError(
-                f"Adapter with name {adapter_name} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
+                f"Adapter with name {adapter_name} not found. Please pass the correct adapter name among {list(getattr(self, 'peft_config', {}).keys())}"
             )
 
         from peft.tuners.tuners_utils import BaseTunerLayer
@@ -650,7 +650,7 @@ class PeftAdapterMixin:
             adapter_names = [adapter_names]
 
         # Check that all adapter names are present in the config
-        missing_adapters = [name for name in adapter_names if name not in self.peft_config]
+        missing_adapters = [name for name in adapter_names if name not in getattr(self, "peft_config", {})]
         if missing_adapters:
             raise ValueError(
                 f"The following adapter(s) are not present and cannot be deleted: {', '.join(missing_adapters)}"
@@ -665,8 +665,9 @@ class PeftAdapterMixin:
 
         # In case all adapters are deleted, we need to delete the config
         # and make sure to set the flag to False
-        if len(self.peft_config) == 0:
-            del self.peft_config
+        if len(getattr(self, "peft_config", {})) == 0:
+            if hasattr(self, "peft_config"):
+                del self.peft_config
             self._hf_peft_config_loaded = False
 
 
