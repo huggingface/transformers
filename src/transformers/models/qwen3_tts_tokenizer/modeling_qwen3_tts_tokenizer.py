@@ -482,7 +482,7 @@ class Qwen3TTSTokenizerPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class Qwen3TTSTokenizerCode2WavPreTrainedModel(Qwen3TTSTokenizerPreTrainedModel):
     config_class = Qwen3TTSTokenizerCode2WavConfig
-    _no_split_modules = ["Qwen3OmniMoeCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
+    _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
 
 
 class Qwen3TTSTokenizerCode2WavDecoderResidualUnit(nn.Module):
