@@ -15,6 +15,7 @@
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 
+import atexit
 import contextlib
 import functools
 import glob
@@ -218,7 +219,7 @@ if is_peft_available():
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
-    from accelerate.state import AcceleratorState
+    from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import (
         DataLoaderConfiguration,
         DistributedDataParallelKwargs,
@@ -250,6 +251,29 @@ SCALER_NAME = "scaler.pt"
 OPTIMIZER_NAME_BIN = "optimizer.bin"
 SCHEDULER_NAME = "scheduler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
+
+# Whether the atexit fallback below was already registered. Multiple `Trainer`s
+# share the same `PartialState`/process group, so it is registered at most once.
+_PROCESS_GROUP_ATEXIT_REGISTERED = False
+
+
+def _destroy_process_group_at_exit() -> None:
+    """`atexit` fallback destroying the distributed process group at interpreter exit.
+
+    This is only ever registered once a `Trainer`'s `Accelerator`/`PartialState`
+    created the process group (see `create_accelerator_and_postprocess`), so a
+    group the user initialized themselves is never torn down on their behalf.
+    Teardown is delegated to `PartialState.destroy_process_group`, which itself
+    skips fork-launched workers and uninitialized groups. Everything is guarded:
+    the interpreter may already be partially torn down when this runs.
+    """
+    try:
+        # Never instantiate `PartialState` while its shared state is empty: its
+        # `__init__` would set up a fresh process group instead of reusing one.
+        if PartialState._shared_state != {} and dist.is_initialized():
+            PartialState().destroy_process_group()
+    except Exception:  # noqa: S110  # interpreter may be partially torn down; never raise at exit
+        pass
 
 
 @requires(
@@ -845,8 +869,30 @@ class Trainer:
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
 
+        # Snapshot whether a process group / accelerate state already exists before
+        # `Accelerator` is created: a group that exists while no `PartialState` does
+        # was initialized by the user (e.g. via `torch.distributed.init_process_group`)
+        # and must not be torn down on their behalf at interpreter exit.
+        process_group_preinitialized = dist.is_available() and dist.is_initialized()
+        partial_state_preinitialized = PartialState._shared_state != {}
+
         # create accelerator object
         self.accelerator = Accelerator(**args)
+        self._ended = False
+
+        # Register the fallback that destroys the process group at interpreter exit
+        # if the user never calls `end()`. All `Trainer`s share the same group through
+        # `PartialState`, so register at most once per process — and only when
+        # accelerate owns the group (created just now or by an earlier
+        # `Accelerator`/`PartialState`), never a group the user set up themselves.
+        global _PROCESS_GROUP_ATEXIT_REGISTERED
+        if (
+            not _PROCESS_GROUP_ATEXIT_REGISTERED
+            and dist.is_initialized()
+            and (not process_group_preinitialized or partial_state_preinitialized)
+        ):
+            atexit.register(_destroy_process_group_at_exit)
+            _PROCESS_GROUP_ATEXIT_REGISTERED = True
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
 
@@ -1999,6 +2045,11 @@ class Trainer:
             deactivate_neftune(self.model, self.neftune_hook_handle, self.accelerator)
         self.is_in_train = False
 
+        # The distributed process group is deliberately NOT destroyed here:
+        # `evaluate`, `predict`, `save_model` and `push_to_hub` all communicate
+        # between processes and may legitimately be called after `train`.
+        # Teardown happens via `end()`/`close()` (or the atexit fallback
+        # registered at accelerator creation if the user never calls them).
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def training_step(
@@ -3010,6 +3061,50 @@ class Trainer:
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
+
+    def end(self) -> None:
+        """
+        Finish the trackers and destroy the distributed process group.
+
+        Call this once, at the very end of a script, after everything that needs the other processes:
+        [`~Trainer.train`], [`~Trainer.evaluate`], [`~Trainer.predict`], [`~Trainer.save_model`] and
+        [`~Trainer.push_to_hub`] all communicate between processes and will fail once the group is gone.
+
+        `end()` is idempotent and is also called automatically when the `Trainer` is used as a context
+        manager. If it is never called, a fallback registered at interpreter exit still destroys the
+        process group when it was set up by accelerate.
+
+        Example:
+
+        ```python
+        trainer.train()
+        trainer.evaluate()
+        trainer.push_to_hub()
+        trainer.end()
+        ```
+
+        or equivalently:
+
+        ```python
+        with Trainer(...) as trainer:
+            trainer.train()
+            trainer.evaluate()
+        ```
+        """
+        if getattr(self, "_ended", False):
+            return
+        self._ended = True
+        self.accelerator.end_training()
+
+    def close(self) -> None:
+        """Alias for [`Trainer.end`]."""
+        self.end()
+
+    def __enter__(self) -> "Trainer":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.end()
 
     def predict(
         self, test_dataset: Dataset, ignore_keys: list[str] | None = None, metric_key_prefix: str = "test"
