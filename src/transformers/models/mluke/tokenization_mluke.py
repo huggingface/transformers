@@ -251,6 +251,11 @@ class MLukeTokenizer(TokenizersBackend):
             else entity_token_2
         )
 
+        # Keep the entity token strings so their ids can be resolved by name (positional indexing into
+        # `extra_special_tokens_ids` is unreliable since other tokens may occupy the first positions).
+        self.entity_token_1 = str(entity_token_1)
+        self.entity_token_2 = str(entity_token_2)
+
         # Handle entity vocab file for backward compatibility
         entity_vocab_file = kwargs.pop("entity_vocab_file", None)
 
@@ -1011,13 +1016,10 @@ class MLukeTokenizer(TokenizersBackend):
             first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
 
             # add special tokens to input ids
+            entity_token_1_id = self.convert_tokens_to_ids(self.entity_token_1)
             entity_token_start, entity_token_end = first_entity_token_spans[0]
-            first_ids = (
-                first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
-            )
-            first_ids = (
-                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
-            )
+            first_ids = first_ids[:entity_token_end] + [entity_token_1_id] + first_ids[entity_token_end:]
+            first_ids = first_ids[:entity_token_start] + [entity_token_1_id] + first_ids[entity_token_start:]
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
         elif self.task == "entity_pair_classification":
@@ -1038,8 +1040,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
-                (head_token_span, self.extra_special_tokens_ids[0]),
-                (tail_token_span, self.extra_special_tokens_ids[1]),
+                (head_token_span, self.convert_tokens_to_ids(self.entity_token_1)),
+                (tail_token_span, self.convert_tokens_to_ids(self.entity_token_2)),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)
