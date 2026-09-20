@@ -29,7 +29,7 @@ into an ONNX model via `torch.onnx.export`:
    per-node in-place rewrites on the `GraphModule` to drop or replace nodes ONNX
    can't lower (alias, in-place ops, dead comparisons, `_assert_*`, …). Triggered
    both directly after `torch.export` and indirectly via the stage 2 hook.
-4. **ONNX translations** (`_ONNX_TRANSLATION_TABLE`): custom onnxscript functions
+4. **ONNX translations** (`_get_onnx_translation_table`): custom onnxscript functions
    passed as `custom_translation_table` that override the default torchlib
    lowering for specific aten ops where it's buggy or missing.
 5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
@@ -44,6 +44,7 @@ import operator
 from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+from typing import Sequence as TypingSequence  # noqa: UP035  # onnxscript.script classifies attrs via typing.Sequence
 
 import numpy as np
 
@@ -52,6 +53,7 @@ from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
+    _resolve_dotted_path,
     apply_fx_node_fixes,
     apply_patches,
     duplicate_leaf_tensors,
@@ -71,6 +73,7 @@ if is_torch_available():
 
 if is_onnxscript_available():
     import onnx_ir
+    from onnxscript import FLOAT, INT64, script  # runtime: `@script` evaluates these annotations at import
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
@@ -78,7 +81,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
     if is_onnxscript_available():
-        from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
+        from onnxscript.function_libs.torch_lib.ops.core import BOOL, TReal
 
 
 logger = logging.get_logger(__file__)
@@ -124,7 +127,7 @@ class OnnxExporter(DynamoExporter):
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
-                custom_translation_table=_ONNX_TRANSLATION_TABLE,
+                custom_translation_table=_get_onnx_translation_table(),
                 opset_version=config.opset_version,
                 external_data=config.external_data,
                 export_params=config.export_params,
@@ -849,10 +852,116 @@ def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool
     return True
 
 
+_TENSOR_FACTORY_OPS = set()
+if is_torch_available():
+    _TENSOR_FACTORY_OPS.update(
+        {
+            torch.ops.aten.zeros.default,
+            torch.ops.aten.ones.default,
+            torch.ops.aten.empty.memory_format,
+            torch.ops.aten.full.default,
+            torch.ops.aten.new_zeros.default,
+            torch.ops.aten.new_ones.default,
+            torch.ops.aten.new_full.default,
+        }
+    )
+
+
+def _sym_expr(value) -> str | None:
+    """Return the sympy expression string of a SymInt-valued FX node/val, else None."""
+    if isinstance(value, torch.fx.Node):
+        value = value.meta.get("val")
+    if isinstance(value, torch.SymInt):
+        return str(value.node.expr)
+    return None
+
+
+@register_fx_node_fix("onnx")
+def _fix_symbolic_factory_shape(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Size ``zeros``/``full``/… off a live tensor's runtime shape instead of a derived floor-div SymInt.
+
+    A conv/pool output length reaches a tensor factory (e.g. ``torch.zeros((batch, feat_len))`` for an
+    audio feature mask) as a *derived* SymInt — a floor-div chain of the input length. onnxscript lowers
+    that signed floor-div as ``Sub(Div, Cast(And(...Mod...Sign)))``, which ORT's CUDA EP mis-evaluates to a
+    negative dim → ``Expand``/``Reshape`` failures. When another tensor already in the graph carries that
+    exact symbolic dim in its shape, rewrite the factory's size element to read it as ``aten.sym_size``
+    (a plain ``Shape`` gather at export) so no floor-div is recomputed. Only touches factory *size* args —
+    never arithmetic ``Div`` nodes — so numeric floor-divs (relative-position lengths) are left intact.
+    """
+    if node.target not in _TENSOR_FACTORY_OPS:
+        return False
+    # The size list is the first list/tuple arg holding at least one SymInt-valued node.
+    size_pos = next(
+        (i for i, a in enumerate(node.args) if isinstance(a, (list, tuple)) and any(_sym_expr(e) for e in a)),
+        None,
+    )
+    if size_pos is None:
+        return False
+    size = list(node.args[size_pos])
+
+    # Map each floor-div symbolic dim to a live tensor dim defined earlier in the graph.
+    sources: dict[str, tuple[torch.fx.Node, int]] = {}
+    for prior in gm.graph.nodes:
+        if prior is node:
+            break
+        if prior.target in _TENSOR_FACTORY_OPS:
+            continue
+        val = prior.meta.get("val") if hasattr(prior, "meta") else None
+        shape = getattr(val, "shape", None)
+        if shape is None or isinstance(val, torch.SymInt):
+            continue
+        for dim, s in enumerate(shape):
+            expr = _sym_expr(s)
+            if expr and expr not in sources:
+                sources[expr] = (prior, dim)
+
+    changed = False
+    for i, element in enumerate(size):
+        expr = _sym_expr(element)
+        if expr is None or "//" not in expr or expr not in sources:
+            continue
+        src_node, src_dim = sources[expr]
+        with gm.graph.inserting_before(node):
+            sym_size = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(src_node, src_dim))
+        # Carry the original SymInt value so downstream shape reasoning / ONNX translation still sees it.
+        sym_size.meta["val"] = element.meta["val"]
+        size[i] = sym_size
+        changed = True
+    if not changed:
+        return False
+    node.update_arg(size_pos, size)
+    return True
+
+
 # ── Stage 4: ONNX translations ────────────────────────────────────────────────
-# Custom onnxscript `_aten_*` functions registered in `_ONNX_TRANSLATION_TABLE`
-# that override `torchlib`'s default lowering for specific aten ops where the
-# default is buggy or missing. Passed to `torch.onnx.export` as `custom_translation_table`.
+# Custom onnxscript `_aten_*` functions that override `torchlib`'s default lowering for specific aten
+# ops where the default is buggy or missing. Each is registered with `@register_onnx_translation` and
+# assembled by `_get_onnx_translation_table` into `torch.onnx.export`'s `custom_translation_table`.
+# ONNX-only (translation tables have no ExecuTorch / Dynamo equivalent), so the registry lives here
+# rather than in the backend-generic `utils.py` alongside `_PATCHES` / `_FX_NODE_FIXES`.
+
+_ONNX_TRANSLATIONS: dict[Any, callable] = {}
+
+
+def register_onnx_translation(*paths: str):
+    """Append the decorated lowering `fn` to `_ONNX_TRANSLATIONS`, keyed by each op `path`.
+
+    Like `register_patch`, each `path` is a dotted string — an op overload
+    (`"torch.ops.aten.index_put.default"`) or an `operator` builtin (`"operator.floordiv"`) — resolved
+    to its object at decoration time. Unresolvable paths (torch not installed, op not yet registered)
+    are skipped so the module still imports. Passing several paths registers the SAME `fn` for each
+    (e.g. `masked_fill.Scalar` + `masked_fill.Tensor`). External code adds translations the same way;
+    `_get_onnx_translation_table` reads them into the `custom_translation_table`.
+    """
+
+    def decorator(fn):
+        for path in paths:
+            op = _resolve_dotted_path(path)
+            if op is not None:
+                _ONNX_TRANSLATIONS[op] = fn
+        return fn
+
+    return decorator
 
 
 def _values_broadcast_to_self(values: TReal, self: TReal) -> bool:
@@ -876,6 +985,7 @@ def _values_broadcast_to_self(values: TReal, self: TReal) -> bool:
     return True
 
 
+@register_onnx_translation("torch.ops.aten.index_put.default")
 def _aten_index_put(
     self: TReal,
     indices: Sequence[INT64 | BOOL | None],
@@ -917,6 +1027,7 @@ def _aten_index_put(
     return op.Reshape(result, op.Shape(self))
 
 
+@register_onnx_translation("torch.ops.aten.bincount.default")
 def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:
     """ONNX implementation of `torch.bincount`: count occurrences of non-negative ints.
 
@@ -966,6 +1077,7 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     return op.Concat(*outputs, axis=0)  # (M, N)
 
 
+@register_onnx_translation("torch.ops.aten.repeat_interleave.self_int")
 def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):
     """ONNX implementation of `aten.repeat_interleave.self_int`.
 
@@ -1009,6 +1121,7 @@ def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):
     return op.Reshape(tiled, final_shape)
 
 
+@register_onnx_translation("operator.floordiv")
 def _operator_floordiv(self, other):
     """Correct floor division (toward -inf) for signed integer SymInts.
 
@@ -1027,6 +1140,7 @@ def _operator_floordiv(self, other):
     return op.Sub(op.Div(self, other), op.Cast(offset, to=dtype))
 
 
+@register_onnx_translation("torch.ops.aten.masked_fill.Scalar", "torch.ops.aten.masked_fill.Tensor")
 def _aten_masked_fill(self, mask, value):
     """ONNX implementation of `aten.masked_fill.{Scalar,Tensor}`.
 
@@ -1044,20 +1158,99 @@ def _aten_masked_fill(self, mask, value):
     return op.Where(mask, value_cast, self)
 
 
-_ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
-if is_onnxscript_available():
-    _ONNX_TRANSLATION_TABLE.update(
-        {
-            torch.ops.aten.bincount.default: _aten_bincount,
-            torch.ops.aten.index_put.default: _aten_index_put,
-            torch.ops.aten._grouped_mm.default: _aten_grouped_mm,
-            torch.ops.transformers.grouped_mm_fallback.default: _aten_grouped_mm,
-            torch.ops.aten.repeat_interleave.self_int: _aten_repeat_interleave_self_int,
-            torch.ops.aten.masked_fill.Scalar: _aten_masked_fill,
-            torch.ops.aten.masked_fill.Tensor: _aten_masked_fill,
-            operator.floordiv: _operator_floordiv,
-        }
-    )
+@functools.cache
+def _compiled_varlen_translation():
+    """Compile (once) the `@script` translation of `torch_attn::_varlen_attn`.
+
+    Kept out of the module-level `@register_onnx_translation` decorators because the `@script` compile (and
+    the onnxscript APIs it exercises) must run only inside `OnnxExporter.export`, after `validate_environment`
+    has confirmed a compatible onnxscript — never on the bare import path. `@functools.cache` compiles at most
+    once. The compile is self-contained (only `op.*` / `FLOAT` / `INT64`); importing `torch.nn.attention.varlen`
+    to register the op key is the caller's concern, not a prerequisite for compiling.
+    """
+
+    @script()
+    def _aten_varlen_attn(
+        query: FLOAT,
+        key: FLOAT,
+        value: FLOAT,
+        cu_seq_q: INT64,
+        cu_seq_k: INT64,
+        max_q: INT64,
+        max_k: INT64,
+        is_causal: bool,
+        scale: float,
+        window_size: TypingSequence[int],
+    ) -> tuple[FLOAT, FLOAT, FLOAT]:
+        """ONNX translation of `torch_attn::_varlen_attn` — the varlen attention emitted by the chunked
+        vision/audio attention export patch. Lowers to an ONNX `Loop` over the `cu_seq_q` segments (each
+        iteration a dense SDPA on that segment's `n_i` tokens, concatenated), i.e. the true variable-length
+        shape — O(sum n_i^2), no N×N block mask materialised. The op has three outputs `(out, softmax_lse,
+        rng_state)`; only `out` is consumed downstream, so the two aux tensors are empty stubs.
+
+        `max_q`/`max_k` are the (unused) flash-kernel bounds — kept as tensor inputs, not `int` attributes,
+        because they arrive as symints under dynamic export. `window_size` must be typed via `typing.Sequence`
+        (not `collections.abc`), which `onnxscript.script`'s annotation parser rejects."""
+        one = op.Constant(value_ints=[1])
+        two = op.Constant(value_ints=[2])
+        three = op.Constant(value_ints=[3])
+        axis0 = op.Constant(value_ints=[0])
+        cu = op.Cast(cu_seq_q, to=7)  # INT64
+        num_segments = op.Squeeze(op.Sub(op.Shape(cu), one))
+        # Grouped-query attention: key/value carry fewer heads than query (e.g. Exaone4.5 vision). The
+        # flash op broadcasts them internally; here we materialise the `repeat_kv` expansion once up
+        # front — (L, Hkv, D) → (L, Hq, D) by repeating each kv head `Hq // Hkv` times — so the per-
+        # segment MatMul sees matching head counts. `n_rep == 1` (multi-head attention) makes it a no-op.
+        q_heads = op.Slice(op.Shape(query), one, two, axis0)
+        k_shape = op.Shape(key)
+        k_len = op.Slice(k_shape, axis0, one, axis0)
+        k_heads = op.Slice(k_shape, one, two, axis0)
+        k_dim = op.Slice(k_shape, two, three, axis0)
+        n_rep = op.Div(q_heads, k_heads)
+        expand_shape = op.Concat(k_len, k_heads, n_rep, k_dim, axis=0)
+        grouped_shape = op.Concat(k_len, q_heads, k_dim, axis=0)
+        key = op.Reshape(op.Expand(op.Unsqueeze(key, two), expand_shape), grouped_shape)
+        value = op.Reshape(op.Expand(op.Unsqueeze(value, two), expand_shape), grouped_shape)
+        output = op.Slice(query, op.Constant(value_ints=[0]), op.Constant(value_ints=[0]), axis0)  # empty (0, H, D)
+        for i in range(num_segments):
+            index = op.Reshape(i, one)
+            start = op.Slice(cu, index, op.Add(index, one), axis0)
+            end = op.Slice(cu, op.Add(index, one), op.Add(index, two), axis0)
+            query_heads = op.Transpose(op.Slice(query, start, end, axis0), perm=[1, 0, 2])
+            key_heads = op.Transpose(op.Slice(key, start, end, axis0), perm=[1, 0, 2])
+            value_heads = op.Transpose(op.Slice(value, start, end, axis0), perm=[1, 0, 2])
+            scores = op.Mul(op.MatMul(query_heads, op.Transpose(key_heads, perm=[0, 2, 1])), scale)
+            segment = op.Transpose(op.MatMul(op.Softmax(scores, axis=-1), value_heads), perm=[1, 0, 2])
+            output = op.Concat(output, segment, axis=0)
+        aux = op.CastLike(op.Constant(value_float=0.0), query)
+        return output, aux, aux
+
+    return _aten_varlen_attn
+
+
+def _get_onnx_translation_table() -> dict[Any, Any]:
+    """Assemble the `custom_translation_table` for `torch.onnx.export`.
+
+    Merges the module-level `@register_onnx_translation(...)` entries (plus any registered by external
+    code) with three ops whose availability is probed here rather than decorated at import: `_grouped_mm`,
+    `grouped_mm_fallback`, and the `@script` varlen op (compiled once via `_compiled_varlen_translation`).
+    Not cached, so a translation registered by a late-imported module is still picked up on the next export.
+    """
+    # None of these three op keys are guaranteed to exist as attributes here, so probe with `hasattr`
+    # rather than referencing them unconditionally (a missing key raises AttributeError):
+    #   - `aten._grouped_mm` is absent on older torch;
+    #   - `transformers::grouped_mm_fallback` only exists once `transformers.integrations.moe` is imported
+    #     (lazy — pulled in while tracing a model that uses it);
+    #   - `torch_attn::_varlen_attn` is registered when `exporter_dynamo` imports `torch.nn.attention.varlen`.
+    # Adding a translation whose op isn't in the graph is harmless — torch.onnx ignores unused entries.
+    table = dict(_ONNX_TRANSLATIONS)
+    if hasattr(torch.ops.aten, "_grouped_mm"):
+        table[torch.ops.aten._grouped_mm.default] = _aten_grouped_mm
+    if hasattr(torch.ops.transformers, "grouped_mm_fallback"):
+        table[torch.ops.transformers.grouped_mm_fallback.default] = _aten_grouped_mm
+    if hasattr(torch.ops.torch_attn, "_varlen_attn"):
+        table[torch.ops.torch_attn._varlen_attn.default] = _compiled_varlen_translation()
+    return table
 
 
 # ── Stage 5: ONNX IR fixes ────────────────────────────────────────────────────
