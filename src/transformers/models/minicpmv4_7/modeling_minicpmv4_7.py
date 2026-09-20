@@ -779,14 +779,16 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
 
     @staticmethod
-    def _frame_end_idx(frame: dict, input_ids: list[int], markers: tuple[int, ...], limit: int) -> int:
+    def _frame_end_idx(last_crop_end_idx: int, input_ids: list[int], markers: tuple[int, ...], limit: int) -> int:
         """End of a frame's span, including the ``</image>``/``</slice>`` markers that close it."""
-        end_idx = frame["slices"][-1][1] if frame["slices"] else frame["thumbnail"][1]
+        end_idx = last_crop_end_idx
         while end_idx < limit and input_ids[end_idx] in markers:
             end_idx += 1
         return end_idx
 
-    def _group_visual_frames(self, input_ids: list[int], mm_token_type_ids: list[int]) -> list[dict]:
+    def _group_visual_frames(
+        self, input_ids: list[int], mm_token_type_ids: list[int]
+    ) -> list[tuple[int, int, list[tuple[int, int, int, int, list[tuple[int, int]]]]]]:
         """Split one sequence into visual groups, each a list of ``thumbnail + slices`` frames.
 
         The canvas is described by three nested spans, group -> frame -> slice:
@@ -809,13 +811,14 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             mm_token_type_ids: `(seq_len,)` modality label per token (0 text, 1 image, 2 video).
 
         Returns:
-            One dict per visual group, in sequence order, each holding the span indices the caller
-            needs so that it never has to rescan `input_ids` itself:
-            - `start_idx`: index of the `<image>` marker opening the group.
-            - `end_idx`: index one past the last marker closing the group.
-            - `frames`: the group's frames, each `{"thumbnail", "slices", "modality", "end_idx"}` where
-              `thumbnail` and every entry of `slices` is a `(start_idx, end_idx)` pair and `end_idx` is
-              one past the markers that close that frame.
+            One tuple per visual group, in sequence order, holding the span indices the caller needs so
+            that it never has to rescan `input_ids` itself:
+            `(group_start_idx, group_end_idx, frames)`, where `group_start_idx` is the index of the
+            `<image>` marker opening the group, `group_end_idx` is one past the last marker closing it
+            and `frames` lists the group's frames as
+            `(modality, thumbnail_start_idx, thumbnail_end_idx, frame_end_idx, slices)`. `slices` holds
+            one `(start_idx, end_idx)` pair per detail crop and `frame_end_idx` is one past the markers
+            that close that frame.
         """
         # `<slice>` comes first by convention: it is the only marker that has to be read on its own, to
         # tell a detail slice from the thumbnail that opens a new frame.
@@ -830,6 +833,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
 
         seq_len = len(input_ids)
         groups = []
+        open_slices = None
         previous_end_idx = 0
         for modality, run in itertools.groupby(enumerate(mm_token_type_ids), lambda item: item[1]):
             if modality == 0:
@@ -837,24 +841,36 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             run = list(run)
             crop = (run[0][0], run[-1][0] + 1)
 
-            if groups and input_ids[crop[0] - 1] == slice_start_id:
-                groups[-1]["frames"][-1]["slices"].append(crop)
+            if open_slices is not None and input_ids[crop[0] - 1] == slice_start_id:
+                open_slices.append(crop)
             else:
-                frame = {"thumbnail": crop, "slices": [], "modality": modality}
+                # A frame is collected without its end index, which is only known once the whole
+                # sequence has been walked; the second pass below fills it in.
+                open_slices = []
+                frame = (modality, crop[0], crop[1], open_slices)
                 gap = input_ids[previous_end_idx : crop[0] - 1]
                 adjacent = bool(groups) and all(token_id in markers for token_id in gap)
                 if adjacent:
-                    groups[-1]["frames"].append(frame)
+                    groups[-1][1].append(frame)
                 else:
-                    groups.append({"start_idx": crop[0] - 1, "frames": [frame]})
+                    groups.append((crop[0] - 1, [frame]))
             previous_end_idx = crop[1]
 
-        for group in groups:
-            # A frame's end is only known once the whole sequence has been walked, hence the second pass.
-            for frame in group["frames"]:
-                frame["end_idx"] = self._frame_end_idx(frame, input_ids, markers, seq_len)
-            group["end_idx"] = group["frames"][-1]["end_idx"]
-        return groups
+        visual_groups = []
+        for group_start_idx, frames in groups:
+            frames = [
+                (
+                    modality,
+                    thumb_start_idx,
+                    thumb_end_idx,
+                    self._frame_end_idx(slices[-1][1] if slices else thumb_end_idx, input_ids, markers, seq_len),
+                    slices,
+                )
+                for modality, thumb_start_idx, thumb_end_idx, slices in frames
+            ]
+            group_end_idx = frames[-1][3]
+            visual_groups.append((group_start_idx, group_end_idx, frames))
+        return visual_groups
 
     def get_vision_position_ids(
         self,
@@ -986,10 +1002,9 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
 
             current_pos = 0
             current_idx = 0
-            for group in self._group_visual_frames(current_input_ids, current_mm_token_type_ids):
-                group_start_idx = group["start_idx"]
-                group_end_idx = group["end_idx"]
-
+            for group_start_idx, group_end_idx, frames in self._group_visual_frames(
+                current_input_ids, current_mm_token_type_ids
+            ):
                 # Text in front of the group is plain 1-D.
                 if group_start_idx > current_idx:
                     text_len = group_start_idx - current_idx
@@ -999,10 +1014,8 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                     current_pos += text_len
 
                 frame_cursor_idx = group_start_idx
-                for frame in group["frames"]:
-                    thumb_start_idx, thumb_end_idx = frame["thumbnail"]
-                    slices = frame["slices"]
-                    target_sizes_thumb = next(grid_iters[frame["modality"]])
+                for modality, thumb_start_idx, thumb_end_idx, frame_end_idx, slices in frames:
+                    target_sizes_thumb = next(grid_iters[modality])
                     frame_start_idx = thumb_start_idx - 1
 
                     # Tokens between two frames of a clip are 1-D text; the extra step afterwards keeps the
@@ -1014,7 +1027,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                         )
                         current_pos += gap_len + 1
 
-                    frame_end_idx = min(frame["end_idx"], group_end_idx)
+                    frame_end_idx = min(frame_end_idx, group_end_idx)
                     canvas_origin = current_pos
                     halo_before_canvas = max(canvas_origin - 1, 0)
 
@@ -1033,7 +1046,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                         num_rows = len(slices) // num_cols if num_cols > 0 else 1
                         if num_rows * num_cols != len(slices):
                             num_rows, num_cols = 1, len(slices)
-                        target_sizes_first_slice = next(grid_iters[frame["modality"]])
+                        target_sizes_first_slice = next(grid_iters[modality])
                         llm_slice_h = target_sizes_first_slice[0] // merge_factor
                         llm_slice_w = target_sizes_first_slice[1] // merge_factor
                         canvas_height = num_rows * llm_slice_h
@@ -1065,9 +1078,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                         h_off = (k // num_cols) * llm_slice_h
                         w_off = (k % num_cols) * llm_slice_w
 
-                        target_sizes_slice = (
-                            target_sizes_first_slice if k == 0 else next(grid_iters[frame["modality"]])
-                        )
+                        target_sizes_slice = target_sizes_first_slice if k == 0 else next(grid_iters[modality])
                         slice_h = target_sizes_slice[0] // merge_factor
                         slice_w = target_sizes_slice[1] // merge_factor
 
@@ -1371,4 +1382,9 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         return text_positions
 
 
-__all__ = ["MiniCPMV4_7PreTrainedModel", "MiniCPMV4_7Model", "MiniCPMV4_7ForConditionalGeneration"]
+__all__ = [
+    "MiniCPMV4_7PreTrainedModel",
+    "MiniCPMV4_7VisionModel",
+    "MiniCPMV4_7Model",
+    "MiniCPMV4_7ForConditionalGeneration",
+]

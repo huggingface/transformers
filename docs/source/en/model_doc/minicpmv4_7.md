@@ -199,6 +199,11 @@ If you already have the rendered prompt string, you can call `processor(text=...
 
 [[autodoc]] MiniCPMV4_7VisionConfig
 
+## MiniCPMV4_7VisionModel
+
+[[autodoc]] MiniCPMV4_7VisionModel
+    - forward
+
 ## MiniCPMV4_7Model
 
 [[autodoc]] MiniCPMV4_7Model

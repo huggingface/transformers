@@ -321,24 +321,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_get_video_features_hidden_states(self):
         pass
 
-    @unittest.skip(
-        "MiniCPM-V generate creates vision-aware embeddings via _build_vlm_inputs; "
-        "text-only get_input_embeddings bypass produces different outputs"
-    )
-    def test_generate_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Same as test_generate_from_inputs_embeds: vision-aware vs text-only embeddings mismatch")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "Manual left-padding in test does not adjust image_bound offsets, "
-        "causing vision features to be placed at wrong positions"
-    )
-    def test_left_padding_compatibility(self):
-        pass
-
     @unittest.skip(reason="Batch splitting in compile test incompatible with list-of-list pixel_values")
     @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward_fullgraph(self):
