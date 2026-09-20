@@ -1967,6 +1967,11 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
                 (self.config.attention_context_left - 1, self.config.attention_context_right)
             ),
         )
+        # `create_bidirectional_mask` returns a float additive mask (0 = keep, large negative = masked)
+        # under eager attention, while `Gemma4AudioAttention` and `_convert_4d_mask_to_blocked_5d`
+        # expect a bool keep-mask. Normalize to bool (True = keep) before consuming it.
+        if attention_mask is not None and attention_mask.dtype != torch.bool:
+            attention_mask = attention_mask == 0
         if attention_mask is not None:
             attention_mask = self._convert_4d_mask_to_blocked_5d(attention_mask)
 
