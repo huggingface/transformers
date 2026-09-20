@@ -103,7 +103,7 @@ class PegasusTokenizer(TokenizersBackend):
 
         self._vocab = vocab
         self._tokenizer = Tokenizer(Unigram(vocab=vocab, unk_id=self._vocab.index((str(unk_token), 0.0), 1)))
-        if _spm_precompiled_charsmap is not None:
+        if _spm_precompiled_charsmap:
             self._tokenizer.normalizer = normalizers.Sequence(
                 [normalizers.Precompiled(_spm_precompiled_charsmap), normalizers.Replace(Regex(r" {2,}"), " ")]
             )

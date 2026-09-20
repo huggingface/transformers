@@ -133,7 +133,7 @@ class AlbertTokenizer(TokenizersBackend):
         if self.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
 
-        if _spm_precompiled_charsmap is not None:
+        if _spm_precompiled_charsmap:
             list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 

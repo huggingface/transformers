@@ -129,7 +129,7 @@ class CamembertTokenizer(TokenizersBackend):
             ]
             self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
-        if _spm_precompiled_charsmap is not None:
+        if _spm_precompiled_charsmap:
             self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         prepend_scheme = "always" if add_prefix_space else "never"

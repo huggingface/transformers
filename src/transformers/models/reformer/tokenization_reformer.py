@@ -91,7 +91,7 @@ class ReformerTokenizer(TokenizersBackend):
             )
         )
 
-        if _spm_precompiled_charsmap is not None:
+        if _spm_precompiled_charsmap:
             self._tokenizer.normalizer = normalizers.Sequence(
                 [
                     normalizers.Precompiled(_spm_precompiled_charsmap),
