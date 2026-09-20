@@ -29,6 +29,7 @@ Requires `slack_sdk`, which `utils/notification_service` imports at module level
 
 import argparse
 import json
+import os
 import re
 import sys
 import tempfile
@@ -90,7 +91,9 @@ TRIAGE_RULES = [
 ]
 UNTRIAGED = "needs triage"
 
-DEFAULT_REPO_ID = "hf-gcp-tpu-internal/transformers_daily_ci"
+# The dataset the results are uploaded to is named by `--repo-id` (or `RESULTS_REPO_ID`), never
+# hardcoded: which one a run publishes to is deployment configuration, not part of this script.
+RESULTS_REPO_ID_ENV = "RESULTS_REPO_ID"
 RESULTS_FOLDER = "ci_results_run_models_gpu"
 
 
@@ -329,7 +332,11 @@ def main() -> None:
         "it has no report for at all. `IMPORTANT_MODELS` for the shared list, empty to not check.",
     )
     parser.add_argument("--upload", action="store_true", help="also upload the results to the dataset repo")
-    parser.add_argument("--repo-id", default=DEFAULT_REPO_ID, help="dataset repo to upload to")
+    parser.add_argument(
+        "--repo-id",
+        default=os.environ.get(RESULTS_REPO_ID_ENV),
+        help=f"dataset repo to upload to, defaults to ${RESULTS_REPO_ID_ENV}",
+    )
     parser.add_argument("--date", default=None, help="date folder to upload under, defaults to today (UTC)")
     parser.add_argument("--self-check", action="store_true", help="check the parsing against a synthetic report dir")
     args = parser.parse_args()
@@ -355,6 +362,8 @@ def main() -> None:
         print(f"Wrote the summary to {args.summary}")
 
     if args.upload:
+        if not args.repo_id:
+            raise SystemExit(f"--upload needs a dataset repo: pass --repo-id or set ${RESULTS_REPO_ID_ENV}")
         upload(args.output, args.repo_id, args.date or datetime.now(timezone.utc).strftime("%Y-%m-%d"))
 
 
