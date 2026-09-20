@@ -87,87 +87,6 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     newline_id: int | None = None
 
 
-def _crop_end(crop, input_ids: torch.LongTensor, structural_ids: set, limit: int) -> int:
-    """End of a frame's span, including the ``</image>``/``</slice>`` markers that close it."""
-    end = crop["slices"][-1][1] if crop["slices"] else crop["thumbnail"][1]
-    while end < limit and input_ids[end].item() in structural_ids:
-        end += 1
-    return end
-
-
-def _group_visual_frames(
-    input_ids: torch.LongTensor, mm_token_type_ids: torch.IntTensor, special_token_ids: dict
-) -> list[dict]:
-    """Split one sequence into visual groups, each a list of ``thumbnail + slices`` frames.
-
-    ``mm_token_type_ids`` labels every token with its modality (``0`` text, ``1`` image, ``2``
-    video), so each maximal non-text run is exactly one crop. A crop is a slice when ``<slice>``
-    sits in front of it, otherwise it opens a new frame and adopts the slices that follow.
-
-    Frames separated by nothing but markers and newlines -- how a clip emits its frames, and how a
-    picture can end up sitting right against one -- share a group. Grouping them matters: the next
-    frame then starts one step past the tokens in between, so its halo cannot land on the last of
-    them.
-
-    Args:
-        input_ids: `(seq_len,)` token ids of one unpadded sequence.
-        mm_token_type_ids: `(seq_len,)` modality label per token (0 text, 1 image, 2 video).
-        special_token_ids: The five canvas marker ids, keyed by `im_start_id`, `im_end_id`,
-            `slice_start_id`, `slice_end_id` and `newline_id`.
-
-    Returns:
-        One dict per visual group, in sequence order, each holding the span indices the caller
-        needs so that it never has to rescan `input_ids` itself:
-        - `start`: index of the `<image>` marker opening the group.
-        - `end`: index one past the last marker closing the group.
-        - `frames`: the group's frames, each `{"thumbnail", "slices", "modality", "end"}` where
-          `thumbnail` and every entry of `slices` is a `(start, end, crop_index)` triple and
-          `end` is one past the markers that close that frame.
-    """
-    slice_start_id = special_token_ids["slice_start_id"]
-    structural_ids = set(special_token_ids.values())
-    gap_ids = torch.tensor(
-        [
-            special_token_ids["im_start_id"],
-            special_token_ids["im_end_id"],
-            slice_start_id,
-            special_token_ids["slice_end_id"],
-            special_token_ids["newline_id"],
-        ],
-        dtype=input_ids.dtype,
-        device=input_ids.device,
-    )
-
-    seq_len = input_ids.shape[0]
-    groups = []
-    crop_index = 0
-    previous_end = 0
-    for modality, run in itertools.groupby(enumerate(mm_token_type_ids.tolist()), lambda item: item[1]):
-        if modality == 0:
-            continue
-        run = list(run)
-        crop = (run[0][0], run[-1][0] + 1, crop_index)
-        crop_index += 1
-
-        if groups and input_ids[crop[0] - 1].item() == slice_start_id:
-            groups[-1]["frames"][-1]["slices"].append(crop)
-        else:
-            frame = {"thumbnail": crop, "slices": [], "modality": modality}
-            gap = input_ids[previous_end : crop[0] - 1]
-            adjacent = bool(groups) and bool(torch.isin(gap, gap_ids).all())
-            if adjacent:
-                groups[-1]["frames"].append(frame)
-            else:
-                groups.append({"start": crop[0] - 1, "frames": [frame]})
-        previous_end = crop[1]
-
-    for group in groups:
-        for frame in group["frames"]:
-            frame["end"] = _crop_end(frame, input_ids, structural_ids, seq_len)
-        group["end"] = group["frames"][-1]["end"]
-    return groups
-
-
 class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
     def forward(
         self,
@@ -220,6 +139,84 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         super().__init__(config)
         self.rope_deltas = None
 
+    @staticmethod
+    def _frame_end_idx(frame: dict, input_ids: list[int], markers: tuple[int, ...], limit: int) -> int:
+        """End of a frame's span, including the ``</image>``/``</slice>`` markers that close it."""
+        end_idx = frame["slices"][-1][1] if frame["slices"] else frame["thumbnail"][1]
+        while end_idx < limit and input_ids[end_idx] in markers:
+            end_idx += 1
+        return end_idx
+
+    def _group_visual_frames(self, input_ids: list[int], mm_token_type_ids: list[int]) -> list[dict]:
+        """Split one sequence into visual groups, each a list of ``thumbnail + slices`` frames.
+
+        The canvas is described by three nested spans, group -> frame -> slice:
+        - a **slice** is one detail crop, the `<slice>`/`</slice>` pair around it pinning its corners;
+        - a **frame** is one picture or one video frame: a thumbnail, optionally followed by the slices
+          that tile it at higher resolution, the whole thing wrapped in `<image>`/`</image>`;
+        - a **group** is a run of frames that only markers separate, so they share one canvas budget.
+
+        ``mm_token_type_ids`` labels every token with its modality (``0`` text, ``1`` image, ``2``
+        video), so each maximal non-text run is exactly one crop. A crop is a slice when ``<slice>``
+        sits in front of it, otherwise it opens a new frame and adopts the slices that follow.
+
+        Frames separated by nothing but markers and newlines -- how a clip emits its frames, and how a
+        picture can end up sitting right against one -- share a group. Grouping them matters: the next
+        frame then starts one step past the tokens in between, so its halo cannot land on the last of
+        them.
+
+        Args:
+            input_ids: `(seq_len,)` token ids of one unpadded sequence.
+            mm_token_type_ids: `(seq_len,)` modality label per token (0 text, 1 image, 2 video).
+
+        Returns:
+            One dict per visual group, in sequence order, each holding the span indices the caller
+            needs so that it never has to rescan `input_ids` itself:
+            - `start_idx`: index of the `<image>` marker opening the group.
+            - `end_idx`: index one past the last marker closing the group.
+            - `frames`: the group's frames, each `{"thumbnail", "slices", "modality", "end_idx"}` where
+              `thumbnail` and every entry of `slices` is a `(start_idx, end_idx)` pair and `end_idx` is
+              one past the markers that close that frame.
+        """
+        # `<slice>` comes first by convention: it is the only marker that has to be read on its own, to
+        # tell a detail slice from the thumbnail that opens a new frame.
+        markers = (
+            self.config.slice_start_id,
+            self.config.slice_end_id,
+            self.config.image_start_id,
+            self.config.image_end_id,
+            self.config.newline_id,
+        )
+        slice_start_id = markers[0]
+
+        seq_len = len(input_ids)
+        groups = []
+        previous_end_idx = 0
+        for modality, run in itertools.groupby(enumerate(mm_token_type_ids), lambda item: item[1]):
+            if modality == 0:
+                continue
+            run = list(run)
+            crop = (run[0][0], run[-1][0] + 1)
+
+            if groups and input_ids[crop[0] - 1] == slice_start_id:
+                groups[-1]["frames"][-1]["slices"].append(crop)
+            else:
+                frame = {"thumbnail": crop, "slices": [], "modality": modality}
+                gap = input_ids[previous_end_idx : crop[0] - 1]
+                adjacent = bool(groups) and all(token_id in markers for token_id in gap)
+                if adjacent:
+                    groups[-1]["frames"].append(frame)
+                else:
+                    groups.append({"start_idx": crop[0] - 1, "frames": [frame]})
+            previous_end_idx = crop[1]
+
+        for group in groups:
+            # A frame's end is only known once the whole sequence has been walked, hence the second pass.
+            for frame in group["frames"]:
+                frame["end_idx"] = self._frame_end_idx(frame, input_ids, markers, seq_len)
+            group["end_idx"] = group["frames"][-1]["end_idx"]
+        return groups
+
     def get_vision_position_ids(
         self,
         start_position: int,
@@ -263,8 +260,8 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
             `torch.Tensor`: `(3, llm_grid_h * llm_grid_w)` position ids `[T, H, W]`, row-major over
             this crop's LLM tokens.
         """
-        llm_grid_h = grid_thw[0].item() // spatial_merge_size
-        llm_grid_w = grid_thw[1].item() // spatial_merge_size
+        llm_grid_h = int(grid_thw[0]) // spatial_merge_size
+        llm_grid_w = int(grid_thw[1]) // spatial_merge_size
 
         canvas_height = canvas_height or llm_grid_h
         canvas_width = canvas_width or llm_grid_w
@@ -320,20 +317,15 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         # with, so it has to follow the per-call override the vision tower is given, not the config.
         downsample_mode = downsample_mode or self.config.downsample_mode
         merge_factor = 2 if downsample_mode == "4x" else 4
-        special_token_ids = {
-            "im_start_id": self.config.image_start_id,
-            "im_end_id": self.config.image_end_id,
-            "slice_start_id": self.config.slice_start_id,
-            "slice_end_id": self.config.slice_end_id,
-            "newline_id": self.config.newline_id,
-        }
 
         device = input_ids.device
         position_ids = torch.zeros(3, *input_ids.size(), dtype=torch.long, device=input_ids.device)
 
+        # The grids drive nothing but python-level arithmetic here, so they are read out once instead
+        # of being `.item()`-ed crop by crop.
         grid_iters = {
-            1: iter(target_sizes) if target_sizes is not None else None,
-            2: iter(target_sizes_videos) if target_sizes_videos is not None else None,
+            1: iter(target_sizes.tolist()) if target_sizes is not None else None,
+            2: iter(target_sizes_videos.tolist()) if target_sizes_videos is not None else None,
         }
 
         for batch_idx in range(input_ids.shape[0]):
@@ -347,48 +339,50 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
                 # Nothing to unpad, so the canvas is scattered back over the whole row.
                 valid_mask = slice(None)
 
-            seq_len = current_input_ids.shape[0]
+            current_input_ids = current_input_ids.tolist()
+            current_mm_token_type_ids = current_mm_token_type_ids.tolist()
+
+            seq_len = len(current_input_ids)
             curr_position_ids = torch.arange(seq_len, device=device, dtype=torch.long).expand(3, -1).clone()
 
             current_pos = 0
-            current_cursor = 0
-            for group in _group_visual_frames(current_input_ids, current_mm_token_type_ids, special_token_ids):
-                frames = group["frames"]
-                group_start = group["start"]
-                group_end = group["end"]
+            current_idx = 0
+            for group in self._group_visual_frames(current_input_ids, current_mm_token_type_ids):
+                group_start_idx = group["start_idx"]
+                group_end_idx = group["end_idx"]
 
                 # Text in front of the group is plain 1-D.
-                if group_start > current_cursor:
-                    text_len = group_start - current_cursor
-                    curr_position_ids[:, current_cursor:group_start] = (
+                if group_start_idx > current_idx:
+                    text_len = group_start_idx - current_idx
+                    curr_position_ids[:, current_idx:group_start_idx] = (
                         torch.arange(text_len, device=device) + current_pos
                     )
                     current_pos += text_len
 
-                frame_cursor = group_start
-                for frame in frames:
-                    thumb_start, thumb_end, thumb_index = frame["thumbnail"]
+                frame_cursor_idx = group_start_idx
+                for frame in group["frames"]:
+                    thumb_start_idx, thumb_end_idx = frame["thumbnail"]
                     slices = frame["slices"]
                     target_sizes_thumb = next(grid_iters[frame["modality"]])
-                    frame_start = thumb_start - 1
+                    frame_start_idx = thumb_start_idx - 1
 
                     # Tokens between two frames of a clip are 1-D text; the extra step afterwards keeps the
                     # next frame's halo from landing on the last of them.
-                    if frame_start > frame_cursor:
-                        gap_len = frame_start - frame_cursor
-                        curr_position_ids[:, frame_cursor:frame_start] = (
+                    if frame_start_idx > frame_cursor_idx:
+                        gap_len = frame_start_idx - frame_cursor_idx
+                        curr_position_ids[:, frame_cursor_idx:frame_start_idx] = (
                             torch.arange(gap_len, device=device) + current_pos
                         )
                         current_pos += gap_len + 1
 
-                    frame_end = min(frame["end"], group_end)
+                    frame_end_idx = min(frame["end_idx"], group_end_idx)
                     canvas_origin = current_pos
                     halo_before_canvas = max(canvas_origin - 1, 0)
 
                     llm_slice_h, llm_slice_w = 0, 0
                     num_rows, num_cols = 0, 0
-                    canvas_height = target_sizes_thumb[0].item() // merge_factor
-                    canvas_width = target_sizes_thumb[1].item() // merge_factor
+                    canvas_height = target_sizes_thumb[0] // merge_factor
+                    canvas_width = target_sizes_thumb[1] // merge_factor
                     if slices:
                         # Slices are laid out row-major; a gap wider than the two `</slice><slice>` markers
                         # is the newline that ends a row and therefore fixes the column count.
@@ -401,25 +395,24 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
                         if num_rows * num_cols != len(slices):
                             num_rows, num_cols = 1, len(slices)
                         target_sizes_first_slice = next(grid_iters[frame["modality"]])
-                        llm_slice_h = target_sizes_first_slice[0].item() // merge_factor
-                        llm_slice_w = target_sizes_first_slice[1].item() // merge_factor
+                        llm_slice_h = target_sizes_first_slice[0] // merge_factor
+                        llm_slice_w = target_sizes_first_slice[1] // merge_factor
                         canvas_height = num_rows * llm_slice_h
                         canvas_width = num_cols * llm_slice_w
 
                     # Base coat for the whole frame, then `<image>` -> halo just outside the canvas.
-                    curr_position_ids[:, frame_start:frame_end] = canvas_origin
-                    curr_position_ids[1:, frame_start] = halo_before_canvas
+                    curr_position_ids[:, frame_start_idx:frame_end_idx] = canvas_origin
+                    curr_position_ids[1:, frame_start_idx] = halo_before_canvas
 
                     # `</image>` closes the thumbnail on the far corner of the canvas.
-                    image_end_pos = thumb_end
-                    if image_end_pos < frame_end:
-                        curr_position_ids[1, image_end_pos] = canvas_origin + canvas_height
-                        curr_position_ids[2, image_end_pos] = canvas_origin + canvas_width
+                    if thumb_end_idx < frame_end_idx:
+                        curr_position_ids[1, thumb_end_idx] = canvas_origin + canvas_height
+                        curr_position_ids[2, thumb_end_idx] = canvas_origin + canvas_width
 
                     # Thumbnail tokens. With slices around, the thumbnail is stretched over the full canvas
                     # so that it stays aligned with the detail crops underneath it. Without slices the canvas
                     # is the thumbnail grid itself and `linspace` degenerates to `arange`.
-                    curr_position_ids[:, thumb_start:thumb_end] = self.get_vision_position_ids(
+                    curr_position_ids[:, thumb_start_idx:thumb_end_idx] = self.get_vision_position_ids(
                         start_position=canvas_origin,
                         grid_thw=target_sizes_thumb,
                         canvas_height=canvas_height,
@@ -429,29 +422,27 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
                     )
 
                     # Slice tokens plus the `<slice>`/`</slice>` markers that pin each crop's corners.
-                    for k, (slice_start, slice_end, slice_index) in enumerate(slices):
+                    for k, (slice_start_idx, slice_end_idx) in enumerate(slices):
                         h_off = (k // num_cols) * llm_slice_h
                         w_off = (k % num_cols) * llm_slice_w
 
-                        if k > 0:
-                            target_sizes = next(grid_iters[frame["modality"]])
-                        else:
-                            target_sizes = target_sizes_first_slice
+                        target_sizes_slice = (
+                            target_sizes_first_slice if k == 0 else next(grid_iters[frame["modality"]])
+                        )
+                        slice_h = target_sizes_slice[0] // merge_factor
+                        slice_w = target_sizes_slice[1] // merge_factor
 
-                        slice_h = target_sizes[0].item() // merge_factor
-                        slice_w = target_sizes[1].item() // merge_factor
-                        slice_start_pos = slice_start - 1
-                        if slice_start_pos >= frame_start:
-                            curr_position_ids[1, slice_start_pos] = canvas_origin + h_off
-                            curr_position_ids[2, slice_start_pos] = canvas_origin + w_off
-                        slice_end_pos = slice_end
-                        if slice_end_pos < frame_end:
-                            curr_position_ids[1, slice_end_pos] = canvas_origin + h_off + slice_h - 1
-                            curr_position_ids[2, slice_end_pos] = canvas_origin + w_off + slice_w - 1
+                        slice_start_marker_idx = slice_start_idx - 1
+                        if slice_start_marker_idx >= frame_start_idx:
+                            curr_position_ids[1, slice_start_marker_idx] = canvas_origin + h_off
+                            curr_position_ids[2, slice_start_marker_idx] = canvas_origin + w_off
+                        if slice_end_idx < frame_end_idx:
+                            curr_position_ids[1, slice_end_idx] = canvas_origin + h_off + slice_h - 1
+                            curr_position_ids[2, slice_end_idx] = canvas_origin + w_off + slice_w - 1
 
-                        curr_position_ids[:, slice_start:slice_end] = self.get_vision_position_ids(
+                        curr_position_ids[:, slice_start_idx:slice_end_idx] = self.get_vision_position_ids(
                             start_position=canvas_origin,
-                            grid_thw=target_sizes,
+                            grid_thw=target_sizes_slice,
                             h_offset=h_off,
                             w_offset=w_off,
                             spatial_merge_size=merge_factor,
@@ -460,27 +451,29 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
 
                     # The "\n" that ends a row of slices sits just past the right edge of that row.
                     for k in range(len(slices) - 1):
-                        gap_start, gap_end = slices[k][1], slices[k + 1][0]
-                        if gap_end - gap_start <= 2:
+                        gap_start_idx, gap_end_idx = slices[k][1], slices[k + 1][0]
+                        if gap_end_idx - gap_start_idx <= 2:
                             continue
                         boundary_h = (k // num_cols + 1) * llm_slice_h - 1
                         right_edge_w = num_cols * llm_slice_w
-                        for newline_pos in range(gap_start + 1, gap_end - 1):
-                            curr_position_ids[1, newline_pos] = canvas_origin + boundary_h
-                            curr_position_ids[2, newline_pos] = canvas_origin + right_edge_w
+                        for newline_idx in range(gap_start_idx + 1, gap_end_idx - 1):
+                            curr_position_ids[1, newline_idx] = canvas_origin + boundary_h
+                            curr_position_ids[2, newline_idx] = canvas_origin + right_edge_w
 
                     current_pos = canvas_origin + max(canvas_height, canvas_width) + 1
-                    frame_cursor = frame_end
+                    frame_cursor_idx = frame_end_idx
 
-                if frame_cursor < group_end:
-                    trail_len = group_end - frame_cursor
-                    curr_position_ids[:, frame_cursor:group_end] = torch.arange(trail_len, device=device) + current_pos
+                if frame_cursor_idx < group_end_idx:
+                    trail_len = group_end_idx - frame_cursor_idx
+                    curr_position_ids[:, frame_cursor_idx:group_end_idx] = (
+                        torch.arange(trail_len, device=device) + current_pos
+                    )
                     current_pos += trail_len
-                current_cursor = group_end
+                current_idx = group_end_idx
 
-            if current_cursor < seq_len:
-                curr_position_ids[:, current_cursor:seq_len] = (
-                    torch.arange(seq_len - current_cursor, device=device) + current_pos
+            if current_idx < seq_len:
+                curr_position_ids[:, current_idx:seq_len] = (
+                    torch.arange(seq_len - current_idx, device=device) + current_pos
                 )
             position_ids[:, batch_idx, valid_mask] = curr_position_ids
 
@@ -582,6 +575,9 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
+            # Pixels are always `1` in first dim due to NaViT packing, and we don't
+            # want to waste compute processing the same image `num_beams` times. Hack until
+            # @raushan adds support for encoding images once same way as in enc-dec models
             num_beams = pixel_values.shape[0]
             vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
             image_features = (
@@ -644,6 +640,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -675,7 +672,10 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -733,19 +733,16 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         input_ids: torch.LongTensor | None = None,
+        target_sizes: torch.LongTensor | None = None,
+        target_sizes_videos: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # `target_sizes*` are indexed by crop, not by batch item, so they must sit out the dim-0
-        # `repeat_interleave` that `super()` applies to every tensor in `model_kwargs`. Note that
-        # `mm_token_type_ids` is deliberately *not* saved here: it is `(batch, seq)`, so the default
-        # dim-0 expansion is exactly what it needs.
-        ts_keys = ("target_sizes", "target_sizes_videos")
-        saved = {k: model_kwargs.pop(k) for k in ts_keys if model_kwargs.get(k) is not None}
-
-        expanded_position_ids = None
-        if (pos := model_kwargs.get("position_ids")) is not None and pos.ndim == 3:
-            expanded_position_ids = model_kwargs.pop("position_ids").repeat_interleave(expand_size, dim=1)
-
+        # Taking these as explicit arguments keeps them out of the dim-0 `repeat_interleave` that
+        # `super()` applies to every tensor left in `model_kwargs`: `target_sizes*` are indexed by
+        # crop instead of by batch item, and canvas M-RoPE position ids are `(3, batch, seq)` so they
+        # expand along dim 1. Note that `mm_token_type_ids` is deliberately *not* listed here: it is
+        # `(batch, seq)`, so the default dim-0 expansion is exactly what it needs.
         input_ids, model_kwargs = super()._expand_inputs_for_generation(
             expand_size=expand_size,
             is_encoder_decoder=is_encoder_decoder,
@@ -753,9 +750,13 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             **model_kwargs,
         )
 
-        if expanded_position_ids is not None:
-            model_kwargs["position_ids"] = expanded_position_ids
-        model_kwargs.update(saved)
+        if target_sizes is not None:
+            model_kwargs["target_sizes"] = target_sizes
+        if target_sizes_videos is not None:
+            model_kwargs["target_sizes_videos"] = target_sizes_videos
+        if position_ids is not None:
+            batch_dim = 1 if position_ids.ndim == 3 else 0
+            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
         return input_ids, model_kwargs
 
 
