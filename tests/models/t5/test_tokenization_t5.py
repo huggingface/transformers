@@ -71,4 +71,3 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.save_pretrained(save_dir)
             reloaded = self.tokenizer_class.from_pretrained(str(save_dir))
             self.assertEqual(reloaded("hello world")["input_ids"], encoded["input_ids"])
-
