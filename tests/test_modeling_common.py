@@ -86,6 +86,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_MAPPING_NAMES,
 )
 from transformers.testing_utils import (
+    NO_CTC_LOSS_DEVICES,
     CaptureLogger,
     force_serialization_as_bin_files,
     get_device_properties,
@@ -782,6 +783,10 @@ class ModelTesterMixin(ExportTesterMixin):
             inputs_dict["noise"] = torch.rand(self.model_tester.batch_size, num_windows)
 
         if return_labels:
+            # A CTC model computes its loss with `torch.nn.functional.ctc_loss`, which does not work
+            # on every backend, so skip rather than hand it labels.
+            if model_class.__name__ in get_values(MODEL_FOR_CTC_MAPPING_NAMES) and torch_device in NO_CTC_LOSS_DEVICES:
+                self.skipTest(f"`torch.nn.functional.ctc_loss` does not work on {torch_device}")
             if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
                 inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
             elif model_class.__name__ in [
