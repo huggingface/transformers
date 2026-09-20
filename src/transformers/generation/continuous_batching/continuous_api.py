@@ -821,9 +821,6 @@ class ContinuousBatchingManager:
         # We expect the batch processor to be initialized at this point. Warn otherwise.
         if self.batch_processor is None:
             logger.warning("\nBatch processor was not initialized.")
-        device_module = None
-        if self.model.device.type in ("cuda", "xpu"):
-            device_module = get_torch_device_module(self.model.device)
 
         # If the manager is not started, warn and return.
         if self._generation_thread is None:
@@ -864,6 +861,15 @@ class ContinuousBatchingManager:
 
         # In all cases, a little cleanup is good
         gc.collect()
+        device_module = None
+        model = getattr(self, "model", None)
+        if model is not None:
+            if model.device.type in ("cuda", "xpu"):
+                device_module = get_torch_device_module(model.device)
+        elif torch.cuda.is_available():
+            device_module = torch.cuda
+        elif hasattr(torch, "xpu") and torch.xpu.is_available():
+            device_module = torch.xpu
         if device_module is not None and device_module.is_available():
             device_module.empty_cache()
 
