@@ -14,12 +14,33 @@
 
 import hashlib
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from transformers import dynamic_module_utils
 from transformers.dynamic_module_utils import get_cached_module_file, get_imports
+
+
+def _can_create_symlinks() -> bool:
+    """Probe whether this process may create symlinks.
+
+    Windows requires elevated privileges or Developer Mode for ``os.symlink`` (WinError 1314
+    otherwise), so symlink-dependent tests must be skipped based on the actual capability.
+    """
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.symlink(os.path.join(tmpdir, "target"), os.path.join(tmpdir, "link"))
+    except OSError:
+        return False
+    return True
+
+
+requires_symlinks = pytest.mark.skipif(
+    not _can_create_symlinks(),
+    reason="creating symlinks requires elevated privileges (e.g. Windows without Developer Mode)",
+)
 
 
 TOP_LEVEL_IMPORT = """
@@ -235,6 +256,7 @@ def _build_symlinked_hub_cache(repo_root: Path, files: dict[str, str], revision:
     return snapshot
 
 
+@requires_symlinks
 def test_get_cached_module_file_local_handles_symlinked_hub_cache(monkeypatch, tmp_path):
     # In a real hub cache the snapshot files are symlinks into a content-addressed ``blobs/`` dir,
     # so relative-import discovery must follow the named ``*.py`` symlinks in the snapshot dir rather

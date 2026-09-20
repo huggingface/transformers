@@ -23,6 +23,20 @@ from transformers import AutoTokenizer, BarkProcessor
 from transformers.testing_utils import require_torch, slow
 
 
+def _can_create_symlinks() -> bool:
+    """Probe whether this process may create symlinks.
+
+    Windows requires elevated privileges or Developer Mode for ``os.symlink`` (WinError 1314
+    otherwise), so symlink-dependent tests must be skipped based on the actual capability.
+    """
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.symlink(os.path.join(tmpdir, "target"), os.path.join(tmpdir, "link"))
+    except OSError:
+        return False
+    return True
+
+
 @require_torch
 class BarkProcessorTest(unittest.TestCase):
     def setUp(self):
@@ -181,6 +195,10 @@ class BarkProcessorTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 processor._load_voice_preset("evil")
 
+    @unittest.skipUnless(
+        _can_create_symlinks(),
+        "creating symlinks requires elevated privileges (e.g. Windows without Developer Mode)",
+    )
     def test_load_voice_preset_allows_symlinked_cache_files(self):
         # The path-traversal guard must be lexical, not symlink-resolving: the HF hub cache stores each
         # snapshot file as a symlink into a sibling `blobs/` dir (snapshots/<rev>/f -> ../../blobs/<sha>),
