@@ -13,7 +13,7 @@
 # limitations under the License.
 from functools import partial
 from itertools import repeat
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import torch
 

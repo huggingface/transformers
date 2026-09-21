@@ -13,7 +13,6 @@
 # limitations under the License.
 import time
 from collections.abc import Callable
-from typing import Any
 
 import torch
 from torch import nn
