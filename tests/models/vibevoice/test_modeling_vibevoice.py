@@ -14,6 +14,7 @@
 
 import copy
 import json
+import random
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -148,11 +149,11 @@ class VibeVoiceModelTester:
             audio_token_id=5,  # Instead of default 151654
         )
 
-    def prepare_config_and_inputs(self, batch_size=None, seq_length=None, audio_config=None):
+    def prepare_config_and_inputs(self, batch_size=None, seq_length=None, rng=None, audio_config=None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         seq_length = seq_length if seq_length is not None else self.seq_length
         config = self.get_config(audio_config=audio_config)
-        input_ids = ids_tensor([batch_size, seq_length], self.vocab_size)
+        input_ids = ids_tensor([batch_size, seq_length], self.vocab_size, rng=rng)
         attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=torch_device)
         return config, input_ids, attention_mask
 
@@ -351,6 +352,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs(
             batch_size=4,
             seq_length=4,
+            rng=random.Random(7),
             audio_config={
                 **self.model_tester.audio_config,
                 "layer_scale_init_value": 0.1,
@@ -369,6 +371,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs(
             batch_size=4,
             seq_length=4,
+            rng=random.Random(7),
             audio_config={
                 **self.model_tester.audio_config,
                 "layer_scale_init_value": 0.1,
