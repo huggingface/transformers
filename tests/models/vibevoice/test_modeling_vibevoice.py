@@ -135,10 +135,10 @@ class VibeVoiceModelTester:
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.pad_token_id = text_config["pad_token_id"]
 
-    def get_config(self):
+    def get_config(self, audio_config=None):
         return VibeVoiceConfig(
             text_config=self.text_config,
-            audio_config=self.audio_config,
+            audio_config=audio_config if audio_config is not None else self.audio_config,
             semantic_model_config=self.semantic_model_config,
             diffusion_head_config=self.diffusion_head_config,
             use_cache=self.use_cache,
@@ -149,10 +149,12 @@ class VibeVoiceModelTester:
             audio_token_id=5,  # Instead of default 151654
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
+    def prepare_config_and_inputs(self, batch_size=None, seq_length=None, rng=None, audio_config=None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        seq_length = seq_length if seq_length is not None else self.seq_length
+        config = self.get_config(audio_config=audio_config)
+        input_ids = ids_tensor([batch_size, seq_length], self.vocab_size, rng=rng)
+        attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=torch_device)
         return config, input_ids, attention_mask
 
     def prepare_config_and_inputs_for_common(self):
@@ -171,6 +173,50 @@ class VibeVoiceModelTester:
         # Check that the model returns expected outputs
         self.parent.assertIsNotNone(result.logits)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_batched_matches_single(self, config, input_ids, attention_mask, use_cache=True):
+        # Fixed weights, so that the decoded audio is reproducible across runs.
+        set_seed(7)
+        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device)
+
+        # No `min_new_tokens`: the rows have to be free to stop at different steps.
+        generate_kwargs = {
+            "noise_scheduler": DummyNoiseScheduler(),
+            "max_new_tokens": 20,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "guidance_scale": 1.3,
+            "num_diffusion_steps": 10,
+            "use_cache": use_cache,
+        }
+
+        # Initialize diffusion with same input for comparable outputs
+        def zeros_instead_of_randn(*args, **kwargs):
+            return torch.zeros(*args, **kwargs)
+
+        with patch("torch.randn", zeros_instead_of_randn):
+            batched = model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+            per_sample = [
+                model.generate(
+                    input_ids=input_ids[i : i + 1],
+                    attention_mask=attention_mask[i : i + 1],
+                    **generate_kwargs,
+                )
+                for i in range(input_ids.shape[0])
+            ]
+
+        for i, single in enumerate(per_sample):
+            self.parent.assertEqual(
+                batched.audio[i] is None,
+                single.audio[0] is None,
+                msg=f"Sequence {i}: batched and single-sample generation disagree on whether audio was produced",
+            )
+            if batched.audio[i] is not None:
+                torch.testing.assert_close(
+                    batched.audio[i],
+                    single.audio[0],
+                    msg=lambda m, i=i: f"Sequence {i} differs between batched and single-sample generation:\n{m}",
+                )
 
 
 class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -296,74 +342,43 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
 
-    def _check_batched_matches_single(self, use_cache):
+    @pytest.mark.generate
+    def test_batched_equivalence_with_cache(self):
         """
         Each decoded audio chunk must be attributed to the sequence that produced it, see
         https://github.com/huggingface/transformers/pull/48902.
         """
-        seed = 7
-        batch_size, seq_length = 4, 4
-
-        config = self.model_tester.get_config()
-        # Change config so the decoded audio is distinguishable between rows.
-        config.audio_config.layer_scale_init_value = 0.1
-        config.audio_config.initializer_range = 0.5
-        config.audio_config.weight_init_value = 0.5
-
-        input_ids = ids_tensor([batch_size, seq_length], self.model_tester.vocab_size, rng=random.Random(seed))
-        attention_mask = torch.ones_like(input_ids)
-
-        set_seed(seed)
-        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device).eval()
-
-        # No `min_new_tokens`: the rows have to be free to stop at different steps.
-        generate_kwargs = {
-            "noise_scheduler": DummyNoiseScheduler(),
-            "max_new_tokens": 20,
-            "do_sample": False,
-            "return_dict_in_generate": True,
-            "guidance_scale": 1.3,
-            "num_diffusion_steps": 10,
-            "use_cache": use_cache,
-        }
-
-        # Initialize diffusion with same input for comparable outputs
-        def zeros_instead_of_randn(*args, **kwargs):
-            return torch.zeros(*args, **kwargs)
-
-        with patch("torch.randn", zeros_instead_of_randn):
-            batched = model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
-            per_sample = [
-                model.generate(
-                    input_ids=input_ids[i : i + 1],
-                    attention_mask=attention_mask[i : i + 1],
-                    **generate_kwargs,
-                )
-                for i in range(input_ids.shape[0])
-            ]
-
-        for i, single in enumerate(per_sample):
-            self.assertEqual(
-                batched.audio[i] is None,
-                single.audio[0] is None,
-                msg=f"Sequence {i}: batched and single-sample generation disagree on whether audio was produced",
-            )
-            if batched.audio[i] is not None:
-                torch.testing.assert_close(
-                    batched.audio[i],
-                    single.audio[0],
-                    msg=lambda m, i=i: f"Sequence {i} differs between batched and single-sample generation:\n{m}",
-                )
-
-    @pytest.mark.generate
-    def test_batched_equivalence_with_cache(self):
-        """Verifies that batched generation matches individual generation."""
-        self._check_batched_matches_single(use_cache=True)
+        # Use different input settings to trigger different stopping times for each row, so that a wrong row/audio attribution is observable.
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            batch_size=4,
+            seq_length=4,
+            rng=random.Random(0),
+            audio_config={
+                **self.model_tester.audio_config,
+                "layer_scale_init_value": 0.1,
+                "initializer_range": 0.5,
+            },
+        )
+        self.model_tester.create_and_check_batched_matches_single(*config_and_inputs, use_cache=True)
 
     @pytest.mark.generate
     def test_batched_equivalence_without_cache(self):
-        """Verifies that batched generation matches individual generation, without cache."""
-        self._check_batched_matches_single(use_cache=False)
+        """
+        Each decoded audio chunk must be attributed to the sequence that produced it, see
+        https://github.com/huggingface/transformers/pull/48902.
+        """
+        # Use different input settings to trigger different stopping times for each row, so that a wrong row/audio attribution is observable.
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            batch_size=4,
+            seq_length=4,
+            rng=random.Random(0),
+            audio_config={
+                **self.model_tester.audio_config,
+                "layer_scale_init_value": 0.1,
+                "initializer_range": 0.5,
+            },
+        )
+        self.model_tester.create_and_check_batched_matches_single(*config_and_inputs, use_cache=False)
 
     @unittest.skip(reason="Vibevoice has a special cache format so skipping for now")
     def test_cached_decode_matches_cacheless(self):
