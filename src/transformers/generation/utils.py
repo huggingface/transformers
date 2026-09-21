@@ -3792,6 +3792,9 @@ class GenerationMixin(ContinuousMixin):
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
 
+        # Same tensor the stopping criteria are built from
+        eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
+
         # Make sure we can record past on the cache
         cache = model_kwargs.get("past_key_values")
         if cache is None:
@@ -3860,7 +3863,6 @@ class GenerationMixin(ContinuousMixin):
                 candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
-            is_done_candidate = stopping_criteria(candidate_input_ids, None)
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
@@ -3914,7 +3916,6 @@ class GenerationMixin(ContinuousMixin):
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    is_done_candidate,
                     assistant_ensemble_weight=assistant_ensemble_weight,
                 )
 
@@ -3939,18 +3940,23 @@ class GenerationMixin(ContinuousMixin):
 
                 candidate_new_tokens = candidate_input_ids[:, cur_len:]
                 n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
-
-                # Ensure we don't generate beyond max_len or an EOS token
-                if is_done_candidate and n_matches == candidate_length:
-                    n_matches -= 1
+                # Select all matching candidate tokens, + the new "bonus" token from the logits after the last validated token
                 valid_tokens = selected_tokens[:, : n_matches + 1]
 
-            # A partial acceptance plus the correction/bonus token can overshoot the length budget when the
-            # candidate generator does not cap its drafts (e.g. MTP always drafts `num_mtp_layers` tokens)
+            # Whenever we are drafting several tokens at once with the candidate without capping its draft (e.g. MTP), we need to
+            # make sure that we did not just validate tokens outside the max length, or outside an eos token
             tokens_budget = generation_config.max_length - input_ids.shape[1]
+            # This is for the max length
             if valid_tokens.shape[1] > tokens_budget:
                 valid_tokens = valid_tokens[:, :tokens_budget]
-                n_matches = valid_tokens.shape[1] - 1
+            # This is for eos tokens
+            if eos_token_id is not None:
+                eos_positions = torch.isin(valid_tokens, eos_token_id.to(valid_tokens.device)).nonzero()
+                if eos_positions.numel() > 0:
+                    num_drafted = eos_positions[0].item() + 1
+                    valid_tokens = valid_tokens[:, :num_drafted]
+            # Recompute how many matches we accepted if we just cropped above due to length/eos
+            n_matches = valid_tokens.shape[1] - 1
 
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
@@ -4166,7 +4172,6 @@ def _speculative_sampling(
     candidate_logits,
     candidate_length,
     new_logits,
-    is_done_candidate,
     assistant_ensemble_weight: float | None = None,
 ):
     """
@@ -4200,37 +4205,30 @@ def _speculative_sampling(
     is_accepted = r_i <= probability_ratio
     n_matches = ((~is_accepted).cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
 
-    # Ensure we don't generate beyond max_len or an EOS token (not in algorithm 1, but needed for correct behavior)
-    if is_done_candidate and n_matches == candidate_length:
-        # Output length is assumed to be `n_matches + 1`. Since we won't generate another token with the target model
-        # due to acceptance on EOS we fix `n_matches`
-        n_matches -= 1
-        valid_tokens = new_candidate_input_ids[:, : n_matches + 1]
-    else:
-        # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
-        gamma = candidate_logits.shape[1]
-        p_n_plus_1 = p[:, n_matches, :]
-        if n_matches < gamma:
-            q_n_plus_1 = q[:, n_matches, :]
-            # Note: with ensemble weight w < 1, the fallback [v-q]+ = w*[p-q]+ normalizes to the same
-            # distribution as [p-q]+, so we compute the standard fallback directly for numerical stability.
-            p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
-            p_prime_sum = p_prime.sum()
-            if assistant_ensemble_weight is not None and p_prime_sum <= torch.finfo(p_prime.dtype).tiny:
-                # Ensemble-only fallback: when `p ≈ q` the residual is numerically zero, so we fall
-                # back to the target distribution. Standard (lossless) SD keeps its original behavior.
-                p_prime = p_n_plus_1
-            else:
-                p_prime.div_(p_prime_sum)
-        else:
+    # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
+    gamma = candidate_logits.shape[1]
+    p_n_plus_1 = p[:, n_matches, :]
+    if n_matches < gamma:
+        q_n_plus_1 = q[:, n_matches, :]
+        # Note: with ensemble weight w < 1, the fallback [v-q]+ = w*[p-q]+ normalizes to the same
+        # distribution as [p-q]+, so we compute the standard fallback directly for numerical stability.
+        p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
+        p_prime_sum = p_prime.sum()
+        if assistant_ensemble_weight is not None and p_prime_sum <= torch.finfo(p_prime.dtype).tiny:
+            # Ensemble-only fallback: when `p ≈ q` the residual is numerically zero, so we fall
+            # back to the target distribution. Standard (lossless) SD keeps its original behavior.
             p_prime = p_n_plus_1
-        t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
-
-        # The selected tokens include the matches (if any) plus the next sampled tokens
-        if n_matches > 0:
-            valid_tokens = torch.cat((new_candidate_input_ids[:, :n_matches], t), dim=-1)
         else:
-            valid_tokens = t
+            p_prime.div_(p_prime_sum)
+    else:
+        p_prime = p_n_plus_1
+    t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
+
+    # The selected tokens include the matches (if any) plus the next sampled tokens
+    if n_matches > 0:
+        valid_tokens = torch.cat((new_candidate_input_ids[:, :n_matches], t), dim=-1)
+    else:
+        valid_tokens = t
 
     return valid_tokens, n_matches
 
