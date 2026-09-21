@@ -33,8 +33,8 @@ from ..cache_utils import (
     EncoderDecoderCache,
     QuantizedCache,
     StaticCache,
-    get_head_shapes,
 )
+from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
 from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (

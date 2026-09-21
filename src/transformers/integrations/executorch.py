@@ -23,8 +23,8 @@ from ..cache_utils import (
     StaticCache,
     StaticLayer,
     StaticSlidingWindowLayer,
-    get_head_shapes,
 )
+from ..configuration_utils import get_head_shapes
 from ..generation.configuration_utils import GenerationConfig
 from ..modeling_utils import PreTrainedModel
 from ..pytorch_utils import (
