@@ -162,6 +162,9 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        raise NotImplementedError("No need to inherit")
+
 
 # NOTE: can copy from qwen vision config!
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
