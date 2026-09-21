@@ -77,7 +77,8 @@ def build_config_mapping_names() -> tuple[dict, dict]:
     # `glob.glob` is filesystem-order dependent — sort to make the output deterministic.
     all_files = sorted(glob.glob("src/transformers/models/**/configuration_*.py", recursive=True))
     for config_path in all_files:
-        module_name = config_path.split("/")[-2]
+        # glob returns OS-native separators; do not split on "/" (breaks on Windows).
+        module_name = os.path.basename(os.path.dirname(config_path))
         with open(config_path, "r") as f:
             content = f.read()
 
