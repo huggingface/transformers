@@ -4347,6 +4347,9 @@ class PreTrainedModel(
         # If the device_map has more than 1 device or disk offloading: dispatch model with hooks
         if device_map is not None and (len(set(device_map.values())) > 1 or "disk" in set(device_map.values())):
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, disk_offload_index, offload_buffers)
+        elif device_map is not None:
+            # Fix #43873: Ensure hf_device_map is attached even if dispatch is skipped
+            model.hf_device_map = device_map
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
