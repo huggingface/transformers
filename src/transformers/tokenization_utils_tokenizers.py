@@ -171,9 +171,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
                         import base64
 
-                        local_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(
-                            normalizer["precompiled_charsmap"]
-                        )
+                        decoded = base64.b64decode(normalizer["precompiled_charsmap"])
+                        if decoded:
+                            local_kwargs["_spm_precompiled_charsmap"] = decoded
                         break
 
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
