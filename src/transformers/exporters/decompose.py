@@ -26,6 +26,7 @@ import contextlib
 import copy
 import functools
 import inspect
+from dataclasses import replace
 from typing import Any, NamedTuple
 
 from ..utils import logging
@@ -38,6 +39,7 @@ from .cache import (
     kv_geometry_of,
     materialize_cache_layers,
 )
+from .components import Component, ComponentRole
 from .utils import (
     CrossAttentionEncoder,
     ModalityEncoder,
@@ -631,8 +633,8 @@ def decompose_multimodal(
     inputs: dict[str, Any],
     recorded_features: dict[str, list] | None = None,
     prompt_ids: torch.Tensor | None = None,
-) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Split a multi-modal model into independently exportable `name: (module, inputs)` pairs.
+) -> dict[str, Component]:
+    """Split a multi-modal model into independently exportable components.
 
     Exports the model's own composition methods rather than raw submodules, so each component is
     self-contained and the set can be reassembled into a generation runtime:
@@ -682,7 +684,11 @@ def decompose_multimodal(
             f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
 
-    components = {"text_decoder": (decoder, decoder_calls[-1])} if decoder_calls else {}
+    components = (
+        {"text_decoder": Component("text_decoder", decoder, decoder_calls[-1], ComponentRole.DECODE)}
+        if decoder_calls
+        else {}
+    )
 
     # embed_tokens: `input_ids -> inputs_embeds`, zeroing the placeholder ids (out of the text vocab)
     # first, the way a VLM `forward` does before scattering in encoder features. Only a model whose
@@ -700,9 +706,11 @@ def decompose_multimodal(
             for spec in _MODALITY_SPECS
             if getattr(model.config, spec[-1], None) is not None
         ]
-        components["embed_tokens"] = (
+        components["embed_tokens"] = Component(
+            "embed_tokens",
             TokenEmbedder(decoder, placeholder_ids),
             {"input_ids": token_ids},
+            ComponentRole.EMBED_TOKENS,
         )
 
     # One feature graph per modality, from the captured getter call — a `ModalityEncoder` wrapping the
@@ -730,10 +738,12 @@ def decompose_multimodal(
                     if key in feature_inputs
                 }
             )
-            components[name] = (PatchVisionEncoder(owner), tower_inputs)
+            components[name] = Component(name, PatchVisionEncoder(owner), tower_inputs, ComponentRole.MODALITY_ENCODER)
             continue
         feature_inputs = precompute_export_inputs(model.config, feature_inputs)
-        components[name] = (ModalityEncoder(owner, getter, grid_key), feature_inputs)
+        components[name] = Component(
+            name, ModalityEncoder(owner, getter, grid_key), feature_inputs, ComponentRole.MODALITY_ENCODER
+        )
     return components
 
 
@@ -888,10 +898,16 @@ def _materialize_stage_cache(model, stage_inputs: dict, decode_inputs: dict) -> 
     )
 
 
+def _component(name: str, stage: tuple) -> Component:
+    """A captured `(module, inputs)` stage as the component the exporter takes."""
+    module, inputs = stage
+    return Component(name, module, inputs, ComponentRole.of(name))
+
+
 def decompose_for_generation(
     model: PreTrainedModel, inputs: dict[str, Any], generation_config: Any = None, multi_token_decode: bool = False
-) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Decompose a generative model into independently exportable `(model, forward_inputs)` pairs.
+) -> dict[str, Component]:
+    """Decompose a generative model into independently exportable components.
 
     Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
     `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
@@ -958,12 +974,12 @@ def decompose_for_generation(
         if multi_token_decode and not _needs_prefill_graph(model, stages, components={}):
             # Everything but the prompt's own copy of the text stack — an encoder-decoder keeps its encoder,
             # which is a different graph doing different work.
-            return {name: stage for name, stage in stages.items() if name != "prefill"}
+            return {name: _component(name, stage) for name, stage in stages.items() if name != "prefill"}
         # Text path only — the multi-modal prefill is discarded after the submodule split, and materializing
         # it would leak cache inputs into the `text_decoder` component's capture. (Decode, captured
         # post-prefill, already holds a materialized cache.)
         _materialize_stage_cache(model, prefill_inputs, stages["decode"][1])
-        return stages
+        return {name: _component(name, stage) for name, stage in stages.items()}
 
     components = decompose_multimodal(prefill_model, prefill_inputs, recorded_features, inputs.get("input_ids"))
     # The pre-loop embedder, for a model whose modality advances with the text (`_STREAMING_EMBEDDERS`): the
@@ -976,24 +992,26 @@ def decompose_for_generation(
             if module is None:
                 break
         if module is not None:
-            components[spec.component] = (module, {spec.source: inputs[spec.source]})
+            components[spec.component] = Component(
+                spec.component, module, {spec.source: inputs[spec.source]}, ComponentRole.STREAMING_EMBEDDER
+            )
     # The multi-modal split rebuilds the component set from the prefill, so carry over the stages that
     # belong to the model as a whole — an encoder-decoder's `encoder` runs once outside the decode loop and
     # is captured above, and dropping it leaves the runtime with a decode graph asking for `encoder_outputs`
     # nothing produces.
     if "encoder" in stages:
-        components["encoder"] = stages["encoder"]
+        components["encoder"] = _component("encoder", stages["encoder"])
     # One decision, made once: does the first step need a graph of its own, or can the decode graph serve
     # it? Three branches used to answer it with the same body; the reasons differ, the answer does not.
     if multi_token_decode:
         stages = _fold_cross_cache_into_encoder(model, stages, cross_writers, components)
         if "encoder" in components:
-            components["encoder"] = stages["encoder"]
+            components["encoder"] = _component("encoder", stages["encoder"])
     # The decode graph serves the prompt too, so the captured prefill is usually dropped here; it is kept
     # as a component only for the shapes where it cannot (`_needs_prefill_graph`).
     if "prefill" in stages and _needs_prefill_graph(model, stages, components):
         _materialize_stage_cache(model, stages["prefill"][1], stages["decode"][1])
-        components["prefill"] = stages["prefill"]
+        components["prefill"] = _component("prefill", stages["prefill"])
 
     # Feed the decode graph `inputs_embeds` (not `input_ids`) so the runtime can scatter the encoder embeds
     # into the embeddings before the text stack; the full forward accepts `inputs_embeds` and — with no
@@ -1012,7 +1030,7 @@ def decompose_for_generation(
         if call_inputs.get("position_ids") is not None:
             call_inputs.pop("mm_token_type_ids", None)
         if call_inputs.get("input_ids") is not None and "embed_tokens" in components:
-            embedding = components["embed_tokens"][0]
+            embedding = components["embed_tokens"].module
             with torch.no_grad():
                 embedded = embedding(call_inputs.pop("input_ids"))
             # A decoder with per-layer embeddings returns those alongside `inputs_embeds`; both are per-token
@@ -1020,11 +1038,12 @@ def decompose_for_generation(
             call_inputs.update(embedded if isinstance(embedded, dict) else {"inputs_embeds": embedded})
         return call_inputs
 
-    components["decode"] = (stages["decode"][0], as_embedded_inputs(stages["decode"][1]))
+    components["decode"] = _component("decode", (stages["decode"][0], as_embedded_inputs(stages["decode"][1])))
     # Same treatment for a kept prefill when the modality graphs exist: the runtime scatters the features
     # in front of it, and the vision tower — whose data-dependent packing only traces at the getter seam,
     # where the precompute injects its tensors — stays out of the graph. The idefics-style writer (no
     # modality getter) keeps its raw inputs: the tower inline is the point there.
     if "prefill" in components and any(name.endswith("_encoder") for name in components):
-        components["prefill"] = (components["prefill"][0], as_embedded_inputs(components["prefill"][1]))
+        prompt = components["prefill"]
+        components["prefill"] = replace(prompt, inputs=as_embedded_inputs(prompt.inputs))
     return components

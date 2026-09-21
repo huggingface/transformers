@@ -31,7 +31,7 @@ in the modeling code.
 > [!WARNING]
 > The exporters are experimental. Many of the patches in this module work around specific upstream bugs (Torch, ONNX Script, ONNX Runtime, ExecuTorch) and will be removed as soon as the fix lands upstream. Until the API stabilizes, treat the patches as tied to the versions used in the test suite. Pin those versions in production tooling, and expect new patches to appear and old ones to disappear as upstream changes land.
 
-Every exporter returns an [`~exporters.ExporterOutput`]; `artifact` is the backend's own program object.
+Every exporter returns an [`~exporters.ExportArtifacts`]; `artifact` is the backend's own program object.
 
 | Exporter               | `artifact`                 | Runtime                                    |
 | ---------------------- | -------------------------- | ------------------------------------------ |
@@ -89,7 +89,7 @@ pip install transformers "torch==2.12.0" "executorch==1.3.1"
 ## Export a model
 
 All exporters share the same interface. Create an exporter with a config, and call
-[`~exporters.HfExporter.export`]. It returns an [`~exporters.ExporterOutput`]: the exported graph, what
+[`~exporters.HfExporter.export`]. It returns an [`~exporters.ExportArtifacts`]: the exported graph, what
 the trace recorded about it, and the configs it was traced with — everything needed to run it or save it.
 
 Switch between runtimes by swapping the exporter class; nothing else in the flow changes.
@@ -405,7 +405,7 @@ for name, (submodel, subinputs) in components.items():
     artifacts[name], metadata[name] = exporter.export_artifact(submodel, subinputs, config=config)
 ```
 
-`export_for_generation` is this loop plus the [`~exporters.ExporterOutput`] it wraps the results in.
+`export_for_generation` is this loop plus the [`~exporters.ExportArtifacts`] it wraps the results in.
 
 ### Multi-token decode
 

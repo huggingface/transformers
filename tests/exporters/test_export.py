@@ -29,11 +29,8 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
-from transformers.exporters.decompose import (
-    decompose_for_generation,
-    decompose_multimodal,
-    is_multimodal,
-)
+from transformers.exporters.components import Component, ComponentRole
+from transformers.exporters.decompose import decompose_for_generation, decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import _VARLEN_ATTENTION_PATHS, DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
@@ -211,7 +208,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "graph is specialized to a mid-compression state (`entry_count: {'compressor': 1, 'indexer': 1}`) "
             "that its tensor-only write-back cannot advance either. Recording the traced context and "
             "restoring it onto a built cache was tried and does not help — the leaf count is the blocker, "
-            "not the counters. Export itself passes, and so do the static-cache generate variants."
+            "not the counters. ExportArtifacts itself passes, and so do the static-cache generate variants."
         ),
         "CsmForConditionalGeneration": (
             "Generates a *frame* at a time: `input_ids` is `[batch, sequence, codebooks]` and each step runs "
@@ -224,13 +221,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Its `prepare_inputs_for_generation` does per-step surgery no generic loop reproduces: it "
             "counts how many audio ids the cache already holds, masks those out, and in decode drops "
             "`input_ids` entirely to pass only the last audio-codebook row. The runtime feeds the generic "
-            "text+kwargs step instead, so generation diverges from the first token. Export itself and the "
+            "text+kwargs step instead, so generation diverges from the first token. ExportArtifacts itself and the "
             "per-component parity still run."
         ),
         "XLMWithLMHeadModel": (
             "Its `prepare_inputs_for_generation` appends a mask token to `input_ids` every step and builds a "
             "`langs` tensor from `config.lang_id`, so the graph takes a per-step input only that model can "
-            "produce (and a step is one token wider than `generate`'s). Export itself is covered by the "
+            "produce (and a step is one token wider than `generate`'s). ExportArtifacts itself is covered by the "
             "non-generate variants."
         ),
         "XLNetLMHeadModel": (
@@ -780,7 +777,7 @@ MIN_EXPORT_TORCH_VERSION = DynamoExporter.min_versions["torch"]
 def disable_hub_kernels(test_fn):
     """Force `is_kernels_available()` to `False` for the duration of an export test.
 
-    Export must trace the pure-PyTorch path, never a Hub kernel (`mamba-ssm`, `causal-conv1d`, …): those
+    ExportArtifacts must trace the pure-PyTorch path, never a Hub kernel (`mamba-ssm`, `causal-conv1d`, …): those
     need optional deps (`einops`, triton, …) and aren't exportable anyway. Kernels load lazily on the first
     (eager) forward — outside the exporter's own trace-time patch — so the whole test is wrapped. With
     `is_kernels_available()` False, `lazy_load_kernel` short-circuits to `None` and the fallback runs.
@@ -1127,7 +1124,7 @@ class ExportTesterMixin:
         assert during tracing would otherwise poison the whole xdist worker's CUDA context).
 
         Returns:
-            Dict of `{name: (model, inputs)}` — one entry per component.
+            Dict of `{name: Component}` — one entry per component.
         """
         if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -1151,12 +1148,13 @@ class ExportTesterMixin:
 
         if is_multimodal(model):
             return decompose_multimodal(model, inputs_dict)
-        return {"model": (model, inputs_dict)}
+        return {"model": Component("model", model, inputs_dict, ComponentRole.MODEL)}
 
     def _collect_eager_outputs(self, components):
         """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict."""
         eager_outputs = {}
-        for name, (model, inputs) in components.items():
+        for name, component in components.items():
+            model, inputs = component.module, component.inputs
             with torch.no_grad():
                 set_seed(1234)
                 eager_outputs[name] = get_leaf_tensors(model(**copy.deepcopy(inputs)))
@@ -1191,7 +1189,7 @@ class ExportTesterMixin:
             _STREAMING_EMBEDDERS,
         )
 
-        model = components["decode"][0]
+        model = components["decode"].module
         if not dynamic and "embed_tokens" in components:
             # A multi-modal model embeds its text in a graph of its own, captured on the *prompt* — under
             # static shapes that graph is specialized to the prompt's length and cannot serve the 1-token
@@ -1306,7 +1304,7 @@ class ExportTesterMixin:
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
-        """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
+        """ExportArtifacts each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
 
         exporter = DynamoExporter()
@@ -1319,7 +1317,8 @@ class ExportTesterMixin:
             components = self._prepare_export_model_and_inputs(model_class, "dynamo")
             eager_outputs = self._collect_eager_outputs(components)
 
-            for name, (model, inputs) in components.items():
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
 
@@ -1351,7 +1350,8 @@ class ExportTesterMixin:
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class, "dynamo")
-            for name, (model, inputs) in components.items():
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     with torch.no_grad():
                         set_seed(1234)
@@ -1395,7 +1395,7 @@ class ExportTesterMixin:
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_onnx_export(self, dynamic):
-        """Export each model class to ONNX and verify output names match eager."""
+        """ExportArtifacts each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_model_classes:
@@ -1409,7 +1409,8 @@ class ExportTesterMixin:
             components = self._prepare_export_model_and_inputs(model_class, "onnx")
             eager_outputs = self._collect_eager_outputs(components)
 
-            for name, (model, inputs) in components.items():
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
                     onnx_outputs = output.runner()(**inputs)
@@ -1426,7 +1427,7 @@ class ExportTesterMixin:
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_executorch_export(self, dynamic):
-        """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
+        """ExportArtifacts each model class to ExecuTorch, run it, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
@@ -1450,7 +1451,8 @@ class ExportTesterMixin:
             components = self._prepare_export_model_and_inputs(model_class, "executorch", device="cpu")
             eager_outputs = self._collect_eager_outputs(components)
 
-            for name, (model, inputs) in components.items():
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
                     # Building the runner stays *inside* the tolerance: loading the method is where
@@ -1498,7 +1500,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         single-token step — see :func:`decompose_for_generation`.
 
         Returns:
-            Dict of `{name: (model, inputs)}` — one entry per component.
+            Dict of `{name: Component}` — one entry per component.
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
@@ -1535,7 +1537,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     # the variance survives pinning both weights and inputs). A real wiring bug — wrong cache, mask or
     # positions — diverges by orders of magnitude more, and the id-parity check below still guards it.
     def test_torch_export_generate(self, dynamic, multi_token_decode, generation_config, atol=5e-4, rtol=1e-4):
-        """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
+        """ExportArtifacts prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
 
         exporter = DynamoExporter()
@@ -1557,7 +1559,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             eager_outputs = self._collect_eager_outputs(components)
 
             exported = {}
-            for name, (model, inputs) in components.items():
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
 
@@ -1602,7 +1605,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_onnx_export_generate(self, dynamic, multi_token_decode, generation_config):
-        """Export prefill and decode stages to ONNX and verify output names match eager."""
+        """ExportArtifacts prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_generative_model_classes:
@@ -1626,7 +1629,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             eager_outputs = self._collect_eager_outputs(components)
 
             exported = {}
-            for name, (model, inputs) in components.items():
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
                     onnx_outputs = output.runner()(**inputs)
@@ -1660,7 +1664,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_executorch_export_generate(self, dynamic, multi_token_decode, generation_config):
-        """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
+        """ExportArtifacts prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
@@ -1693,7 +1697,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             eager_outputs = self._collect_eager_outputs(components)
 
             exported = {}
-            for name, (model, inputs) in components.items():
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
                     # Building the runner stays *inside* the tolerance: loading the method is where

@@ -26,7 +26,7 @@ Add a workaround by writing one function and registering it with a decorator. Ea
 To add a whole backend rather than a workaround, subclass [`HfExporter`] and implement its two hooks —
 `export_artifact`, which traces one graph and returns it with the metadata describing it, and
 `save_artifact`, which writes one out — then declare `export_format` and `artifact_suffix`. The public
-`export` / `export_for_generation` entry points, the [`~exporters.ExporterOutput`] they return, and
+`export` / `export_for_generation` entry points, the [`~exporters.ExportArtifacts`] they return, and
 loading it back are built on those two and need no per-backend code.
 
 ## Patches and fixes

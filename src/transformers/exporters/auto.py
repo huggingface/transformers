@@ -153,9 +153,10 @@ class AutoHfExporter:
 class AutoExportedModel:
     """Load a saved export as whatever it was exported as.
 
-    The manifest records the `kind`, so this picks the same shape the export produced without the caller
-    having to remember: an [`ExportedGenerator`] for a decomposed, cache-driven export, an
-    [`ExportedModel`] for a single graph (a classifier, an encoder, a feature extractor).
+    The manifest records what each saved component is, so this picks the same shape the export produced
+    without the caller having to remember: an [`ExportedGenerator`] where a decode graph was saved (a
+    decomposed, cache-driven export), an [`ExportedModel`] for a single graph (a classifier, an encoder,
+    a feature extractor).
 
     Example:
         runtime = AutoExportedModel.from_pretrained("out/")
@@ -164,14 +165,14 @@ class AutoExportedModel:
     @classmethod
     def from_pretrained(cls, save_directory, **kwargs):
         """Load a saved export from a local directory or a Hub repo."""
-        from .base import read_export_manifest, split_download_kwargs
+        from .base import ComponentRole, read_export_manifest, saved_roles, split_download_kwargs
         from .generator import ExportedGenerator
 
         download_kwargs, _ = split_download_kwargs(dict(kwargs))
         manifest = read_export_manifest(save_directory, **download_kwargs)
-        # Older manifests predate `kind`; a decomposed export is the one with more than one component.
-        kind = manifest.get("kind") or ("generation" if len(manifest["components"]) > 1 else "model")
-        target = ExportedGenerator if kind == "generation" else ExportedModel
+        # The same question `ExportArtifacts.runtime` asks of an export it just produced: is there a decode graph?
+        can_generate = ComponentRole.DECODE in saved_roles(manifest).values()
+        target = ExportedGenerator if can_generate else ExportedModel
         return target.from_pretrained(save_directory, **kwargs)
 
 

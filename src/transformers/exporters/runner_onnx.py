@@ -19,6 +19,20 @@ from .utils import (
 )
 
 
+def _session_device(device=None) -> torch.device:
+    """Which device a session opened for `device` runs on, with the GPU index filled in.
+
+    `cuda` names whichever GPU is current, and that is the one a caller's tensors are allocated on, so it is
+    the one the session has to be opened for. Without a device to go by, CUDA is used when one is visible.
+    """
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device(device)
+    if device.type == "cuda" and device.index is None:
+        return torch.device("cuda", torch.cuda.current_device())
+    return device
+
+
 def _ort_to_torch_dtype(ort_type: str | None) -> torch.dtype | None:
     """torch dtype for an ORT input/output type string (`"tensor(float)"`), or `None` if it names no
     tensor — the caller then keeps the tensor's own dtype.
@@ -102,8 +116,11 @@ class OnnxModelRunner(ModelRunner):
             export_metadata,
             lambda: ExportMetadata.from_json(session.get_modelmeta().custom_metadata_map.get(EXPORT_METADATA_KEY)),
         )
-        # Where the session runs, and so where `__call__` lands its outputs.
-        self.device = "cuda" if any("CUDA" in p for p in session.get_providers()) else "cpu"
+        # Where the session runs, and so where `__call__` lands its outputs. A CUDA session is pinned to one
+        # GPU, and which one is read back off the provider rather than assumed: io-binding hands ORT raw
+        # addresses, and an address on a GPU the session was not opened for is an illegal access, not a copy.
+        options = session.get_provider_options().get("CUDAExecutionProvider")
+        self.device = torch.device("cpu" if options is None else f"cuda:{options.get('device_id', 0)}")
 
         # The graph names its *mutated* inputs with an `input.` prefix — the cache leaves always, and any
         # plain kwarg the graph writes to (a merged multi-token decode mutates its `attention_mask`).
@@ -187,20 +204,23 @@ class OnnxModelRunner(ModelRunner):
             self._binds = True
 
     @staticmethod
-    def _providers_for(device=None) -> list[str]:
+    def _providers_for(device=None) -> list[str | tuple[str, dict]]:
         """The providers to open a session with. `device` pins it; without one, CUDA is used only when a
         device is actually visible — an ORT build carries its CUDA provider whether or not the machine has a
-        GPU, and asking for it without one prints a provider failure before falling back on its own."""
+        GPU, and asking for it without one prints a provider failure before falling back on its own.
+
+        The GPU is named outright, where ORT would otherwise default to device 0 whatever the caller asked
+        for. A session that runs on a different GPU than its inputs live on does not copy them across: it
+        reads the address it was given on the GPU it was opened for, which faults.
+        """
         import onnxruntime
 
-        available = onnxruntime.get_available_providers()
-        if device is not None:
-            wants_cuda = torch.device(device).type == "cuda"
-        else:
-            wants_cuda = torch.cuda.is_available()
-        if wants_cuda and "CUDAExecutionProvider" not in available:
+        device = _session_device(device)
+        if device.type != "cuda":
+            return ["CPUExecutionProvider"]
+        if "CUDAExecutionProvider" not in onnxruntime.get_available_providers():
             raise ValueError("This onnxruntime build has no CUDA provider, so the session cannot run on CUDA.")
-        return ["CUDAExecutionProvider"] if wants_cuda else ["CPUExecutionProvider"]
+        return [("CUDAExecutionProvider", {"device_id": device.index})]
 
     @classmethod
     def from_artifact(cls, artifact, export_metadata=None, device=None, providers=None, **kwargs) -> OnnxModelRunner:
@@ -231,9 +251,9 @@ class OnnxModelRunner(ModelRunner):
         Not a move: a session's execution provider is fixed when it is created, so this opens a second one.
         That costs an ORT session load -- small next to the export, not free -- and it is why the runner is
         returned rather than mutated."""
-        # A session knows only the device *type* it was opened for, so `cuda` and `cuda:0` name the same one
-        # and reopening for the difference would only pay the load again.
-        if torch.device(device).type == torch.device(self.device).type:
+        # `cuda` and `cuda:0` name the same session when the current GPU is 0, and reopening for the
+        # difference in spelling would only pay the load again.
+        if _session_device(device) == self.device:
             return self
         if self._source is None:
             return super().to(device)
@@ -306,7 +326,7 @@ class OnnxModelRunner(ModelRunner):
         is possible at all was settled in `__init__` (`_binds`).
         """
         device, known_axes = self.device, {}
-        device_index = torch.cuda.current_device() if device == "cuda" else 0
+        device_type, device_index = device.type, device.index or 0
         for name, tensor in feed.items():
             for axis, dim in enumerate(self.input_shapes.get(self._exposed_names.get(name, name), ())):
                 if isinstance(dim, str) and axis < tensor.dim():
@@ -343,13 +363,15 @@ class OnnxModelRunner(ModelRunner):
             # cache entry at prefill holds zero positions. Such a tensor lends a one-element scratch buffer's
             # address instead; the bound shape still says zero, so nothing is read or written through it.
             pointer = tensor.data_ptr() or self._scratch(tensor, name)
-            self._io_binding.bind_input(name, device, device_index, self._element_types[name], bound_shape, pointer)
+            self._io_binding.bind_input(
+                name, device_type, device_index, self._element_types[name], bound_shape, pointer
+            )
             if (paired := self._shared_outputs.get(name)) is not None:
                 # One buffer for the pair: the graph's write lands in the tensor it just read, under the same
                 # shape the input went in with — which is what the graph writes back, so a rank-0 counter's
                 # output is `[1]` here too.
                 self._io_binding.bind_output(
-                    paired, device, device_index, self._element_types[paired], bound_shape, pointer
+                    paired, device_type, device_index, self._element_types[paired], bound_shape, pointer
                 )
                 outputs[paired] = tensor
         # Bind order is what `get_outputs()` comes back in, so the ORT-allocated ones are read back by index.
@@ -364,7 +386,7 @@ class OnnxModelRunner(ModelRunner):
             # its stride away like that) leaves no size to allocate against, so that one output is ORT's to
             # size and costs a copy. Everything else binds, the rest of the graph included.
             if None in shape:
-                self._io_binding.bind_output(name, device_type=device, device_id=device_index)
+                self._io_binding.bind_output(name, device_type=device_type, device_id=device_index)
                 ort_allocated.append(name)
                 continue
             buffer = self._buffers.get(name)
@@ -377,7 +399,7 @@ class OnnxModelRunner(ModelRunner):
             # holds zero positions, and a compressed-latent one holds several such buffers).
             self._io_binding.bind_output(
                 name,
-                device,
+                device_type,
                 device_index,
                 self._element_types[name],
                 list(shape),

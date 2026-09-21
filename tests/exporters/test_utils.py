@@ -62,7 +62,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import GenerationConfig
+    from transformers import GenerationConfig, PretrainedConfig
     from transformers.exporters.utils import (
         cast_leaf_tensors,
         duplicate_leaf_tensors,
@@ -105,7 +105,7 @@ class AutoExportConfigTest(unittest.TestCase):
                 self.assertIsInstance(AutoExportConfig.from_dict({"export_format": export_format}), config_cls)
 
     def test_from_dict_missing_export_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "export_format"):
+        with self.assertRaisesRegex(ValueError, "No export format given"):
             AutoExportConfig.from_dict({})
 
     def test_from_dict_unknown_format_raises(self):
@@ -136,9 +136,10 @@ class AutoHfExporterTest(unittest.TestCase):
         self._check_dispatch(ExecutorchConfig())
 
     def test_from_config_raises_on_unknown_format(self):
-        with self.assertRaisesRegex(ValueError, "Unsupported export config"):
+        # Both name the formats that *are* registered, so the message says what to pass instead.
+        with self.assertRaisesRegex(ValueError, "Unknown export format 'not_a_real_backend'"):
             AutoHfExporter.from_config({"export_format": "not_a_real_backend"})
-        with self.assertRaisesRegex(ValueError, "Unsupported export config"):
+        with self.assertRaisesRegex(ValueError, "No export format given"):
             AutoHfExporter.from_config({})
 
 
@@ -311,8 +312,9 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(1, 1)
-                # `decompose_prefill_decode` bases its capture config on the model's own (mimics a
+                # `decompose_prefill_decode` reads the model's own configs before capturing (mimics a
                 # real `PreTrainedModel`); the guard under test fires afterwards on the capture count.
+                self.config = PretrainedConfig()
                 self.generation_config = GenerationConfig()
 
             def forward(self, input_ids=None, **kwargs):

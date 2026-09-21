@@ -24,7 +24,8 @@ from .auto import (
     register_exporter,
     register_runner,
 )
-from .base import ExportedModel, ExporterOutput, HfExporter, ModelRunner
+from .base import ExportArtifacts, ExportedModel, HfExporter, ModelRunner
+from .components import Component, ComponentRole, ExportedComponent
 from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .exporter_executorch import ExecutorchExporter

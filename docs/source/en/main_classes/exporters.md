@@ -55,9 +55,17 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
     - export_artifact
     - save_artifact
 
-## ExporterOutput
+## ExportArtifacts
 
-[[autodoc]] exporters.base.ExporterOutput
+[[autodoc]] exporters.base.ExportArtifacts
+
+## ExportedComponent
+
+[[autodoc]] exporters.base.ExportedComponent
+
+## ComponentRole
+
+[[autodoc]] exporters.base.ComponentRole
 
 ## Running an export
 

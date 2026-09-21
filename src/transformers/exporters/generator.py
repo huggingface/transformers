@@ -13,7 +13,7 @@
 # limitations under the License.
 """Run exported generative models by orchestrating their component graphs through `GenerationMixin.generate`.
 
-`HfExporter.export_for_generation` produces one graph per component; this module plugs the graphs back
+`HfExporter.export` produces one graph per component; this module plugs the graphs back
 together and drives the generation loop from artifacts + configs alone — no model instance, no checkpoint
 weights. The model config and the generation config **used at export** are the contract: save them with
 the artifacts and hand them back to `ExportedGenerator.from_runners` — the generation config declares the
@@ -237,7 +237,7 @@ class ExportedGenerator(GenerationMixin):
     `StaticCache`, whose `max_cache_len` a static-cache export should pin explicitly).
 
     Example:
-        programs = OnnxExporter().export_for_generation(model, inputs,
+        programs = OnnxExporter().export(model, inputs,
                                                         OnnxConfig(dynamic=True, external_data=False),
                                                         generation_config=generation_config,
                                                         multi_token_decode=True)
@@ -323,7 +323,7 @@ class ExportedGenerator(GenerationMixin):
         generation_config: GenerationConfig | None = None,
     ) -> ExportedGenerator:
         """Assemble the generator from `{component_name: runner}` (the names
-        `HfExporter.export_for_generation` produces) + the configs — text-only from a `"decode"` runner,
+        `HfExporter.export` produces) + the configs — text-only from a `"decode"` runner,
         multi-modal when `"embed_tokens"` and `"<modality>_encoder"` runners are present; each modality's
         precompute is built from `config` alone. `generation_config` must be the one the model was
         **exported with** (it declares the cache the graphs were traced against — save it with the

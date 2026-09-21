@@ -41,9 +41,10 @@ import unittest
 import pytest
 
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
-from transformers.exporters.decompose import (
-    decompose_for_generation,
-)
+from transformers.exporters.base import ModelRunner
+from transformers.exporters.cache import mask_width
+from transformers.exporters.decompose import decompose_for_generation
+from transformers.exporters.generator import ExportedGenerator
 from transformers.testing_utils import (
     require_onnxruntime,
     require_onnxscript,
@@ -67,6 +68,69 @@ def _causal_mask(positions, cache_len):
     return (torch.arange(cache_len)[None, :] <= positions[:, None])[None, None]
 
 
+@require_torch
+class RuntimeFeedTest(unittest.TestCase):
+    """What the runtime hands a graph, decided without exporting anything.
+
+    Each case here is a bug that reached a model sweep and read as a flake for weeks, because the question
+    it gets wrong ("how wide is the mask", "does this graph take this kwarg") is only asked while driving a
+    real export. They are plain functions, so they can be asked directly.
+    """
+
+    class _Graph:
+        """A stand-in for a runner: what it declares, and what the trace recorded about it."""
+
+        def __init__(self, input_names, kwargs=None, cache_input="past_key_values"):
+            from transformers.exporters.metadata import ExportMetadata
+
+            self.input_names = tuple(input_names)
+            self.export_metadata = ExportMetadata.from_dict({"kwargs": kwargs or {}})
+            self.cache_input = cache_input
+            self.device = "cpu"
+
+        declares = ModelRunner.declares
+
+    def test_declares_a_pytree_kwarg_its_backend_flattened(self):
+        """A backend that flattens a kwarg declares only its leaves, so the kwarg's own name is absent —
+        the rule that left t5gemma's per-type decoder masks unfed on ONNX."""
+        graph = self._Graph(["input.encoder_outputs.last_hidden_state", "decoder_attention_mask.full_attention"])
+        self.assertTrue(graph.declares("encoder_outputs", {"last_hidden_state": torch.zeros(1)}))
+        self.assertTrue(graph.declares("decoder_attention_mask", {"full_attention": torch.zeros(1)}))
+        # A plain tensor has to be named outright: a graph taking `input_features_mask` does not take
+        # `input_features`.
+        self.assertFalse(graph.declares("input_features", torch.zeros(1)))
+
+    def test_mask_width_comes_from_the_layer_the_mask_belongs_to(self):
+        """`get_max_length()` answers for the *longest* layer, which on mllama is the vision-sized
+        cross-attention one — the mask belongs to the self-attention layer beside it."""
+
+        class _Cache:
+            def get_mask_sizes(self, query_length, layer_idx):
+                return 256, 0
+
+            def get_max_length(self):
+                return 904
+
+        self.assertEqual(mask_width(_Cache(), query_length=7), 256)
+
+    def test_mask_is_built_at_the_rank_the_graph_was_traced_with(self):
+        """`generate` omits the mask when nothing is padded. Rebuilding it as the 4-D causal mask for a
+        graph traced on the 2-D padding mask puts the head axis where the width belongs, which the graph's
+        own comparison then rejects (`input_ids.size()[1] <= attention_mask.size()[1]`)."""
+        two_dimensional = self._Graph(["attention_mask"], {"attention_mask": {"rank": 2, "dtype": "bool"}})
+        four_dimensional = self._Graph(["attention_mask"], {"attention_mask": {"rank": 4, "dtype": "float32"}})
+        generator = ExportedGenerator.__new__(ExportedGenerator)
+        generator._device = torch.device("cpu")
+        positions = torch.arange(3)[None]
+
+        flat = generator._mask_feed(two_dimensional, None, positions, cache_len=3)["attention_mask"]
+        self.assertEqual(flat.shape, (1, 3))
+        self.assertEqual(flat.dtype, torch.bool)
+
+        causal = generator._mask_feed(four_dimensional, None, positions, cache_len=3)["attention_mask"]
+        self.assertEqual(causal.dim(), 4)
+
+
 @slow
 @require_torch
 class ExportedDecodeRuntimeTest(unittest.TestCase):
@@ -86,9 +150,10 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         """Capture the multi-token `decode` component against a fixed-size `StaticCache`."""
         inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
         gen_config = GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
-        return decompose_for_generation(
+        decode = decompose_for_generation(
             model, copy.deepcopy(inputs), generation_config=gen_config, multi_token_decode=True
         )["decode"]
+        return decode.module, decode.inputs
 
     # ──────────────────── torch.export (Dynamo) ────────────────────
 
