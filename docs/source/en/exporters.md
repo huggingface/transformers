@@ -169,7 +169,7 @@ logits = outputs["logits"]
 
 `runtime()` goes one level up and gives something that behaves like the model: an
 [`~exporters.ExportedModel`] for a single graph, an [`~exporters.ExportedGenerator`] for an export that
-`generate` drives (see [Export for generation](#export-for-generation)).
+`generate` drives (see [Generative models](#generative-models)).
 
 ```python
 outputs = exported_artifacts.runtime()(**inputs)   # -> ModelOutput, so outputs.logits works
