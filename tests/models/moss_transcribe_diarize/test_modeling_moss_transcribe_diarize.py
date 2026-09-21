@@ -13,7 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch moss_transcribe_diarize model."""
 
+import json
 import unittest
+from pathlib import Path
 
 from transformers import (
     AutoProcessor,
@@ -124,6 +126,16 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
 
     @slow
     def test_single_batch_sub_30(self):
+        """
+        reproducer: https://gist.github.com/itazap/6045ee5b1c4737c5623d5701de68081a
+        """
+        path = (
+            Path(__file__).parent.parent.parent
+            / "fixtures/moss_transcribe_diarize/expected_results_single_batch_sub_30.json"
+        )
+        with open(path, "r", encoding="utf-8") as f:
+            expected_outputs = json.load(f)
+
         model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
             self.checkpoint, device_map=torch_device, dtype="auto"
         )
@@ -131,21 +143,27 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
         inputs = self.processor.apply_transcription_request(
             "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
         ).to(model.device, dtype=model.dtype)
+        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(expected_outputs["input_ids"]))
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        generated_ids = outputs[:, inputs.input_ids.shape[1] :]
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(expected_outputs["generated_ids"]))
 
-        decoded_outputs = self.processor.decode(
-            outputs[:, inputs.input_ids.shape[1] :],
-            skip_special_tokens=True,
-        )
-
-        EXPECTED_OUTPUT = [
-            "[0.86][S01] Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to[7.81][7.81][S01] minus 20 degrees.[9.53]"
-        ]
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        decoded_outputs = self.processor.decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(decoded_outputs, expected_outputs["transcriptions"])
 
     @slow
     def test_single_batch_over_30(self):
+        """
+        reproducer: https://gist.github.com/itazap/e551c66d2d928be5027c2aa832bc8123
+        """
+        path = (
+            Path(__file__).parent.parent.parent
+            / "fixtures/moss_transcribe_diarize/expected_results_single_batch_over_30.json"
+        )
+        with open(path, "r", encoding="utf-8") as f:
+            expected_outputs = json.load(f)
+
         model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
             self.checkpoint, device_map=torch_device, dtype="auto"
         )
@@ -153,21 +171,24 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
         inputs = self.processor.apply_transcription_request(
             "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
         ).to(model.device, dtype=model.dtype)
+        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(expected_outputs["input_ids"]))
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        generated_ids = outputs[:, inputs.input_ids.shape[1] :]
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(expected_outputs["generated_ids"]))
 
-        decoded_outputs = self.processor.decode(
-            outputs[:, inputs.input_ids.shape[1] :],
-            skip_special_tokens=True,
-        )
-
-        EXPECTED_OUTPUT = [
-            "[0.76][S01] This week, I traveled to Chicago to deliver my final farewell address to the nation,[5.99][5.99][S01] following in the tradition of presidents before me.[8.94][8.94][S01] It was an opportunity to say thank you.[11.74][11.74][S01] Whether we've seen eye to eye, or rarely agreed at all, my conversations with you,[17.14][17.14][S01] the American people, in living rooms and schools, at farms and on factory floors,[23.32][23.32][S01] at diners, and on distant military outposts, all these conversations are what have kept[29.16][29.16][S01] me honest, kept me inspired, and kept me going.[33.15][33.15][S01] Every day, I learned from you.[35.82][35.82][S01] You made me a better president, and you made me a better man.[39.64][39.64][S01] Over the[39.97]"
-        ]
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        decoded_outputs = self.processor.decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(decoded_outputs, expected_outputs["transcriptions"])
 
     @slow
     def test_batched(self):
+        """
+        reproducer: https://gist.github.com/itazap/549d040019a61b735ae4099da3d7ad1c
+        """
+        path = Path(__file__).parent.parent.parent / "fixtures/moss_transcribe_diarize/expected_results_batched.json"
+        with open(path, "r", encoding="utf-8") as f:
+            expected_outputs = json.load(f)
+
         model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
             self.checkpoint, device_map=torch_device, dtype="auto"
         )
@@ -178,16 +199,11 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
                 "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
             ],
         ).to(model.device, dtype=model.dtype)
+        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(expected_outputs["input_ids"]))
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        generated_ids = outputs[:, inputs.input_ids.shape[1] :]
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(expected_outputs["generated_ids"]))
 
-        decoded_outputs = self.processor.decode(
-            outputs[:, inputs.input_ids.shape[1] :],
-            skip_special_tokens=True,
-        )
-
-        EXPECTED_OUTPUT = [
-            "[0.86][S01] Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to[7.81][7.81][S01] minus 20 degrees.[9.53]",
-            "[0.76][S01] This week, I traveled to Chicago to deliver my final farewell address to the nation,[5.99][5.99][S01] following in the tradition of presidents before me.[8.94][8.94][S01] It was an opportunity to say thank you.[11.74][11.74][S01] Whether we've seen eye to eye, or rarely agreed at all, my conversations with you,[17.14][17.14][S01] the American people, in living rooms and schools, at farms and on factory floors,[23.32][23.32][S01] at diners, and on distant military outposts, all these conversations are what have kept[29.16][29.16][S01] me honest, kept me inspired, and kept me going.[33.15][33.15][S01] Every day, I learned from you.[35.82][35.82][S01] You made me a better president, and you made me a better man.[39.64][39.64][S01] Over the[39.97]",
-        ]
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        decoded_outputs = self.processor.decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(decoded_outputs, expected_outputs["transcriptions"])
