@@ -715,8 +715,7 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 _EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
 # `multi_token_decode=False` captures the classic single-token decode (its query axis specializes to 1;
 # the separate `prefill` graph serves the prompt); `True` merges two decode steps so the query axis stays
-# symbolic and one graph serves prefill and decode — the only option for multi-modal models, which export
-# no standalone prefill graph.
+# symbolic and one graph serves prefill and decode.
 _EXPORT_DECODE_MODES = [False, True]  # multi_token_decode
 # `generation_config=None` is the model's own config (growing `DynamicCache`);
 # `cache_implementation="static"` exports against a `StaticCache`. Every cache runs under every shape
@@ -1178,11 +1177,10 @@ class ExportTesterMixin:
         config-only in `_prepare_position_ids_for_generation`) and encoder-decoder models (encoder +
         decoder-step graphs).
 
-        Text models wire the exported `prefill` graph as the generator's dedicated prefill runner, so the
+        A single-token export wires its `prefill` graph as the generator's dedicated prefill runner, so the
         `decode` graph only ever sees query=1 steps — which is what lets the *static-shape* variants run
-        parity too (over a static cache, every step reproduces the frozen shapes). Multi-modal models have
-        no standalone prefill graph; their multi-token `decode` serves both, exercising the single-graph
-        path (dynamic shapes only)."""
+        parity too (over a static cache, every step reproduces the frozen shapes). A multi-token export has
+        one text graph serving both, exercising the single-graph path (dynamic shapes only)."""
         from transformers.exporters import ExportedGenerator
         from transformers.exporters.decompose import (
             _MODALITY_SPECS,
@@ -1574,11 +1572,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             # End-to-end id-parity (text and VLM), over both cache kinds (static `cache_implementation`
             # and the default growing `DynamicCache`). Runs whenever the exported graphs can serve
-            # `generate`'s loop: via the dedicated `prefill` graph (text models — always under dynamic
+            # `generate`'s loop: via the dedicated `prefill` graph (always under dynamic
             # shapes; under static shapes only with a static cache, whose frozen prefill/decode shapes
             # reproduce every step, while a growing cache changes shape each step), or via the multi-token
-            # decode serving prefill and decode from one graph (the only option for multi-modal models,
-            # which export no standalone prefill graph).
+            # decode serving prefill and decode from one graph.
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
                 if not self._should_skip(

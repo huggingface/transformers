@@ -696,6 +696,74 @@ class ExportedGenerator(GenerationMixin):
         feed.update({name: embedded[name] for name in extra if name in runner.input_names})
         return feed
 
+    def _step_kwargs(self, runner, kwargs: dict, feed: dict, query_length: int) -> dict:
+        """The per-step inputs a graph declares beyond the text, the mask and the cache — `token_type_ids`,
+        a model's own auxiliary masks — taken from `generate`'s kwargs.
+
+        `generate` slices sequence kwargs to the current step only for the ones named on the real model's
+        `forward`; ours takes them generically, so they are trimmed here the same way.
+        """
+        step = {}
+        for name, value in kwargs.items():
+            # `declares`, not a plain name lookup: a backend that flattens a pytree kwarg declares only its
+            # leaves, so the kwarg's own name is never in `input_names` — which is how t5gemma's *dict* of
+            # per-type decoder masks (`decoder_attention_mask.full_attention`, `.sliding_attention`, built by
+            # `generate` and handed to us whole) went unfed on ONNX while dynamo, which takes the dict under
+            # one name, got it.
+            if name in feed or not runner.declares(name, value):
+                continue
+            # Rank 2 or 3 only — those have the sequence at axis 1 (higgs_audio_v2's audio ids carry a
+            # codebook axis after it). A 4-D mask is `[batch, 1, query, key]`, where axis 1 is heads.
+            # A modality's own tensors (`pixel_values`, packed patches, …) are features, not per-token
+            # kwargs — their axis 1 is patches or channels, so they go through whole (a prefill graph
+            # with the vision tower inline takes them directly).
+            is_per_token = isinstance(value, torch.Tensor) and name not in self._modality_keys
+            if is_per_token and value.dim() in (2, 3) and value.shape[1] > query_length:
+                value = value[:, -query_length:]
+            step[name] = value
+        return step
+
+    def _streamed_window(self, runner, kwargs: dict, past_len: int, query_length: int) -> dict:
+        """This step's window of a modality that advances with the text.
+
+        The whole prompt's features are embedded once, and each step reads the window its own tokens span
+        (`past_seen * stride` onwards) — what the model's own `prepare_inputs_for_generation` slices out
+        before each call.
+        """
+        embedder = self._embedder
+        if embedder is None or embedder.produces not in runner.input_names:
+            return {}
+        features = kwargs.get(embedder.source)
+        if features is not None and (self._embedded is None or past_len == 0):
+            self._embedded = next(iter(embedder.runner(**{embedder.source: features}).values()))
+        if self._embedded is None:
+            return {}
+        window = self._embedded[:, past_len * embedder.stride : (past_len + query_length) * embedder.stride]
+        return {embedder.produces: window}
+
+    def _empty_containers(self, runner, feed: dict, batch_size: int) -> dict:
+        """The containers a graph declares besides its own cache, and that the trace saw *empty*.
+
+        A fresh empty one each step is exactly the structure it was traced with (voxtral_realtime's decode
+        re-derives its encoder state from this step's audio window, and its conv state belongs to the
+        pre-loop embedder). One traced non-empty is a cache with real content and not ours to invent, so it
+        is left alone.
+        """
+        containers = {}
+        for name, spec in runner.export_metadata.kwargs.items():
+            container = spec.get("container")
+            if container is None or spec.get("leaves") or name in feed:
+                continue
+            empty = _empty_container(
+                container, self.config, batch_size, self._dtype, self._device, self._encoder_config
+            )
+            # `declares`, not a plain name lookup: a backend that flattens the container names only its
+            # leaves (`input.encoder_past_key_values.layers.0.keys`), so the kwarg itself is never in
+            # `input_names` and the graph would go unfed.
+            if empty is not None and runner.declares(name, empty):
+                containers[name] = empty
+        return containers
+
     def forward(
         self,
         past_key_values=None,
@@ -728,59 +796,15 @@ class ExportedGenerator(GenerationMixin):
             feed["position_ids"] = position_ids
         if encoder_outputs is not None and any(n.startswith("encoder_outputs") for n in runner.input_names):
             feed["encoder_outputs"] = encoder_outputs
-        # Extra per-step inputs the graph declares (`token_type_ids`, per-model aux masks, …) come from
-        # `generate`'s kwargs. `generate` slices sequence kwargs to the current step only for the ones named
-        # on the real model's `forward` — ours takes them generically, so trim them here the same way.
-        for name, value in kwargs.items():
-            # `_declares`, not a plain name lookup: a backend that flattens a pytree kwarg declares only its
-            # leaves, so the kwarg's own name is never in `input_names` — which is how t5gemma's *dict* of
-            # per-type decoder masks (`decoder_attention_mask.full_attention`, `.sliding_attention`, built by
-            # `generate` and handed to us whole) went unfed on ONNX while dynamo, which takes the dict under
-            # one name, got it.
-            if name not in feed and runner.declares(name, value):
-                # Rank 2 or 3 only — those have the sequence at axis 1 (higgs_audio_v2's audio ids carry a
-                # codebook axis after it). A 4-D mask is `[batch, 1, query, key]`, where axis 1 is heads.
-                # A modality's own tensors (`pixel_values`, packed patches, …) are features, not per-token
-                # kwargs — their axis 1 is patches or channels, so they go through whole (a prefill graph
-                # with the vision tower inline takes them directly).
-                is_per_token = isinstance(value, torch.Tensor) and name not in self._modality_keys
-                if is_per_token and value.dim() in (2, 3) and value.shape[1] > text.shape[1]:
-                    value = value[:, -text.shape[1] :]
-                feed[name] = value
+        feed.update(self._step_kwargs(runner, kwargs, feed, text.shape[1]))
+        feed.update(self._streamed_window(runner, kwargs, past_len, text.shape[1]))
+        feed.update(self._empty_containers(runner, feed, text.shape[0]))
         # How wide the graph's key axis is: a fixed-size cache is allocated in full, so the mask has to be
         # padded out to it, while a growing one is only as long as what it already holds plus this step's
         # query. Growing vs fixed-size is the layer's *kind*, not what `get_max_length` reports — a
         # `DynamicSlidingWindowLayer` grows and crops, yet reports its whole window (4096 on a gemma2 text
         # config), padding the mask to a width the graph never declared (`set_inputs` then refuses it).
         cache_len = mask_width(past_key_values, text.shape[1])
-        # A modality that advances with the text: embed the whole prompt's features once, then hand this step
-        # the window its own tokens span (`past_seen * stride` onwards) — what the model's own
-        # `prepare_inputs_for_generation` slices out before each call.
-        if self._embedder is not None and self._embedder.produces in runner.input_names:
-            features = kwargs.get(self._embedder.source)
-            if features is not None and (self._embedded is None or past_len == 0):
-                self._embedded = next(iter(self._embedder.runner(**{self._embedder.source: features}).values()))
-            if self._embedded is not None:
-                stride = self._embedder.stride
-                feed[self._embedder.produces] = self._embedded[
-                    :, past_len * stride : (past_len + text.shape[1]) * stride
-                ]
-        # Containers the graph declares besides its own cache, and that the trace saw *empty*: a fresh empty
-        # one each step is exactly the structure it was traced with (voxtral_realtime's decode re-derives its
-        # encoder state from this step's audio window, and its conv state belongs to the pre-loop embedder).
-        # One traced non-empty is a cache with real content and not ours to invent, so it is left alone.
-        for name, spec in runner.export_metadata.kwargs.items():
-            container = spec.get("container")
-            if container is None or spec.get("leaves") or name in feed:
-                continue
-            empty = _empty_container(
-                container, self.config, text.shape[0], self._dtype, self._device, self._encoder_config
-            )
-            # `_declares`, not a plain name lookup: a backend that flattens the container names only its
-            # leaves (`input.encoder_past_key_values.layers.0.keys`), so the kwarg itself is never in
-            # `input_names` and the graph would go unfed.
-            if empty is not None and runner.declares(name, empty):
-                feed[name] = empty
         feed.update(self._mask_feed(runner, attention_mask, position_ids, cache_len))
         # A graph that names the decoder's mask separately gets the causal one here — `attention_mask` is
         # the *encoder's* on those models. `generate` supplies neither this nor decoder positions (the
@@ -797,7 +821,7 @@ class ExportedGenerator(GenerationMixin):
             feed[runner.cache_input] = past_key_values
         # Only what this graph declares: a model whose decode graph takes its text some other way
         # (higgs_audio_v2 embeds it upstream) would otherwise be handed an `input_ids` it never had. Pytree
-        # kwargs are the exception — see `_declares`, which knows a graph naming only their leaves still takes
+        # kwargs are the exception — see `declares`, which knows a graph naming only their leaves still takes
         # them (the cache, `encoder_outputs`, a mask dict).
         outputs = runner(**{name: value for name, value in feed.items() if runner.declares(name, value)})
         if past_key_values is not None:

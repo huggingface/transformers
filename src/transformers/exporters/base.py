@@ -114,14 +114,10 @@ def read_export_manifest(pretrained_model_name_or_path, **download_kwargs) -> di
 def saved_roles(manifest: dict) -> dict[str, ComponentRole]:
     """`{component: role}` from a manifest — what each saved graph is for.
 
-    A load dispatches on these exactly as an in-memory export dispatches on `ExportArtifacts.can_generate`, so
-    the two paths cannot drift apart. An entry written before roles were recorded falls back to reading its
-    name, which is what the exporter would have called it.
+    A load dispatches on these exactly as an in-memory export dispatches on `ExportArtifacts.can_generate`,
+    so the two paths cannot drift apart.
     """
-    return {
-        name: ComponentRole(entry["role"]) if "role" in entry else ComponentRole.of(name)
-        for name, entry in manifest["components"].items()
-    }
+    return {name: ComponentRole(entry["role"]) for name, entry in manifest["components"].items()}
 
 
 def load_export_runners(pretrained_model_name_or_path, **kwargs) -> tuple[dict[str, ModelRunner], dict]:

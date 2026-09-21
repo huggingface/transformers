@@ -39,12 +39,15 @@ from .cache import (
     kv_geometry_of,
     materialize_cache_layers,
 )
-from .components import Component, ComponentRole
-from .utils import (
+from .components import (
+    Component,
+    ComponentRole,
     CrossAttentionEncoder,
     ModalityEncoder,
     PatchVisionEncoder,
     TokenEmbedder,
+)
+from .utils import (
     _find_config_attr,
     module_device,
     module_dtype,
@@ -301,7 +304,7 @@ def decompose_prefill_decode(
     inputs: dict[str, Any],
     generation_config: Any = None,
     multi_token_decode: bool = False,
-) -> dict[str, tuple[torch.nn.Module, dict]]:
+) -> dict[str, Component]:
     """Run `model.generate()` and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
@@ -320,8 +323,7 @@ def decompose_prefill_decode(
     classic single-token decode.
 
     Returns:
-        `dict[str, tuple[torch.nn.Module, dict]]`:
-        `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`.
+        `{"prefill": Component(model, prefill_inputs), "decode": Component(model, decode_inputs)}`.
     """
     # 1 prefill forward + 1 decode (or 2 decode steps merged, when `multi_token_decode`) forward to capture.
     # Set the capture window on the config itself, not as generate() kwargs — passing a
@@ -387,8 +389,8 @@ def decompose_prefill_decode(
         check_cache_geometry(model.config, captured_cache)
 
     return {
-        "prefill": (copy.copy(model), prefill_inputs),
-        "decode": (copy.copy(model), decode_inputs),
+        "prefill": Component("prefill", copy.copy(model), prefill_inputs, ComponentRole.PREFILL),
+        "decode": Component("decode", copy.copy(model), decode_inputs, ComponentRole.DECODE),
     }
 
 
@@ -747,34 +749,35 @@ def decompose_multimodal(
     return components
 
 
-def _needs_prefill_graph(model, stages: dict, components: dict, *, cross_written_by_encoder=None) -> bool:
-    """Whether the prompt needs a graph of its own, beside a *merged* decode graph that could serve it.
+def _needs_prefill_graph(model, components: dict, *, cross_written_by_encoder=None) -> bool:
+    """Whether the prompt needs a graph of its own, beside a decode graph that could serve it.
 
-    Asked only where the decode graph's query axis is symbolic (`multi_token_decode`), because that is what
-    lets one graph take both a whole prompt on a fresh cache and one token on a full one. Shipping a second
-    graph then costs a duplicate copy of every parameter, and buys nothing a merged decode has not already
-    given up: a query=1 decode is the shape worth capturing as a CUDA graph, and merging is what trades
-    that away. So the answer is "no" unless the decode graph provably cannot stand in.
+    Asked wherever the decode graph might stand in for the prompt: a merged decode takes a symbolic query
+    axis, and a multi-modal export is driven through its decode graph whatever that axis is. Shipping a
+    second graph costs a duplicate copy of every parameter, so the answer is "no" unless the decode graph
+    provably cannot stand in.
 
     The shapes where it cannot all come down to one thing: **the decode graph was traced after the branch**.
     `torch.export` records the path a Python `if` took, not the `if`, so whatever the prompt's forward does
     and a decode step does not is absent from the graph — not disabled, absent. A symbolic query axis does
     not bring it back. Cross-attention is the clearest case: at decode time `is_updated` is `True`, so the
     graph holds the cache *read* and the `k_proj`/`v_proj` that fill that cache were never traced.
+
+    `cross_written_by_encoder` asks the question hypothetically — whether the answer *would* be no if the
+    encoder wrote the cross cache — which is how `_fold_cross_cache_into_encoder` finds out whether moving
+    those writes there would buy anything.
     """
     # An encoder-decoder's prefill is the one graph that *writes* the cross-attention cache; the decode
     # graph, captured after it, only reads it (`is_updated` bakes as trace-time context). Unless the encoder
-    # component writes it instead, which is the whole point of `CrossAttentionEncoder` — and then a second
-    # writer would be worse than redundant: the prefill graph was traced filling an *empty* cross cache, so
-    # handing it a seeded one does not match the spec it was traced against.
-    # Normally read off the encoder component; `cross_written_by_encoder` asks it hypothetically, which is
-    # how `_fold_cross_cache_into_encoder` finds out whether writing it there would buy anything.
+    # component writes it instead (`CrossAttentionEncoder`), and then a second writer would be worse than
+    # redundant: the prefill graph was traced filling an *empty* cross cache.
+    encoder = components.get("encoder")
     writes_cross_cache = (
-        isinstance(stages.get("encoder", (None, None))[0], CrossAttentionEncoder)
+        isinstance(encoder.module if encoder is not None else None, CrossAttentionEncoder)
         if cross_written_by_encoder is None
         else cross_written_by_encoder
     )
-    if "encoder" in stages and not writes_cross_cache:
+    if encoder is not None and not writes_cross_cache:
         return True
     # A modality that streams alongside the text unifies its token count with the query length in a merged
     # decode and then bakes a query-length branch, so that graph cannot serve single-token steps.
@@ -784,7 +787,7 @@ def _needs_prefill_graph(model, stages: dict, components: dict, *, cross_written
     # idefics-style gated cross-attention cache) has the same writer/reader split as the encoder-decoder.
     # Under either name the decode capture took it: a recurrent model keeps its conv / SSM state in
     # `cache_params`, and looking only at `past_key_values` misses exactly the layers this rule is about.
-    decode_inputs = stages["decode"][1]
+    decode_inputs = components["decode"].inputs
     cache = next(
         (decode_inputs[name] for name in ("past_key_values", "cache_params") if decode_inputs.get(name) is not None),
         None,
@@ -801,10 +804,9 @@ def _needs_prefill_graph(model, stages: dict, components: dict, *, cross_written
     # A modality the prompt carries that no component took: a model whose images enter through
     # cross-attention (mllama, idefics) has no `get_<modality>_features` getter to split out, so its vision
     # tower runs inside the prompt's own forward and the decode graph never sees pixels. Asked per
-    # *modality*, not per kwarg name -- a getter takes its features under its own parameter name (the video
-    # one takes `pixel_values`, not `pixel_values_videos`), so the component's presence is the fact to read,
-    # and a leftover kwarg of another kind says nothing: the runtime consumes `image_sizes` itself.
-    prefill_inputs = stages["prefill"][1]
+    # *modality*, not per kwarg name — a getter takes its features under its own parameter name (the video
+    # one takes `pixel_values`, not `pixel_values_videos`), so the component's presence is what to read.
+    prefill_inputs = components["prefill"].inputs
     return any(
         prefill_inputs.get(key) is not None
         for name, _getter, input_keys, *_ in _MODALITY_SPECS
@@ -813,7 +815,7 @@ def _needs_prefill_graph(model, stages: dict, components: dict, *, cross_written
     )
 
 
-def _cross_writing_encoder(encoder, writers: dict, encoder_inputs: dict, stages: dict):
+def _cross_writing_encoder(encoder, writers: dict, encoder_inputs: dict, components: dict):
     """A `CrossAttentionEncoder` that reproduces this model's cross cache, or `None` if it cannot.
 
     Replaying a writer gives the cache back only when the module's cross work is separable from the rest of
@@ -822,12 +824,12 @@ def _cross_writing_encoder(encoder, writers: dict, encoder_inputs: dict, stages:
     keep a list of the modules that behave, the component is built and *checked* against the cache the model
     itself filled — and where it disagrees the export keeps the prompt graph that was writing it before.
     """
-    captured = stages["decode"][1].get("past_key_values")
+    captured = components["decode"].inputs.get("past_key_values")
     layers = getattr(getattr(captured, "cross_attention_cache", None), "layers", [])
     if not layers:
         return None
     # On copies of the captured call: the check runs a module that may write into its arguments in place,
-    # and those tensors are the ones the decode stage is about to be exported with.
+    # and those tensors are the ones the decode component is about to be exported with.
     copied = {
         index: writer._replace(args=copy.deepcopy(writer.args), kwargs=copy.deepcopy(writer.kwargs))
         for index, writer in writers.items()
@@ -856,7 +858,7 @@ def _cross_writing_encoder(encoder, writers: dict, encoder_inputs: dict, stages:
     return component
 
 
-def _fold_cross_cache_into_encoder(model, stages: dict, writers: dict, components: dict) -> dict:
+def _fold_cross_cache_into_encoder(model, components: dict, writers: dict) -> dict:
     """Let the encoder component write the decoder's cross-attention cache, when that buys the prompt graph.
 
     Only then. The point is to ship one text stack instead of two, so if anything *else* already requires a
@@ -864,17 +866,17 @@ def _fold_cross_cache_into_encoder(model, stages: dict, writers: dict, component
     the cache as it always did, and a second writer in the encoder would be worse than redundant: the prompt
     graph was traced filling an *empty* cross cache, and would be handed a seeded one.
     """
-    if not writers or "encoder" not in stages:
-        return stages
-    if _needs_prefill_graph(model, stages, components, cross_written_by_encoder=True):
-        return stages
-    encoder, encoder_inputs = stages["encoder"]
-    component = _cross_writing_encoder(encoder, writers, encoder_inputs, stages)
-    return stages if component is None else {**stages, "encoder": (component, encoder_inputs)}
+    encoder = components.get("encoder")
+    if not writers or encoder is None:
+        return components
+    if _needs_prefill_graph(model, components, cross_written_by_encoder=True):
+        return components
+    module = _cross_writing_encoder(encoder.module, writers, encoder.inputs, components)
+    return components if module is None else {**components, "encoder": replace(encoder, module=module)}
 
 
-def _materialize_stage_cache(model, stage_inputs: dict, decode_inputs: dict) -> None:
-    """Fill in a captured stage's cache, so it is traced against the cache the runtime will feed it.
+def _materialize_prefill_cache(model, prefill_inputs: dict, decode_inputs: dict) -> None:
+    """Fill in the prompt capture's cache, so it is traced against the cache the runtime will feed it.
 
     What a capture hands back is the pre-forward, lazily-uninitialized cache, while `torch.export` bakes
     real tensors into the graph's input spec. The geometry comes from the *decode* capture's cache, which
@@ -883,10 +885,10 @@ def _materialize_stage_cache(model, stage_inputs: dict, decode_inputs: dict) -> 
     layer the model leaves empty (hy_v4's "shared" indexer layers reuse another's) must stay empty here too,
     or the prefill graph takes a leaf the decode graph does not.
     """
-    cache = stage_inputs.get("past_key_values")
+    cache = prefill_inputs.get("past_key_values")
     if cache is None:
         return
-    batch_size = next(t for t in stage_inputs.values() if isinstance(t, torch.Tensor)).shape[0]
+    batch_size = next(t for t in prefill_inputs.values() if isinstance(t, torch.Tensor)).shape[0]
     materialize_cache_layers(
         cache,
         batch_size,
@@ -898,10 +900,98 @@ def _materialize_stage_cache(model, stage_inputs: dict, decode_inputs: dict) -> 
     )
 
 
-def _component(name: str, stage: tuple) -> Component:
-    """A captured `(module, inputs)` stage as the component the exporter takes."""
-    module, inputs = stage
-    return Component(name, module, inputs, ComponentRole.of(name))
+def _capture_generation(
+    model, inputs, generation_config, multi_token_decode
+) -> tuple[dict[str, Component], dict, dict]:
+    """One real `generate`, and everything it has to say: the prompt and decode components, plus what an
+    encoder-decoder does *outside* the decode loop.
+
+    Returns `(components, recorded_features, cross_writers)`. The last two are empty for a decoder-only
+    model, which does all its work inside the forwards the capture already sees.
+    """
+    capture = functools.partial(
+        decompose_prefill_decode,
+        model,
+        inputs,
+        generation_config=generation_config,
+        multi_token_decode=multi_token_decode,
+    )
+    if not getattr(model.config, "is_encoder_decoder", False):
+        return capture(), {}, {}
+
+    # `generate` runs the encoder once outside the decoder loop (`get_encoder()(...)`), so it never appears
+    # in the captured forwards — capture its call during the same generate to export it as its own
+    # component (the runtime serves it back through `get_encoder()`). Record the modality getters over the
+    # same generate: this model runs its vision tower once, into the encoder, so the prefill kwargs no
+    # longer carry the images.
+    modality_owners = {
+        name: owner for name, getter, *_ in _MODALITY_SPECS if (owner := _modality_owner(model, getter)) is not None
+    }
+    with contextlib.ExitStack() as stack:
+        encoder_calls = stack.enter_context(_capture_calls(model.get_encoder(), "forward"))
+        cross_writers = stack.enter_context(capture_cross_writers(model))
+        live = {
+            name: stack.enter_context(_capture_calls(owner, _MODALITY_GETTERS[name]))
+            for name, owner in modality_owners.items()
+        }
+        components = capture()
+    encoder_inputs = {key: value for key, value in encoder_calls[0].items() if isinstance(value, torch.Tensor)}
+    components = {
+        "encoder": Component("encoder", model.get_encoder(), encoder_inputs, ComponentRole.ENCODER),
+        **components,
+    }
+    return components, {name: list(calls) for name, calls in live.items() if calls}, cross_writers
+
+
+def _streaming_embedder(model, inputs) -> Component | None:
+    """The pre-loop embedder of a model whose modality advances with the text (`_STREAMING_EMBEDDERS`).
+
+    The decode graph takes a window of this graph's output, so without it nothing turns the raw features
+    into one and the runtime is handed a feature kwarg no graph declares.
+    """
+    spec = streaming_embedder_spec(model.config)
+    if spec is None or inputs.get(spec.source) is None:
+        return None
+    module = model.base_model
+    for attribute in spec.path.split("."):
+        module = getattr(module, attribute, None)
+        if module is None:
+            return None
+    return Component(spec.component, module, {spec.source: inputs[spec.source]}, ComponentRole.STREAMING_EMBEDDER)
+
+
+def _embedded_inputs(call_inputs: dict, components: dict) -> dict:
+    """A text graph's captured kwargs, rewritten to take embeddings where it took token ids and modality
+    inputs.
+
+    This is what lets the components reassemble into a loop: the runtime scatters each modality's features
+    into the embeddings and hands the result to the text graph, so the graph itself takes neither the
+    pixels nor the ids. The full forward accepts `inputs_embeds` and — with no modality inputs — skips the
+    encoders, which is why the same module serves as the text graph.
+    """
+    call_inputs = copy.copy(call_inputs)
+    for _name, _getter, input_keys, grid_key, _token_field in _MODALITY_SPECS:
+        for input_key in input_keys:
+            call_inputs.pop(input_key, None)
+        if grid_key is not None:
+            call_inputs.pop(grid_key, None)
+    # The anyres packing reads the image sizes as *data*, which is why it moved out of the graphs and into
+    # the runtime (`pack_anyres_features`). Nothing downstream of the scatter reads them, so a text graph
+    # that kept them in its spec would only be asking for a tensor the runtime deliberately never feeds.
+    call_inputs.pop("image_sizes", None)
+    # `mm_token_type_ids` only drives the model's internal M-RoPE (`get_rope_index`); once `position_ids`
+    # is captured, the forward never reads it. Drop it from the graph's inputs so the runtime (which
+    # supplies `position_ids` by running that same `get_rope_index`) needn't thread a per-step token-type
+    # tensor.
+    if call_inputs.get("position_ids") is not None:
+        call_inputs.pop("mm_token_type_ids", None)
+    if call_inputs.get("input_ids") is not None and "embed_tokens" in components:
+        with torch.no_grad():
+            embedded = components["embed_tokens"].module(call_inputs.pop("input_ids"))
+        # A decoder with per-layer embeddings returns those alongside `inputs_embeds`; both are per-token
+        # inputs of the decode graph, so they go in as they come out.
+        call_inputs.update(embedded if isinstance(embedded, dict) else {"inputs_embeds": embedded})
+    return call_inputs
 
 
 def decompose_for_generation(
@@ -909,10 +999,9 @@ def decompose_for_generation(
 ) -> dict[str, Component]:
     """Decompose a generative model into independently exportable components.
 
-    Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
-    `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
-    further splits it into one entry per submodule (vision/audio encoder, projector, language model,
-    `text_decoder`) via `decompose_multimodal`.
+    Captures prefill and decode forward kwargs from a real `model.generate(**inputs)`
+    (`decompose_prefill_decode`), splits a multi-modal prompt into one component per submodule
+    (`decompose_multimodal`), and drops the prompt's own graph wherever the decode graph can serve it.
 
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
@@ -921,129 +1010,52 @@ def decompose_for_generation(
             one with `cache_implementation="static"` + `max_cache_len=N` to export against a statically
             sized cache (see `decompose_prefill_decode`).
         multi_token_decode: When `True`, capture the `decode` component as a multi-token decode (dynamic
-            query sequence axis: multiple tokens at once — continuation-from-past, or a plain prefill when the cache is empty); a
-            single-token decode can't stay dynamic (see `decompose_prefill_decode`).
+            query sequence axis: multiple tokens at once — continuation-from-past, or a plain prefill when
+            the cache is empty); a single-token decode can't stay dynamic (see `decompose_prefill_decode`).
 
     Returns:
-        `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
-        plain generative models and `"embed_tokens"` / `"image_encoder"` / `"audio_encoder"` /
-        `"text_decoder"` / `"decode"` for multi-modal generative models. For multi-modal
-        models the `decode` component takes `inputs_embeds` (not `input_ids`) so the caller can scatter the
-        encoder features into the embeddings before running it.
+        `{component_name: Component}` — `"prefill"` / `"decode"` for a plain generative model,
+        plus `"embed_tokens"` / `"image_encoder"` / `"audio_encoder"` / `"encoder"` as the architecture
+        calls for them. A multi-modal `decode` takes `inputs_embeds` (not `input_ids`), so the runtime
+        scatters the encoder features into the embeddings before running it.
     """
-    recorded_features: dict[str, list] = {}
-    cross_writers: dict = {}
-    if getattr(model.config, "is_encoder_decoder", False):
-        # `generate` runs the encoder once outside the decoder loop (`get_encoder()(...)`), so it never
-        # appears in the captured forwards — capture its call during the same generate to export it as its
-        # own component (the runtime serves it back through `get_encoder()`).
-        # Record the modality getters over the same generate: this model runs its vision tower once, into
-        # the encoder, so the prefill kwargs the split sees below no longer carry the images.
-        modality_owners = {
-            name: owner
-            for name, getter, *_ in _MODALITY_SPECS
-            if (owner := _modality_owner(model, getter)) is not None
-        }
-        with contextlib.ExitStack() as stack:
-            encoder_calls = stack.enter_context(_capture_calls(model.get_encoder(), "forward"))
-            cross_writers = stack.enter_context(capture_cross_writers(model))
-            live = {
-                name: stack.enter_context(_capture_calls(owner, _MODALITY_GETTERS[name]))
-                for name, owner in modality_owners.items()
-            }
-            stages = decompose_prefill_decode(
-                model, inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
-            )
-        recorded_features = {name: list(calls) for name, calls in live.items() if calls}
-        encoder_inputs = {k: v for k, v in encoder_calls[0].items() if isinstance(v, torch.Tensor)}
-        stages = {"encoder": (model.get_encoder(), encoder_inputs), **stages}
-    else:
-        stages = decompose_prefill_decode(
-            model, inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
-        )
-    prefill_model, prefill_inputs = stages["prefill"]
+    components, recorded_features, cross_writers = _capture_generation(
+        model, inputs, generation_config, multi_token_decode
+    )
 
-    if not is_multimodal(prefill_model):
-        if multi_token_decode:
-            stages = _fold_cross_cache_into_encoder(model, stages, cross_writers, components={})
-        # One text stack, not two: a merged decode takes a symbolic query axis, so it serves the whole
-        # prompt as readily as one token. Shipping the captured prefill beside it would duplicate every
-        # parameter to buy a query=1 graph worth capturing as a CUDA graph -- which is precisely what a
-        # merged decode gives up anyway. A single-token decode is the other trade: its query axis bakes to
-        # 1, it cannot take a prompt, and the split is the point.
-        if multi_token_decode and not _needs_prefill_graph(model, stages, components={}):
-            # Everything but the prompt's own copy of the text stack — an encoder-decoder keeps its encoder,
-            # which is a different graph doing different work.
-            return {name: _component(name, stage) for name, stage in stages.items() if name != "prefill"}
-        # Text path only — the multi-modal prefill is discarded after the submodule split, and materializing
-        # it would leak cache inputs into the `text_decoder` component's capture. (Decode, captured
-        # post-prefill, already holds a materialized cache.)
-        _materialize_stage_cache(model, prefill_inputs, stages["decode"][1])
-        return {name: _component(name, stage) for name, stage in stages.items()}
+    # The prompt's own forward is a single graph only for a text model. Where it runs modality towers,
+    # those become graphs of their own and the text stack is served by the decode component, fed embeddings.
+    prompt = components["prefill"]
+    multimodal = is_multimodal(prompt.module)
+    if multimodal:
+        split = decompose_multimodal(prompt.module, prompt.inputs, recorded_features, inputs.get("input_ids"))
+        # `text_decoder` is the text graph of a *plain* split, traced at the prompt's own call. A generation
+        # loop drives the decode component instead — the same stack, traced at the call the loop makes — so
+        # keeping both would export every text parameter twice.
+        split.pop("text_decoder", None)
+        components.update(split)
+        if (embedder := _streaming_embedder(model, inputs)) is not None:
+            components[embedder.name] = embedder
 
-    components = decompose_multimodal(prefill_model, prefill_inputs, recorded_features, inputs.get("input_ids"))
-    # The pre-loop embedder, for a model whose modality advances with the text (`_STREAMING_EMBEDDERS`): the
-    # decode graph takes a window of its output, so without this graph nothing turns the raw features into
-    # one and the runtime is handed a feature kwarg no graph declares.
-    if (spec := streaming_embedder_spec(model.config)) is not None and inputs.get(spec.source) is not None:
-        module = model.base_model
-        for attribute in spec.path.split("."):
-            module = getattr(module, attribute, None)
-            if module is None:
-                break
-        if module is not None:
-            components[spec.component] = Component(
-                spec.component, module, {spec.source: inputs[spec.source]}, ComponentRole.STREAMING_EMBEDDER
-            )
-    # The multi-modal split rebuilds the component set from the prefill, so carry over the stages that
-    # belong to the model as a whole — an encoder-decoder's `encoder` runs once outside the decode loop and
-    # is captured above, and dropping it leaves the runtime with a decode graph asking for `encoder_outputs`
-    # nothing produces.
-    if "encoder" in stages:
-        components["encoder"] = _component("encoder", stages["encoder"])
-    # One decision, made once: does the first step need a graph of its own, or can the decode graph serve
-    # it? Three branches used to answer it with the same body; the reasons differ, the answer does not.
+    # Let the encoder write the decoder's cross-attention cache, where that is what frees the prompt graph.
     if multi_token_decode:
-        stages = _fold_cross_cache_into_encoder(model, stages, cross_writers, components)
-        if "encoder" in components:
-            components["encoder"] = _component("encoder", stages["encoder"])
-    # The decode graph serves the prompt too, so the captured prefill is usually dropped here; it is kept
-    # as a component only for the shapes where it cannot (`_needs_prefill_graph`).
-    if "prefill" in stages and _needs_prefill_graph(model, stages, components):
-        _materialize_stage_cache(model, stages["prefill"][1], stages["decode"][1])
-        components["prefill"] = _component("prefill", stages["prefill"])
+        components = _fold_cross_cache_into_encoder(model, components, cross_writers)
 
-    # Feed the decode graph `inputs_embeds` (not `input_ids`) so the runtime can scatter the encoder embeds
-    # into the embeddings before the text stack; the full forward accepts `inputs_embeds` and — with no
-    # modality inputs — skips the encoders. This is what lets the components reassemble into a loop.
-    def as_embedded_inputs(call_inputs: dict) -> dict:
-        call_inputs = copy.copy(call_inputs)
-        for _name, _getter, _input_keys, grid_key, _token_field in _MODALITY_SPECS:
-            for _input_key in _input_keys:
-                call_inputs.pop(_input_key, None)
-            if grid_key is not None:
-                call_inputs.pop(grid_key, None)
-        # `mm_token_type_ids` only drives the model's internal M-RoPE (`get_rope_index`); once `position_ids`
-        # is captured, the forward never reads it. Drop it from the graph's inputs so the runtime (which
-        # supplies `position_ids` by running that same `get_rope_index`) needn't thread a per-step
-        # token-type tensor.
-        if call_inputs.get("position_ids") is not None:
-            call_inputs.pop("mm_token_type_ids", None)
-        if call_inputs.get("input_ids") is not None and "embed_tokens" in components:
-            embedding = components["embed_tokens"].module
-            with torch.no_grad():
-                embedded = embedding(call_inputs.pop("input_ids"))
-            # A decoder with per-layer embeddings returns those alongside `inputs_embeds`; both are per-token
-            # inputs of the decode graph, so they go in as they come out.
-            call_inputs.update(embedded if isinstance(embedded, dict) else {"inputs_embeds": embedded})
-        return call_inputs
+    # Does the prompt need a graph of its own? A single-token decode bakes its query axis to 1 and cannot
+    # take a prompt, so the captured prefill is kept outright. Only a merged decode can serve both, and
+    # there the prefill is kept just where that graph provably cannot stand in (`_needs_prefill_graph`).
+    if not multi_token_decode or _needs_prefill_graph(model, components):
+        _materialize_prefill_cache(model, components["prefill"].inputs, components["decode"].inputs)
+    else:
+        del components["prefill"]
 
-    components["decode"] = _component("decode", (stages["decode"][0], as_embedded_inputs(stages["decode"][1])))
-    # Same treatment for a kept prefill when the modality graphs exist: the runtime scatters the features
-    # in front of it, and the vision tower — whose data-dependent packing only traces at the getter seam,
-    # where the precompute injects its tensors — stays out of the graph. The idefics-style writer (no
-    # modality getter) keeps its raw inputs: the tower inline is the point there.
-    if "prefill" in components and any(name.endswith("_encoder") for name in components):
-        prompt = components["prefill"]
-        components["prefill"] = replace(prompt, inputs=as_embedded_inputs(prompt.inputs))
+    # The text graphs take embeddings, which is what lets the runtime scatter the modality features in front
+    # of them. The kept prompt graph joins the decode graph in that only where the modality graphs exist:
+    # the idefics-style writer has no modality getter to split out, so running its tower inline is the point
+    # and it keeps its raw inputs.
+    if multimodal:
+        scattered = any(name.endswith("_encoder") for name in components)
+        for name in ("decode", "prefill") if scattered else ("decode",):
+            if (component := components.get(name)) is not None:
+                components[name] = replace(component, inputs=_embedded_inputs(component.inputs, components))
     return components
