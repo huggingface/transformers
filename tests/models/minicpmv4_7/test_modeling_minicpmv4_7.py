@@ -581,7 +581,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_get_rope_index_golden_canvas_layouts(self):
         """Exact canvas coordinates for every layout the processor can emit."""
         model = self.model_tester._mrope_model()
-        for layout, case in self.GOLDEN_CANVAS_LAYOUTS.items():
+        for layout, case in GOLDEN_CANVAS_LAYOUTS.items():
             with self.subTest(layout=layout):
                 input_ids = torch.tensor(case["input_ids"], device=torch_device)
                 if "attention_mask" in case:

@@ -50,8 +50,6 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     r"""
     insert_layer_id (`int`, *optional*, defaults to 6):
         Vision encoder layer index after which the window-attention merger is applied.
-    drop_vision_last_layer (`bool`, *optional*, defaults to `False`):
-        Whether to drop the last layer of the vision encoder.
     downsample_mode (`str`, *optional*, defaults to `"16x"`):
         Visual token downsampling ratio. `"4x"` keeps 4× more tokens.
     merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
@@ -85,6 +83,7 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     slice_start_id: int | None = None
     slice_end_id: int | None = None
     newline_id: int | None = None
+    drop_vision_last_layer = AttributeError()
 
 
 class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):

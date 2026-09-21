@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 [MiniCPM-V](https://huggingface.co/papers/2509.18154) is a series of efficient multimodal large language models developed by [OpenBMB](https://github.com/OpenBMB). Like [MiniCPM-V 4.6](./minicpmv4_6.md), the MiniCPM-V 4.7 architecture pairs a [SigLIP](./siglip.md) vision encoder that has a window-attention merger with a [Qwen3.5](./qwen3_5.md) language model backbone, and supports both 4x and 16x visual downsampling modes.
 
-The main addition over 4.6 is *canvas M-RoPE*: instead of numbering visual tokens along a single 1-D sequence, the model lays every image out on a 2-D canvas and assigns each visual token a `(temporal, height, width)` position, so slices of the same image keep their spatial relationship and video frames keep their temporal order. See [Canvas M-RoPE](#canvas-m-rope) for the configuration this requires.
+The main addition over 4.6 is *canvas M-RoPE*: instead of numbering visual tokens along a single 1-D sequence, the model lays every image out on a 2-D canvas and assigns each visual token a `(temporal, height, width)` position, so slices of the same image keep their spatial relationship and video frames keep their temporal order.
 
 This model was contributed by [OpenBMB](https://huggingface.co/openbmb).
 The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
