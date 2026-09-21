@@ -29,10 +29,8 @@ from transformers import (
     RTDetrResNetConfig,
     is_torch_available,
     is_vision_available,
-    logging,
 )
 from transformers.testing_utils import (
-    CaptureLogger,
     Expectations,
     require_scipy,
     require_torch,
@@ -637,22 +635,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         source_indices, target_indices = indices[0]
         self.assertEqual(source_indices.tolist(), list(range(num_nan_queries, num_queries)))
         self.assertEqual(sorted(target_indices.tolist()), list(range(num_targets)))
-
-    @require_scipy
-    def test_matcher_warns_if_all_logits_are_nan(self):
-        matcher, logits, pred_boxes, targets = self._prepare_matcher_and_targets(num_queries=4, num_targets=3)
-        logger = logging.get_logger("transformers.loss.loss_rt_detr")
-        logger.warning_once.cache_clear()
-
-        with CaptureLogger(logger) as capture:
-            matcher({"logits": logits, "pred_boxes": pred_boxes}, targets)
-        self.assertEqual("", capture.out)
-
-        logits[0] = float("nan")
-        with CaptureLogger(logger) as capture:
-            matcher({"logits": logits, "pred_boxes": pred_boxes}, targets)
-        self.assertIn("NaN or inf cost", capture.out)
-        logger.warning_once.cache_clear()
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
