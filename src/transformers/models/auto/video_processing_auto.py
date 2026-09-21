@@ -29,6 +29,7 @@ from ...utils import (
     cached_file,
     is_torchvision_available,
     logging,
+    resolve_revision,
     safe_load_json_file,
 )
 from ...utils.import_utils import requires
@@ -58,6 +59,7 @@ else:
             ("exaone4_5", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("instructblip", {"torchvision": "InstructBlipVideoVideoProcessor"}),
+            ("minicpmv4_7", {"torchvision": "MiniCPMV4_6VideoProcessor"}),
             ("pe_audio_video", {"torchvision": "PeVideoVideoProcessor"}),
             ("qwen2_5_omni", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("qwen2_5_vl", {"torchvision": "Qwen2VLVideoProcessor"}),
@@ -362,6 +364,15 @@ class AutoVideoProcessor:
         backend = kwargs.pop("backend", "torchvision")
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
 
         config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
