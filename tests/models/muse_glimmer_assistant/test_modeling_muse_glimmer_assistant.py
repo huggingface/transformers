@@ -15,19 +15,32 @@
 
 import unittest
 
+from transformers.testing_utils import (
+    Expectations,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
+from transformers.utils import is_torch_available
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
-    is_torch_available,
     random_attention_mask,
-    require_torch,
-    torch_device,
 )
 
 
 if is_torch_available():
     import torch
 
-    from transformers import MuseGlimmerAssistantConfig, MuseGlimmerAssistantModel
+    from transformers import (
+        AutoProcessor,
+        BitsAndBytesConfig,
+        MuseGlimmerAssistantConfig,
+        MuseGlimmerAssistantModel,
+        MuseGlimmerForConditionalGeneration,
+    )
 
 
 class MuseGlimmerAssistantModelTester:
@@ -141,3 +154,63 @@ class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Fix me later, not worth wasting time on it now")
     def test_retain_grad_hidden_states_attention(self):
         pass
+
+
+@slow
+@require_torch_accelerator
+class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    drafter_id = "meta-models/Muse-Glimmer-30B-assistant"
+    main_model_id = "meta-models/Muse-Glimmer-30B"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.drafter = None
+        cls.model = None
+
+    @classmethod
+    def get_drafter(cls):
+        if cls.drafter is None:
+            cls.drafter = MuseGlimmerAssistantModel.from_pretrained(
+                cls.drafter_id, dtype=torch.bfloat16, device_map="auto"
+            )
+        return cls.drafter
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+            cls.model = MuseGlimmerForConditionalGeneration.from_pretrained(
+                cls.main_model_id,
+                quantization_config=bnb_config,
+                device_map="auto",
+            )
+        return cls.model
+
+    def test_dflash_speculative_generation(self):
+        """End-to-end DFlash speculative decoding produces the same text as greedy decoding."""
+        model = self.get_model()
+        drafter = self.get_drafter()
+        processor = AutoProcessor.from_pretrained(self.main_model_id)
+        tokenizer = processor.tokenizer
+
+        prompt = "The meaning of life is"
+        prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
+        input_ids = torch.tensor([[tokenizer.bos_token_id] + prompt_ids], device=torch_device)
+
+        output = model.generate(
+            input_ids=input_ids,
+            assistant_model=drafter,
+            speculation_type="dflash",
+            max_new_tokens=24,
+            do_sample=False,
+        )
+        completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
+        # Expected value from MuseGlimmerIntegrationTest.test_text_generation_matches_reference.
+        # fmt: off
+        expected = Expectations(
+            {
+                ("cuda", None): " to find your gift. The purpose of life is to give it away.\n\nThe meaning of life is to find your gift",
+            }
+        )
+        # fmt: on
+        self.assertEqual(completion, expected.get_expectation())
