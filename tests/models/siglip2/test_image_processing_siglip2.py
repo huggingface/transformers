@@ -22,19 +22,12 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Siglip2ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     size = {"height": 18, "width": 18}
-    do_resize = True
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    resample = Image.Resampling.BILINEAR
     patch_size = 16
     max_num_patches = 256
 

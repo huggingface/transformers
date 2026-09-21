@@ -42,15 +42,10 @@ class Kimi26ImageProcessingTester(ImageProcessingTester):
     max_resolution = 1024
 
     # Image processor init kwargs
-    do_normalize = True
-    do_convert_rgb = True
-    do_resize = True
+    size = {"max_height": 512, "max_width": 512}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
-    size = {"max_height": 512, "max_width": 512}
     max_patches = 36
-    patch_size = 14
-    merge_size = 2
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -217,8 +212,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             for size in pixel_choices:
-                image_processor_dict["size"]["max_height"] = size
-                image_processor_dict["size"]["max_width"] = size
+                image_processor_dict["size"] = {"max_height": size, "max_width": size}
                 image_processor = image_processing_class(**image_processor_dict)
                 image_inputs = self.image_processor_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
@@ -227,8 +221,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Can't assign different sizes for H and W
         with self.assertRaises(ValueError):
             image_processor_dict = self.image_processor_dict.copy()
-            image_processor_dict["size"]["max_height"] = 100
-            image_processor_dict["size"]["max_width"] = 200
+            image_processor_dict["size"] = {"max_height": 100, "max_width": 200}
             image_processor = image_processing_class(**image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs()
             image_processor(image_inputs, return_tensors="pt")

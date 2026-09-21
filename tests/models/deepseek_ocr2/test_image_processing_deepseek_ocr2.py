@@ -29,13 +29,8 @@ class DeepseekOcr2ImageProcessingTester(ImageProcessingTester):
     max_resolution = 800
 
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 512, "width": 512}
     tile_size = 384
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_convert_rgb = True
 
 
 @require_torch

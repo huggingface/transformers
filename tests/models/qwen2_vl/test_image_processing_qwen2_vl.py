@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -46,16 +45,8 @@ class Qwen2VLImageProcessingTester(ImageProcessingTester):
     max_resolution = 1024
 
     # Image processor init kwargs
-    do_normalize = True
-    do_convert_rgb = True
-    do_resize = True
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
     min_pixels = 56 * 56
     max_pixels = 28 * 28 * 1280
-    patch_size = 14
-    temporal_patch_size = 2
-    merge_size = 2
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

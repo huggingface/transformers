@@ -29,14 +29,8 @@ class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
     max_resolution = 64
 
     # Image processor init kwargs
-    do_resize = True
-    size = {"shortest_edge": 32 * 32, "longest_edge": 64 * 64}
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_convert_rgb = True
     patch_size = 16
-    merge_size = 2
+    size = {"shortest_edge": 32 * 32, "longest_edge": 64 * 64}
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Wrap one image per sample to exercise Edge's nested multimodal input form."""

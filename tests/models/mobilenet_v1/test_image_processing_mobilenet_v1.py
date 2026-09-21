@@ -22,9 +22,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class MobileNetV1ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"shortest_edge": 20}
-    do_center_crop = True
     crop_size = {"height": 18, "width": 18}
 
 

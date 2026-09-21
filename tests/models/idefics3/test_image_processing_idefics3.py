@@ -38,18 +38,9 @@ class Idefics3ImageProcessingTester(ImageProcessingTester):
     num_images = 1
 
     # Image processor init kwargs
-    resample = PILImageResampling.LANCZOS
-    do_convert_rgb = True
-    do_resize = True
+    do_image_splitting = True
     size = {"longest_edge": max_resolution}
     max_image_size = {"longest_edge": 20}
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_pad = True
-    do_image_splitting = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

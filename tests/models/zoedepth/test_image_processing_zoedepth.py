@@ -35,14 +35,9 @@ class ZoeDepthDepthOutputProxy:
 
 class ZoeDepthImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 18, "width": 18}
     ensure_multiple_of = 32
     keep_aspect_ratio = False
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_pad = True
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.ensure_multiple_of, self.ensure_multiple_of

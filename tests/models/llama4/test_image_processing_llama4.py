@@ -23,12 +23,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 class Llama4ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     max_patches = 1
-    do_resize = True
     size = {"height": 20, "width": 20}
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_convert_rgb = True
     do_pad = False
 
 

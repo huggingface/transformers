@@ -22,12 +22,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class BlipImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 20, "width": 20}
-    do_normalize = True
-    image_mean = [0.48145466, 0.4578275, 0.40821073]
-    image_std = [0.26862954, 0.26130258, 0.27577711]
-    do_convert_rgb = True
     do_pad = False
 
 

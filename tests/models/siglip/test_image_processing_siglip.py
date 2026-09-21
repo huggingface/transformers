@@ -22,13 +22,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class SiglipImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 18, "width": 18}
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
 
 
 @require_torch

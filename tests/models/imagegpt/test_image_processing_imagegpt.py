@@ -55,9 +55,7 @@ class ImageGPTImageProcessingTester(ImageProcessingTester):
             [-0.6042559146881104, -0.02295008860528469, 0.5423797369003296],
         ]
     )
-    do_resize = True
     size = {"height": 18, "width": 18}
-    do_normalize = True
 
     def expected_output_image_shape(self, images):
         return (self.size["height"] * self.size["width"],)

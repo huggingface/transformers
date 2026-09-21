@@ -33,43 +33,14 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
-    from transformers.image_utils import PILImageResampling
-    from transformers.models.flava.image_processing_flava import (
-        FLAVA_CODEBOOK_MEAN,
-        FLAVA_CODEBOOK_STD,
-        FLAVA_IMAGE_MEAN,
-        FLAVA_IMAGE_STD,
-    )
-else:
-    FLAVA_IMAGE_MEAN = FLAVA_IMAGE_STD = FLAVA_CODEBOOK_MEAN = FLAVA_CODEBOOK_STD = None
-
 
 class FlavaImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    image_mean = FLAVA_IMAGE_MEAN
-    image_std = FLAVA_IMAGE_STD
-    do_normalize = True
-    do_resize = True
     size = {"height": 224, "width": 224}
-    resample = PILImageResampling.BICUBIC
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_center_crop = True
-    crop_size = {"height": 224, "width": 224}
     input_size_patches = 14
-    total_mask_patches = 75
-    mask_group_min_patches = 16
-    mask_group_min_aspect_ratio = 0.3
-    mask_group_max_aspect_ratio = 0.3
-    codebook_do_resize = True
     codebook_size = {"height": 112, "width": 112}
-    codebook_resample = PILImageResampling.LANCZOS
-    codebook_do_center_crop = True
-    codebook_crop_size = {"height": 112, "width": 112}
-    codebook_do_map_pixels = True
-    codebook_do_normalize = True
-    codebook_image_mean = FLAVA_CODEBOOK_MEAN
-    codebook_image_std = FLAVA_CODEBOOK_STD
+
+    mask_group_max_aspect_ratio = 0.3
 
     def get_expected_image_size(self):
         return (self.size["height"], self.size["width"])

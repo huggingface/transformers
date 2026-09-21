@@ -17,7 +17,6 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -35,12 +34,7 @@ class LlavaOnevisionImageProcessingTester(ImageProcessingTester):
     image_size = 20
 
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 20, "width": 20}
-    do_normalize = True
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    do_convert_rgb = True
 
 
 @require_torch

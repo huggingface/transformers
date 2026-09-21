@@ -27,11 +27,7 @@ if is_torch_available():
 
 class PPDocLayoutV3ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 40, "width": 40}
-    do_normalize = True
-    image_mean = [0.0, 0.0, 0.0]
-    image_std = [1.0, 1.0, 1.0]
 
 
 @require_torch

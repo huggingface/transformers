@@ -16,6 +16,7 @@ import json
 import pathlib
 import unittest
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -48,14 +49,9 @@ class DetrImageProcessingTester(ImageProcessingTester):
     width = 4
 
     # Image processor init kwargs
-    do_resize = True
     size = {"shortest_edge": 18, "longest_edge": 1333}
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_pad = True
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         from transformers.models.detr.modeling_detr import DetrSegmentationOutput

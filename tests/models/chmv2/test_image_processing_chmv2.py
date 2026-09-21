@@ -14,6 +14,7 @@
 
 import unittest
 
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_image_processing_common import (
@@ -27,9 +28,8 @@ class CHMv2ImageProcessingTester(ImageProcessingTester):
     num_labels = 5
 
     # Image processor init kwargs
-    image_mean = [0.485, 0.456, 0.406]
-    image_std = [0.229, 0.224, 0.225]
-    do_normalize = True
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
     do_resize = True
     size = {"height": 512, "width": 512}
     keep_aspect_ratio = False

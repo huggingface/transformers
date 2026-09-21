@@ -22,12 +22,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class ConvNextImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
     size = {"shortest_edge": 20}
-    crop_pct = 0.875
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]

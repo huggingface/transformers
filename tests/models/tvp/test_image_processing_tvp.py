@@ -17,6 +17,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -39,16 +40,11 @@ class TvpImageProcessingTester(ImageProcessingTester):
 
     # Image processor init kwargs
     crop_size = None
-    rescale_factor = 1 / 255
-    pad_mode = "constant"
-    image_mean = [0.48145466, 0.4578275, 0.40821073]
-    image_std = [0.26862954, 0.26130258, 0.27577711]
-    do_normalize = True
-    do_resize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
     size = {"longest_edge": 40}
     do_rescale = False
     do_center_crop = False
-    do_pad = True
     pad_size = {"height": 80, "width": 80}
 
     def expected_output_image_shape(self, images):

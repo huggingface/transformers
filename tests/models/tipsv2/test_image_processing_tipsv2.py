@@ -21,12 +21,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class Tipsv2ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 18, "width": 18}
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = False
-    do_convert_rgb = True
 
 
 @require_torch

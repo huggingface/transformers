@@ -17,6 +17,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -42,8 +43,8 @@ class MuseGlimmerImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     do_resize = True
     do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 2
     patch_size = 14
     merge_size = 2

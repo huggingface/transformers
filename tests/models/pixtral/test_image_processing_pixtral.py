@@ -40,13 +40,8 @@ class PixtralImageProcessingTester(ImageProcessingTester):
     max_num_images_per_sample = 3
 
     # Image processor init kwargs
-    do_resize = True
     size = {"longest_edge": 24}
     patch_size = {"height": 8, "width": 8}
-    do_normalize = True
-    image_mean = [0.48145466, 0.4578275, 0.40821073]
-    image_std = [0.26862954, 0.26130258, 0.27577711]
-    do_convert_rgb = True
 
     def expected_output_image_shape(self, images):
         if not isinstance(images, (list, tuple)):

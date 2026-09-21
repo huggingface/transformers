@@ -16,6 +16,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import OPENAI_CLIP_MEAN
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -34,12 +35,9 @@ class JanusImageProcessingTester(ImageProcessingTester):
     max_resolution = 200
 
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 384, "width": 384}
-    min_size = 14
-    do_normalize = True
-    image_mean = [0.48145466, 0.4578275, 0.40821073]
-    image_std = [0.26862954, 0.26130258, 0.27577711]
+    # Passing the mean explicitly also selects the padding background color.
+    image_mean = OPENAI_CLIP_MEAN
     do_convert_rgb = True
 
 

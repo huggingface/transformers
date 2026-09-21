@@ -36,12 +36,7 @@ class Tipsv2DptImageProcessingTester(ImageProcessingTester):
     num_labels = 3
 
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 18, "width": 18}
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = False
-    do_convert_rgb = True
 
 
 @require_torch

@@ -16,6 +16,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -35,12 +36,10 @@ if is_vision_available():
 
 class DeepseekVLHybridImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    high_res_image_mean = [0.5, 0.5, 0.5]
-    high_res_image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    high_res_image_mean = IMAGENET_STANDARD_MEAN
+    high_res_image_std = IMAGENET_STANDARD_STD
     size = {"height": 18, "width": 18}
     high_res_size = {"height": 36, "width": 36}
 

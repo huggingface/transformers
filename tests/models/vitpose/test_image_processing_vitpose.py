@@ -16,6 +16,7 @@ import unittest
 import numpy as np
 import pytest
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -36,13 +37,9 @@ if is_vision_available():
 
 class VitPoseImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_affine_transform = True
     size = {"height": 20, "width": 20}
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
 
 
 @require_torch

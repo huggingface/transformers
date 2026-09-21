@@ -32,13 +32,8 @@ class EfficientNetImageProcessingTester(ImageProcessingTester):
     batch_size = 13
 
     # Image processor init kwargs
-    do_rescale = True
     rescale_offset = True
     rescale_factor = 1 / 127.5
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
     size = {"height": 18, "width": 18}
     resample = PILImageResampling.BILINEAR
 

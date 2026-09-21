@@ -37,11 +37,8 @@ class MobileNetV2ImageProcessingTester(ImageProcessingTester):
     num_labels = 5
 
     # Image processor init kwargs
-    do_resize = True
     size = {"shortest_edge": 20}
-    do_center_crop = True
     crop_size = {"height": 18, "width": 18}
-    do_reduce_labels = False
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {

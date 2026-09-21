@@ -35,10 +35,6 @@ if is_vision_available():
 
 class Sam3ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
     size = {"height": 20, "width": 20}
     mask_size = {"height": 12, "width": 12}
 

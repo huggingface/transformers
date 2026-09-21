@@ -32,13 +32,7 @@ class PPOCRV5ServerRecImageProcessingTester(ImageProcessingTester):
     keep_aspect_ratio = False
 
     # Image processor init kwargs
-    do_rescale = True
-    rescale_factor = 1 / 255
     max_image_width = 3200
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
     size = {"height": 48, "width": 320}
     do_pad = False
 

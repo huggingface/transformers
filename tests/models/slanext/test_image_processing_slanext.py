@@ -34,12 +34,6 @@ class SLANeXtImageProcessingTester(ImageProcessingTester):
     min_resolution = 10
 
     # Image processor init kwargs
-    do_rescale = True
-    rescale_factor = 1 / 255
-    image_mean = [0.485, 0.456, 0.406]
-    image_std = [0.229, 0.224, 0.225]
-    do_normalize = True
-    do_resize = True
     size = {"height": 512, "width": 512}
     do_pad = True
 

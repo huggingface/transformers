@@ -17,6 +17,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -37,14 +38,12 @@ class Glm4vImageProcessingTester(ImageProcessingTester):
     max_resolution = 80
 
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
-    size = {"longest_edge": 20, "shortest_edge": 10}
     temporal_patch_size = 2
     patch_size = 14
     merge_size = 2
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"longest_edge": 20, "shortest_edge": 10}
 
     def expected_output_image_shape(self, images):
         grid_t = 1

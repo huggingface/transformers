@@ -24,10 +24,6 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class PromptDepthAnythingImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
     size = {"height": 18, "width": 18}
 
 

@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers.image_utils import SizeDict
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, SizeDict
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -29,15 +29,9 @@ class FuyuImageProcessingTester(ImageProcessingTester):
     max_resolution = 360
 
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 180, "width": 360}
-    do_pad = True
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_rescale = True
-    rescale_factor = 1 / 255
-    patch_size = {"height": 30, "width": 30}
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Prepares a batch of images for testing"""

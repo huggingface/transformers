@@ -22,13 +22,8 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class DeiTImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 20, "width": 20}
-    do_center_crop = True
     crop_size = {"height": 18, "width": 18}
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
 
 
 @require_torch

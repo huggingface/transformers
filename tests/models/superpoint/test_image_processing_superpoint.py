@@ -29,7 +29,6 @@ if is_torch_available():
 
 class SuperPointImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 480, "width": 640}
     do_grayscale = True
 

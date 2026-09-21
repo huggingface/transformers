@@ -41,10 +41,8 @@ class Kosmos2_5ImageProcessingTester(ImageProcessingTester):
     max_patches_values = [512, 1024, 2048, 4096]
 
     # Image processor init kwargs
-    size = {"height": 20, "width": 20}
     patch_size = {"height": 16, "width": 16}
-    do_normalize = True
-    do_convert_rgb = True
+    size = {"height": 20, "width": 20}
 
     def prepare_dummy_image(self):
         img_url = url_to_local_path(

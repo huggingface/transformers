@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.models.video_llama_3.image_processing_video_llama_3 import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -46,15 +45,8 @@ class VideoLlama3ImageProcessingTester(ImageProcessingTester):
     max_resolution = 1024
 
     # Image processor init kwargs
-    do_normalize = True
-    do_convert_rgb = True
-    do_resize = True
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
     min_pixels = 14 * 14 * 16
     max_pixels = 14 * 14 * 16384
-    patch_size = 14
-    merge_size = 1
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

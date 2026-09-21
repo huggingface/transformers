@@ -34,10 +34,6 @@ class VideoMAEImageProcessingTester(ImageProcessingTester):
     num_frames = 10
 
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
     size = {"shortest_edge": 18}
     crop_size = {"height": 18, "width": 18}
 

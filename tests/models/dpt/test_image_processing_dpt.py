@@ -35,10 +35,6 @@ class DPTImageProcessingTester(ImageProcessingTester):
     num_labels = 5
 
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
     size = {"height": 18, "width": 18}
     do_reduce_labels = False
 

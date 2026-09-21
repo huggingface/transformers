@@ -42,16 +42,7 @@ class Lfm2VlImageProcessingTester(ImageProcessingTester):
     max_resolution = 1024
 
     # Image processor init kwargs
-    downsample_factor = 2
     do_image_splitting = False
-    min_tiles = 2
-    max_tiles = 10
-    use_thumbnail = True
-    min_image_tokens = 64
-    max_image_tokens = 256
-    encoder_patch_size = 16
-    tile_size = 512
-    max_pixels_tolerance = 2.0
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

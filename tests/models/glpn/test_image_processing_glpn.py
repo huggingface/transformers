@@ -32,9 +32,7 @@ if is_vision_available():
 
 class GLPNImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size_divisor = 32
-    do_rescale = True
 
     def expected_output_image_shape(self, images):
         if isinstance(images[0], Image.Image):

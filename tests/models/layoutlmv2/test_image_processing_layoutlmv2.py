@@ -41,9 +41,7 @@ if is_torch_available():
 
 class LayoutLMv2ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 18, "width": 18}
-    apply_ocr = True
 
 
 @require_torch

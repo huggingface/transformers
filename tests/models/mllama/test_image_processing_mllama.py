@@ -36,15 +36,7 @@ class MllamaImageProcessingTester(ImageProcessingTester):
     num_images = 18
 
     # Image processor init kwargs
-    do_convert_rgb = True
-    do_resize = True
     size = {"height": 224, "width": 224}
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_pad = True
     max_image_tiles = 4
 
     def prepare_image_inputs(

@@ -43,12 +43,7 @@ if is_vision_available():
 
 class VitMatteImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_rescale = True
     rescale_factor = 0.5
-    do_pad = True
     size_divisor = 10
 
 

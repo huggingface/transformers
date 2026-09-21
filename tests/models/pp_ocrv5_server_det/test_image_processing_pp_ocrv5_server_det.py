@@ -17,6 +17,7 @@ import unittest
 import numpy as np
 
 from transformers import is_torch_available, is_vision_available
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
@@ -36,14 +37,9 @@ class PPOCRV5ServerDetImageProcessingTester(ImageProcessingTester):
 
     # Image processor init kwargs
     limit_side_len = 960
-    limit_type = "max"
     max_side_limit = 4000
-    do_rescale = True
-    rescale_factor = 1 / 255
-    image_mean = [0.485, 0.456, 0.406]
-    image_std = [0.229, 0.224, 0.225]
-    do_normalize = True
-    do_resize = True
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
     size = {"height": 512, "width": 512}
     do_pad = False
 

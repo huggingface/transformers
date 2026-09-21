@@ -34,14 +34,8 @@ class ChameleonImageProcessingTester(ImageProcessingTester):
     max_resolution = 200
 
     # Image processor init kwargs
-    do_resize = True
     size = {"shortest_edge": 18}
-    do_center_crop = True
     crop_size = {"height": 18, "width": 18}
-    do_normalize = True
-    image_mean = [1.0, 1.0, 1.0]
-    image_std = [1.0, 1.0, 1.0]
-    do_convert_rgb = True
     resample = PILImageResampling.BILINEAR
 
 

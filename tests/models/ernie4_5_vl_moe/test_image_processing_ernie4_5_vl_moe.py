@@ -18,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, load_image
+from transformers.image_utils import load_image
 from transformers.models.ernie4_5_vl_moe.image_processing_ernie4_5_vl_moe import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -39,14 +39,7 @@ class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
     max_resolution = 1024
 
     # Image processor init kwargs
-    do_normalize = True
-    do_convert_rgb = True
-    do_resize = True
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
     size = {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28}
-    patch_size = 14
-    merge_size = 2
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

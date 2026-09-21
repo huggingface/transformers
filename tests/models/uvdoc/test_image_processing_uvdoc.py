@@ -24,7 +24,6 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 class UVDocImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     do_normalize = False
-    do_resize = True
     size = {"height": 18, "width": 18}
 
 

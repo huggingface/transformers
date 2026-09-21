@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -32,15 +31,8 @@ if is_vision_available():
 
 class PerceptionLMImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     tile_size = 16
-    do_normalize = True
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
-    do_convert_rgb = True
     max_num_tiles = 4
-    vision_input_type = "thumb+tile"
-    resample = Image.Resampling.BICUBIC
     size = {"shortest_edge": 20}
 
 

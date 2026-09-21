@@ -36,11 +36,6 @@ if is_vision_available():
 
 class Gemma4UnifiedImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
-    do_normalize = False
-    image_mean = [0.0, 0.0, 0.0]
-    image_std = [1.0, 1.0, 1.0]
-    do_convert_rgb = True
     patch_size = 6
     max_soft_tokens = 70
     pooling_kernel_size = 1

@@ -17,7 +17,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -36,15 +35,9 @@ class AriaImageProcessingTester(ImageProcessingTester):
     num_images = 1
 
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
     max_image_size = 980
-    min_image_size = 336
     split_resolutions = [[980, 980]]
     split_image = True
-    do_convert_rgb = True
-    do_normalize = True
-    resample = PILImageResampling.BICUBIC
     size = {"longest_edge": max_resolution}
 
     def __init__(self, **kwargs):

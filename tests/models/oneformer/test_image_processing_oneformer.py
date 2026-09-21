@@ -20,6 +20,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -48,14 +49,10 @@ class OneFormerImageProcessingTester(ImageProcessingTester):
     width = 4
 
     # Image processor init kwargs
-    repo_path = "shi-labs/oneformer_demo"
-    do_resize = True
     size = {"shortest_edge": 32, "longest_edge": 1333}
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     num_labels = 10
-    do_reduce_labels = False
     ignore_index = 255
     class_info_file = "ade20k_panoptic.json"
     num_text = 10

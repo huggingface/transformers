@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -41,16 +41,11 @@ class HunYuanVLImageProcessingTester(ImageProcessingTester):
     max_resolution = 64
 
     # Image processor init kwargs
-    do_normalize = True
-    do_resize = True
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    min_pixels = 32 * 32
-    max_pixels = 32 * 32
     patch_size = 16
     temporal_patch_size = 1
+    min_pixels = 32 * 32
+    max_pixels = 32 * 32
     merge_size = 1
-    do_convert_rgb = True
 
 
 @require_torch

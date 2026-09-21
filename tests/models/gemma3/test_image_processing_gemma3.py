@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -32,12 +31,7 @@ if is_vision_available():
 
 class Gemma3ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 18, "width": 18}
-    do_normalize = True
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
-    do_convert_rgb = True
     do_pan_and_scan = True
     pan_and_scan_min_crop_size = 10
     pan_and_scan_max_num_crops = 2

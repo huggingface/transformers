@@ -33,12 +33,12 @@ if is_vision_available():
 
 class InklingImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
+    size = {"height": 40, "width": 40}
+
     do_resize = True
     do_normalize = False
     image_mean = [0.0, 0.0, 0.0]
     image_std = [1.0, 1.0, 1.0]
-    do_convert_rgb = True
-    size = {"height": 40, "width": 40}
 
 
 @require_torch

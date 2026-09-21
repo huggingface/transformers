@@ -33,14 +33,7 @@ if is_vision_available():
 
 class DonutImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 18, "width": 20}
-    do_thumbnail = True
-    do_align_long_axis = False
-    do_pad = True
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
 
 
 @require_torch

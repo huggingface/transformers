@@ -17,6 +17,7 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -40,10 +41,8 @@ class SegGptImageProcessingTester(ImageProcessingTester):
     num_segmentation_labels = 5
 
     # Image processor init kwargs
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_normalize = True
-    do_resize = True
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     size = {"height": 18, "width": 18}
 
     def expected_post_processed_shape(self):

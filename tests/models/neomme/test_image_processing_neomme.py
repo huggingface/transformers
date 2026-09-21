@@ -36,8 +36,8 @@ class NeoMMEImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     do_resize = True
     do_rescale = True
-    rescale_factor = 1 / 127.5
     do_normalize = True
+    rescale_factor = 1 / 127.5
     image_mean = [1.0, 1.0, 1.0]
     image_std = [1.0, 1.0, 1.0]
     patch_size = 4

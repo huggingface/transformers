@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.llava_next.image_processing_llava_next import select_best_resolution
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -33,14 +32,8 @@ if is_vision_available():
 
 class LlavaNextImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"shortest_edge": 20}
-    do_center_crop = True
     crop_size = {"height": 18, "width": 18}
-    do_normalize = True
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    do_convert_rgb = True
 
 
 @require_torch

@@ -47,9 +47,7 @@ class SuperGlueImageProcessingTester(ImageProcessingTester):
     batch_size = 6
 
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 480, "width": 640}
-    do_grayscale = True
 
     def expected_output_image_shape(self, images):
         return 2, self.num_channels, self.size["height"], self.size["width"]

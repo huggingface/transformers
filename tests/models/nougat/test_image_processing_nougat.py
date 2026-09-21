@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from transformers.image_utils import SizeDict, load_image
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, SizeDict, load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -35,15 +35,9 @@ if is_vision_available():
 
 class NougatImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_crop_margin = True
-    do_resize = True
     size = {"height": 20, "width": 20}
-    do_thumbnail = True
-    do_align_long_axis = False
-    do_pad = True
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     data_format = "channels_first"
 
     def prepare_dummy_image(self):

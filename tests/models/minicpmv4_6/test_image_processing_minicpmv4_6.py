@@ -37,17 +37,8 @@ class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
     max_resolution = 128
 
     # Image processor init kwargs
-    do_resize = True
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    max_slice_nums = 9
     scale_resolution = 448
     patch_size = 14
-    slice_mode = True
-    downsample_mode = "16x"
 
     def expected_output_image_shape(self, image_inputs):
         """Return the expected NaViT-packed shape [C, P, total_L] for pixel_values[0]."""

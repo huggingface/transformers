@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.paddleocr_vl.image_processing_paddleocr_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -39,17 +38,11 @@ class PaddleOCRVLImageProcessingTester(ImageProcessingTester):
     max_resolution = 80
 
     # Image processor init kwargs
+    patch_size = 14
+    merge_size = 2
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
-    do_resize = True
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    do_normalize = True
     min_pixels = size["shortest_edge"]
     max_pixels = size["longest_edge"]
-    patch_size = 14
-    temporal_patch_size = 1
-    merge_size = 2
-    do_convert_rgb = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

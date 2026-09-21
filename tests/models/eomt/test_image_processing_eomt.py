@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import load_image
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -45,11 +45,9 @@ class EomtImageProcessingTester(ImageProcessingTester):
     width = 18
 
     # Image processor init kwargs
-    do_resize = True
     size = {"shortest_edge": 18, "longest_edge": 18}
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     do_pad = True
 
     def prepare_fake_eomt_outputs(self, batch_size, patch_offsets=None):

@@ -47,16 +47,14 @@ class CohereCompassImageProcessingTester(ImageProcessingTester):
     max_resolution = 1024
 
     # Image processor init kwargs
-    min_pixels = 56 * 56
-    max_pixels = 28 * 28 * 1280
-    do_normalize = True
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_resize = True
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    do_convert_rgb = True
+    min_pixels = 56 * 56
+    max_pixels = 28 * 28 * 1280
 
     def prepare_image_processor_dict(self):
         return {

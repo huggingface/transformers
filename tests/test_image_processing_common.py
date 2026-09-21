@@ -186,6 +186,7 @@ class ImageProcessingTester:
 
     Any class attributes are automatically used to initialize the processor class
     under test if their name matches one of the args in the processor's init.
+    Set these class attributes only to override the processor's defaults.
 
     Attributes:
         parent (`ImageProcessingTestMixin`):

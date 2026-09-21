@@ -33,15 +33,7 @@ class Idefics2ImageProcessingTester(ImageProcessingTester):
     num_images = 1
 
     # Image processor init kwargs
-    do_convert_rgb = True
-    do_resize = True
     size = {"shortest_edge": 378, "longest_edge": 980}
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_pad = True
     do_image_splitting = True
 
     def get_expected_values(self, image_inputs, batched=False):

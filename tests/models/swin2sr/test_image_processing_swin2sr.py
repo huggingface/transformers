@@ -34,9 +34,6 @@ if is_vision_available():
 
 class Swin2SRImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_rescale = True
-    rescale_factor = 1 / 255
-    do_pad = True
     size_divisor = 8
 
     def expected_output_image_shape(self, images):

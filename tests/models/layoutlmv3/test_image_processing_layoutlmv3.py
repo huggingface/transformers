@@ -22,9 +22,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class LayoutLMv3ImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"height": 18, "width": 18}
-    apply_ocr = True
 
 
 @require_torch

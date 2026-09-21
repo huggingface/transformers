@@ -21,14 +21,8 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 class BitImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    do_resize = True
     size = {"shortest_edge": 20}
-    do_center_crop = True
     crop_size = {"height": 18, "width": 18}
-    do_normalize = True
-    image_mean = [0.48145466, 0.4578275, 0.40821073]
-    image_std = [0.26862954, 0.26130258, 0.27577711]
-    do_convert_rgb = True
 
 
 @require_torch

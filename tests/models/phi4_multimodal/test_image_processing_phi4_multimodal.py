@@ -38,14 +38,9 @@ class Phi4MultimodalImageProcessingTester(ImageProcessingTester):
     image_size = 100
 
     # Image processor init kwargs
+    dynamic_hd = 36
     do_resize = True
     size = {"height": 100, "width": 100}
-    patch_size = 14
-    dynamic_hd = 36
-    do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
-    do_convert_rgb = True
 
     def expected_output_image_shape(self, images):
         max_num_patches = 0
