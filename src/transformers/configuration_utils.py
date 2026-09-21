@@ -85,9 +85,8 @@ ALLOWED_MLP_LAYER_TYPES = (
 # Keep a complete list of layer types as well for BC
 ALLOWED_LAYER_TYPES = ALLOWED_ATTN_LAYER_TYPES + ALLOWED_MLP_LAYER_TYPES
 
-# Legacy ``layer_types`` strings → current ``linear_attention`` / ``full_attention`` convention.
-# Configs call ``remap_legacy_layer_types`` in their ``__post_init__`` so checkpoints stored on
-# the Hub with the old names (``mamba``, ``attention``) load transparently.
+
+# Mapping from old names to new names
 _LEGACY_LAYER_TYPE_REMAP = {
     "conv": "linear_attention",  # only in LFMv2
     "mamba": "linear_attention",

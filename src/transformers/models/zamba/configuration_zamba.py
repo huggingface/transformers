@@ -17,7 +17,7 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -106,8 +106,6 @@ class ZambaConfig(PreTrainedConfig):
                 "hybrid" if i % self.attn_layer_period == self.attn_layer_offset else "linear_attention"
                 for i in range(self.num_hidden_layers - 3)
             ]
-        else:
-            self.layers_block_type = remap_legacy_layer_types(self.layers_block_type)
 
         super().__post_init__(**kwargs)
 
