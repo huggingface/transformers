@@ -62,7 +62,7 @@ jobs:
     name: "${{ matrix.model }}"
     needs: models-setup
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
-    timeout-minutes: 150   # loose outer net; the `timeout` in the step is the real limit
+    timeout-minutes: 380   # loose outer net; the `timeout` in the step is the real limit
     strategy:
       fail-fast: false
       matrix:
@@ -85,7 +85,7 @@ jobs:
           # partial log (SIGINT -> summary; SIGKILL 2 min later if it's stuck in a
           # GPU call). xdist --max-worker-restart survives a segfault; pytest's
           # --timeout is the per-test cap. (xdist + pytest-timeout are in the image.)
-          timeout -s INT --kill-after=120 120m \
+          timeout -s INT --kill-after=120 360m \
             python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
               --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
 
@@ -93,7 +93,7 @@ jobs:
     name: "${{ matrix.model }}"
     needs: models-setup
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
-    timeout-minutes: 150
+    timeout-minutes: 380
     strategy:
       fail-fast: false
       matrix:
@@ -112,7 +112,7 @@ jobs:
       - name: Test ${{ matrix.model }}
         run: |
           cd /transformers
-          timeout -s INT --kill-after=120 120m \
+          timeout -s INT --kill-after=120 360m \
             python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
               --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
 
@@ -120,7 +120,7 @@ jobs:
     name: "${{ matrix.model }}"
     needs: models-setup
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
-    timeout-minutes: 150
+    timeout-minutes: 380
     strategy:
       fail-fast: false
       matrix:
@@ -139,7 +139,7 @@ jobs:
       - name: Test ${{ matrix.model }}
         run: |
           cd /transformers
-          timeout -s INT --kill-after=120 120m \
+          timeout -s INT --kill-after=120 360m \
             python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
               --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
 
