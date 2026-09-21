@@ -185,20 +185,30 @@ Add tests for each vision processing component in the model test directory. Imag
 
 ### Image processor tests
 
-Image processor tests usually live in `tests/models/<model_name>/test_image_processing_<model_name>.py` and inherit from [`ImageProcessingTestMixin`].
+Image processor tests usually live in `tests/models/<model_name>/test_image_processing_<model_name>.py` and inherit from [`ImageProcessingTester`] and [`ImageProcessingTestMixin`].
 
-The image processing mixin finds the image processor classes from `IMAGE_PROCESSOR_MAPPING_NAMES`. Expose model-specific defaults through `image_processor_dict`. Add a tester object only when you need reusable dummy inputs or helper methods for focused tests.
+The image processing tester defines default test attributes such as the processor initialization arguments. Only override arguments if they should be
+different from the image processor defaults. For example, we usually test with smaller image sizes to keep the tests fast. The image processor classes
+are automatically inferred from `IMAGE_PROCESSOR_MAPPING_NAMES`.
+
+The image processing test class defines all the test methods. It inherits from [`ImageProcessingTestMixin`] which already defines most required test
+methods.
+
 
 ```py
 from transformers.testing_utils import require_torch, require_vision
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTestMixin, ImageProcessingTester
+
+class MyModelImageProcessingTester(ImageProcessingTester):
+    # Image processor init kwargs
+    size = {"shortest_edge": 224}
+    do_resize = True
+
 
 @require_torch
 @require_vision
 class MyModelImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    @property
-    def image_processor_dict(self):
-        return {"size": {"shortest_edge": 224}, "do_resize": True}
+    image_processing_tester = MyModelImageProcessingTester
 ```
 
 Add focused tests for behavior the mixin can't infer, such as custom resizing rules or model-specific kwargs.
