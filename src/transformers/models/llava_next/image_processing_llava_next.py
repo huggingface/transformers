@@ -210,7 +210,7 @@ class LlavaNextImageProcessor(TorchvisionBackend):
             grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
                 image_patches, disable_grouping=disable_grouping
             )
-            for shape, stacked_image_patches in grouped_image_patches.items():
+            for key, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
                     stacked_image_patches = self.resize(
                         image=stacked_image_patches,
@@ -226,7 +226,7 @@ class LlavaNextImageProcessor(TorchvisionBackend):
                 stacked_image_patches = self.rescale_and_normalize(
                     stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean_tuple, image_std_tuple
                 )
-                processed_image_patches_grouped[shape] = stacked_image_patches
+                processed_image_patches_grouped[key] = stacked_image_patches
             processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
             processed_image_patches = torch.stack(processed_image_patches, dim=0)
             processed_images.append(processed_image_patches)

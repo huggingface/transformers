@@ -217,7 +217,7 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
         """
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 # Unlike Glm4v's `smart_resize`, the target size keeps aspect ratio under a token cap.
                 stacked_images = self.resize(
@@ -227,13 +227,13 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
                     max_tokens=max_image_tokens,
                     resample=resample,
                 )
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         processed_grids = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
@@ -243,8 +243,8 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
                 temporal_patch_size=temporal_patch_size,
             )
 
-            processed_images_grouped[shape] = patches
-            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
+            processed_images_grouped[key] = patches
+            processed_grids[key] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)

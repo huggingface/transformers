@@ -187,7 +187,7 @@ class Gemma3ImageProcessor(TorchvisionBackend):
         processed_images_grouped = {}
         num_crops_grouped = {}
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        for shape_images, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_pan_and_scan:
                 pas_images, num_crops = self._process_images_for_pan_and_scan(
                     images=stacked_images,
@@ -203,13 +203,13 @@ class Gemma3ImageProcessor(TorchvisionBackend):
                 grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
                     stacked_images, disable_grouping=disable_grouping
                 )
-                for shape, stacked_image_patches in grouped_image_patches.items():
+                for patches_key, stacked_image_patches in grouped_image_patches.items():
                     stacked_image_patches = self.resize(
                         image=stacked_image_patches,
                         size=size,
                         resample=resample,
                     )
-                    processed_image_patches_grouped[shape] = stacked_image_patches
+                    processed_image_patches_grouped[patches_key] = stacked_image_patches
                 processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
                 # Transpose to have the thumbnails with their corresponding patches
                 stacked_images = torch.stack(processed_image_patches, dim=0).transpose(0, 1).contiguous()
@@ -222,8 +222,8 @@ class Gemma3ImageProcessor(TorchvisionBackend):
                         size=size,
                         resample=resample,
                     )
-            num_crops_grouped[shape_images] = num_crops
-            processed_images_grouped[shape_images] = stacked_images
+            num_crops_grouped[key] = num_crops
+            processed_images_grouped[key] = stacked_images
         resized_images = reorder_images(processed_images_grouped, grouped_images_index)
         # If pan and scan is enabled, we need to flatten the list of images
         if do_pan_and_scan:
@@ -234,12 +234,12 @@ class Gemma3ImageProcessor(TorchvisionBackend):
         # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         return BatchFeature(
