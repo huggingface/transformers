@@ -21,7 +21,7 @@ import unittest.mock as mock
 import warnings
 from pathlib import Path
 
-import httpx
+from huggingface_hub.utils import httpx
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
 from transformers.configuration_utils import PreTrainedConfig
@@ -147,7 +147,6 @@ class ConfigTestUtils(unittest.TestCase):
                 "transformers_version",
                 "is_encoder_decoder",
                 "_name_or_path",
-                "_commit_hash",
                 "_output_attentions",
                 "_attn_implementation_internal",
                 "_experts_implementation_internal",

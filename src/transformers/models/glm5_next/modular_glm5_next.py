@@ -542,7 +542,8 @@ def chunk_kimi_delta_attention(
     # Main difference to GDN is the per head application of `g` which was broadcasted across heads instead
     g = g.cumsum(dim=-2)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
-    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).exp().float()
+    strict_mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
+    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).masked_fill(strict_mask[..., None], float("-inf")).exp().float()
     attn = -(k_beta.unsqueeze(-2) * key.unsqueeze(-3) * decay_mask).sum(dim=-1).masked_fill(mask, 0)
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()
@@ -1026,9 +1027,7 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.scaling = self.qk_head_dim ** (-0.5)
-        self.q_a_layernorm = (
-            Glm5NextTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
-        )
+        self.q_a_layernorm = Glm5NextTextRMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
         self.kv_a_layernorm = Glm5NextTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
         self.indexer = None if self.skip_topk else Glm5NextTextIndexer(config, layer_idx)
         self.next_skip_topk = (
@@ -1055,11 +1054,11 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
         k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        # Cache update
+        # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         if self.indexer is not None:
             topk_indices = self.indexer(

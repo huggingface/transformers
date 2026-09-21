@@ -267,6 +267,11 @@ class OneFormerHungarianMatcher(nn.Module):
     def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> list[tuple[Tensor]]:
         """Performs the matching
 
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             masks_queries_logits (`torch.Tensor`):
                 A tensor` of dim `batch_size, num_queries, num_labels` with the
@@ -332,6 +337,10 @@ class OneFormerHungarianMatcher(nn.Module):
                 cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
                 # final cost matrix
                 cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+                # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+                # these predictions only if there are no other valid predictions.
+                max_value = torch.finfo(cost_matrix.dtype).max
+                cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
                 cost_matrix = cost_matrix.reshape(num_queries, -1).cpu()
                 # do the assigmented using the hungarian algorithm in scipy
                 assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
@@ -2883,7 +2892,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import OneFormerProcessor, OneFormerModel
 
@@ -3081,7 +3090,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ```python
         >>> from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

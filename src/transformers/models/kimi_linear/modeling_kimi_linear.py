@@ -115,7 +115,7 @@ class KimiLinearExperts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -210,18 +210,18 @@ class KimiLinearAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = (
-            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is None
-            else None
+            None
+            if self.q_lora_rank is not None
+            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         )
         self.q_a_proj = (
-            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
             if self.q_lora_rank is not None
             else None
         )
-        self.q_a_layernorm = KimiLinearRMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_a_layernorm = KimiLinearRMSNorm(self.q_lora_rank) if self.q_lora_rank is not None else None
         self.q_b_proj = (
-            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is not None
             else None
         )
@@ -513,7 +513,8 @@ def chunk_kimi_delta_attention(
     # Main difference to GDN is the per head application of `g` which was broadcasted across heads instead
     g = g.cumsum(dim=-2)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
-    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).exp().float()
+    strict_mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
+    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).masked_fill(strict_mask[..., None], float("-inf")).exp().float()
     attn = -(k_beta.unsqueeze(-2) * key.unsqueeze(-3) * decay_mask).sum(dim=-1).masked_fill(mask, 0)
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()

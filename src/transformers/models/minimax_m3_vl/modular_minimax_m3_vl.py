@@ -162,6 +162,9 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        raise NotImplementedError("No need to inherit")
+
 
 # NOTE: can copy from qwen vision config!
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
@@ -244,6 +247,11 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         """Append the new token's `idx_k` to the cache and return the full history."""
         self.idx_keys = idx_k if self.idx_keys is None else torch.cat([self.idx_keys, idx_k], dim=-2)
         return self.idx_keys
+
+    def reset(self) -> None:
+        super().reset()
+        # Dropped rather than zeroed, as `update_index` grows them by concatenation, like the main states
+        self.idx_keys = None
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
@@ -1132,7 +1140,9 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return MiniMaxM3VLCausalLMOutputWithPast(
             loss=loss,
