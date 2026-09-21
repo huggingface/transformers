@@ -708,9 +708,18 @@ def get_rope_index_from_config(config: Any, inputs: Mapping[str, Any]):
         if not (isinstance(mask, torch.Tensor) and mask.dim() == 2):
             call_kwargs["attention_mask"] = torch.ones_like(inputs["input_ids"])
 
-    # Spans are placed from a grid or from audio lengths; with none of them present there is nothing to
-    # lay out — a text-only prompt through a multi-modal model lands here.
-    if not {"image_grid_thw", "video_grid_thw", "audio_seqlens"} & call_kwargs.keys():
+    # Spans are placed from whatever modality tensors the layout declares — a grid for most, audio lengths
+    # for the omni thinkers, `target_sizes` for minicpm, `images_per_sample` for glm_image. Read off the
+    # signature rather than named here: the names differ per architecture and the question does not. With
+    # none of them present there is nothing to lay out, which is a text-only prompt through a multi-modal
+    # model. `mm_token_type_ids` is not one of them — it says which tokens the spans cover, not where they
+    # come from, and the layouts that take it take a grid too (below).
+    spans_from = {
+        name
+        for name, value in call_kwargs.items()
+        if name not in ("input_ids", "attention_mask", "mm_token_type_ids") and isinstance(value, torch.Tensor)
+    }
+    if not spans_from:
         return None
     # There is multi-modal data but nothing saying which tokens it covers. The model raises here rather
     # than guessing, and so do we: falling back to 1-D positions would run and be quietly wrong.

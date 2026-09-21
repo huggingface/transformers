@@ -35,6 +35,10 @@ models exportable. The export pipeline uses five sections, in execution order:
    (`_STATEFUL_CACHE_ATTRS`) are saved on entry, set to `None` during the trace, and
    restored on exit — so a previous eager forward doesn't leak into the trace and any
    FakeTensors the trace planted are discarded before the next eager forward.
+6. **Unused-weight removal** (`drop_unused_weights`): the trace lifts every parameter of
+   the module it was given, and a decomposed component is traced from a wrapper holding
+   the whole model — so the ones the graph never reads are dropped before any backend
+   sees the program.
 """
 
 from __future__ import annotations
@@ -69,6 +73,7 @@ from .utils import (
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
+    from torch.export.graph_signature import ExportGraphSignature
 
     from ..cache_utils import Cache
     from ..modeling_utils import PreTrainedModel
@@ -138,6 +143,11 @@ class DynamoExporter(HfExporter):
                 dynamic_shapes=dynamic_shapes,
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
+
+        # Before anything reads the program: a decomposed component is traced from a wrapper holding the
+        # whole model, so the trace lifts weights it never touches, and every backend downstream would
+        # carry them.
+        exported_program = drop_unused_weights(exported_program)
 
         # What the graph is, recorded on the program itself: `graph_module.meta` survives `.module()`, so a
         # `DynamoModelRunner` reads the trace's own account of itself the way the ONNX and ExecuTorch runners
@@ -866,3 +876,44 @@ def reset_model_state(model: torch.nn.Module):
     finally:
         for module, attr, original in originals:
             setattr(module, attr, original)
+
+
+# ── Stage 6: Unused-weight removal ──────────────────────────────────────────
+
+
+def drop_unused_weights(exported_program: ExportedProgram) -> ExportedProgram:
+    """Drop the parameters and buffers the graph never reads.
+
+    `torch.export` lifts every parameter of the traced module into the program, used or not — and a
+    decomposed component is traced from a wrapper that holds the whole model, so it can call the model's own
+    `get_<modality>_features`. A vision graph therefore carries the text stack's weights, and the token
+    embedder carries everything: measured on video_llava, each component shipped two thirds to four fifths
+    of what it never touches, and a four-component export came to 3.2x the model's weights.
+
+    They are dead placeholders, so dropping them is a graph edit, not an approximation — the outputs are
+    identical. Done here rather than per backend because every backend traces through this one.
+    """
+    signature = exported_program.graph_signature
+    lifted = {**signature.inputs_to_parameters, **signature.inputs_to_buffers}
+    # A mutated buffer is named among the outputs even where the body never reads it, and it is the
+    # mutation the graph exists for -- so those stay whatever their users say.
+    mutated = {spec.arg.name for spec in signature.output_specs if hasattr(spec.arg, "name")}
+    graph_module = copy.deepcopy(exported_program.graph_module)
+    unused = [
+        node
+        for node in graph_module.graph.nodes
+        if node.op == "placeholder" and node.name in lifted and not node.users and node.name not in mutated
+    ]
+    if not unused:
+        return exported_program
+
+    dropped = {node.name for node in unused}
+    for node in unused:
+        graph_module.graph.erase_node(node)
+    graph_module.recompile()
+    input_specs = [spec for spec in signature.input_specs if getattr(spec.arg, "name", None) not in dropped]
+    weights = {lifted[name] for name in dropped}
+    state_dict = {name: value for name, value in exported_program.state_dict.items() if name not in weights}
+    return exported_program._update(
+        graph_module, ExportGraphSignature(input_specs, signature.output_specs), state_dict=state_dict
+    )

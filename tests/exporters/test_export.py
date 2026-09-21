@@ -1273,6 +1273,7 @@ class ExportTesterMixin:
             "output_scores": True,
             "return_dict_in_generate": True,
             "generation_config": generation_config,
+            "disable_compile": True,
         }
         eager_out = model.generate(**inputs, **gen_kwargs)
         try:

@@ -340,6 +340,7 @@ def decompose_prefill_decode(
     capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
+    capture_config.disable_compile = True
     try:
         with _capture_forward(model) as calls:
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
