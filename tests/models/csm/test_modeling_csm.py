@@ -276,6 +276,25 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_tied_weights_keys(self):
         pass
 
+    def test_audio_embeddings_tied_across_save_load(self):
+        """
+        CSM structurally ties the backbone audio embeddings to the depth decoder embeddings
+        via `_tied_weights_keys`, independent of `tie_word_embeddings` (force-disabled in
+        `CsmConfig` because classic word-embedding tying is invalid for CSM). Regression test:
+        the tie must survive a save/load roundtrip, where the checkpoint only stores the
+        depth-decoder copy of the weight.
+        """
+        import tempfile
+
+        config, _, _ = self.model_tester.prepare_config_and_inputs()
+        model = CsmForConditionalGeneration(config).eval()
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model_reloaded = CsmForConditionalGeneration.from_pretrained(tmpdirname)
+        backbone_embed = model_reloaded.backbone_model.embed_tokens.embed_audio_tokens.weight
+        depth_decoder_embed = model_reloaded.depth_decoder.model.embed_tokens.weight
+        self.assertTrue(torch.equal(backbone_embed, depth_decoder_embed))
+
     @unittest.skip(reason="CSM has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass

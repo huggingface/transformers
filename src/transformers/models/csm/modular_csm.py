@@ -435,6 +435,17 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
 
+    def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
+        # CsmConfig force-disables `tie_word_embeddings` (classic word-embedding tying is invalid
+        # for CSM: `lm_head` over the audio vocab must not be tied to the text embeddings). The core
+        # `get_expanded_tied_weights_keys` gates on that flag, which would silently drop CSM's
+        # *structural* tie between the backbone audio embeddings and the depth decoder embeddings,
+        # leaving the backbone audio embeddings randomly initialized after `from_pretrained`.
+        # CSM's mapping is already fully expanded, so return it directly.
+        if not all_submodels:
+            return dict(self._tied_weights_keys or {})
+        return super().get_expanded_tied_weights_keys(all_submodels=True)
+
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         if kwargs.get("output_loading_info", False):
