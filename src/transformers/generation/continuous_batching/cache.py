@@ -538,10 +538,14 @@ class PagedAttentionMemoryHandler:
         self.num_groups = len(attn_types)
 
         # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
+        # Flash reads GQA heads natively, but eager/sdpa repeat KV heads to num_attention_heads while V is in VRAM
+        num_key_value_heads = find_num_key_value_heads(self.config)
         if is_flash_attention_requested(self.config):
             self.num_attention_masks = 0
+            self.kv_heads_at_peak = 2 * num_key_value_heads
         else:
             self.num_attention_masks = 2 if SLIDING_ATTENTION in attn_types else 1
+            self.kv_heads_at_peak = 2 * self.config.num_attention_heads + num_key_value_heads  # repeated KV + V
 
         if cb_config.max_blocks_per_request is None:
             self.max_blocks_per_request = cb_config.fallback_max_blocks_per_request
@@ -572,6 +576,7 @@ class PagedAttentionMemoryHandler:
             self.config.hidden_size  # hidden states, shape [M, hidden_size]
             + self.config.num_attention_heads * head_dim  # query projection, shape [M, num_heads * head_dim]
             + 2 * find_num_key_value_heads(self.config) * head_dim  # new K and V states
+            + self.kv_heads_at_peak * head_dim  # their copy in the K and V read back from the cache # TODO: optimize
         )
         io_bytes = self.io_multiplier * (
             7 * i  # bulk_input: [7, M] int32, packed as 7 rows
@@ -586,8 +591,7 @@ class PagedAttentionMemoryHandler:
     def bytes_per_cache_token(self) -> int:
         """The memory cost of one readable cache token beside the cache itself: the old key and value states read from
         the cache at the attention peak, plus its share of the read indices."""
-        num_key_value_heads = find_num_key_value_heads(self.config)
-        kv_read_bytes = 2 * num_key_value_heads * find_head_dim(self.config) * self.activation_dtype.itemsize
+        kv_read_bytes = self.kv_heads_at_peak * find_head_dim(self.config) * self.activation_dtype.itemsize
         read_index_bytes = self.io_multiplier * self.num_groups * 8  # read_index: [num_groups, N + M] (N part, int64)
         return kv_read_bytes + read_index_bytes
 

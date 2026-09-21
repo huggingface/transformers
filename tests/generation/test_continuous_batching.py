@@ -1445,6 +1445,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             references.append(out[0, len(ids) :].tolist())
 
         # Continuous batching, all prompts at once
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, dtype=torch.float32)
         gen_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False, eos_token_id=None)
         results = model.generate_batch(
             inputs=prompts,
