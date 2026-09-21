@@ -34,7 +34,6 @@ if is_vision_available():
 class InklingImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     size = {"height": 40, "width": 40}
-
     do_resize = True
     do_normalize = False
 

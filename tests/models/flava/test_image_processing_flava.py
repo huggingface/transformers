@@ -39,7 +39,6 @@ class FlavaImageProcessingTester(ImageProcessingTester):
     size = {"height": 224, "width": 224}
     input_size_patches = 14
     codebook_size = {"height": 112, "width": 112}
-
     mask_group_max_aspect_ratio = 0.3
 
     def get_expected_image_size(self):
