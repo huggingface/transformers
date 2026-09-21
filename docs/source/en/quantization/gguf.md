@@ -57,9 +57,9 @@ The packed path currently supports Qwen3.5 and Qwen3.5 MoE. Packed loads use flo
 
 ## Attention
 
-On Metal, with kernels installed, [ggml-attn](https://huggingface.co/kernels/transformers-community/ggml-attn) is the default attention when loading a GGUF file: the same flash-attention kernel llama.cpp uses for decode and prefill. If the kernel cannot be fetched, the model keeps its usual attention, and passing `attn_implementation` (for example `"sdpa"`) always takes precedence.
+On MPS, with kernels installed, [ggml-attn](https://huggingface.co/kernels/transformers-community/ggml-attn) is the default attention when loading a GGUF file: the same flash-attention kernel llama.cpp uses for decode and prefill. If the kernel cannot be fetched, the model keeps its attention implementation. Passing `attn_implementation` (for example `"sdpa"`) always takes precedence.
 
-Otherwise, if you want to use it, you need to pass it:
+You can also pass it explicitly:
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
