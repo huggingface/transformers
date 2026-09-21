@@ -8,7 +8,13 @@ from packaging.version import parse as parse_version
 from parameterized import parameterized
 
 from transformers import logging
-from transformers.testing_utils import CaptureLogger, LoggingLevel, require_torch, require_torchvision, run_test_using_subprocess
+from transformers.testing_utils import (
+    CaptureLogger,
+    LoggingLevel,
+    require_torch,
+    require_torchvision,
+    run_test_using_subprocess,
+)
 from transformers.utils.import_utils import (
     _candidate_distribution_names,
     _is_package_available,
