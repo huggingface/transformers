@@ -519,20 +519,20 @@ def mamba2_chunk_scan(
     # This is the analog of a causal mask
     L = torch.exp(segment_sum(A))
 
-    # Contraction of C and B to get G (attention-weights like)
-    G = (C[:, :, :, None, :, :] * B[:, :, None, :, :, :]).sum(dim=-1)
+    # Contraction of C and B to get G (attention-weights like).
+    G = torch.einsum("bclhn,bcshn->bclsh", C, B)
 
     # Compute M, equivalent to applying attention mask to weights
-    M = (G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]).sum(dim=-1)
+    M = G * L.permute(0, 2, 3, 4, 1)
 
     # Compute Y_diag (apply to values)
-    Y_diag = (M[..., None] * hidden_states[:, :, None]).sum(dim=3)
+    Y_diag = torch.einsum("bclsh,bcshp->bclhp", M, hidden_states)
 
     # 2. Compute the state for each intra-chunk
     # (right term of low-rank factorization of off-diagonal blocks; B terms)
     decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
     B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
-    states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
+    states = torch.einsum("bclhn,bclhp->bchpn", B_decay, hidden_states)
 
     # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
     # (middle term of factorization of off-diag blocks; A terms)
@@ -543,14 +543,14 @@ def mamba2_chunk_scan(
     )
     states = torch.cat([previous_states, states], dim=1)
     decay_chunk = torch.exp(segment_sum(F.pad(A_cumsum[:, :, :, -1], (1, 0)))).transpose(1, 3)
-    new_states = (decay_chunk[..., None, None] * states[:, :, None, ...]).sum(dim=1)
+    new_states = torch.einsum("bzch,bzhpn->bchpn", decay_chunk, states)
     states, final_state = new_states[:, :-1], new_states[:, -1]
 
     # 4. Compute state -> output conversion per chunk
     # (left term of low-rank factorization of off-diagonal blocks; C terms)
     state_decay_out = torch.exp(A_cumsum)
-    C_times_states = C[..., None, :] * states[:, :, None, ...]
-    Y_off = C_times_states.sum(-1) * state_decay_out.permute(0, 2, 3, 1)[..., None]
+    C_times_states = torch.einsum("bclhn,bchpn->bclhp", C, states)
+    Y_off = C_times_states * state_decay_out.permute(0, 2, 3, 1)[..., None]
 
     # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
     output = Y_diag + Y_off
