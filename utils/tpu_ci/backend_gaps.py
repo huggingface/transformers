@@ -112,6 +112,22 @@ if leaked != 0.0:
     raise RuntimeError(f"the fully masked row carries {leaked:.3e} of the values it should ignore")
 """,
     ),
+    "multinomial_seeding": (
+        "torch.multinomial ignores the seeded generator, so sampling is not reproducible: seeding "
+        "and drawing twice gives different answers, and it takes no `generator=` either. "
+        "torch.rand and torch.randn are seeded correctly, so it is the draw and not the generator. "
+        "Anything that samples -- generation with do_sample=True above all -- cannot be pinned, and "
+        "a test that seeds and compares two sampled runs has nothing to hold on to.",
+        """
+weights = torch.rand(2, 16, device=DEVICE) + 0.1
+torch.manual_seed(0)
+first = torch.multinomial(weights, num_samples=4)
+torch.manual_seed(0)
+second = torch.multinomial(weights, num_samples=4)
+if not torch.equal(first, second):
+    raise RuntimeError(f"the same seed drew {first.tolist()} and then {second.tolist()}")
+""",
+    ),
     "differentiable_attention_mask": (
         "Scaled dot product attention refuses an `attn_mask` that requires grad, blaming the CPU "
         "flash kernel -- which is not the kernel the tensors are on. Models that fold a learned bias "
