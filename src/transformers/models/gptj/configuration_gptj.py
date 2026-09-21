@@ -42,6 +42,14 @@ class GPTJConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gptj"
+    base_model_tp_plan = {
+        "h.*.attn.q_proj": "colwise",
+        "h.*.attn.k_proj": "colwise",
+        "h.*.attn.v_proj": "colwise",
+        "h.*.attn.out_proj": "rowwise",
+        "h.*.mlp.fc_in": "colwise",
+        "h.*.mlp.fc_out": "rowwise",
+    }
     attribute_map = {
         "max_position_embeddings": "n_positions",
         "hidden_size": "n_embd",
