@@ -513,14 +513,13 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         forward pass, and so a model moved off the meta device has no uninitialized tensor left. A
         real forecast needs the geometry that came with the weights.
         """
-        # `init.zeros_` leaves anything that was loaded alone, so this is a no-op for a checkpoint
-        # that carries its geometry. The mask needs the same guard written out, because it is filled
-        # through a slice and a slice does not carry the flag the guard reads.
-        for name in GEOMETRY_BUFFERS:
+        # The initialization helpers leave checkpoint geometry unchanged.
+        for name in GEOMETRY_BUFFERS[:-1]:
             init.zeros_(getattr(self, name))
         if not getattr(self.attention_mask, "_is_hf_initialized", False):
+            init.zeros_(self.attention_mask)
             block_size = self.attention_mask.shape[2]
-            self.attention_mask[:, :, :, block_size : 2 * block_size] = True
+            init.ones_(self.attention_mask[:, :, :, block_size : 2 * block_size])
 
     @merge_with_config_defaults
     # `last_hidden_state` is the grid representation, not the last mesh-transformer layer, so it must
