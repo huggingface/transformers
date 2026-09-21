@@ -106,6 +106,21 @@ mask = torch.zeros(1, 2, 6, 6, device=DEVICE, requires_grad=True)
 torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=mask)
 """,
     ),
+    "avg_pool1d_gradient": (
+        "torch.nn.functional.avg_pool1d returns a tensor that is not part of the autograd graph, so "
+        "a model with an average pooling layer in the middle silently trains only the layers after "
+        "it -- no error, no warning, just no gradients. avg_pool2d, adaptive_avg_pool1d and "
+        "max_pool1d are all fine, so it is this operator rather than pooling in general.",
+        """
+x = torch.randn(2, 4, 8, device=DEVICE, requires_grad=True)
+pooled = torch.nn.functional.avg_pool1d(x, 2)
+if not pooled.requires_grad:
+    raise RuntimeError("avg_pool1d dropped the gradient: its output has no grad_fn")
+pooled.sum().backward()
+if x.grad is None:
+    raise RuntimeError("no gradient reached the input")
+""",
+    ),
     "boolean_mask_indexing": (
         "Indexing trailing dimensions with a multi-dimensional boolean mask -- `x[:, :, mask]` -- "
         "tries to broadcast the mask instead of selecting with it, and raises a shape error. "
