@@ -112,6 +112,23 @@ if leaked != 0.0:
     raise RuntimeError(f"the fully masked row carries {leaked:.3e} of the values it should ignore")
 """,
     ),
+    "compile_storage_offset_guard": (
+        "Compiling through the TorchDynamo backend this device registers guards on the storage "
+        "offset of the tensor arguments, so calling the compiled function with a tensor that starts "
+        "partway into a buffer -- the second half of a batch, say -- recompiles although the shapes "
+        "and strides are identical. The same function compiled with the eager backend does not, so "
+        "the guard comes from this backend and not from dynamo.",
+        """
+@torch.compile(fullgraph=True, dynamic=False, backend=DEVICE)
+def total(x):
+    return x.sum()
+
+buffer = torch.randn(4, 7, device=DEVICE)
+total(buffer[:2])  # traced with a tensor that starts at offset 0
+with torch.compiler.set_stance("fail_on_recompile"):
+    total(buffer[2:])  # same shape and strides, only the storage offset differs
+""",
+    ),
     "multinomial_seeding": (
         "torch.multinomial ignores the seeded generator, so sampling is not reproducible: seeding "
         "and drawing twice gives different answers, and it takes no `generator=` either. "
