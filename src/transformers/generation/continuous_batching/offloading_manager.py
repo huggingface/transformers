@@ -176,7 +176,7 @@ class OffloadingManager:
             for state, request_len in scheduler.starved_requests
         ]
 
-        # Offload request until all the remaining starved request can be scheduled
+        # Offload request until all the remaining starved request can be scheduled or only 1 active request remains
         num_active = len(scheduler.active_requests)
         offloaded: list[RequestState] = []
         offloaded_block_tables: dict[str, dict[str, list[int]]] = {}
@@ -195,11 +195,12 @@ class OffloadingManager:
                 name: allocator.block_table.get(state.request_id, [])[:]
                 for name, allocator in self.cache.cache_allocators.items()
             }
-            self.cache.free_blocks(state.request_id)
+            self.cache.free_blocks(state.request_id, no_cache=True)  # no_cache=True means we directly free the blocks
+            # TODO: check the impact of self.cache.pool.try_to_free_sectors() here
 
-        # Sometimes, no request is offloaded because evicting cached blocks has made enough room on its own
+        # If no request was offloaded, either evicting the cache blocks was enough, or nothing can be offloaded anymore
         if not offloaded:
-            return True
+            return cached_blocks_evicted
 
         # Copy as many victims as fit in the CPU pool, in one batched copy per allocator
         cpu_offloaded = self._offload_to_cpu(offloaded, offloaded_block_tables)

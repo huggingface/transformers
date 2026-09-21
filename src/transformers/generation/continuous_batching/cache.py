@@ -296,10 +296,11 @@ class PagedAttentionCache:
                 free_blocks[name] -= blocks_needed[name]
         return len(list_blocks_needed)
 
-    def free_blocks(self, request_id: str) -> None:
-        """Signals all cache allocators that a request's cache can be freed."""
+    def free_blocks(self, request_id: str, no_cache: bool = False) -> None:
+        """Signals all cache allocators that a request's cache can be freed. If the `no_cache` flag is passed, the freed
+        blocks go straight to the free pool, and cannot be reused later."""
         for allocator in self.cache_allocators.values():
-            allocator.free_blocks(request_id)
+            allocator.free_blocks(request_id, no_cache)
 
     def free_all_requests(self, clear_ledgers: bool = False) -> None:
         """Signals all cache allocators that all requests' caches can be freed. Also clears the ledgers if requested."""

@@ -16,7 +16,7 @@
 class RegularTrees:
     """
     An object to represent a set of trees with depths two and at most "elems_per_tree" leaves.
-    Each tree is defined by an integer root, say X, and starts with leaves [X+elem_per_tree-1, ..., X+1, X].
+    Each tree is defined by an int root R, and starts with leaves [(R+1) * elem_per_tree - 1, ..., R * elem_per_tree].
     This is used to represent the free blocks in a cache pool.
     """
 

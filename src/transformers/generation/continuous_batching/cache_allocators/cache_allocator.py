@@ -63,9 +63,10 @@ class BlockLedger:
         else:
             self.shared_ref_counts[block_id] = self.shared_ref_counts.get(block_id, 1) + 1
 
-    def release(self, block_id: int) -> bool:
+    def release(self, block_id: int, no_cache: bool = False) -> bool:
         """Removes a reference from a block and returns True when it can go back to the pool, ie. when it is not
-        referenced and not complete (no hash). Unreferenced hashed blocks are kept cached to instead."""
+        referenced and not complete (no hash). Unreferenced hashed blocks are kept cached to instead.
+        If the `no_cache` flag is passed, the block is never cached, even if it is complete."""
         new_ref_count = self.shared_ref_counts.pop(block_id, 1) - 1
         # Only keep track of the ref count if it is > 1: a ref count of 1 is implicit
         if new_ref_count > 1:
@@ -74,9 +75,15 @@ class BlockLedger:
         if new_ref_count > 0:
             return False
         # If the block is not referenced anymore, it is kept as a cached block only if it's complete (ie. has a hash)
+        # and the `no_cache` flag was not passed
         if block_id in self.block_to_hash:
-            self.cached_blocks[block_id] = None
-            return False
+            # A hashed block going back to the pool must lose its hash, or a later match would alias a block that's gone
+            if no_cache:
+                block_hash = self.block_to_hash.pop(block_id)
+                self.hash_to_block.pop(block_hash)
+            else:
+                self.cached_blocks[block_id] = None
+                return False
         return True
 
     def register_new_hash(self, block_id: int, block_hash: int) -> int | None:
@@ -222,12 +229,14 @@ class CacheAllocator(ABC):
     def allocate_cache_to_request(self, request_id: str, past_length: int, query_length: int) -> None:
         """Allocates the cache to the request."""
 
-    def free_blocks(self, request_id: str) -> None:
+    def free_blocks(self, request_id: str, no_cache: bool = False) -> None:
         """Discards the block table of a request and tries to free as many blocks as possible. Some blocks may not be
         freed because they are owned by other requests or because they are complete: then, they are cached but may be
-        released anytime."""
+        released anytime. If the `no_cache` flag is passed, the blocks are never cached, even if they are complete."""
         blocks_ids = self.block_table.pop(request_id, [])
-        freed_blocks = list(filter(self.ledger.release, blocks_ids))
+        freed_blocks = [
+            block_id for block_id in blocks_ids if self.ledger.release(block_id, no_cache)
+        ]
         self.pool.free_blocks(self.index, freed_blocks)
 
     def count_shareable_blocks(self, source_request_id: str, past_length: int) -> int:
