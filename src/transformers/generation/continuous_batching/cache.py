@@ -494,7 +494,7 @@ class PagedAttentionCache:
         return self._block_table_key
 
 
-# TODO: BUG: check this class in details (moving on rn)
+# TODO: can we get rid of this class?
 class PagedAttentionMemoryHandler:
     """Determines the max batch tokens (M) and number of cache sectors (S) for the paged attention cache, given the
     available GPU memory.
