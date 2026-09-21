@@ -108,8 +108,8 @@ class FullAttentionCacheAllocator(CacheAllocator):
     def get_bytes_per_page(
         cls, num_key_value_heads: int, head_dim: int, cache_dtype: torch.dtype, page_size: int
     ) -> int:
-        """Computes the number of bytes in a full attention page: the keys and values of page_size tokens for one
-        layer, hence the 2."""
+        """Computes the number of bytes in a full attention page."""
+        # The first "2" is because we need space for both keys and values
         return 2 * num_key_value_heads * head_dim * cache_dtype.itemsize * page_size
 
     # _________________________________________________ BLOCK LEVEL __________________________________________________ #
@@ -211,7 +211,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         """
         # Select the shifted views of this layer's keys and values
         k_cache, v_cache = self._kv_token_views[layer_idx]
-        # Transpose the key and value states to match the cache shape, after which shape is [seqlen_q, num_kv_heads, head_dim]
+        # Transpose the key and value states to match the cache shape: [seqlen_q, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
 

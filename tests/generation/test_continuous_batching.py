@@ -482,7 +482,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
         def reference_indices(start: int, end: int) -> list[int]:
             """Reference implementation: converts logical indices to physical row indices. The token slot t of block b
-            lives at row b * rows_per_block + t."""
+            lives at row b * block_physical_stride + t."""
             return [
                 block_table[i // block_size] * allocator.block_physical_stride + i % block_size
                 for i in range(start, end)
@@ -630,11 +630,13 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
         # Shared blocks are ref-counted: freeing the source keeps them alive for the child
         shared_blocks = full.block_table["src"][:2]
-        self.assertEqual(full.ledger.ref_counts, dict.fromkeys(shared_blocks, 2))
-        self.assertEqual(sliding.ledger.ref_counts, {})
+        self.assertEqual(full.ledger.shared_ref_counts, dict.fromkeys(shared_blocks, 2))
+        self.assertEqual(sliding.ledger.shared_ref_counts, {})
+        # Sliding never shares: the child's table is fully disjoint from the source's
+        self.assertTrue(set(sliding.block_table["child"]).isdisjoint(sliding.block_table["src"]))
         full.free_blocks("src")
         sliding.free_blocks("src")
-        self.assertEqual(full.ledger.ref_counts, {})  # counts of 1 are implicit
+        self.assertEqual(full.ledger.shared_ref_counts, {})  # counts of 1 are implicit
         self.assertEqual(full.block_table["child"][:2], shared_blocks)
         self.assertEqual(pool.count_free_blocks(full.index), 1)  # only the copied-from block was freed
         self.assertEqual(pool.count_free_blocks(sliding.index), 2)
@@ -673,7 +675,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(len(ledger.hash_to_block), 2)
         self.assertEqual(allocator.block_table["dup"][:2], src_table[:2])
         self.assertEqual(pool.count_free_blocks(0), 2)  # the two duplicate blocks were freed by the swap
-        self.assertEqual(ledger.ref_counts, dict.fromkeys(src_table[:2], 2))
+        self.assertEqual(ledger.shared_ref_counts, dict.fromkeys(src_table[:2], 2))
         allocator.free_blocks("dup")  # releases the adopted blocks and frees its own incomplete one
         self.assertEqual(pool.count_free_blocks(0), 3)
 
@@ -690,7 +692,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(allocator.block_table["same"], src_table[:2])
         self.assertEqual(match_and_acquire("partial", tokens[:5] + [9, 9, 9]), 4)
         self.assertEqual(match_and_acquire("exact", tokens[:8]), 4)
-        self.assertEqual(ledger.ref_counts, {src_table[0]: 4, src_table[1]: 2})
+        self.assertEqual(ledger.shared_ref_counts, {src_table[0]: 4, src_table[1]: 2})
 
         # Freeing every request moves the hashed blocks to the cached set, not to the pool
         for request_id in ("src", "same", "partial", "exact"):
@@ -701,7 +703,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         # A new match claims the cached blocks back, and freeing it caches them again
         self.assertEqual(match_and_acquire("revive", tokens[:8] + [7]), 8)
         self.assertEqual(ledger.cached_blocks, {})
-        self.assertEqual(ledger.ref_counts, {})  # single owner stays implicit
+        self.assertEqual(ledger.shared_ref_counts, {})  # single owner stays implicit
         allocator.free_blocks("revive")
 
         # Eviction drops the hashes and releases the blocks: the pool ends up whole again

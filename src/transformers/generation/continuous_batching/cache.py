@@ -156,7 +156,6 @@ class PagedAttentionCache:
             "cache_dtype": self.dtype,
             "page_size": continuous_batching_config.page_size,
             "allow_block_sharing": continuous_batching_config.allow_block_sharing,
-            # "is_tp_enabled": distributed_helper.tp_size > 1,
         }
         self.cache_allocators: dict[str, CacheAllocator] = {}
         self.layer_to_allocator: dict[int, CacheAllocator] = {}

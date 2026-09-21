@@ -41,7 +41,7 @@ class BlockLedger:
 
     def __init__(self) -> None:
         # Reference counts of shared blocks: a block has an entry only when it is referenced by 2+ requests
-        self.ref_counts: dict[int, int] = {}
+        self.shared_ref_counts: dict[int, int] = {}
         # Hash tables of the fully-written blocks, used for de-duplication
         self.hash_to_block: dict[int, int] = {}
         self.block_to_hash: dict[int, int] = {}
@@ -50,7 +50,7 @@ class BlockLedger:
 
     def reset(self) -> None:
         """Forgets all reference counts, hashes and cached blocks."""
-        self.ref_counts.clear()
+        self.shared_ref_counts.clear()
         self.hash_to_block.clear()
         self.block_to_hash.clear()
         self.cached_blocks.clear()
@@ -61,15 +61,15 @@ class BlockLedger:
             self.cached_blocks.pop(block_id)
             # no need to add to the ref count, it used to be 0, now it is 1 (implicit)
         else:
-            self.ref_counts[block_id] = self.ref_counts.get(block_id, 1) + 1
+            self.shared_ref_counts[block_id] = self.shared_ref_counts.get(block_id, 1) + 1
 
     def release(self, block_id: int) -> bool:
         """Removes a reference from a block and returns True when it can go back to the pool, ie. when it is not
         referenced and not complete (no hash). Unreferenced hashed blocks are kept cached to instead."""
-        new_ref_count = self.ref_counts.pop(block_id, 1) - 1
+        new_ref_count = self.shared_ref_counts.pop(block_id, 1) - 1
         # Only keep track of the ref count if it is > 1: a ref count of 1 is implicit
         if new_ref_count > 1:
-            self.ref_counts[block_id] = new_ref_count
+            self.shared_ref_counts[block_id] = new_ref_count
         # If the block is still referenced, it cannot go back to the free block pool
         if new_ref_count > 0:
             return False
@@ -153,6 +153,8 @@ class CacheAllocator(ABC):
         bytes_per_page: int,
         allow_block_sharing: bool,
     ) -> None:
+        """Initializes the cache allocator before the cache tensor is registered. Since cache allocators can differ
+        quite a bit, there is no base __init__ method, but this still needs to be called from the subclasses."""
         # Model-related attributes
         self.index = index
         self.layer_indices = layer_indices
@@ -178,6 +180,8 @@ class CacheAllocator(ABC):
     def _after_cache_tensor_init(
         self, non_trash_bytes: int, bytes_per_sector: int, cache_tensor: torch.Tensor, pool: CachePool
     ) -> None:
+        """Initializes the cache allocator after the cache tensor is registered. It consitutes the second part of the
+        initialization. Afterwards, the cache allocator is ready to be used."""
         # Cache dimensions attributes
         self.num_pages = exact_div(non_trash_bytes, self.bytes_per_page)
         self.num_blocks = exact_div(self.num_pages, self.pages_per_block)
@@ -194,7 +198,7 @@ class CacheAllocator(ABC):
         # Sector 1 holds the write trash, where padding tokens can safely write their cache (it is never read from).
         self.read_trash_index = 0
         self.sentinel_index = 1
-        self.write_trash_index = self.rows_per_token * self.tokens_per_block * self.blocks_per_sector
+        self.write_trash_index = self.block_physical_stride * self.blocks_per_sector
 
     # _________________________________________________ SECTOR LEVEL _________________________________________________ #
 

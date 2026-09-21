@@ -1890,7 +1890,7 @@ class ContinuousBatchingConfig:
             logger.warning(
                 "max_cached_graphs is deprecated: maximum number of graph is no longer an issue. Deprecated in 5.13."
             )
-        if self.block_size is not None:  # Deprecated in 5.14
+        if self.block_size is not None:  # Deprecated in 5.17
             logger.warning(
                 "block_size is deprecated: please use page_size instead. For backwards compatibility, block_size will "
                 "be used as the full attention page size."
