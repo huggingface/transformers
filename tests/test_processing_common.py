@@ -1740,6 +1740,7 @@ class ProcessorTesterMixin:
             self.skipTest("Processor doesn't count video tokens yet")
 
         video_inputs = self.prepare_videos_inputs(batch_size=2)
+        # An odd frame count, so that the temporal padding of the counters is covered
         video_inputs = [video_inputs[0][:7], video_inputs[1][:7, :, :, :200]]
         video_sizes = [(len(video), *get_video_size(video)) for video in video_inputs]
 

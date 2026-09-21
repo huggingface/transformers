@@ -138,6 +138,7 @@ class Kimi_K25Processor(ProcessorMixin):
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]
+            # Each of the `num_chunks_per_video` chunks costs one frame's worth of merged patches
             num_video_tokens = [
                 math.ceil(num_frames / temporal_patch_size) * (num_patches // num_frames) // merge_size**2
                 for (num_frames, _, _), num_patches in zip(video_sizes, num_video_patches)
