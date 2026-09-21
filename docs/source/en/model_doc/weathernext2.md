@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-09-16.*
+*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-09-21.*
 
 # WeatherNext 2
 
@@ -89,7 +89,7 @@ import numpy as np
 import torch
 from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2FeatureExtractor
 
-model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini", device_map="auto").eval()
+model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini", device_map="auto")
 processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext2-mini")
 
 # `state` maps each input variable to its values. Time-varying variables are
@@ -115,7 +115,7 @@ require a different preprocessing path:
 ```python
 model = WeatherNext2ForWeatherForecasting.from_pretrained(
     "kashif/weathernext2-mini", device_map="auto", dtype=torch.bfloat16
-).eval()
+)
 inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
 ```
 
@@ -192,6 +192,8 @@ tensor shaped `(num_steps, batch_size, noise_channels)` through `noise=` for a r
 arrays works as well, at the cost of transfers between the host and model device.
 
 ### Tropical cyclones
+
+Install the optional packages used in this example with `pip install xarray weathernext`.
 
 `kashif/weathernext-cyclones` predicts 17 cyclone diagnostics alongside the usual atmospheric
 fields: a per-gridpoint existence probability, `cyclone_exists_gaussian_unit_mode`, plus intensity,

@@ -19,11 +19,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-# Each node carries sin(lat), sin(lon), cos(lon); each edge carries distance and the three
-# components of the relative position vector.
-NUM_NODE_SPATIAL_FEATURES = 3
-NUM_EDGE_SPATIAL_FEATURES = 4
-
 ATMOSPHERIC_VARIABLES = (
     "temperature",
     "geopotential",
@@ -93,6 +88,10 @@ class WeatherNext2Config(PreTrainedConfig):
         Number of attention heads in the mesh transformer.
     edge_hidden_size (`int`, *optional*, defaults to 32):
         Latent width of the grid/mesh graph edges.
+    num_node_spatial_features (`int`, *optional*, defaults to 3):
+        Number of spatial features describing each grid or mesh node.
+    num_edge_spatial_features (`int`, *optional*, defaults to 4):
+        Number of spatial features describing each grid/mesh edge.
     noise_channels (`int`, *optional*, defaults to 32):
         Dimension of the global noise vector, and of the conditioning vector it is projected to.
     hidden_act (`str`, *optional*, defaults to `"gelu_pytorch_tanh"`):
@@ -173,6 +172,8 @@ class WeatherNext2Config(PreTrainedConfig):
     num_hidden_layers: int = 24
     num_attention_heads: int = 6
     edge_hidden_size: int = 32
+    num_node_spatial_features: int = 3
+    num_edge_spatial_features: int = 4
     noise_channels: int = 32
     hidden_act: str = "gelu_pytorch_tanh"
     mlp_act: str = "silu"
@@ -264,11 +265,11 @@ class WeatherNext2Config(PreTrainedConfig):
 
     @property
     def num_grid_input_channels(self) -> int:
-        return NUM_NODE_SPATIAL_FEATURES + sum(levels for _, _, levels in self.input_channel_layout)
+        return self.num_node_spatial_features + sum(levels for _, _, levels in self.input_channel_layout)
 
     @property
     def num_mesh_input_channels(self) -> int:
-        return NUM_NODE_SPATIAL_FEATURES + sum(levels for _, _, levels in self.mesh_channel_layout)
+        return self.num_node_spatial_features + sum(levels for _, _, levels in self.mesh_channel_layout)
 
     @property
     def num_output_channels(self) -> int:

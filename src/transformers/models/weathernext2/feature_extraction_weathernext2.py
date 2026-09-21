@@ -29,7 +29,8 @@ from typing import Any
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...utils import TensorType, is_torch_available, logging, requires_backends
+from ...utils import TensorType, is_torch_available, logging
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -55,6 +56,7 @@ def get_day_progress(seconds_since_epoch: np.ndarray, longitude: np.ndarray) -> 
     return np.mod(greenwich[..., None] + offsets, 1.0).astype(np.float32)
 
 
+@requires(backends=("torch",))
 class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
     r"""
     Constructs a WeatherNext 2 feature extractor.
@@ -118,8 +120,6 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         grid_longitudes: int = 1440,
         **kwargs,
     ):
-        # The arithmetic here is all torch, so that a rollout can stay on the accelerator.
-        requires_backends(self, ["torch"])
         super().__init__(**kwargs)
         self.input_variables = input_variables
         self.target_variables = target_variables
@@ -188,7 +188,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         expected = self.num_levels(variable)
         if value.shape != (expected,):
             raise ValueError(f"Statistic for {variable!r} has shape {tuple(value.shape)}, expected ({expected},).")
-        return value
+        return value.reshape(-1, 1, 1)
 
     def normalize(self, values: np.ndarray, variable: str) -> np.ndarray:
         """Maps a variable to roughly zero mean and unit variance, level by level.
@@ -201,16 +201,10 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             values = torch.nan_to_num(values, nan=self.nan_fill_values[variable])
         mean = self._statistic(self.mean_by_level, variable)
         stddev = self._statistic(self.stddev_by_level, variable)
-        normalized = values if mean is None else values - self._broadcast(mean, values)
+        normalized = values if mean is None else values - mean.to(values.device)
         if stddev is not None:
-            normalized = normalized / self._broadcast(stddev, values)
+            normalized = normalized / stddev.to(values.device)
         return normalized
-
-    @staticmethod
-    def _broadcast(statistic: "torch.Tensor", values: "torch.Tensor") -> "torch.Tensor":
-        """Aligns a per-level statistic against `[..., levels, lat, lon]` or `[..., lat, lon]`."""
-        shape = [1] * values.ndim if statistic.shape[0] == 1 else [1] * (values.ndim - 3) + [-1, 1, 1]
-        return statistic.to(values.device).reshape(shape)
 
     def compute_forcings(self, seconds_since_epoch: np.ndarray) -> dict[str, np.ndarray]:
         """Clock-derived variables at the given times.
@@ -374,15 +368,15 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 if last_frame.ndim == 3:
                     last_frame = last_frame[:, None]
                 if residual_scale is not None:
-                    values = values * self._broadcast(residual_scale, values)
+                    values = values * residual_scale.to(values.device)
                 values = values + last_frame
             else:
                 mean = self._statistic(self.mean_by_level, variable)
                 stddev = self._statistic(self.stddev_by_level, variable)
                 if stddev is not None:
-                    values = values * self._broadcast(stddev, values)
+                    values = values * stddev.to(values.device)
                 if mean is not None:
-                    values = values + self._broadcast(mean, values)
+                    values = values + mean.to(values.device)
             if state is not None and variable in self.nan_fill_values and variable in state:
                 # The land mask is constant across the conditioning frames, so any frame will do.
                 missing = torch.as_tensor(state[variable], dtype=torch.float32).to(values.device).isnan().any(dim=1)
