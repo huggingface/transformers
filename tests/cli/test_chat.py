@@ -37,7 +37,7 @@ def test_save_and_clear_chat():
         filename = os.path.join(tmp_path, "chat.json")
         save_chat(filename, [{"role": "user", "content": "hi"}], {"foo": "bar"})
         assert os.path.isfile(filename)
-        with open(filename, "r") as f:
+        with open(filename, "r", encoding="utf-8") as f:
             data = json.load(f)
             assert data["chat_history"] == [{"role": "user", "content": "hi"}]
             assert data["settings"] == {"foo": "bar"}

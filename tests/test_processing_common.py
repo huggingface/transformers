@@ -1147,7 +1147,7 @@ class ProcessorTesterMixin:
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname)
-            with open(Path(tmpdirname, "chat_template.json"), "w") as fp:
+            with open(Path(tmpdirname, "chat_template.json"), "w", encoding="utf-8") as fp:
                 json.dump({"chat_template": processor.chat_template}, fp)
             os.remove(Path(tmpdirname, "chat_template.jinja"))
 
@@ -1288,7 +1288,7 @@ class ProcessorTesterMixin:
         # Qwen-style pixels don't scale with bs same way as other models
         # calculate expected video token count based on video_grid_thw
         if (grid_thw := out_dict.get(f"{modality}_grid_thw")) is not None:
-            mm_len = sum([thw[0] * thw[1] * thw[2] for thw in grid_thw])
+            mm_len = sum(thw[0] * thw[1] * thw[2] for thw in grid_thw)
         else:
             mm_len = batch_size
 
