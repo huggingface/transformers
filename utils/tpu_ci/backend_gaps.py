@@ -95,6 +95,23 @@ if embedding.weight is not head.weight:
     raise RuntimeError("the move untied the two parameters")
 """,
     ),
+    "fully_masked_attention_row": (
+        "A query that attends to nothing -- a row of the attention mask that is False everywhere, "
+        "which is what a fully padded sequence in a batch produces -- comes back as a mixture of "
+        "the values it was told to ignore instead of zeros. Feeding such a batch anything large in "
+        "the padded positions moves the whole output, and the mask looks like it did nothing.",
+        """
+query = torch.randn(1, 1, 2, 8, device=DEVICE)
+key = torch.randn(1, 1, 4, 8, device=DEVICE)
+value = torch.full((1, 1, 4, 8), 1e6, device=DEVICE)
+mask = torch.ones(1, 1, 2, 4, dtype=torch.bool, device=DEVICE)
+mask[:, :, 0, :] = False  # the first query attends to nothing
+attention = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=mask)
+leaked = attention[0, 0, 0].abs().max().item()
+if leaked != 0.0:
+    raise RuntimeError(f"the fully masked row carries {leaked:.3e} of the values it should ignore")
+""",
+    ),
     "differentiable_attention_mask": (
         "Scaled dot product attention refuses an `attn_mask` that requires grad, blaming the CPU "
         "flash kernel -- which is not the kernel the tensors are on. Models that fold a learned bias "
