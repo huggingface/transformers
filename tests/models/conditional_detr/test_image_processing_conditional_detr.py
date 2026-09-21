@@ -42,6 +42,7 @@ class ConditionalDetrImageProcessingTester(ImageProcessingTester):
     width = 4
 
     # Image processor init kwargs
+    # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
     size = {"shortest_edge": 18, "longest_edge": 1333}
 
     def prepare_post_process_semantic_segmentation_inputs(self):
