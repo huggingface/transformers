@@ -233,6 +233,59 @@ class ExecutorchImportIsolationTest(unittest.TestCase):
             assert not loaded, loaded
             """
         )
+        self._run_in_subprocess(code)
+
+    @require_executorch
+    def test_mlx_prepares_unregistered_cropped_cache(self):
+        code = textwrap.dedent(
+            """
+            import sys
+            from types import SimpleNamespace
+            from unittest import mock
+
+            import torch
+            from transformers import DynamicCache, EncoderDecoderCache
+            from transformers.exporters.exporter_executorch import prepare_for_mlx
+
+            cache = DynamicCache()
+            cache.update(torch.randn(1, 2, 3, 8), torch.randn(1, 2, 3, 8), 0)
+            cache.crop(-1)
+            original_keys = cache.layers[0].keys
+            original_values = cache.layers[0].values
+            assert not original_keys.is_contiguous()
+            assert not original_values.is_contiguous()
+            assert DynamicCache not in torch.utils._pytree.SUPPORTED_NODES
+            assert EncoderDecoderCache not in torch.utils._pytree.SUPPORTED_NODES
+
+            model = torch.nn.Linear(2, 2)
+            inputs = {
+                "input": torch.ones(1, 2),
+                "past_key_values": EncoderDecoderCache(cache, cache),
+            }
+            modules = {"executorch.backends.mlx": SimpleNamespace(MLXPartitioner=mock.Mock())}
+            with mock.patch.dict(sys.modules, modules):
+                _, prepared, _ = prepare_for_mlx(model, inputs)
+                _, repeated, _ = prepare_for_mlx(model, prepared)
+
+            for name in ("self_attention_cache", "cross_attention_cache"):
+                layer = getattr(prepared["past_key_values"], name).layers[0]
+                repeated_layer = getattr(repeated["past_key_values"], name).layers[0]
+                assert layer.keys.is_contiguous()
+                assert layer.values.is_contiguous()
+                torch.testing.assert_close(layer.keys, original_keys, rtol=0, atol=0)
+                torch.testing.assert_close(layer.values, original_values, rtol=0, atol=0)
+                assert repeated_layer.keys is layer.keys
+                assert repeated_layer.values is layer.values
+            assert prepared["input"] is inputs["input"]
+            assert cache.layers[0].keys is original_keys
+            assert cache.layers[0].values is original_values
+            assert not original_keys.is_contiguous()
+            assert not original_values.is_contiguous()
+            """
+        )
+        self._run_in_subprocess(code)
+
+    def _run_in_subprocess(self, code):
         result = subprocess.run(
             [sys.executable, "-c", code],
             env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},

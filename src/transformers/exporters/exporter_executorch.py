@@ -47,7 +47,7 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig
-from .exporter_dynamo import DynamoExporter
+from .exporter_dynamo import DynamoExporter, register_cache_pytrees_for_model
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -284,6 +284,8 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
     from executorch.backends.mlx import MLXPartitioner
 
+    # Traverse cache tensors on the first export, before Dynamo registers their pytrees.
+    register_cache_pytrees_for_model(model)
     model.requires_grad_(False)
     model = model.to(device="cpu")
     partitioner = [MLXPartitioner()]
