@@ -234,9 +234,7 @@ class CacheAllocator(ABC):
         freed because they are owned by other requests or because they are complete: then, they are cached but may be
         released anytime. If the `no_cache` flag is passed, the blocks are never cached, even if they are complete."""
         blocks_ids = self.block_table.pop(request_id, [])
-        freed_blocks = [
-            block_id for block_id in blocks_ids if self.ledger.release(block_id, no_cache)
-        ]
+        freed_blocks = [block_id for block_id in blocks_ids if self.ledger.release(block_id, no_cache)]
         self.pool.free_blocks(self.index, freed_blocks)
 
     def count_shareable_blocks(self, source_request_id: str, past_length: int) -> int:
