@@ -400,12 +400,9 @@ class ContinuousBatchProcessor:
         )
 
     def __del__(self) -> None:
-        device_module = None
-        if self.model_device.type in ("cuda", "xpu"):
-            device_module = torch.get_device_module(self.model_device)
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
         gc.collect()
-        if device_module is not None and device_module.is_available():
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
             device_module.empty_cache()
 
     def reset(self) -> None:
@@ -861,16 +858,7 @@ class ContinuousBatchingManager:
 
         # In all cases, a little cleanup is good
         gc.collect()
-        device_module = None
-        model = getattr(self, "model", None)
-        if model is not None:
-            if model.device.type in ("cuda", "xpu"):
-                device_module = torch.get_device_module(model.device)
-        elif torch.cuda.is_available():
-            device_module = torch.cuda
-        elif hasattr(torch, "xpu") and torch.xpu.is_available():
-            device_module = torch.xpu
-        if device_module is not None and device_module.is_available():
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
             device_module.empty_cache()
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
