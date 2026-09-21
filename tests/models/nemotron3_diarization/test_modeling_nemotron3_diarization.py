@@ -313,6 +313,7 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
     reproducer (all cases, uploads the golden to
     ``hf://buckets/hf-internal-testing/nemotron3-diarization-integration-test/expected_probabilities.safetensors``):
         ~/audio-model-work/nemotron3_diarization/reproducers/reproducer_probabilities.py
+    gist: https://gist.github.com/eustlb/f20c18d24580e7416697aec5747d1107
     """
 
     # Model-card "low latency" profile (1.04 s input buffer), in encoder frames of 80 ms.
