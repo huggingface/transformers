@@ -372,9 +372,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # Remap layer types if needed
         if getattr(self, "layer_types", None) is not None:
-            self.layer_types = remap_legacy_layer_types(self.layer_types)
+            # This check should not be needed, but sometimes `layer_types` is a read-only @attribute (already following
+            # correct conventions), so it avoids trying to reset it
+            if (remapped := remap_legacy_layer_types(self.layer_types)) != self.layer_types:
+                self.layer_types = remapped
         if getattr(self, "mtp_layer_types", None) is not None:
-            self.mtp_layer_types = remap_legacy_layer_types(self.mtp_layer_types)
+            # This check should not be needed, but sometimes `mtp_layer_types` is a read-only @attribute (already following
+            # correct conventions), so it avoids trying to reset it
+            if (remapped := remap_legacy_layer_types(self.mtp_layer_types)) != self.mtp_layer_types:
+                self.mtp_layer_types = remapped
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
