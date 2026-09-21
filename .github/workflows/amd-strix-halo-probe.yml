@@ -13,6 +13,12 @@
 # and there are >256 models, so `models-setup` splits tests/models/* into 3
 # slices (~172 each, <=256) and there is one models-ci job group per slice, each
 # a matrix over its slice's folders. Total = one job per model in a single run.
+#
+# Timeouts: each job wraps pytest in coreutils `timeout` so a hang ends as a
+# FAILED job with the partial -v log visible (SIGINT -> pytest prints its
+# summary; SIGKILL 2 min later if a stuck GPU call ignores it). We deliberately
+# do NOT rely on GitHub's job timeout, which marks the job `cancelled` and hides
+# the logs; `timeout-minutes` here is only a loose outer safety net.
 name: AMD Strix Halo probe
 
 on:
@@ -56,6 +62,7 @@ jobs:
     name: "${{ matrix.model }}"
     needs: models-setup
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    timeout-minutes: 150   # loose outer net; the `timeout` in the step is the real limit
     strategy:
       fail-fast: false
       matrix:
@@ -74,17 +81,19 @@ jobs:
       - name: Test ${{ matrix.model }}
         run: |
           cd /transformers
-          # xdist worker-restart survives a segfault (some attention tests crash
-          # on gfx1151); pytest-timeout kills a hung test instead of burning the
-          # whole job's time budget. Job timeout is left at GitHub's default (6h).
-          python3 -m pip install -q pytest-xdist pytest-timeout || true
-          python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
-            --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
+          # `timeout` kills pytest itself on a hang so the job FAILS with the
+          # partial log (SIGINT -> summary; SIGKILL 2 min later if it's stuck in a
+          # GPU call). xdist --max-worker-restart survives a segfault; pytest's
+          # --timeout is the per-test cap. (xdist + pytest-timeout are in the image.)
+          timeout -s INT --kill-after=120 120m \
+            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
+              --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
 
   models-ci-1:
     name: "${{ matrix.model }}"
     needs: models-setup
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -103,14 +112,15 @@ jobs:
       - name: Test ${{ matrix.model }}
         run: |
           cd /transformers
-          python3 -m pip install -q pytest-xdist pytest-timeout || true
-          python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
-            --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
+          timeout -s INT --kill-after=120 120m \
+            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
+              --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
 
   models-ci-2:
     name: "${{ matrix.model }}"
     needs: models-setup
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -129,9 +139,9 @@ jobs:
       - name: Test ${{ matrix.model }}
         run: |
           cd /transformers
-          python3 -m pip install -q pytest-xdist pytest-timeout || true
-          python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
-            --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
+          timeout -s INT --kill-after=120 120m \
+            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
+              --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
 
   test:
     name: Smoke + tests (prebuilt gfx1151 image)
