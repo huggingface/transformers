@@ -103,7 +103,7 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
         Number of DSA indexer heads.
     layer_types (`list[str]`, *optional*):
         Per-layer attention cache schedule. Values are `"linear_attention"` for
-        KDA layers and `"deepseek_sparse_attention"` for MLA (DSA) layers.
+        KDA layers and `"indexed_attention"` for MLA (DSA) layers.
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer mode. Values are `"full"` (run the indexer) or `"shared"`
         (reuse the previous full layer's top-k selection).
@@ -180,12 +180,11 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
         if self.layer_types is None:
             kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
             self.layer_types = [
-                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
+                "linear_attention" if layer_idx in kda_layers else "indexed_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
         self.layer_types = [
-            "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
-            for layer_type in self.layer_types
+            "indexed_attention" if layer_type == "full_attention" else layer_type for layer_type in self.layer_types
         ]
 
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
@@ -1342,7 +1341,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             attention_mask = attention_mask.bool()
 
             causal_mask_mapping = {
-                "deepseek_sparse_attention": attention_mask,
+                "indexed_attention": attention_mask,
                 "linear_attention": attention_mask,
             }
 
@@ -1694,7 +1693,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             )
         attention_mask = attention_mask.bool()
 
-        return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
+        return {"indexed_attention": attention_mask, "linear_attention": attention_mask}
 
 
 class Glm5NextProcessor(Glm46VProcessor):

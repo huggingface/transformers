@@ -65,6 +65,7 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "sliding_attention",
     "chunked_attention",
     "window_attention",  # non-overlapping windows usually in ViT
+    "indexed_attention",  # For indexer-based attentions
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
@@ -72,8 +73,6 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
     "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
-    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
-    "qwen_sparse_attention",  # QSA with block-compressed indexer keys (Qwen4-Exp)
     # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
     "linear_attention",
 )
@@ -93,6 +92,8 @@ _LEGACY_LAYER_TYPE_REMAP = {
     "conv": "linear_attention",  # only in LFMv2
     "mamba": "linear_attention",
     "attention": "full_attention",
+    "deepseek_sparse_attention": "indexed_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
+    "qwen_sparse_attention": "indexed_attention",  # QSA with block-compressed indexer keys (Qwen4-Exp)
 }
 
 
@@ -369,6 +370,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 **self.base_model_tp_plan,
                 "embed_tokens": "embedding_rowwise",
             }
+
+        # Remap layer types if needed
+        if hasattr(self, "layer_types"):
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
+        if hasattr(self, "mtp_layer_types"):
+            self.mtp_layer_types = remap_legacy_layer_types(self.mtp_layer_types)
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
