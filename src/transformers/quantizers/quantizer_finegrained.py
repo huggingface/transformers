@@ -560,11 +560,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
         if self.pre_quantized and self.quantization_config.dequantize:
             updated = []
             for conv in weight_conversions:
-                weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
-                if isinstance(conv, WeightConverter) and weight_sources:
+                # collect the sibling `.weight_scale_inv` alongside each `.weight` so the pair folds
+                # to full precision BEFORE merge/concat ops collapse the per-expert structure
+                weights = [p for p in conv.source_patterns if p.endswith(".weight")]
+                if isinstance(conv, WeightConverter) and weights:
                     conv = WeightConverter(
-                        source_patterns=[p + "$" for p in weight_sources]
-                        + [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
+                        source_patterns=[p + "$" for p in weights]
+                        + [p.removesuffix(".weight") + ".weight_scale_inv$" for p in weights]
                         + [p for p in conv.source_patterns if not p.endswith(".weight")],
                         target_patterns=conv._original_target_patterns,
                         operations=[FineGrainedDequantize(self), *conv.operations],
@@ -575,6 +577,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         if self.pre_quantized and self._quant_method() == "nvfp4":
             updated = []
             for conv in weight_conversions:
+                # anchored so the `.weight` source cannot swallow `weight_scale` / `weight_scale_2`
                 if isinstance(conv, WeightConverter) and any(p.endswith(".weight") for p in conv.source_patterns):
                     conv = WeightConverter(
                         source_patterns=[p + "$" if p.endswith(".weight") else p for p in conv.source_patterns],
@@ -612,28 +615,32 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 ]  # the swizzle reads 1-byte scales
             return ops
 
+        def sources_the_fused_key(conv, fused: str) -> bool:
+            """Whether `conv` can SOURCE the fused transformers-format key, not merely target it.
+
+            modelopt-style sources (`...gate_proj.weight_scale`) never match an already-fused
+            `experts.gate_up_proj_scale_inv`, so keying on the target would let them suppress the
+            catch-all below: the scale then arrives as a plain rename with none of the layout ops
+            — an affine tensor in the swizzled 5-D slot the module allocated, which is a malformed
+            DTensor under sharding.
+            """
+            probe = f"model.layers.0.mlp.experts.{fused}"
+            return any(re.search(pattern, probe) for pattern in (conv.source_patterns or []))
+
+        expert_target = re.compile(r"experts\.(gate_up_proj|down_proj)(_scale_inv|_bias)?\$?$")
         updated = []
         covered: set[str] = set()
         for conv in weight_conversions:
             targets = conv.target_patterns if isinstance(conv, WeightConverter) else []
-            expert_targets = [
-                t for t in targets if re.search(r"experts\.(gate_up_proj|down_proj)(_scale_inv|_bias)?\$?$", t)
-            ]
+            expert_targets = [t for t in targets if expert_target.search(t)]
             if expert_targets:
                 # Append to the EXISTING converter rather than rebuild it: `scope_prefix`,
                 # `base_model_prefix` and `force_cpu` are set on it before this hook runs and
                 # are not `__init__` arguments, so a fresh one silently loses them.
                 conv.operations = list(conv.operations) + layout_ops(expert_targets[0])
-                # Covered only when this converter can SOURCE the fused transformers-format key,
-                # not merely target it: modelopt-style sources (`...gate_proj.weight_scale`) never
-                # match an already-fused `experts.gate_up_proj_scale_inv`, so keying on the target
-                # let them suppress the catch-all below and the scale arrived as a plain rename
-                # with none of the layout ops — an affine tensor in the swizzled 5-D slot the
-                # module allocated, which is a malformed DTensor under sharding.
-                fused_probe = "model.layers.0.mlp.experts.{}"
                 for target in expert_targets:
                     fused = target.rpartition("experts.")[2].removesuffix("$")
-                    if any(re.search(pattern, fused_probe.format(fused)) for pattern in (conv.source_patterns or [])):
+                    if sources_the_fused_key(conv, fused):
                         covered.add(fused)
             updated.append(conv)
         # dense linears have no converter: their scale keys take the container cast alone
@@ -648,13 +655,14 @@ class FineGrainedHfQuantizer(HfQuantizer):
             # only where no converter already produces that target: a second converter for the
             # same key is appended LATER and shadows the first, dropping whatever ops it carried
             # that these do not (the packed uint8 -> int8 view, on a fused modelopt checkpoint)
-            if name not in covered and layout_ops(name):
+            ops = layout_ops(name)
+            if name not in covered and ops:
                 # the target is replacement text (op outputs are keyed by it), so no regex escapes
                 updated.append(
                     WeightConverter(
                         source_patterns=rf"experts\.{name}$",
                         target_patterns=f"experts.{name}",
-                        operations=layout_ops(name),
+                        operations=ops,
                     )
                 )
         return updated

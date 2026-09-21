@@ -561,42 +561,33 @@ def _moe_operands(kernel, module) -> dict:
     else:
         act_fn = module._apply_gate if module.has_gate else module.act_fn
 
-    norm_eps, norm_weight = 1e-6, None
-    if not module.has_post_expert_norm:
-        post_expert_norm = None
-    elif module.post_expert_norm_name in kernel.get_supported_norms() and not getattr(
-        module.post_expert_norm, "_hf_tp_input_reduce", False
-    ):
-        # fusing puts the norm INSIDE the launch that produced the rows, so a collective that has
-        # to land between the two has nowhere to go: under intra-expert TP those rows are a
-        # partial sum over the sharded intermediate. Fall back to the module, whose wrapped
-        # forward does the all-reduce first.
-        post_expert_norm = module.post_expert_norm_name
-        norm = module.post_expert_norm
-        norm_weight = norm.weight
-        # the model owns this module, so take epsilon under either name; `nn.RMSNorm` leaves it
-        # None and resolves to the dtype's own
-        eps = _first_attr(norm, "eps", "variance_epsilon", raise_error=False)
-        norm_eps = float(eps) if eps is not None else torch.finfo(norm_weight.dtype).eps
-    else:
-        post_expert_norm = module._apply_post_norm
+    # a `get_supported_norms()` NAME is folded into the routing-weighted reduce; any other
+    # callable runs on the routed rows before it. The name is only usable where nothing has to
+    # happen in between: fusing puts the norm INSIDE the launch that produced the rows, so under
+    # intra-expert TP — where they are a partial sum over the sharded intermediate — the
+    # all-reduce would have nowhere to land, and the module's wrapped forward must do it first.
+    post_expert_norm, norm_weight, norm_eps = None, None, 1e-6
+    if module.has_post_expert_norm:
+        fusable = module.post_expert_norm_name in kernel.get_supported_norms()
+        if not fusable or getattr(module.post_expert_norm, "_hf_tp_input_reduce", False):
+            post_expert_norm = module._apply_post_norm
+        else:
+            norm = module.post_expert_norm
+            post_expert_norm, norm_weight = module.post_expert_norm_name, norm.weight
+            # the model owns this module, so take epsilon under either name; `nn.RMSNorm` leaves
+            # it None and resolves to the dtype's own
+            eps = _first_attr(norm, "eps", "variance_epsilon", raise_error=False)
+            norm_eps = float(eps) if eps is not None else torch.finfo(norm.weight.dtype).eps
 
     # The kernels always say `gate_up_proj`; the module names that weight `up_proj` when the model
     # has no gate, which is the only reason these are not plain attribute reads. A slot the module
     # does not hold reads back as None — the argument the kernels take for an absent one.
     return {
-        "gate_up_proj": getattr(module, up),
-        "gate_up_proj_scale_inv": getattr(module, f"{up}_scale_inv"),
-        "gate_up_proj_weight_global_scale": getattr(module, f"{up}_weight_global_scale"),
-        "gate_up_proj_input_global_scale": getattr(module, f"{up}_input_global_scale"),
-        "gate_up_proj_activation_scale": getattr(module, f"{up}_activation_scale"),
-        "gate_up_proj_bias": getattr(module, f"{up}_bias"),
-        "down_proj": module.down_proj,
-        "down_proj_scale_inv": module.down_proj_scale_inv,
-        "down_proj_weight_global_scale": module.down_proj_weight_global_scale,
-        "down_proj_input_global_scale": module.down_proj_input_global_scale,
-        "down_proj_activation_scale": module.down_proj_activation_scale,
-        "down_proj_bias": module.down_proj_bias,
+        **{
+            f"{kernel_proj}{slot}": getattr(module, f"{held_proj}{slot}")
+            for kernel_proj, held_proj in (("gate_up_proj", up), ("down_proj", "down_proj"))
+            for slot in ("", "_scale_inv", "_weight_global_scale", "_input_global_scale", "_activation_scale", "_bias")
+        },
         # a supported activation NAME is fused into the gate_up epilogue; any other callable
         # leaves that GEMM plain and runs on the host between the two
         "act_fn": act_fn,
@@ -671,10 +662,11 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[self.act_fn_name]
 
-        # Expert weight storage is declared by the QUANT config's format key, not the model
-        # config: `weight_format` arrives from `replace_with_finegrained_layer` as the
-        # checkpoint's quant_method. `config.expert_dtype` is the legacy DeepSeek-V4 side-channel,
-        # kept as the fallback when no format is passed.
+        # `weight_format` is the checkpoint's quant_method, as `replace_with_finegrained_layer`
+        # passes it. DeepSeek-V4 is MIXED though — mxfp4 experts under an "fp8" quant config —
+        # and declares that on the MODEL config (`expert_dtype`), because a quant config carries
+        # one `quant_method` and has no way to say "the experts are a different format". That
+        # side-channel is the fallback here when no format is passed.
         if weight_format is None:
             weight_format = "mxfp4" if getattr(config, "expert_dtype", "fp8") == "fp4" else "fp8"
         self.weight_format = weight_format
@@ -695,43 +687,19 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
         up_name = "gate_up_proj" if self.has_gate else "up_proj"
         up_rows = (2 if self.has_gate else 1) * self.intermediate_dim
-        for proj, rows, in_dim, min_scale_out in (
-            (up_name, up_rows, self.hidden_dim, 2 if self.has_gate else 1),
-            ("down_proj", self.hidden_dim, self.intermediate_dim, 1),
+        # gate_up's activation global is ONE value — its rows are the pre-routing hidden states,
+        # quantized once before routing; down's rows belong to an expert each.
+        for proj, rows, in_dim, min_scale_out, input_globals in (
+            (up_name, up_rows, self.hidden_dim, 2 if self.has_gate else 1, 1),
+            ("down_proj", self.hidden_dim, self.intermediate_dim, 1, self.num_experts),
         ):
-            weight, scale = _alloc_expert_proj(
-                self.num_experts, rows, in_dim, format_spec, scale_dtype, scale_group, min_scale_out, swizzled
-            )
-            self.register_parameter(proj, weight)
-            self.register_parameter(f"{proj}_scale_inv", scale)
-            # the model dtype (the default dtype under `from_pretrained`), like the bf16 experts it
-            # replaces: the kernels add it on the fp32 accumulator, and a save keeps the checkpoint dtype
-            _set_optional_parameter(
-                self, f"{proj}_bias", torch.empty(self.num_experts, rows) if self.has_bias else None
-            )
-            # NVFP4 two-level: the fp32 globals the kernels recover on the accumulator, one per
-            # expert for the weight (`FineGrainedWeightGlobals` merges a separately calibrated
-            # gate|up stack down to that). The activation's is the checkpoint's `input_scale` —
-            # one value for gate_up, whose rows are the pre-routing hidden states, and one per
-            # expert for down, whose rows are per expert.
-            _set_optional_parameter(
-                self,
-                f"{proj}_weight_global_scale",
-                torch.ones(self.num_experts, dtype=self.global_scale_dtype)
-                if self.global_scale_dtype is not None
-                else None,
-            )
-            calibrated = self.global_scale_dtype is not None and self.activation_format != "bf16"
-            _set_optional_parameter(
-                self,
-                f"{proj}_input_global_scale",
-                torch.ones(1 if proj == up_name else self.num_experts, dtype=torch.float32) if calibrated else None,
-            )
-            static = self.activation_scheme == "static"
-            _set_optional_parameter(
-                self,
-                f"{proj}_activation_scale",
-                torch.ones(self.num_experts, dtype=torch.float32) if static else None,
+            self._register_projection(
+                proj,
+                rows,
+                in_dim,
+                min_scale_out,
+                input_globals,
+                (format_spec, scale_dtype, scale_group, swizzled),
             )
 
         # The model's per-expert output norm, carried over by the swap. A submodule slot, not a
@@ -742,6 +710,36 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         # The form it implements, when the model names one it wants a backend to FUSE
         # (`get_supported_norms`); unnamed norms still run through `_apply_post_norm`.
         self.post_expert_norm_name = None
+
+    def _register_projection(self, proj, rows, in_dim, min_scale_out, input_globals, storage):
+        """One expert projection: the packed weight and its scale grid, then the slots a
+        checkpoint may or may not fill — a bias, the NVFP4 second-level globals, a calibrated
+        activation scale. `storage` is the layout `resolve_weight_format` settled on."""
+        format_spec, scale_dtype, scale_group, swizzled = storage
+        weight, scale = _alloc_expert_proj(
+            self.num_experts, rows, in_dim, format_spec, scale_dtype, scale_group, min_scale_out, swizzled
+        )
+        self.register_parameter(proj, weight)
+        self.register_parameter(f"{proj}_scale_inv", scale)
+
+        # the model dtype (the default dtype under `from_pretrained`), like the bf16 experts it
+        # replaces: the kernels add it on the fp32 accumulator, and a save keeps the checkpoint dtype
+        bias = torch.empty(self.num_experts, rows) if self.has_bias else None
+        # NVFP4 two-level: the fp32 globals the kernels recover on the accumulator, one per expert
+        # for the weight (`FineGrainedWeightGlobals` merges a separately calibrated gate|up stack
+        # down to that). The activation's is the checkpoint's `input_scale`.
+        two_level = self.global_scale_dtype is not None
+        calibrated = two_level and self.activation_format != "bf16"
+        for name, tensor in (
+            ("bias", bias),
+            (
+                "weight_global_scale",
+                torch.ones(self.num_experts, dtype=self.global_scale_dtype) if two_level else None,
+            ),
+            ("input_global_scale", torch.ones(input_globals, dtype=torch.float32) if calibrated else None),
+            ("activation_scale", torch.ones(self.num_experts) if self.activation_scheme == "static" else None),
+        ):
+            _set_optional_parameter(self, f"{proj}_{name}", tensor)
 
     def _apply_post_norm(self, expert_out: torch.Tensor) -> torch.Tensor:
         """The standard hook every backend applies: the model's norm on one expert application's

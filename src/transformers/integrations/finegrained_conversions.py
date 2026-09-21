@@ -68,14 +68,28 @@ def _recontain(scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     return scale.view(dtype) if scale.element_size() == dtype.itemsize else scale.to(dtype)
 
 
-class FineGrainedInterleaveGateUp(ConversionOps):
-    """Stacked ``[gate; up]`` expert rows into the kernels' ``[g0, u0, g1, u1, ...]`` order — the
-    core ``Interleave`` along dim 1, over the weight, scale grid and bias alike. Runs on load and
-    save wherever the checkpoint's row order differs from the one the experts hold."""
+class _FineGrainedOp(ConversionOps):
+    """Base for the ops below. Each carries the quantizer that built it, which is how an op reaches
+    the config (the activation format, the block size) while it runs.
+
+    The default reverse is the op ITSELF with `inverse` flipped: it applies the layout the modules
+    hold on load and puts the checkpoint's back on save. The pairs that reverse into a *different*
+    class — merge/split, quantize/dequantize — override `reverse_op` and ignore the flag.
+    """
 
     def __init__(self, hf_quantizer=None, inverse: bool = False):
         self.hf_quantizer = hf_quantizer
         self.inverse = inverse
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return type(self)(self.hf_quantizer, inverse=not self.inverse)
+
+
+class FineGrainedInterleaveGateUp(_FineGrainedOp):
+    """Stacked ``[gate; up]`` expert rows into the kernels' ``[g0, u0, g1, u1, ...]`` order — the
+    core ``Interleave`` along dim 1, over the weight, scale grid and bias alike. Runs on load and
+    save wherever the checkpoint's row order differs from the one the experts hold."""
 
     def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
         input_dict = _keyed_by_target(input_dict, target_patterns)
@@ -94,19 +108,11 @@ class FineGrainedInterleaveGateUp(ConversionOps):
                 out[key] = interleave.convert({key: value}, None, [key])[key]
         return out
 
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedInterleaveGateUp(self.hf_quantizer, inverse=not self.inverse)
 
-
-class FineGrainedScaleContainer(ConversionOps):
+class FineGrainedScaleContainer(_FineGrainedOp):
     """A block scale into the dtype its module holds. UE8M0 ships either as the exponent byte
     under ``uint8`` (reinterpreted) or as its power-of-two value in float32 (cast exactly); the
     module records which the checkpoint used so the reverse restores it on save."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         out = {}
@@ -127,19 +133,11 @@ class FineGrainedScaleContainer(ConversionOps):
             out[key] = value
         return out
 
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedScaleContainer(self.hf_quantizer, inverse=not self.inverse)
 
-
-class FineGrainedSwizzleScales(ConversionOps):
+class FineGrainedSwizzleScales(_FineGrainedOp):
     """Expert block scales into the ``SWIZZLE_32_4_4`` layout their module holds (a 5-D Parameter):
     one triton launch per rank-local shard, values unchanged. The swizzle covers whole 128-row
     blocks and 4-column groups, so the reverse reads the affine grid back off the 5-D shape."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         out = {}
@@ -163,19 +161,11 @@ class FineGrainedSwizzleScales(ConversionOps):
             return value
         return load_finegrained_kernel().swizzle_mx_scales(value)
 
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedSwizzleScales(self.hf_quantizer, inverse=not self.inverse)
 
-
-class FineGrainedPackedBlocks(ConversionOps):
+class FineGrainedPackedBlocks(_FineGrainedOp):
     """GPT-OSS's ``{proj}_blocks`` ``(E, N, K/32, 16)`` uint8 as the packed ``(E, N, K/2)`` int8
     the kernels read: the same bytes regrouped per row, folded back into 16-byte groups on the way
     out. Two low-nibble-first E2M1 values per byte."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
 
     def convert(self, input_dict, target_patterns=None, **kwargs):
         out = {}
@@ -189,19 +179,11 @@ class FineGrainedPackedBlocks(ConversionOps):
                 out[key] = value.reshape(*value.shape[:-2], -1).view(torch.int8)
         return out
 
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedPackedBlocks(self.hf_quantizer, inverse=not self.inverse)
 
-
-class FineGrainedViewPackedInt8(ConversionOps):
+class FineGrainedViewPackedInt8(_FineGrainedOp):
     """Bitcast packed-FP4 uint8 checkpoint bytes to the int8 view the finegrained modules store:
     ``copy_`` into an int8 param would numerically CONVERT and corrupt values >= 128. Non-uint8
     tensors pass through, so this can ride converters that also match unquantized modules."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
 
     def convert(self, input_dict, target_patterns=None, **kwargs):
         held, want = (torch.int8, torch.uint8) if self.inverse else (torch.uint8, torch.int8)
@@ -211,14 +193,8 @@ class FineGrainedViewPackedInt8(ConversionOps):
             out[key] = value.view(want) if torch.is_tensor(value) and value.dtype == held else value
         return out
 
-    @property
-    def reverse_op(self) -> ConversionOps:
-        # a bitcast is its own inverse; on save the int8 the module holds goes back out as the
-        # uint8 bytes the checkpoint packs fp4 into
-        return FineGrainedViewPackedInt8(self.hf_quantizer, inverse=not self.inverse)
 
-
-class FineGrainedWeightGlobals(ConversionOps):
+class FineGrainedWeightGlobals(_FineGrainedOp):
     """The second-level NVFP4 globals and the calibrated ``input_scale``, as the kernels index them:
     one fp32 global per expert per projection, from either the per-expert checkpoint keys
     (``experts.*.gate_proj.weight_scale_2``) or one stacked ``(E, 2)`` tensor per layer.
@@ -229,9 +205,6 @@ class FineGrainedWeightGlobals(ConversionOps):
     ``1 / ratio`` — which the down projection's weight global takes back, and its calibrated input
     global keeps the requant on the range the e4m3 block scales were chosen for. Rescaling the up
     half's block scales instead would re-round them against codes chosen for the old global."""
-
-    def __init__(self, hf_quantizer=None):
-        self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, target_patterns=None, model=None, **kwargs):
         sources = defaultdict(dict)
@@ -288,15 +261,12 @@ def _global_role(key: str) -> tuple[str, str]:
     return projection, level
 
 
-class FineGrainedInputScales(ConversionOps):
+class FineGrainedInputScales(_FineGrainedOp):
     """A calibrated checkpoint's ``input_scale`` in the layout the module holds: one value per
     quantized module, so a MoE brings one per expert, the gate|up pair reducing to their max since
     both halves read the same rows. The NVFP4 gate_up global collapses to ONE value — its rows are
     the hidden states, quantized once before routing. A static activation scale IS the
     quantization scale, with no block level to absorb an inflated one, so it stays per-expert."""
-
-    def __init__(self, hf_quantizer=None):
-        self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, full_layer_name=None, **kwargs):
         values = []
@@ -320,14 +290,11 @@ class FineGrainedInputScales(ConversionOps):
         return FineGrainedInputScalesSplit(self.hf_quantizer)
 
 
-class FineGrainedInputScalesSplit(ConversionOps):
+class FineGrainedInputScalesSplit(_FineGrainedOp):
     """Save reverse of :class:`FineGrainedInputScales`: the module's scale back onto every
     projection key the checkpoint calibrated one for. The merge took a max, so the folded halves
     are gone and each projection is written the value that covers it. A collapsed global
     re-expands per expert, the shape the checkpoint holds."""
-
-    def __init__(self, hf_quantizer=None):
-        self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
         value = next(iter(input_dict.values()))
@@ -343,7 +310,7 @@ class FineGrainedInputScalesSplit(ConversionOps):
         return FineGrainedInputScales(self.hf_quantizer)
 
 
-class FineGrainedQuantize(ConversionOps):
+class FineGrainedQuantize(_FineGrainedOp):
     """Quantize a full-precision weight on load into the format its module holds, emitting the
     scale (and the NVFP4 global) in the module's layout — the held container dtype, the swizzled
     artifact where the module holds one. Block-FP8 is computed in torch (per-block E4M3, fp32 or
@@ -497,7 +464,7 @@ class FineGrainedQuantize(ConversionOps):
         return FineGrainedDequantize(self.hf_quantizer)
 
 
-class FineGrainedDequantize(ConversionOps):
+class FineGrainedDequantize(_FineGrainedOp):
     """A quantized weight folded back to full precision against its per-block scale grid.
 
     Runs FIRST in its converter under ``dequantize=True``, which is why
