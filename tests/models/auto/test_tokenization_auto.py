@@ -91,6 +91,8 @@ class AutoTokenizerTest(unittest.TestCase):
     BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS = [
         "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
         "deepseek-ai/deepseek-llm-7b-base",
+        "deepseek-ai/DeepSeek-V2-Lite",
+        "deepseek-ai/DeepSeek-V3.2-Exp",
         "Salesforce/xLAM-1b-fc-r",
         "microsoft/wavecoder-ultra-6.7b",
         "LSX-UniWue/LLaMmlein_1B_prerelease",

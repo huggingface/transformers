@@ -370,15 +370,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
     "chameleon",
     "chatlm",
-    "deepseek_v2",
-    "deepseek_v3",
-    "deepseek_v32",
-    "deepseek_v4",
-    "deepseek_vl",
-    "deepseek_vl_hybrid",
-    "deepseek_vl_v2",
-    "deepseek_ocr",
-    "deepseek_ocr2",
     "ernie4_5",
     "ernie4_5_moe",
     "fuyu",
@@ -423,8 +414,6 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
 MODEL_IDS_TO_TOKENIZERS_BACKEND = [
-    "deepseek-ai/deepseek-r1-distill-*",
-    "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
     "salesforce/blip2-opt-*",
