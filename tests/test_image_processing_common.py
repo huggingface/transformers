@@ -282,6 +282,52 @@ class ImageProcessingTestMixin:
         torch.testing.assert_close(tensor1, tensor2, atol=atol, rtol=rtol)
         self.assertLessEqual(torch.mean(torch.abs(tensor1 - tensor2)).item(), mean_atol)
 
+    def _assert_encodings_equivalence(
+        self, reference_encoding, encoding, reference_backend, backend_name, **tensor_kwargs
+    ):
+        """Assert that two backends return the same outputs, not just the same pixel values.
+
+        Float tensors are compared with tolerances because the backends resize differently (`tensor_kwargs` are passed
+        to `_assert_tensors_equivalence`); everything else (masks, sizes, lists of ints) must match exactly.
+        """
+        self.assertEqual(
+            set(reference_encoding.keys()),
+            set(encoding.keys()),
+            f"{backend_name} returns different keys than {reference_backend}",
+        )
+        for key in reference_encoding:
+            self._assert_values_equivalence(
+                reference_encoding[key], encoding[key], f"`{key}`", reference_backend, backend_name, **tensor_kwargs
+            )
+
+    def _assert_values_equivalence(
+        self, reference_value, value, name, reference_backend, backend_name, **tensor_kwargs
+    ):
+        if torch.is_tensor(reference_value) and torch.is_tensor(value):
+            self.assertEqual(
+                reference_value.dtype,
+                value.dtype,
+                f"{name} has dtype {value.dtype} in {backend_name} and {reference_value.dtype} in {reference_backend}",
+            )
+            self.assertEqual(
+                reference_value.shape,
+                value.shape,
+                f"{name} has shape {tuple(value.shape)} in {backend_name} and "
+                f"{tuple(reference_value.shape)} in {reference_backend}",
+            )
+            if reference_value.is_floating_point():
+                self._assert_tensors_equivalence(reference_value, value, **tensor_kwargs)
+            else:
+                self.assertTrue(torch.equal(reference_value, value), f"{name} differs from {reference_backend}")
+        elif isinstance(reference_value, (list, tuple)) and isinstance(value, (list, tuple)):
+            self.assertEqual(len(reference_value), len(value), f"{name} has a different length in {backend_name}")
+            for i, (reference_item, item) in enumerate(zip(reference_value, value)):
+                self._assert_values_equivalence(
+                    reference_item, item, f"{name}[{i}]", reference_backend, backend_name, **tensor_kwargs
+                )
+        else:
+            self.assertEqual(reference_value, value, f"{name} differs from {reference_backend}")
+
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
@@ -299,9 +345,11 @@ class ImageProcessingTestMixin:
         # Compare all backends to the first one (reference backend)
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_encoding = encodings[reference_backend].pixel_values
+        reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
+            self._assert_encodings_equivalence(
+                reference_encoding, encodings[backend_name], reference_backend, backend_name
+            )
 
     @require_vision
     @require_torch
@@ -320,9 +368,11 @@ class ImageProcessingTestMixin:
         # Compare all backends to the first one (reference backend)
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_encoding = encodings[reference_backend].pixel_values
+        reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
+            self._assert_encodings_equivalence(
+                reference_encoding, encodings[backend_name], reference_backend, backend_name
+            )
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():

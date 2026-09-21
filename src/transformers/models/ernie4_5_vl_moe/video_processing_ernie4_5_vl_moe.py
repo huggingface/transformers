@@ -120,7 +120,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             raise ValueError("`Ernie 4.5 VL` only supports a temporal patch size of 2")
 
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        size = dict(self.size) if size is None else size
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
