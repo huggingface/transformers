@@ -21,9 +21,8 @@ from collections.abc import MutableMapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import torch
-
 from ..utils import logging
+from ..utils.import_utils import is_torch_available
 from .configs import AotiConfig, ExportFormat
 from .exporter_dynamo import DynamoExporter
 from .metadata import EXPORT_METADATA_KEY
@@ -34,6 +33,10 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_torch_available():
+    import torch
 
 
 class AotiExporter(DynamoExporter):

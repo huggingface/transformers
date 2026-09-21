@@ -6,8 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-import torch
-
+from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .cache import _read_cache_entry
 from .metadata import (
@@ -17,6 +16,10 @@ from .metadata import (
 from .utils import (
     get_leaf_tensors,
 )
+
+
+if is_torch_available():
+    import torch
 
 
 def _session_device(device=None) -> torch.device:

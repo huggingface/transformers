@@ -5,12 +5,15 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-import torch
-from torch.utils import _pytree as pytree
-
+from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .metadata import EXPORT_METADATA_KEY, ExportMetadata
 from .utils import get_leaf_tensors
+
+
+if is_torch_available():
+    import torch
+    from torch.utils import _pytree as pytree
 
 
 def _load_package(source, device):

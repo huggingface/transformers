@@ -42,14 +42,13 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-import torch
-
 from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
 from ..generation import GenerationConfig, GenerationMixin
 from ..masking_utils import create_masks_for_generate
 from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ..models.auto import AutoConfig
 from ..utils import GENERATION_CONFIG_NAME, logging
+from ..utils.import_utils import is_torch_available
 from .base import (
     ModelRunner,
     load_export_runners,
@@ -72,16 +71,18 @@ from .decompose import (
     pack_anyres_features,
     streaming_embedder_spec,
 )
+from .precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
 from .utils import (
-    _find_config_attr,
     cast_leaf_tensors,
-    get_rope_index_from_config,
-    precompute_export_inputs,
     runner_feed,
 )
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_torch_available():
+    import torch
 
 
 # The text-path kwargs `generate` always carries. A modality graph that declares one of these names means

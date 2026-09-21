@@ -23,7 +23,6 @@ from collections.abc import Iterable, Mapping, MutableMapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import torch
 from packaging import version
 
 from ..models.auto import AutoConfig
@@ -38,6 +37,10 @@ from .utils import runner_feed
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_torch_available():
+    import torch
 
 # Everything a saved export says about itself: which backend wrote it, which file each component is, and
 # what the exporter recorded about each component's graph. One file, because those are one question — and

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 
-import torch
-
+from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .metadata import (
     EXPORT_METADATA_KEY,
@@ -14,6 +13,10 @@ from .metadata import (
 from .utils import (
     get_leaf_tensors,
 )
+
+
+if is_torch_available():
+    import torch
 
 
 class DynamoModelRunner(ModelRunner):

@@ -19,10 +19,8 @@ import copy
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING, Any
 
-import torch
-from torch.utils import _pytree as pytree
-
 from ..utils import logging
+from ..utils.import_utils import is_torch_available
 from .configs import ExportFormat, TensorrtConfig
 from .exporter_dynamo import DynamoExporter, get_auto_dynamic_shapes
 from .metadata import EXPORT_METADATA_KEY
@@ -33,6 +31,11 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_torch_available():
+    import torch
+    from torch.utils import _pytree as pytree
 
 
 # Left to torch rather than converted. A cache write is an `index_put`, and Torch-TensorRT's converter for

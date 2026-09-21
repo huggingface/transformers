@@ -47,11 +47,10 @@ from .components import (
     PatchVisionEncoder,
     TokenEmbedder,
 )
+from .precompute import _find_config_attr, precompute_export_inputs
 from .utils import (
-    _find_config_attr,
     module_device,
     module_dtype,
-    precompute_export_inputs,
 )
 
 
@@ -545,7 +544,7 @@ def pack_anyres_features(config, features, image_sizes, outputs) -> torch.Tensor
     Mirrors `pack_image_features`, calling the modeling's own grid/unpad helpers so the geometry lives in one
     place — the split optimum-intel uses, and the reason the graph is dynamic in image count and resolution."""
     from ..models.llava_next.modeling_llava_next import get_anyres_image_grid_shape, unpad_image
-    from .utils import _find_config_attr
+    from .precompute import _find_config_attr
 
     newline = next((t for name, t in outputs.items() if name.endswith("image_newline")), None)
     pinpoints = _find_config_attr(config, "image_grid_pinpoints")

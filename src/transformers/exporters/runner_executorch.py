@@ -5,8 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import torch
-
+from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
 from .cache import _cache_tensors
 from .metadata import (
@@ -16,6 +15,10 @@ from .metadata import (
 from .utils import (
     get_leaf_tensors,
 )
+
+
+if is_torch_available():
+    import torch
 
 
 def _executorch_constant(value):
