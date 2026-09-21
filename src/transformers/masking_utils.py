@@ -255,7 +255,9 @@ def _ignore_causal_mask_sdpa(
         padding_mask = padding_mask[:, mask_indices]
 
     # `torch.export` hard-codes `is_causal` into the exported forward, which is in general wrong
-    # (see https://github.com/pytorch/pytorch/issues/108108). `torch.compile` reguards and is thus unaffected
+    # (see https://github.com/pytorch/pytorch/issues/108108). `torch.compile` reguards and is thus unaffected.
+    # NOTE: before torch 2.14 (pytorch#176499), dynamo also reported exporting under `torch.compile`, which simply
+    # means that we keep the previous, conservative behavior of never skipping while compiling on older versions.
     if is_torchdynamo_exporting():
         return False
 
@@ -315,7 +317,7 @@ def _can_skip_bidirectional_mask_xpu(
     if is_tracing(padding_mask):
         return False
 
-    return padding_mask.all()
+    return bool(fast_all(padding_mask))
 
 
 def _ignore_bidirectional_mask_sdpa(
@@ -352,7 +354,7 @@ def _ignore_bidirectional_mask_sdpa(
     if is_tracing(padding_mask):
         return False
 
-    return padding_mask.all()
+    return bool(fast_all(padding_mask))
 
 
 def _vmap_expansion_sdpa(mask_function: Callable) -> Callable:
