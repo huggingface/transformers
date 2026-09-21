@@ -4098,8 +4098,9 @@ class SafetensorsPrefetchLoadingTest(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as tmp:
             LlamaForCausalLM(config).save_pretrained(tmp, max_shard_size="20KB")
-            reference = LlamaForCausalLM.from_pretrained(tmp, device_map="cuda:0")
-            loaded = LlamaForCausalLM.from_pretrained(tmp, device_map="cuda:0", prefetch=True)
+            # prefetch=False pins the default loader, which the None default no longer uses
+            reference = LlamaForCausalLM.from_pretrained(tmp, device_map="cuda:0", prefetch=False)
+            loaded = LlamaForCausalLM.from_pretrained(tmp, device_map="cuda:0")
         for (name, expected), (_, got) in zip(reference.state_dict().items(), loaded.state_dict().items()):
             self.assertEqual(got.device.type, "cuda", name)
             torch.testing.assert_close(got, expected, msg=name)

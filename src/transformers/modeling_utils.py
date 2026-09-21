@@ -4023,11 +4023,12 @@ class PreTrainedModel(
                 files are read fully into memory and parsed with `safetensors.torch.load`. When `False`, the
                 default memory-mapped loader is always used.
             prefetch (`bool`, *optional*):
-                Load safetensors shards straight into device memory with safetensors' CUDA prefetch engine
-                (safetensors >= 0.9.0rc1, Linux). Shards are read and copied to the device in the background
-                while the weights are being assigned, and parameters are created as zero-copy views of the
-                loaded buffers. Used only when every entry of `device_map` is the same CUDA device and no
-                on-the-fly quantization is requested; the default loader is used otherwise.
+                Load safetensors shards straight into device memory with safetensors' prefetch engine.
+                Shards are read and copied to the device in the background while the weights are being
+                assigned, and parameters are created as zero-copy views of the loaded buffers. When `None`
+                (default) the engine is used whenever it applies: safetensors >= 0.9.0rc1 on Linux,
+                safetensors checkpoint files, no on-the-fly quantization, and every entry of `device_map`
+                resolving to the same CUDA device. Pass `False` to always use the default loader.
             fusion_config (`dict[str, bool | dict[str, Any]]`, *optional*):
                 Optional fusion configuration applied before model instantiation. Each key enables a fusion family and
                 its value can either be `True` to enable that fusion with default options or a dictionary of
@@ -4407,7 +4408,7 @@ class PreTrainedModel(
         # as zero-copy tensors: with it, the caching-allocator warmup would only double the footprint
         prefetch_device = None
         if (
-            load_config.prefetch
+            load_config.prefetch is not False
             and state_dict is None
             and checkpoint_files is not None
             and checkpoint_files[0].endswith(".safetensors")
@@ -4417,6 +4418,12 @@ class PreTrainedModel(
             prefetch_device = prefetch_target_device(load_config.device_map)
             if prefetch_device is not None:
                 logger.info(f"Loading safetensors shards with the CUDA prefetch engine on {prefetch_device}")
+        if load_config.prefetch and prefetch_device is None:
+            logger.warning(
+                "prefetch=True was requested but this checkpoint cannot be loaded with safetensors' CUDA "
+                "prefetch engine (it needs safetensors >= 0.9.0rc1 on Linux, safetensors files and a single "
+                "CUDA device); loading with the default loader."
+            )
 
         # Warmup cuda to load the weights much faster on devices
         if load_config.device_map is not None and not is_hqq_or_quark and prefetch_device is None:
