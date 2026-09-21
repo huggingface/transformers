@@ -36,28 +36,17 @@ def _get_graph_class_name(device_type: str) -> str:
     raise RuntimeError(f"Expected one of {SUPPORTED_CUDA_GRAPH_DEVICE_TYPES}, but got {device_type = }.")
 
 
-def get_torch_device_module(device: torch.device) -> Any:
-    device_type = torch.device(device).type
-    if device_type == "cuda":
-        return torch.cuda
-    if device_type == "xpu" and hasattr(torch, "xpu"):
-        return torch.xpu
-    raise RuntimeError(f"Expected one of {SUPPORTED_CUDA_GRAPH_DEVICE_TYPES}, but got {device_type = }.")
-
-
-def device_stream_ctx(device_module: Any | None, stream: Any):
+def device_stream_ctx(stream: torch.cuda.Stream | None):
     if stream is None:
         return nullcontext()
-    if device_module is None:
-        raise RuntimeError("Expected an accelerator device module when a stream is provided.")
-    return device_module.stream(stream)
+    return torch.get_device_module(stream.device).stream(stream)
 
 
 def is_cuda_graph_available(device: torch.device | None = None) -> bool:
     device_types = SUPPORTED_CUDA_GRAPH_DEVICE_TYPES if device is None else (torch.device(device).type,)
     for device_type in device_types:
         try:
-            device_module = get_torch_device_module(torch.device(device_type))
+            device_module = torch.get_device_module(device_type)
         except RuntimeError:
             continue
         is_available = getattr(device_module, "is_available", None)
@@ -67,9 +56,9 @@ def is_cuda_graph_available(device: torch.device | None = None) -> bool:
     return False
 
 
-def get_cuda_graph(device: torch.device) -> Any:
+def get_cuda_graph(device: torch.device) -> torch.cuda.CUDAGraph:
     device_type = torch.device(device).type
-    device_module = get_torch_device_module(device)
+    device_module = torch.get_device_module(device)
     graph_class_name = _get_graph_class_name(device_type)
     graph_class = getattr(device_module, graph_class_name, None)
     if graph_class is None:
@@ -81,7 +70,7 @@ class CudaGraphBuffer:
     """A dict for CUDA graphs with a special __del__ method to make sure the graphs are properly reset."""
 
     def __init__(self) -> None:
-        self._storage: dict[tuple[int, ...], Any] = {}
+        self._storage: dict[tuple[int, ...], torch.cuda.CUDAGraph] = {}
 
     def __del__(self) -> None:
         self.clear()
@@ -91,10 +80,10 @@ class CudaGraphBuffer:
             _, graph = self._storage.popitem()
             graph.reset()
 
-    def get_graph(self, key: tuple[int, ...]) -> Any | None:
+    def get_graph(self, key: tuple[int, ...]) -> torch.cuda.CUDAGraph | None:
         return self._storage.get(key)
 
-    def set_graph(self, key: tuple[int, ...], graph: Any) -> None:
+    def set_graph(self, key: tuple[int, ...], graph: torch.cuda.CUDAGraph) -> None:
         self._storage[key] = graph
 
 
@@ -263,7 +252,7 @@ def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
 
 def get_cuda_graph_pools(device: torch.device) -> tuple:
     """Returns a tuple of (mem_pool, graph_pool_id) for CUDA graphs."""
-    device_module = get_torch_device_module(device)
+    device_module = torch.get_device_module(device)
     mem_pool = device_module.MemPool()
     graph_pool_id = mem_pool.id
     return mem_pool, graph_pool_id
@@ -272,7 +261,7 @@ def get_cuda_graph_pools(device: torch.device) -> tuple:
 @contextmanager
 def mem_pool_ctx(device: torch.device, mem_pool):
     """A context manager to use a CUDA graph mem pool."""
-    device_module = get_torch_device_module(device)
+    device_module = torch.get_device_module(device)
     with device_module.use_mem_pool(mem_pool):
         yield
 
@@ -280,7 +269,7 @@ def mem_pool_ctx(device: torch.device, mem_pool):
 @contextmanager
 def graph_capture_ctx(device: torch.device, graph, stream, graph_pool_id):
     device_type = torch.device(device).type
-    device_module = get_torch_device_module(device)
+    device_module = torch.get_device_module(device)
     kwargs = {"stream": stream, "pool": graph_pool_id}
     if device_type == "cuda":
         kwargs["capture_error_mode"] = "thread_local"

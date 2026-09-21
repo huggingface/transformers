@@ -44,7 +44,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, get_torch_device_module
+from .utils import ThreadLocalCounter, WorkloadHints, drain_queue
 
 
 """
@@ -402,7 +402,7 @@ class ContinuousBatchProcessor:
     def __del__(self) -> None:
         device_module = None
         if self.model_device.type in ("cuda", "xpu"):
-            device_module = get_torch_device_module(self.model_device)
+            device_module = torch.get_device_module(self.model_device)
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
         gc.collect()
         if device_module is not None and device_module.is_available():
@@ -617,7 +617,7 @@ class ContinuousBatchProcessor:
         if copy_source:
             # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
             # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
-            with self.inputs_and_outputs.stream_ctx():
+            with self.inputs_and_outputs.compute_stream_ctx():
                 self.cache.copy_cache(copy_source, copy_destination)
 
     def has_pending_requests(self) -> bool:
@@ -865,7 +865,7 @@ class ContinuousBatchingManager:
         model = getattr(self, "model", None)
         if model is not None:
             if model.device.type in ("cuda", "xpu"):
-                device_module = get_torch_device_module(model.device)
+                device_module = torch.get_device_module(model.device)
         elif torch.cuda.is_available():
             device_module = torch.cuda
         elif hasattr(torch, "xpu") and torch.xpu.is_available():

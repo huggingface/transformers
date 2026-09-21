@@ -127,7 +127,7 @@ class ModelRunner:
 
         # If we are not using CUDA graphs, we perform the generation step and return
         if not use_cuda_graph:
-            maybe_stream = device_stream_ctx(self.device_module, compute_stream)
+            maybe_stream = device_stream_ctx(compute_stream)
             with maybe_stream:
                 forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
 
@@ -136,7 +136,7 @@ class ModelRunner:
             graph = self.inputs_and_outputs.get_graph()
             # Case: the graph already exists, so we replay it
             if graph is not None:
-                with device_stream_ctx(self.device_module, compute_stream):
+                with device_stream_ctx(compute_stream):
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
@@ -153,10 +153,10 @@ class ModelRunner:
             use_cuda_graph = self.use_cuda_graph_varlen
         return forward_fn, use_cuda_graph
 
-    def _capture_graph(self, forward_fn: Callable, compute_stream: Any, *args) -> None:
+    def _capture_graph(self, forward_fn: Callable, compute_stream: torch.cuda.Stream, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
         # Warmup (ensures the right result is computed before capturing the graph)
-        with device_stream_ctx(self.device_module, compute_stream), mem_pool_ctx(self.device, self.mem_pool):
+        with device_stream_ctx(compute_stream), mem_pool_ctx(self.device, self.mem_pool):
             forward_fn(*args)
         # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
         graph = get_cuda_graph(self.device)
