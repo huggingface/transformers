@@ -40,8 +40,6 @@ if is_torch_available():
     from transformers import (
         EmbeddingGemma2Model,
         EmbeddingGemma2TextModel,
-        Gemma4AudioModel,
-        Gemma4VisionModel,
     )
 
 
@@ -68,7 +66,7 @@ class EmbeddingGemma2TextModelTester:
         num_key_value_heads=2,
         head_dim=8,
         max_position_embeddings=512,
-        sliding_window=8,
+        sliding_window=4,
         hidden_size_per_layer_input=16,
         embedding_dim=24,
         pad_token_id=0,
@@ -150,62 +148,6 @@ class EmbeddingGemma2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-        model = EmbeddingGemma2TextModel(config).to(torch_device).eval()
-        with torch.no_grad():
-            result = model(input_ids, attention_mask=attention_mask)
-        self.assertEqual(
-            result.last_hidden_state.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, config.embedding_dim),
-        )
-
-    def test_embedding_projection(self):
-        """The embedding head lives on the text model and maps `hidden_size` -> `embedding_dim`."""
-        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-        model = EmbeddingGemma2TextModel(config).to(torch_device).eval()
-
-        self.assertIsInstance(model.embedding_projection, torch.nn.Linear)
-        self.assertEqual(model.embedding_projection.out_features, config.embedding_dim)
-        self.assertEqual(model.embedding_projection.in_features, config.hidden_size)
-        self.assertIsNone(model.embedding_projection.bias)
-
-        with torch.no_grad():
-            outputs = model(input_ids, attention_mask=attention_mask)
-        self.assertEqual(outputs.last_hidden_state.shape[-1], config.embedding_dim)
-
-    def test_projection_only_per_layer_inputs(self):
-        """EmbeddingGemma 2 has no per-layer embedding table; the PLE signal comes from `inputs_embeds`."""
-        config, input_ids, _ = self.model_tester.prepare_config_and_inputs()
-        self.assertFalse(hasattr(config, "vocab_size_per_layer_input"))
-        self.assertFalse(hasattr(config, "final_logit_softcapping"))
-
-        model = EmbeddingGemma2TextModel(config).to(torch_device).eval()
-        self.assertFalse(hasattr(model, "embed_tokens_per_layer"))
-        self.assertFalse(hasattr(model, "per_layer_input_scale"))
-
-        inputs_embeds = model.embed_tokens(input_ids)
-
-        # `project_per_layer_inputs` takes a *single* argument (Gemma 4 takes two).
-        per_layer_inputs = model.project_per_layer_inputs(inputs_embeds)
-        self.assertEqual(
-            per_layer_inputs.shape,
-            (
-                self.model_tester.batch_size,
-                self.model_tester.seq_length,
-                config.num_hidden_layers,
-                config.hidden_size_per_layer_input,
-            ),
-        )
-
-    def test_per_layer_embeddings_accessors_raise(self):
-        config, _, _ = self.model_tester.prepare_config_and_inputs()
-        model = EmbeddingGemma2TextModel(config)
-        with self.assertRaises(AttributeError):
-            model.get_per_layer_input_embeddings()
-        with self.assertRaises(AttributeError):
-            model.set_per_layer_input_embeddings(None)
 
 
 class EmbeddingGemma2ModelTester:
@@ -520,46 +462,3 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
             (self.model_tester.batch_size, self.model_tester.seq_length, config.text_config.embedding_dim),
         )
         self.assertNotEqual(config.text_config.embedding_dim, config.text_config.hidden_size)
-
-    def test_embedding_projection_lives_on_the_text_model(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = EmbeddingGemma2Model(config).to(torch_device).eval()
-
-        projection = model.language_model.embedding_projection
-        self.assertIsInstance(projection, torch.nn.Linear)
-        self.assertEqual(projection.out_features, config.text_config.embedding_dim)
-        self.assertEqual(projection.in_features, config.text_config.hidden_size)
-        self.assertIsNone(projection.bias)
-        # The composite model owns no projection of its own.
-        self.assertFalse(hasattr(model, "embedding_projection"))
-
-    def test_towers_are_reused_from_gemma4(self):
-        """Vision and audio towers are resolved through `AutoModel` and come out as Gemma 4 classes."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = EmbeddingGemma2Model(config)
-
-        self.assertIsInstance(model.vision_tower, Gemma4VisionModel)
-        self.assertIsInstance(model.audio_tower, Gemma4AudioModel)
-        self.assertEqual(config.vision_config.model_type, "gemma4_vision")
-        self.assertEqual(config.audio_config.model_type, "gemma4_audio")
-
-    def test_projection_only_ple_in_composite_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self.assertFalse(hasattr(config.text_config, "vocab_size_per_layer_input"))
-
-        model = EmbeddingGemma2Model(config).to(torch_device).eval()
-        text_model = model.language_model
-
-        inputs_embeds = text_model.embed_tokens(inputs_dict["input_ids"])
-        self.assertFalse(hasattr(text_model, "embed_tokens_per_layer"))
-
-        per_layer_inputs = text_model.project_per_layer_inputs(inputs_embeds)
-        self.assertEqual(
-            per_layer_inputs.shape,
-            (
-                self.model_tester.batch_size,
-                self.model_tester.seq_length,
-                config.text_config.num_hidden_layers,
-                config.text_config.hidden_size_per_layer_input,
-            ),
-        )

@@ -36,17 +36,11 @@ logger = logging.get_logger(__name__)
 @strict
 class EmbeddingGemma2TextConfig(PreTrainedConfig):
     r"""
-    global_head_dim (`int`, *optional*, defaults to 512):
-        Attention head dimension of the `full_attention` layers, which are wider than the
-        `sliding_attention` layers described by `head_dim`. Only consulted when no explicit
-        `per_layer_config` is given.
-    num_global_key_value_heads (`int`, *optional*, defaults to 1):
-        Number of key-value heads of the `full_attention` layers. Only consulted when no
-        explicit `per_layer_config` is given.
-    sliding_window_pattern (`int`, *optional*, defaults to 6):
-        Period of the sliding/full attention alternation: every `sliding_window_pattern`-th layer
-        is `full_attention` and the rest are `sliding_attention`, i.e. the default 6 gives a 5:1
-        pattern. Only consulted when no explicit `layer_types` is given.
+    sliding_window (`int`, *optional*, defaults to 512):
+        Inclusive radius of the bidirectional sliding window: a `sliding_attention` layer attends to
+        every position with `abs(q_idx - kv_idx) <= sliding_window`. It is a radius and not the
+        one-sided width the causal Gemma models configure, because the mask here is symmetric, so
+        the default is half of the 1024-wide window the reference implementation states.
     hidden_size_per_layer_input (`int`, *optional*, defaults to 512):
         Dimensionality of the per-layer (PLE) residual signal. EmbeddingGemma 2 uses
         *projection-only* PLE: the signal is derived from `inputs_embeds` alone, with no
@@ -80,8 +74,6 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
     num_attention_heads: int = 4
     num_key_value_heads: int = 2
     head_dim: int = 256
-    global_head_dim: int = 512
-    num_global_key_value_heads: int = 1
     hidden_activation: str = "gelu_pytorch_tanh"
     max_position_embeddings: int = 262_144
     initializer_range: float = 0.02
@@ -92,24 +84,22 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float | None = 0.0
-    sliding_window: int = 1024
-    sliding_window_pattern: int = 6
+    sliding_window: int = 512
     layer_types: list[str] | None = None
     hidden_size_per_layer_input: int = 512
     embedding_dim: int = 768
 
     def __post_init__(self, **kwargs):
-        # `sliding_window` is configured as the full window width, but the bidirectional mask
-        # takes a radius (it unmasks when `abs(q_idx - kv_idx) <= sliding_window`).
-        self.sliding_window = (self.sliding_window // 2) + 1
+        # `sliding_window_pattern`, `global_head_dim` and `num_global_key_value_heads` are builder-only
+        # kwargs, as in Gemma 4: they shape `layer_types` and `per_layer_config` and are not kept on
+        # the config, which exposes the derived values instead.
+        sliding_window_pattern = kwargs.pop("sliding_window_pattern", 6)
+        if sliding_window_pattern < 1:
+            raise ValueError(f"`sliding_window_pattern` must be a positive integer, got {sliding_window_pattern}.")
 
         if self.layer_types is None:
-            if self.sliding_window_pattern < 1:
-                raise ValueError(
-                    f"`sliding_window_pattern` must be a positive integer, got {self.sliding_window_pattern}."
-                )
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % self.sliding_window_pattern) else "full_attention"
+                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
 
@@ -126,22 +116,17 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
-        # Full-attention layers are wider; derive their overrides from the `global_*` fields
-        # unless an explicit `per_layer_config` was given.
+        # Full-attention layers are wider, hence the separate head dimension and kv head count.
+        global_head_dim = kwargs.pop("global_head_dim", 512)
+        num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", 1)
         if "per_layer_config" not in kwargs:
             kwargs["per_layer_config"] = {
-                layer_idx: {"head_dim": self.global_head_dim, "num_key_value_heads": self.num_global_key_value_heads}
+                layer_idx: {"head_dim": global_head_dim, "num_key_value_heads": num_global_key_value_heads}
                 for layer_idx, layer_type in enumerate(self.layer_types)
                 if layer_type == "full_attention"
             }
 
         super().__post_init__(**kwargs)
-
-    def to_dict(self) -> dict[str, Any]:
-        output = super().to_dict()
-        # Undo the radius conversion done in `__post_init__` so a save/load round-trip is stable.
-        output["sliding_window"] = (self.sliding_window - 1) * 2
-        return output
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`

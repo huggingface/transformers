@@ -153,7 +153,6 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
     pooling_kernel_size = 3
     valid_kwargs = EmbeddingGemma2VideoProcessorKwargs
     model_input_names = ["pixel_values_videos", "video_position_ids"]
-    # EmbeddingGemma 2 was trained on visual-only, 1-FPS-sampled video, so both default to `True`.
     use_1fps_linear_sampling = True
     exclude_timestamps = True
 

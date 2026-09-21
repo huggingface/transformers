@@ -21,9 +21,9 @@ The output directory is a SentenceTransformers model: alongside the usual
 either `EmbeddingGemma2Model.from_pretrained` or `SentenceTransformer`.
 
 python src/transformers/models/embedding_gemma2/convert_embedding_gemma2_weights.py \
-    --tokenizer_path="$HOME/embedding_gemma/tokenizers/gemma4_cleaned_262144.model" \
-    --checkpoint_path="$HOME/embedding_gemma/checkpoints/multimodal/float_complete_internal_renamed" \
-    --output_path="$HOME/embedding_gemma/eg2_v_4_huggingface_export"
+    --tokenizer_path="/path/to/tokenizer.model" \
+    --checkpoint_path="/path/to/orbax_checkpoint" \
+    --output_path="/path/to/output_dir"
 """
 
 import ast
@@ -78,17 +78,17 @@ _VISION_ENCODER_VIT_PARAMETER = f"{_VISION_ENCODER_PARAMETER}/_model/vit"
 _VISION_ENCODER_ENTRY = f"{_VISION_ENCODER_VIT_PARAMETER}/entry"
 _VISION_ENCODER_TRANSFORMER = f"{_VISION_ENCODER_VIT_PARAMETER}/transformer/stacked_layers/block"
 
-# The embedding head, stored outside the transformer tree.
-_EMBEDDING_PROJECTION = "hybrid_transformer/default_projection/linear"
+# The embedding head, stored alongside the rest of the transformer tree.
+_EMBEDDING_PROJECTION = "transformer/default_projection/linear"
 
 # Boundary-token embeddings live outside the main table in the Orbax checkpoint and are fused into
 # it by `_fuse_boundary_token_embeddings`.
 _AUDIO_INPUT_EMBEDDING_EXTRA = "audio_input_embedding_extra"
 _MM_INPUT_EMBEDDING_EXTRA = "mm_input_embedding_extra"
 
-# Unlike the generative Gemma 4 templates this one emits no turn markers: it drops a bare
-# `<|image|>` / `<|video|>` / `<|audio|>` placeholder for each non-text part, then concatenates all
-# the text. The processor expands the placeholders into soft tokens.
+# An embedding-only chat template: it emits no turn markers or role prefixes. Each non-text part
+# becomes a bare `<|image|>` / `<|video|>` / `<|audio|>` placeholder, then all the text is
+# concatenated. The processor expands the placeholders into soft tokens.
 _EMBEDDING_CHAT_TEMPLATE = (
     "{%- for msg in messages -%}"
     "{%- if msg.get('content') is not string -%}"
@@ -196,7 +196,8 @@ _CONFIG = EmbeddingGemma2Config(
         num_global_key_value_heads=1,
         global_head_dim=512,
         max_position_embeddings=262_144,
-        sliding_window=1024,
+        # Inclusive radius of the symmetric window; the JAX config states it as a 1024-wide window.
+        sliding_window=512,
         hidden_size_per_layer_input=512,
         rope_parameters=None,
         embedding_dim=768,
@@ -274,7 +275,7 @@ _VISION_DTYPE = flags.DEFINE_enum(
 
 
 def convert_audio_encoder_weights(
-    config,  # Gemma4AudioConfig
+    config: Gemma4AudioConfig,
     path: str,
     param: str,
     weights: np.ndarray,
@@ -432,7 +433,7 @@ def convert_audio_encoder_weights(
 
 
 def convert_vision_encoder_weights(
-    config,  # Gemma4VisionConfig
+    config: Gemma4VisionConfig,
     path: str,
     param: str,
     weights: np.ndarray,
@@ -529,8 +530,6 @@ def convert_vision_encoder_weights(
                 converted_paths.append(f"{base_path}.pre_feedforward_layernorm.weight")
                 converted_weights.append(matrix)
             elif path.endswith("attn/query_norm/scale") or path.endswith("attn/query_norm"):
-                # The JAX scales are unusable here (different shapes); the checkpoint stores zeros,
-                # which is identity under HF RMSNorm's `weight + 1.0`, matching the blaze reference.
                 converted_paths.append(f"{base_path}.self_attn.q_norm.weight")
                 converted_weights.append(matrix)
             elif path.endswith("attn/key_norm/scale") or path.endswith("attn/key_norm"):
@@ -614,10 +613,10 @@ def convert_transformer_weights(
                 converted_paths.append(f"{base_path}.mlp.down_proj.weight")
                 converted_weights.append(matrix.transpose())
             elif path.endswith("per_layer_input_gate"):
-                converted_paths.append(f"{base_path}.per_layer_input_gate.weight")
+                converted_paths.append(f"{base_path}.ple_block.per_layer_input_gate.weight")
                 converted_weights.append(matrix.transpose())
             elif path.endswith("per_layer_projection"):
-                converted_paths.append(f"{base_path}.per_layer_projection.weight")
+                converted_paths.append(f"{base_path}.ple_block.per_layer_projection.weight")
                 converted_weights.append(matrix.transpose())
             elif path.endswith("post_attention_norm"):
                 converted_paths.append(f"{base_path}.post_attention_layernorm.weight")
@@ -626,7 +625,7 @@ def convert_transformer_weights(
                 converted_paths.append(f"{base_path}.post_feedforward_layernorm.weight")
                 converted_weights.append(matrix)
             elif path.endswith("post_per_layer_input_norm"):
-                converted_paths.append(f"{base_path}.post_per_layer_input_norm.weight")
+                converted_paths.append(f"{base_path}.ple_block.post_per_layer_input_norm.weight")
                 converted_weights.append(matrix)
             elif path.endswith("pre_attention_norm"):
                 converted_paths.append(f"{base_path}.input_layernorm.weight")
@@ -640,14 +639,14 @@ def convert_transformer_weights(
             converted_weights.append(weights)
     elif path.startswith(_TRANSFORMER_EMBEDDER):
         if path.endswith("per_layer_model_projection"):
-            converted_paths.append("per_layer_model_projection.weight")
+            converted_paths.append("ple.per_layer_model_projection.weight")
             converted_weights.append(
                 weights.reshape(
                     config.hidden_size, config.num_hidden_layers * config.hidden_size_per_layer_input
                 ).transpose()
             )
         elif path.endswith("per_layer_projection_norm"):
-            converted_paths.append("per_layer_projection_norm.weight")
+            converted_paths.append("ple.per_layer_projection_norm.weight")
             converted_weights.append(weights)
     elif path == _TRANSFORMER_FINAL_NORM:
         converted_paths = ["norm.weight"]
@@ -697,6 +696,11 @@ def _restore_checkpoint(checkpoint_path: str) -> dict:
     return checkpointer.restore(checkpoint_path, args=restore)
 
 
+def _round_to_dtype(value: float, dtype: torch.dtype) -> float:
+    """Round a scalar to `dtype`'s precision, returned as a Python float."""
+    return torch.tensor(value, dtype=torch.float64).to(dtype).item()
+
+
 def _fuse_boundary_token_embeddings(
     hf_tree: dict[str, torch.Tensor],
     config: EmbeddingGemma2Config,
@@ -714,7 +718,8 @@ def _fuse_boundary_token_embeddings(
 
     The `sqrt(d)` factor matches the Gemma embedding-table convention, and the
     `1 / sqrt(hidden_size)` divisor pre-compensates for `EmbeddingGemma2TextScaledWordEmbedding`
-    multiplying by `sqrt(hidden_size)` at forward time.
+    multiplying by `sqrt(hidden_size)` at forward time. Both constants are rounded to the
+    precision they are applied in at runtime -- see the comment on the multiplication below.
 
     Only row 0 of each extra table is used -- the begin-of-audio and begin-of-image tokens are
     *not* fused, because they are plain learned tokens already present in `embed_tokens`.
@@ -747,9 +752,14 @@ def _fuse_boundary_token_embeddings(
 
         raw = extra[0]
         modality_dim = raw.shape[0]
-        scaled = raw * np.sqrt(modality_dim).astype(raw.dtype)
+        # Both scales are rounded to `bfloat16` because that is the precision they are applied in
+        # at runtime: the reference embedder scales the extra table in bfloat16 activations, and
+        # `EmbeddingGemma2TextScaledWordEmbedding` casts `embed_scale` to the weight dtype before
+        # multiplying. Using full-precision constants here instead leaves the two fused rows ~0.15%
+        # short of the reference (sqrt(1536) is 39.25 in bfloat16, not 39.1918).
+        scaled = raw * _round_to_dtype(np.sqrt(modality_dim), torch.bfloat16)
         projected = np.dot(scaled.reshape(1, -1), projection)
-        projected = projected / np.sqrt(hidden_size).astype(projected.dtype)
+        projected = projected / _round_to_dtype(np.sqrt(hidden_size), config.text_config.dtype)
         embed_table[token_id] = torch.from_numpy(projected[0])
 
         logging.info(
@@ -777,8 +787,7 @@ def convert(checkpoint_path: str, config: EmbeddingGemma2Config) -> dict[str, to
 
     text_config = config.text_config
 
-    # `EmbeddingGemma2Model` holds its submodules at the top level (no `model.` prefix), because
-    # there is no causal-LM wrapper around it.
+    # `EmbeddingGemma2Model` holds its submodules at the top level (no `model.` prefix).
     text_path_prefix = "language_model"
 
     def update_tree(path: str, weights: np.ndarray, target_dtype: torch.dtype) -> None:
