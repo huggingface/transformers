@@ -749,8 +749,9 @@ class ContinuousBatchingManager:
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
     def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
-        """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is
-        requested and, in any cases, switch to a paged implementation."""
+        """Switch the attn implementation to one that is CB friendly. If SDPA or eager is requested, and flash is
+        availaible, change to flash. If that can't be done and the attention is "eager", then change to "paged|eager",
+        as SDPA and flash can automatically route to flash but "eager" can't (it's redefined in each model)."""
         # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
         original_attn_impl = model.config._attn_implementation
         target_implem = original_attn_impl
@@ -769,17 +770,18 @@ class ContinuousBatchingManager:
             # Change and warn
             msg = "Continuous batching is much better when using flash attention."
             if version is not None:
-                target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
+                target_implem = f"flash_attention_{version}"
                 logger.warning(
                     f"{msg} Switching from {original_attn_impl} to {target_implem}. "
-                    "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
+                    "If you need paged eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
             else:
                 logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
-        # Switch to a paged implementation (always entered if conversion to flash happened)
-        if "paged|" not in target_implem:
-            model.set_attn_implementation(f"paged|{target_implem}")
+        # If eager is requested, change to paged|eager so the forward does not crash
+        target_implem = "paged|eager" if target_implem == "eager" else target_implem
+        if target_implem != original_attn_impl:
+            model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:

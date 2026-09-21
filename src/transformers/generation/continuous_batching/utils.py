@@ -21,6 +21,7 @@ from typing import Any
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
+from transformers.utils.generic import is_flash_attention_requested
 
 from .requests import FutureRequestState, RequestState, RequestStatus
 
@@ -53,8 +54,8 @@ class WorkloadHints:
 
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
-    """Checks if attention mask is needed for the given (config)."""
-    return config._attn_implementation in ["paged|eager", "paged|sdpa"]
+    """Checks if attention mask is needed for the given config."""
+    return not is_flash_attention_requested(config)
 
 
 def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:
