@@ -584,15 +584,6 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
 class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
-    def __init__(self, config: MossTranscribeDiarizeConfig):
-        super().__init__(config)
-        self.model = MossTranscribeDiarizeModel(config)
-        self.post_init()
-
-    @auto_docstring
-    def get_audio_features(self, *args, **kwargs):
-        return self.model.get_audio_features(*args, **kwargs)
-
     @can_return_tuple
     @auto_docstring
     def forward(
