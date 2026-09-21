@@ -177,6 +177,47 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         # cannot be skipped under compile, should result into a triu mask
         self.assertTrue(torch.equal(~torch.ones(*causal_mask.shape).triu(diagonal=1).bool(), causal_mask))
 
+    def test_mask_skip_without_padding_mask_under_compile(self):
+        """
+        Checks whether the mask creation can still be skipped under `torch.compile` if we have no padding mask at all.
+        Whether a padding mask is provided is a static property that dynamo guards on - only the checks reading its
+        values are data-dependent, and have to be skipped while tracing.
+        """
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+
+        batch_size = 2
+        sequence_length = 10
+        inputs_embeds = torch.empty((batch_size, sequence_length, 8), dtype=torch.float16, device=torch_device)
+        padded_mask = torch.ones(batch_size, sequence_length, dtype=torch.long, device=torch_device)
+        padded_mask[0, :3] = 0
+
+        def create_masks(attention_mask):
+            causal_mask = create_causal_mask(
+                config=config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=None,
+            )
+            bidirectional_mask = create_bidirectional_mask(
+                config=config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
+            return causal_mask, bidirectional_mask
+
+        compiled_create_masks = torch.compile(create_masks, fullgraph=True)
+
+        # Without a padding mask, both masks are skipped in eager as well as under compile
+        self.assertEqual(create_masks(None), (None, None))
+        self.assertEqual(compiled_create_masks(None), (None, None))
+
+        # With a padding mask, the masks are materialized. Under compile, reading its values must be skipped
+        # instead of raising a data-dependent control flow error
+        for causal_mask, bidirectional_mask in (create_masks(padded_mask), compiled_create_masks(padded_mask)):
+            self.assertIsNotNone(causal_mask)
+            self.assertIsNotNone(bidirectional_mask)
+
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
         # Make sure we have an attention_chunk_size in the config
         config = LlamaConfig(attention_chunk_size=3, attn_implementation="sdpa")

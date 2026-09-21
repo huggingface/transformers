@@ -25,6 +25,7 @@ from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
+    is_torchdynamo_exporting,
     is_tracing,
 )
 
@@ -253,27 +254,34 @@ def _ignore_causal_mask_sdpa(
         mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
-    # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
-    # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
-    # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
-    # `ignore_causal_mask = True` if we are not tracing
-    if is_tracing(padding_mask):
+    # `torch.export` hard-codes `is_causal` into the exported forward, which is in general wrong
+    # (see https://github.com/pytorch/pytorch/issues/108108). `torch.compile` reguards and is thus unaffected
+    if is_torchdynamo_exporting():
         return False
-    # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
+
+    # Local attention requires additional patterns in the mask, which sdpa's `is_causal` cannot express
     if local_attention_size is not None and kv_length >= local_attention_size:
         return False
 
-    # If `q_length == 1`, we then use `is_causal=False` in sdpa integration to mimic lower-right alignment. If `kv_length == q_length`,
-    # we use `is_causal=True` as upper-left alignment (torch's default) is the same as lower-right in this case. If we have padding,
-    # we need to add padding to the mask, so cannot be skipped
-    if (q_length == 1 or kv_length == q_length) and (padding_mask is None or fast_all(padding_mask)):
+    # `q_length == 1` mimics lower-right alignment with `is_causal=False`, while `kv_length == q_length` is
+    # upper-left aligned (torch's default) and thus equivalent, so both can rely on sdpa's `is_causal`
+    is_causal_aligned = q_length == 1 or kv_length == q_length
+    # An empty cache is upper-left aligned as well, which allows skipping during prefill even with padding
+    cache_is_empty = q_offset == 0
+
+    # Without a padding mask, only these static conditions matter, which dynamo guards on
+    if padding_mask is None:
+        return is_causal_aligned or cache_is_empty
+
+    # Reading the mask values is a data-dependent control flow, which cannot be traced
+    if is_tracing(padding_mask):
+        return False
+
+    # Padding must be represented in the mask, so it can only be skipped if there is none
+    if is_causal_aligned and fast_all(padding_mask):
         return True
-    # Additional case to optimize prefill: if the cache is empty (`q_offset == 0`), we can use `is_causal=True` even
-    # with a padding_mask, if the padding_mask only contains padding related to "future k/v tokens" of the static k/v states
-    # returned by StaticCaches. This works thanks to the upper-left alignment of sdpa's `is_causal` mask
-    if q_offset == 0 and (
-        padding_mask is None or (fast_all(padding_mask[:, :q_length]) and fast_all(~padding_mask[:, q_length:]))
-    ):
+    # The exception is padding that only covers the "future k/v tokens" of a StaticCache's static k/v states
+    if cache_is_empty and fast_all(padding_mask[:, :q_length]) and fast_all(~padding_mask[:, q_length:]):
         return True
 
     return False
@@ -291,18 +299,22 @@ def _can_skip_bidirectional_mask_xpu(
     - Skip if no padding and no local attention constraint
     """
 
-    if is_tracing(padding_mask):
+    # Under `torch.export`, the skip would be hard-coded into the exported forward, which is in general wrong
+    if is_torchdynamo_exporting():
         return False
 
-    # Check local attention constraint (same as CUDA)
+    # Local attention requires additional patterns in the mask, which sdpa's `is_causal` cannot express (same as CUDA)
     if local_attention_size is not None and kv_length >= local_attention_size:
         return False
 
+    # Without a padding mask, full bidirectional attention never requires an explicit mask
     if padding_mask is None:
-        # Without padding mask, can always skip for full bidirectional attention
         return True
 
-    # Skip only if no padding tokens present
+    # Reading the mask values is a data-dependent control flow, which cannot be traced
+    if is_tracing(padding_mask):
+        return False
+
     return padding_mask.all()
 
 
@@ -324,17 +336,23 @@ def _ignore_bidirectional_mask_sdpa(
         # - Skip if no padding and no local attention constraint
         return _can_skip_bidirectional_mask_xpu(padding_mask, kv_length, local_attention_size)
 
-    # When using `torch.export` or `torch.onnx.dynamo_export`, we need to avoid to check the contents of the mask;
-    # otherwise, we will encounter dynamic control flows
-    if (
-        not is_tracing(padding_mask)
-        and (padding_mask is None or padding_mask.all())
-        # in this case we need to add special patterns to the mask so cannot be skipped otherwise
-        and (local_attention_size is None or kv_length < local_attention_size)
-    ):
+    # Under `torch.export`, the skip would be hard-coded into the exported forward, which is in general wrong
+    if is_torchdynamo_exporting():
+        return False
+
+    # Local attention requires additional patterns in the mask, which sdpa's `is_causal` cannot express
+    if local_attention_size is not None and kv_length >= local_attention_size:
+        return False
+
+    # Without a padding mask, full bidirectional attention never requires an explicit mask
+    if padding_mask is None:
         return True
 
-    return False
+    # Reading the mask values is a data-dependent control flow, which cannot be traced
+    if is_tracing(padding_mask):
+        return False
+
+    return padding_mask.all()
 
 
 def _vmap_expansion_sdpa(mask_function: Callable) -> Callable:
