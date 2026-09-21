@@ -157,21 +157,13 @@ class ExecutorchConfig(DynamoConfig):
     Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`,
     `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
 
-    The causal-LM fields describe cache-aware model preparation, not general vision or audio export.
-    Setting them does not by itself enable causal-LM preparation; the selected backend must support
-    the requested cache and output contracts. These fields are currently used by the MLX backend;
-    XNNPACK and CUDA reject non-default values for these fields before preparation. Their default
-    values are accepted for compatibility but do not configure causal-LM behavior on those backends.
-    Other backend-specific restrictions are checked during preparation.
-
     Args:
         backend (`str`, *optional*, defaults to `"xnnpack"`):
             Target ExecuTorch backend. Supported values:
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
-            - `"mlx"` — nonquantized causal-LM export for the ExecuTorch MLX runtime on Apple Silicon.
-              Pass an empty sample-input mapping; MLX preparation generates the input ABI and shapes.
+            - `"mlx"` — inference via the ExecuTorch MLX backend on Apple Silicon.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
@@ -184,23 +176,6 @@ class ExecutorchConfig(DynamoConfig):
         alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
             state). Passed through to the `MemoryPlanningPass`.
-        cache_mode (`str`, *optional*, defaults to `"in-graph"`):
-            KV cache ownership for causal-LM export. `"in-graph"` represents cache state inside the
-            exported graph; `"off-graph"` uses runtime-owned cache state outside the graph.
-        max_context_len (`int`, *optional*, defaults to 1024):
-            Positive context capacity for causal-LM export.
-        max_seq_len (`int`, *optional*, defaults to 512):
-            Maximum number of input tokens per invocation. Must be positive and no greater than
-            `max_context_len`. `None` defaults to the context limit; a backend may impose a tighter
-            bound. This config does not infer a sliding-window limit.
-        dtype (`str`, *optional*, defaults to `"bf16"`):
-            Activation and cache dtype for causal-LM preparation: `"fp32"`, `"fp16"`, or `"bf16"`.
-            Must agree with the model dtype unless preparation explicitly converts the model.
-            MLX requires a CPU model with matching dtype and does not move or cast it.
-        logits_to_keep (`str`, *optional*, defaults to `"full"`):
-            Causal-LM output contract. `"full"` returns logits for all input tokens; `"last"` returns
-            logits for the final input token; `"selected"` adds a rank-one int64 `logits_to_keep`
-            input containing token indices. Logit selection does not reduce the cache-write length.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
@@ -209,9 +184,3 @@ class ExecutorchConfig(DynamoConfig):
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True
-
-    cache_mode: str = "in-graph"
-    max_context_len: int = 1024
-    max_seq_len: int | None = 512
-    dtype: str = "bf16"
-    logits_to_keep: str = "full"

@@ -63,7 +63,6 @@ from transformers.testing_utils import (
     require_onnx,
     require_onnxscript,
     require_torch,
-    require_torch_greater_or_equal,
 )
 from transformers.utils.import_utils import is_torch_available
 
@@ -105,32 +104,58 @@ class ExportConfigMixinTest(unittest.TestCase):
 
 
 class ExecutorchConfigTest(unittest.TestCase):
-    def test_causal_lm_defaults(self):
+    def test_defaults_and_serialization(self):
         config = ExecutorchConfig()
-        self.assertEqual(config.cache_mode, "in-graph")
-        self.assertEqual(config.max_context_len, 1024)
-        self.assertEqual(config.max_seq_len, 512)
-        self.assertEqual(config.dtype, "bf16")
-        self.assertEqual(config.logits_to_keep, "full")
+        expected = {
+            "export_format": ExportFormat.EXECUTORCH,
+            "dynamic": False,
+            "strict": False,
+            "dynamic_shapes": None,
+            "prefer_deferred_runtime_asserts_over_guards": False,
+            "backend": "xnnpack",
+            "alloc_graph_input": True,
+            "alloc_graph_output": True,
+            "alloc_mutable_buffers": True,
+        }
+        self.assertEqual(config.to_dict(), expected)
+        self.assertEqual(dict(config), expected)
+        self.assertEqual(ExecutorchConfig.from_dict(expected), config)
+        self.assertEqual(AutoExportConfig.from_dict(expected), config)
 
-    def test_causal_lm_options_roundtrip(self):
-        for cache_mode, max_seq_len, dtype, logits_to_keep in (
-            ("in-graph", 256, "fp16", "last"),
-            ("off-graph", None, "fp32", "selected"),
-        ):
-            with self.subTest(cache_mode=cache_mode, logits_to_keep=logits_to_keep):
+    def test_capture_and_allocation_options_roundtrip(self):
+        for backend in ("xnnpack", "cuda", "mlx"):
+            with self.subTest(backend=backend):
                 original = ExecutorchConfig(
-                    cache_mode=cache_mode,
-                    max_context_len=4096,
-                    max_seq_len=max_seq_len,
-                    dtype=dtype,
-                    logits_to_keep=logits_to_keep,
+                    backend=backend,
+                    dynamic=True,
                     strict=True,
+                    dynamic_shapes={},
+                    prefer_deferred_runtime_asserts_over_guards=True,
+                    alloc_graph_input=False,
+                    alloc_graph_output=False,
                     alloc_mutable_buffers=False,
                 )
                 serialized = original.to_dict()
                 self.assertEqual(ExecutorchConfig.from_dict(serialized), original)
                 self.assertEqual(AutoExportConfig.from_dict(serialized), original)
+
+    def test_obsolete_generation_options_raise_type_error(self):
+        obsolete = {
+            "cache_mode": "in-graph",
+            "max_context_len": 1024,
+            "max_seq_len": 512,
+            "dtype": "bf16",
+            "logits_to_keep": "full",
+        }
+        for backend, (name, value) in itertools.product(("xnnpack", "cuda", "mlx"), obsolete.items()):
+            with self.subTest(backend=backend, option=name):
+                kwargs = {"backend": backend, name: value}
+                with self.assertRaisesRegex(TypeError, name):
+                    ExecutorchConfig(**kwargs)
+                serialized = {"export_format": "executorch", **kwargs}
+                for factory in (ExecutorchConfig.from_dict, AutoExportConfig.from_dict):
+                    with self.subTest(factory=factory), self.assertRaisesRegex(TypeError, name):
+                        factory(serialized)
 
 
 class AutoExportConfigTest(unittest.TestCase):
@@ -914,20 +939,23 @@ class ExecutorchBackendPipelineTest(unittest.TestCase):
         self.assertFalse(any(p.requires_grad for p in model.parameters()))
 
     def test_backend_config_allocation_flags(self):
-        for flags in (
-            (True, True, True),
-            (False, True, True),
-            (True, False, True),
-            (True, True, False),
-            (False, False, False),
+        for backend_name, flags in itertools.product(
+            ("xnnpack", "cuda", "mlx"),
+            (
+                (True, True, True),
+                (False, True, True),
+                (True, False, True),
+                (True, True, False),
+                (False, False, False),
+            ),
         ):
-            with self.subTest(flags=flags):
+            with self.subTest(backend=backend_name, flags=flags):
                 kwargs = dict(zip(("alloc_graph_input", "alloc_graph_output", "alloc_mutable_buffers"), flags))
                 with (
                     mock.patch.object(self.et, "MemoryPlanningPass") as memory,
                     mock.patch.object(self.et, "ExecutorchBackendConfig") as backend,
                 ):
-                    result = self.et._get_backend_config(ExecutorchConfig(**kwargs))
+                    result = self.et._get_backend_config(ExecutorchConfig(backend=backend_name, **kwargs))
                 if all(flags):
                     self.assertIsNone(result)
                     memory.assert_not_called()
@@ -937,8 +965,8 @@ class ExecutorchBackendPipelineTest(unittest.TestCase):
                     backend.assert_called_once_with(memory_planning_pass=memory.return_value)
                     self.assertIs(result, backend.return_value)
 
-    def test_uniform_dispatch_uses_prepared_record_and_deferred_settings(self):
-        self.assertEqual(set(self.et._BACKEND_PREPARE), {"xnnpack", "cuda", "mlx"})
+    def test_dispatch_uses_prepared_record_and_deferred_settings(self):
+        self.assertTrue({"xnnpack", "cuda", "mlx"}.issubset(self.et._BACKEND_PREPARE))
         for backend in ("xnnpack", "cuda", "mlx"):
             with self.subTest(backend=backend):
                 config = ExecutorchConfig(backend=backend)
@@ -1035,35 +1063,6 @@ class ExecutorchBackendPipelineTest(unittest.TestCase):
                 backend_factory.assert_called_once_with()
                 lower.return_value.to_executorch.assert_called_once_with(config=mock.sentinel.backend_config)
                 self.assertIs(result, lower.return_value.to_executorch.return_value)
-
-    @require_torch_greater_or_equal("2.11")
-    def test_non_mlx_rejects_causal_lm_options_before_preparation(self):
-        options = (
-            ("cache_mode", "off-graph"),
-            ("logits_to_keep", "last"),
-            ("logits_to_keep", "selected"),
-            ("max_context_len", 2048),
-            ("max_seq_len", 128),
-            ("max_seq_len", None),
-            ("dtype", "fp32"),
-            ("dtype", "fp16"),
-        )
-        for backend, (name, value), as_dict in itertools.product(("xnnpack", "cuda"), options, (False, True)):
-            with self.subTest(backend=backend, option=name, value=value, as_dict=as_dict):
-                config = ExecutorchConfig(backend=backend, **{name: value})
-                model, prepare = nn.Linear(2, 2), mock.Mock()
-                with (
-                    mock.patch.dict(self.et._BACKEND_PREPARE, {backend: prepare}),
-                    mock.patch.object(self.dynamo.DynamoExporter, "export") as capture,
-                    mock.patch.object(self.et, "apply_patches") as patches,
-                    self.assertRaisesRegex(ValueError, f"{backend!r} does not support causal-LM options:.*{name}"),
-                ):
-                    self.et.ExecutorchExporter().export(model, {}, config.to_dict() if as_dict else config)
-                prepare.assert_not_called()
-                capture.assert_not_called()
-                patches.assert_not_called()
-                self.assertTrue(model.training)
-                self.assertTrue(all(parameter.requires_grad for parameter in model.parameters()))
 
     def test_scopes_and_deferred_factories_restore_after_pipeline_failures(self):
         original_import = builtins.__import__

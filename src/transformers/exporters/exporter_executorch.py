@@ -19,7 +19,6 @@ edge deployment. The export pipeline runs:
 
 1. **Backend preparation** (`_BACKEND_PREPARE`): prepare the model, sample inputs,
    capture config, contexts, and deferred lowering settings for the selected backend.
-   MLX includes a cache-aware causal-LM wrapper, input shapes, and runtime metadata.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -42,12 +41,9 @@ from __future__ import annotations
 import math
 import operator
 import re
-from collections.abc import Callable, Mapping, MutableMapping
-from contextlib import AbstractContextManager, contextmanager, nullcontext
-from dataclasses import dataclass, field, replace
-from functools import partial
-from itertools import chain
-from types import SimpleNamespace
+from collections.abc import Callable, MutableMapping
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..utils import logging
@@ -74,19 +70,6 @@ if is_torch_available():
     from torch.utils._sympy.value_ranges import ValueRanges
 
     from .. import masking_utils
-    from ..integrations.executorch import (
-        _attention_mask,
-        _attention_scope,
-        _CacheLayout,
-        _check_attention_kwargs,
-        _export_inputs,
-        _in_graph_cache_capture_scope,
-        _InGraphCacheAndOutput,
-        _off_graph_attention_forward,
-        _OffGraphWrapper,
-        _positive_int,
-        _resolve_cache_layout,
-    )
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -97,19 +80,34 @@ if is_torch_available():
 
 
 if is_executorch_available():
-    from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+    from executorch.backends.xnnpack.partition.xnnpack_partitioner import (
+        XnnpackPartitioner,
+    )
     from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import (  # type: ignore[import-not-found]
         XNNStaticReshape,
         XNode,
     )
     from executorch.backends.xnnpack.utils.utils import get_input_node
-    from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
+    from executorch.exir.capture._config import (
+        EdgeCompileConfig,
+        ExecutorchBackendConfig,
+    )
     from executorch.exir.dialects._ops import ops as exir_ops
-    from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
+    from executorch.exir.passes.executorch_prim_ops_registry import (
+        _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS,
+    )
     from executorch.exir.passes.memory_planning_pass import MemoryPlanningPass
-    from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _is_view_copy, _ViewSpec
+    from executorch.exir.passes.replace_view_copy_with_view_pass import (
+        _VIEW_OP,
+        _is_view_copy,
+        _ViewSpec,
+    )
     from executorch.exir.passes.spec_prop_pass import _is_mutable_buffer
-    from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
+    from executorch.exir.program import (
+        EdgeProgramManager,
+        ExecutorchProgramManager,
+        to_edge_transform_and_lower,
+    )
     from executorch.exir.sym_util import eval_expr
     from executorch.exir.tensor import determine_tensor_dynanism
 
@@ -204,25 +202,16 @@ class ExecutorchExporter(DynamoExporter):
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
-        if config.backend != "mlx":
-            # Legacy recipes do not consume causal-LM options. Accept their defaults only for compatibility.
-            defaults = ExecutorchConfig()
-            unsupported = {
-                name: getattr(config, name)
-                for name in ("cache_mode", "max_context_len", "max_seq_len", "dtype", "logits_to_keep")
-                if getattr(config, name) != getattr(defaults, name)
-            }
-            if unsupported:
-                raise ValueError(
-                    f"Backend {config.backend!r} does not support causal-LM options: {unsupported}. "
-                    "These options currently require backend='mlx'; leave them at their defaults for this backend."
-                )
         prepared = prepare_for_backend(model, sample_inputs, config)
+        return self._export_prepared(prepared, config.backend)
 
-        with prepared.export_context, apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
+    def _export_prepared(self, prepared: _BackendPreparation, backend: str) -> ExecutorchProgramManager:
+        with prepared.export_context, apply_patches("executorch"), apply_patches(f"executorch.{backend}"):
             with prepared.capture_context:
                 exported_program: ExportedProgram = super().export(
-                    prepared.model, prepared.sample_inputs, config=prepared.capture_config
+                    prepared.model,
+                    prepared.sample_inputs,
+                    config=prepared.capture_config,
                 )
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
@@ -241,7 +230,10 @@ def _lower_to_executorch(exported_program: ExportedProgram, settings: _LoweringS
     if settings.constant_methods is not None:
         kwargs["constant_methods"] = settings.constant_methods
     edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-        programs, partitioner=settings.partitioner, compile_config=settings.compile_config, **kwargs
+        programs,
+        partitioner=settings.partitioner,
+        compile_config=settings.compile_config,
+        **kwargs,
     )
     return edge_program_manager.to_executorch(config=settings.make_backend_config())
 
@@ -298,7 +290,7 @@ def _get_backend_config(config):
 # - Move the model to the target device.
 # - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
 # - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
-# MLX also prepares cache-aware wrappers, metadata, and export/capture scopes.
+# MLX uses the same preparation and capture/lowering flow as the other backends.
 
 
 def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
@@ -380,422 +372,38 @@ def prepare_for_cuda(
     )
 
 
-# MLX causal-LM preparation and capture scopes.
-
-
-@dataclass(frozen=True)
-class _MLXRecipeState:
-    """Private MLX recipe outputs and state, adapted into the shared `_BackendPreparation`."""
-
-    model: torch.nn.Module
-    sample_inputs: dict[str, torch.Tensor]
-    dynamic_shapes: dict[str, Any]
-    constant_methods: dict[str, Any]
-    attention_target: torch.nn.Module
-    cache_mode: str
-    cache_layout: _CacheLayout
-
-
-def _load_mlx_dependencies(cache_mode: str) -> SimpleNamespace:
-    """Load ET dependencies and register their ops before model mutation.
-
-    ET's metadata package currently also requires TorchAO transitively. Neither
-    weight conversion nor quantization is performed here. CPU export has no
-    Darwin/MPS requirement; executing the lowered program needs Apple Silicon.
-    """
-    try:
-        import executorch.backends.mlx.custom_ops  # noqa: F401
-        from executorch.backends.mlx import MLXPartitioner
-        from executorch.backends.mlx.passes import get_default_passes
-        from executorch.exir import EdgeCompileConfig
-        from executorch.exir.capture._config import ExecutorchBackendConfig
-        from executorch.exir.passes import MemoryPlanningPass
-        from executorch.extension.llm.export import model_metadata
-
-        for name in (
-            "model_vocab_size",
-            "write_max_context_len",
-            "write_max_seq_len",
-            "write_vocab_size",
-            "write_activation_dtype",
-            "write_logits_to_keep_mode",
-            "write_cache_geometry",
-        ):
-            if not callable(getattr(model_metadata, name, None)):
-                raise ImportError(f"ExecuTorch model_metadata.{name} is required")
-        dependencies = SimpleNamespace(
-            MLXPartitioner=MLXPartitioner,
-            get_default_passes=get_default_passes,
-            EdgeCompileConfig=EdgeCompileConfig,
-            ExecutorchBackendConfig=ExecutorchBackendConfig,
-            MemoryPlanningPass=MemoryPlanningPass,
-            metadata=model_metadata,
-        )
-        if cache_mode == "off-graph":
-            from executorch.extension.llm.cache import update_and_attend  # noqa: F401
-
-            if not callable(torch.ops.kvcache.update_and_attend.default):
-                raise ImportError("ExecuTorch kvcache::update_and_attend registration is required")
-        else:
-            from executorch.backends.mlx.llm.cache import sliding_window_mask  # noqa: F401
-            from executorch.backends.mlx.llm.source_transformation import (
-                replace_hf_cache_with_mlx_in_graph_cache,
-            )
-
-            dependencies.replace_hf_cache_with_mlx_in_graph_cache = replace_hf_cache_with_mlx_in_graph_cache
-            if not callable(torch.ops.mlx.custom_sdpa.default):
-                raise ImportError("ExecuTorch mlx::custom_sdpa registration is required")
-    except (ImportError, AttributeError, TypeError, ValueError) as error:
-        raise ImportError(f"Missing MLX backend or required ExecuTorch dependencies: {error}") from error
-    return dependencies
-
-
-def _prepare_mlx(model, sample_inputs, config: ExecutorchConfig) -> _MLXRecipeState:
-    """Prepare the owned batch-one, unpadded, contiguous-position ABI.
-
-    Validation, dependencies, inputs and metadata precede explicit mutation.
-    Eval mode and in-graph generation/text cache flags persist afterwards;
-    preparation is not transactional. generation_config.cache_config is kept.
-    No forward, model move, cast, weight conversion or attention selection runs here.
-    """
-    if not isinstance(sample_inputs, Mapping) or sample_inputs:
-        raise ValueError("MLX export requires an empty sample_inputs mapping; inputs are generated by preparation")
-    if config.dynamic_shapes is not None and (not isinstance(config.dynamic_shapes, dict) or config.dynamic_shapes):
-        raise ValueError("MLX export generates dynamic_shapes; pass None or {}")
-    if config.cache_mode not in ("in-graph", "off-graph"):
-        raise ValueError("cache_mode must be 'in-graph' or 'off-graph'")
-    if config.logits_to_keep not in ("full", "last", "selected"):
-        raise ValueError("logits_to_keep must be 'full', 'last', or 'selected'")
-    dtypes = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
-    if config.dtype not in dtypes:
-        raise ValueError("MLX dtype must be 'fp32', 'fp16', or 'bf16'")
-    context = _positive_int("max_context_len", config.max_context_len)
-    text_config = model.config.get_text_config()
-    layout = _resolve_cache_layout(text_config)
-    limit = min([context, *(window for window in layout.windows if window > 0)])
-    max_seq_len = limit if config.max_seq_len is None else _positive_int("max_seq_len", config.max_seq_len)
-    if max_seq_len > limit:
-        raise ValueError(f"max_seq_len {max_seq_len} exceeds context/sliding-window limit {limit}")
-    if config.cache_mode == "off-graph" and max_seq_len > torch.iinfo(torch.int32).max:
-        raise ValueError("max_seq_len must fit in int32 for off-graph cache metadata")
-    if not callable(getattr(model, "set_attn_implementation", None)):
-        raise ValueError("MLX export requires a model supporting set_attn_implementation")
-    if getattr(text_config, "is_encoder_decoder", False):
-        raise ValueError("MLX export supports decoder-only causal language models")
-    if config.cache_mode == "in-graph" and getattr(model, "generation_config", None) is None:
-        raise ValueError("In-graph MLX export requires model.generation_config")
-    dtype = dtypes[config.dtype]
-    if getattr(model, "dtype", None) != dtype:
-        raise ValueError(f"Model dtype must match config.dtype={config.dtype!r}; MLX export does not cast weights")
-    if getattr(model, "is_quantized", False) or getattr(model, "hf_quantizer", None) is not None:
-        raise ValueError("MLX export requires nonquantized floating-point weights")
-    for name, tensor in chain(model.named_parameters(), model.named_buffers()):
-        if tensor.device.type != "cpu":
-            raise ValueError(f"MLX export requires CPU tensors; {name} is on {tensor.device}")
-        if (
-            tensor.is_quantized
-            or tensor.is_complex()
-            or (tensor.is_floating_point() and tensor.dtype not in dtypes.values())
-        ):
-            raise ValueError(f"Unsupported MLX tensor dtype for {name}: {tensor.dtype}")
-    for name, parameter in model.named_parameters():
-        if parameter.dtype != dtype:
-            raise ValueError(f"Model parameter {name} must match config.dtype={config.dtype!r}")
-    inputs, shapes = _export_inputs(max_seq_len, config.logits_to_keep)
-    dependencies = _load_mlx_dependencies(config.cache_mode)
-    metadata = dependencies.metadata
-    constant_methods = {
-        **metadata.write_max_context_len(context),
-        **metadata.write_max_seq_len(max_seq_len),
-        **metadata.write_vocab_size(metadata.model_vocab_size(model)),
-        **metadata.write_activation_dtype(config.dtype),
-        **metadata.write_logits_to_keep_mode(config.logits_to_keep),
-    }
-    if config.cache_mode == "off-graph":
-        constant_methods.update(
-            metadata.write_cache_geometry(
-                list(layout.kv_heads), list(layout.head_dims), list(layout.windows[: len(layout.kv_heads)])
-            )
-        )
-
-    model.eval()
-    if config.cache_mode == "off-graph":
-        exportable = _OffGraphWrapper(model, config.logits_to_keep)
-    else:
-        model.generation_config.use_cache = True
-        model.generation_config.cache_implementation = "static"
-        text_config.use_cache = True
-        exportable = _InGraphCacheAndOutput(
-            model, config.logits_to_keep, cache_buffer_bindings=_mlx_cache_buffer_bindings
-        )
-        dependencies.replace_hf_cache_with_mlx_in_graph_cache(
-            exportable,
-            layout.layer_configs,
-            max_batch_size=1,
-            max_cache_len=context,
-            max_write_len=max_seq_len,
-            dtype=dtype,
-        )
-    return _MLXRecipeState(exportable, inputs, shapes, constant_methods, model, config.cache_mode, layout)
-
-
-def _mlx_cache_buffer_bindings(wrapper, cache):
-    """Resolve MLX KV buffers and native HF counters for stateless capture."""
-    if len(cache.layers) != len(cache.kv_cache):
-        raise ValueError("MLX cache layer counts do not match")
-    bindings = []
-    for index, (layer, kv) in enumerate(zip(cache.layers, cache.kv_cache)):
-        bindings.extend(
-            (
-                (vars(layer), "cumulative_length", getattr(wrapper, f"cumulative_length_{index}")),
-                (kv._buffers, "k_cache", getattr(wrapper, f"key_cache_{index}")),
-                (kv._buffers, "v_cache", getattr(wrapper, f"value_cache_{index}")),
-            )
-        )
-    return bindings
-
-
-def _mlx_in_graph_attention_forward(
-    module,
-    query,
-    key,
-    value,
-    attention_mask,
-    position_ids=None,
-    scaling=None,
-    softcap=None,
-    head_mask=None,
-    _cache_windows=None,
-    **kwargs,
-):
-    _check_attention_kwargs(
-        module, kwargs, softcap, head_mask, attention_mask=attention_mask, cache_windows=_cache_windows
-    )
-    if _cache_windows is None:
-        config = module.config
-        if hasattr(config, "get_text_config"):
-            config = config.get_text_config()
-        _cache_windows = _resolve_cache_layout(config).windows
-    window = _cache_windows[module.layer_idx]
-    if window > 0:
-        assert position_ids is not None, "position_ids must be provided for sliding MLX attention"
-        from executorch.backends.mlx.llm.cache import sliding_window_mask
-
-        start_pos = position_ids[0][0].item()
-        seq_len, buffer_size = query.shape[2], key.shape[2]
-        mask = sliding_window_mask(start_pos, seq_len, window, buffer_size, key.dtype)
-        # Slice the entire ring, with masking determined by static geometry.
-        start_pos, is_causal = buffer_size - seq_len, False
-    else:
-        assert position_ids is not None, "position_ids must be provided for causal MLX attention"
-        start_pos = position_ids[0][0].item()
-        torch._check(start_pos >= 0)
-        torch._check(start_pos + query.shape[2] <= key.shape[2])
-        mask, is_causal = None, True
-    output = torch.ops.mlx.custom_sdpa(
-        query,
-        key,
-        value,
-        start_pos=start_pos,
-        attn_mask=mask,
-        dropout_p=0.0,
-        is_causal=is_causal,
-        scale=scaling,
-    )
-    return output.transpose(1, 2).contiguous(), None
-
-
-def _mlx_experts_forward(self, hidden_states, top_k_index, top_k_weights):
-    """Run HF's packed floating-point experts with MLX's shared routing metadata.
-
-    Gated weights may be concatenated or interleaved: HF's existing `_apply_gate`
-    owns that distinction. We only adapt the matrix orientation, without repacking.
-    MLX ops are registered by `_load_mlx_dependencies` before entering export.
-    """
-    if self._is_expert_parallel:
-        raise ValueError("MLX experts do not support expert-parallel execution")
-    if any(
-        not isinstance(getattr(self, name, None), bool)
-        for name in ("has_gate", "has_bias", "is_transposed", "is_concatenated")
-    ):
-        raise ValueError("MLX experts require the HF ExpertsInterface layout flags")
-    if hidden_states.ndim != 2 or top_k_index.ndim != 2 or top_k_weights.shape != top_k_index.shape:
-        raise ValueError("MLX experts require hidden_states[N, H] and routing indices/weights[N, k]")
-    if top_k_index.shape[0] != hidden_states.shape[0] or top_k_index.shape[1] < 1:
-        raise ValueError("MLX experts require matching token counts and at least one routed expert")
-    if top_k_index.dtype not in (torch.int32, torch.int64):
-        raise ValueError("MLX expert indices must be int32 or int64")
-
-    up_name = "gate_up_proj" if self.has_gate else "up_proj"
-    up_weight, down_weight = getattr(self, up_name, None), getattr(self, "down_proj", None)
-    for weight in (up_weight, down_weight):
-        if (
-            not isinstance(weight, torch.Tensor)
-            or weight.ndim != 3
-            or weight.layout != torch.strided
-            or weight.dtype not in (torch.float32, torch.float16, torch.bfloat16)
-            or weight.dtype != hidden_states.dtype
-        ):
-            raise ValueError("MLX experts require nonquantized 3D floating-point weights matching the input dtype")
-    if not self.is_transposed:
-        up_weight, down_weight = up_weight.transpose(-2, -1), down_weight.transpose(-2, -1)
-    if (
-        up_weight.shape[0] != down_weight.shape[0]
-        or up_weight.shape[1] != hidden_states.shape[1]
-        or down_weight.shape[2] != hidden_states.shape[1]
-        or up_weight.shape[2] != down_weight.shape[1] * (2 if self.has_gate else 1)
-    ):
-        raise ValueError("Unsupported MLX expert projection layout: expected matching packed up/down dimensions")
-    if self.has_bias:
-        up_bias, down_bias = getattr(self, up_name + "_bias", None), getattr(self, "down_proj_bias", None)
-        for bias, weight in ((up_bias, up_weight), (down_bias, down_weight)):
-            if (
-                not isinstance(bias, torch.Tensor)
-                or bias.shape != (weight.shape[0], weight.shape[2])
-                or bias.dtype != hidden_states.dtype
-                or bias.layout != torch.strided
-            ):
-                raise ValueError("MLX experts require per-expert biases[E, output_dim] matching the input dtype")
-
-    top_k = top_k_index.shape[-1]
-    # The eager decode kernel casts IDs to int32; int64 input keeps its output non-aliasing.
-    selected, indices, sorted_indices, inverse = torch.ops.mlx.moe_gather_inputs.default(
-        hidden_states, top_k_index.to(torch.int64), top_k, 1
-    )
-    projected = torch.ops.mlx.gather_mm.default(selected, up_weight, indices, None, sorted_indices).squeeze(1)
-    if self.has_bias:
-        bias_indices = indices.to(torch.int64)
-        projected = projected + up_bias[bias_indices]
-    projected = self._apply_gate(projected) if self.has_gate else self.act_fn(projected)
-    if projected.ndim != 2 or projected.shape[-1] != down_weight.shape[1]:
-        raise ValueError("MLX experts require gating/activation to return [N * k, intermediate_dim]")
-    down = torch.ops.mlx.gather_mm.default(projected.unsqueeze(1), down_weight, indices, None, sorted_indices)
-    if self.has_bias:
-        down = down + down_bias[bias_indices].unsqueeze(1)
-    down = torch.ops.mlx.moe_scatter_outputs.default(down, sorted_indices, inverse, top_k)
-    return (down * top_k_weights.unsqueeze(-1)).sum(dim=1).to(hidden_states.dtype)
-
-
-@contextmanager
-def _mlx_experts_scope(target):
-    """Temporarily select HF expert dispatch; nested scopes restore their entry state.
-
-    Like the attention scope, this modifies global dispatch and does not isolate
-    unrelated concurrent forwards.
-    """
-    if not isinstance(target, PreTrainedModel) or not target._can_set_experts_implementation():
-        yield
-        return
-
-    from ..integrations.moe import ALL_EXPERTS_FUNCTIONS, ExpertsInterface
-
-    name, missing = "executorch_mlx", object()
-    configs, seen = [], set()
-    modules = list(target.modules())
-    pending = [getattr(module, "config", None) for module in modules]
-    fields = ("_experts_implementation_internal", "_experts_implementation")
-    while pending:
-        config = pending.pop()
-        if config is None or id(config) in seen:
-            continue
-        seen.add(id(config))
-        configs.append((vars(config), {key: vars(config).get(key, missing) for key in fields}))
-        pending.extend(getattr(config, key, None) for key in getattr(config, "sub_configs", ()))
-    mappings = (ExpertsInterface._global_mapping, ALL_EXPERTS_FUNCTIONS._local_mapping)
-    snapshots = [(mapping, mapping.get(name, missing)) for mapping in mappings]
-    try:
-        ExpertsInterface.register(name, _mlx_experts_forward)
-        ALL_EXPERTS_FUNCTIONS[name] = _mlx_experts_forward
-        target.set_experts_implementation(name)
-        selected_configs = [target.config]
-        selected_configs.extend(module.config for module in modules if hasattr(module, "_is_expert_parallel"))
-        if any(getattr(config, "_experts_implementation", None) != name for config in selected_configs):
-            raise ValueError(f"Model did not select {name!r}; export requires HF ExpertsInterface support")
-        yield
-    finally:
-        # Restore backing fields directly: the property setter would overwrite subconfigs.
-        for mapping, snapshot in reversed(configs):
-            for key, value in snapshot.items():
-                if value is missing:
-                    mapping.pop(key, None)
-                else:
-                    mapping[key] = value
-        for mapping, value in reversed(snapshots):
-            if value is missing:
-                mapping.pop(name, None)
-            else:
-                mapping[name] = value
-
-
-@contextmanager
-def _mlx_export_scope(mlx_state: _MLXRecipeState):
-    with _mlx_attention_scope(mlx_state), _mlx_experts_scope(mlx_state.attention_target):
-        yield
-
-
-def _mlx_attention_scope(mlx_state: _MLXRecipeState):
-    """Select the recipe's callbacks for the shared attention scope."""
-    off_graph = mlx_state.cache_mode == "off-graph"
-    attention = (
-        partial(
-            _off_graph_attention_forward,
-            _cache_ids=mlx_state.cache_layout.cache_ids,
-            _cache_windows=mlx_state.cache_layout.windows,
-        )
-        if off_graph
-        else partial(_mlx_in_graph_attention_forward, _cache_windows=mlx_state.cache_layout.windows)
-    )
-    return _attention_scope(
-        mlx_state.attention_target,
-        "executorch_off_graph" if off_graph else "mlx",
-        attention,
-        _attention_mask,
-    )
-
-
 def prepare_for_mlx(
-    model: PreTrainedModel, sample_inputs: MutableMapping[str, Any], config: ExecutorchConfig
+    model: PreTrainedModel,
+    sample_inputs: MutableMapping[str, Any],
+    config: ExecutorchConfig,
 ) -> _BackendPreparation:
-    """Adapt the private MLX recipe to the shared capture and lowering pipeline."""
-    mlx_state = _prepare_mlx(model, sample_inputs, config)
-    capture_config = replace(config, dynamic_shapes=mlx_state.dynamic_shapes)
+    """Inference via the ExecuTorch MLX backend, preserving native model attention and cache I/O."""
+    from executorch.backends.mlx import MLXPartitioner
+    from executorch.backends.mlx.passes import get_default_passes
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
 
     def make_lowering_settings():
-        dependencies = _load_mlx_dependencies(mlx_state.cache_mode)
-        transform_passes = dependencies.get_default_passes()
-        partitioner = [dependencies.MLXPartitioner()]
-        compile_config = dependencies.EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True)
-
-        def make_backend_config():
-            return dependencies.ExecutorchBackendConfig(
-                extract_delegate_segments=True,
-                memory_planning_pass=dependencies.MemoryPlanningPass(
-                    alloc_graph_input=capture_config.alloc_graph_input,
-                    alloc_graph_output=capture_config.alloc_graph_output,
-                    alloc_mutable_buffers=capture_config.alloc_mutable_buffers,
-                ),
-            )
-
         return _LoweringSettings(
-            partitioner=partitioner,
-            compile_config=compile_config,
-            make_backend_config=make_backend_config,
-            transform_passes=transform_passes,
-            constant_methods=mlx_state.constant_methods,
-            method_name="forward",
+            partitioner=[MLXPartitioner()],
+            compile_config=EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True),
+            transform_passes=get_default_passes(),
+            make_backend_config=lambda: ExecutorchBackendConfig(
+                extract_delegate_segments=True,
+                memory_planning_pass=MemoryPlanningPass(
+                    alloc_graph_input=config.alloc_graph_input,
+                    alloc_graph_output=config.alloc_graph_output,
+                    alloc_mutable_buffers=config.alloc_mutable_buffers,
+                ),
+            ),
         )
 
     return _BackendPreparation(
-        model=mlx_state.model,
-        sample_inputs=mlx_state.sample_inputs,
-        capture_config=capture_config,
+        model=model,
+        sample_inputs=_make_contiguous(sample_inputs),
+        capture_config=config,
         make_lowering_settings=make_lowering_settings,
-        export_context=_mlx_export_scope(mlx_state),
-        capture_context=(
-            _in_graph_cache_capture_scope(mlx_state.model, strict=capture_config.strict)
-            if mlx_state.cache_mode == "in-graph"
-            else nullcontext()
-        ),
     )
 
 
@@ -901,7 +509,13 @@ def _patch_avg_pool2d(original):
     """
 
     def patch(
-        input, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None
+        input,
+        kernel_size,
+        stride=None,
+        padding=0,
+        ceil_mode=False,
+        count_include_pad=True,
+        divisor_override=None,
     ):
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
@@ -947,7 +561,16 @@ def _patch_searchsorted(original):
     bucketize). ``sorted_sequence`` is sorted, so the insertion index is the count of entries below.
     """
 
-    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
+    def patch(
+        sorted_sequence,
+        input,
+        *,
+        out_int32=False,
+        right=False,
+        side=None,
+        out=None,
+        sorter=None,
+    ):
         if side is not None:
             right = side == "right"
         seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
@@ -983,7 +606,10 @@ def _patch_adaptive_avg_pool2d(original):
             return [((i * size) // out, -(-(i + 1) * size // out)) for i in range(out)]
 
         rows = [
-            torch.cat([input[..., hs:he, ws:we].mean(dim=(-2, -1), keepdim=True) for ws, we in bounds(w, ow)], dim=-1)
+            torch.cat(
+                [input[..., hs:he, ws:we].mean(dim=(-2, -1), keepdim=True) for ws, we in bounds(w, ow)],
+                dim=-1,
+            )
             for hs, he in bounds(h, oh)
         ]
         return torch.cat(rows, dim=-2)
@@ -1009,7 +635,8 @@ def _cumulative_reduce(input: torch.Tensor, dim: int, maximum: bool) -> torch.Te
 @register_patch("executorch", "torch.cummax", "torch.Tensor.cummax")
 def _patch_cummax(_original):
     """Decompose ``cummax`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
-    Returns ``(values, indices)`` like ``torch.cummax``; indices are zeros (callers use the values)."""
+    Returns ``(values, indices)`` like ``torch.cummax``; indices are zeros (callers use the values).
+    """
 
     def patch(input, dim):
         values = _cumulative_reduce(input, dim, maximum=True)
@@ -1021,7 +648,8 @@ def _patch_cummax(_original):
 @register_patch("executorch", "torch.cummin", "torch.Tensor.cummin")
 def _patch_cummin(_original):
     """Decompose ``cummin`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
-    Returns ``(values, indices)`` like ``torch.cummin``; indices are zeros (callers use the values)."""
+    Returns ``(values, indices)`` like ``torch.cummin``; indices are zeros (callers use the values).
+    """
 
     def patch(input, dim):
         values = _cumulative_reduce(input, dim, maximum=False)
@@ -1063,7 +691,10 @@ def _patch_broadcast_mask_expansion(_original):
         def _expanded(batch_arange, head_arange, q_arange, kv_arange):
             broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
             return mask_function(*broadcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
+                batch_arange.shape[0],
+                head_arange.shape[0],
+                q_arange.shape[0],
+                kv_arange.shape[0],
             )
 
         return _expanded
@@ -1118,7 +749,16 @@ def _patch_scaled_dot_product_attention(original):
         batch = t.shape[0]
         return isinstance(batch, torch.SymInt) and bool(free_unbacked_symbols(batch.node.expr))
 
-    def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
+    def patch(
+        query,
+        key,
+        value,
+        attn_mask=None,
+        dropout_p=0.0,
+        is_causal=False,
+        scale=None,
+        **kwargs,
+    ):
         needs_eager_attention = (
             query.device.type == "cuda"
             and (
@@ -1147,7 +787,14 @@ def _patch_scaled_dot_product_attention(original):
             return torch.matmul(attn_weight, value)
         with sdpa_kernel(SDPBackend.MATH):
             return original(
-                query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
+                query,
+                key,
+                value,
+                attn_mask=attn_mask,
+                dropout_p=dropout_p,
+                is_causal=is_causal,
+                scale=scale,
+                **kwargs,
             ).clone(memory_format=torch.contiguous_format)
 
     return patch
@@ -1271,7 +918,8 @@ def _patch_eval_upper_bound(original):
 
 
 @register_patch(
-    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
+    "executorch",
+    "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat",
 )
 def _patch_remove_empty_tensors_from_cat(_original):
     """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
@@ -1302,7 +950,10 @@ def _patch_remove_empty_tensors_from_cat(_original):
     return patch
 
 
-@register_patch("executorch", "executorch.exir.verification.verifier._check_tensor_args_matching_op_allowed_dtype")
+@register_patch(
+    "executorch",
+    "executorch.exir.verification.verifier._check_tensor_args_matching_op_allowed_dtype",
+)
 def _patch_check_tensor_args_dtype(original):
     """Suppress complex-dtype violations in
     ``_check_tensor_args_matching_op_allowed_dtype``.
@@ -1365,7 +1016,10 @@ def _patch_dim_order_from_stride(_original):
     return patch
 
 
-@register_patch("executorch", "executorch.exir.passes.spec_prop_pass.SpecPropPass.update_placeholder_tensor_specs")
+@register_patch(
+    "executorch",
+    "executorch.exir.passes.spec_prop_pass.SpecPropPass.update_placeholder_tensor_specs",
+)
 def _patch_update_placeholder_tensor_specs(_original):
     """Replacement for ``SpecPropPass.update_placeholder_tensor_specs``.
 
@@ -1457,11 +1111,13 @@ def _view_replaceable_nodes(graph_module):
 
 
 @register_patch(
-    "executorch", "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.call"
+    "executorch",
+    "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.call",
 )
 def _patch_replace_view_copy_with_view_call(_original):
     """Replacement for ``ReplaceViewCopyWithViewPass.call`` that only replaces ``view_copy``
-    nodes whose shape dynamism matches their base's — see ``_view_replaceable_nodes``."""
+    nodes whose shape dynamism matches their base's — see ``_view_replaceable_nodes``.
+    """
 
     def patch(self, graph_module):
         n_replaced = 0
@@ -1479,7 +1135,8 @@ def _patch_replace_view_copy_with_view_call(_original):
 
 
 @register_patch(
-    "executorch", "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.ensures"
+    "executorch",
+    "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.ensures",
 )
 def _patch_replace_view_copy_with_view_ensures(_original):
     """Companion to ``_patch_replace_view_copy_with_view_call``: the original ``ensures`` asserts
@@ -1530,7 +1187,13 @@ def _extend_sym_ops_allowlist(original):
 
     Trace-time-only ops don't need a runtime kernel; without this they still trip the verifier.
     """
-    return original | {torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float}
+    return original | {
+        torch.sym_ite,
+        torch.sym_not,
+        torch.sym_int,
+        torch.sym_sum,
+        torch.sym_float,
+    }
 
 
 def _make_squeeze_define_node(original):
@@ -1568,7 +1231,8 @@ def _make_squeeze_define_node(original):
 
 
 @register_patch(
-    "executorch", "executorch.backends.transforms.remove_clone_ops.RemoveCloneOpsTransform._is_non_identity_clone"
+    "executorch",
+    "executorch.backends.transforms.remove_clone_ops.RemoveCloneOpsTransform._is_non_identity_clone",
 )
 def _patch_is_non_identity_clone(original):
     """Keep identity clones that feed the graph output.
@@ -1594,7 +1258,8 @@ def _patch_is_non_identity_clone(original):
 
 
 @register_patch(
-    "executorch.xnnpack", "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints"
+    "executorch.xnnpack",
+    "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints",
 )
 def _patch_prelu_check_constraints(original):
     """Only delegate ``prelu`` to XNNPACK when its input is 4-D.
@@ -1655,7 +1320,10 @@ def _patch_flatc_compile_nonfinite(original):
     return patch
 
 
-@register_patch("executorch.xnnpack", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")
+@register_patch(
+    "executorch.xnnpack",
+    "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict",
+)
 def _patch_squeeze_node_visitors(original):
     """Swap the squeeze/unsqueeze visitor entries in ``_node_visitor_dict`` with subclasses
     whose ``define_node`` skips the strict reshape check.
@@ -1673,7 +1341,11 @@ def _patch_squeeze_node_visitors(original):
     new = dict(original)
     for key in ("aten.squeeze_copy.dim", "aten.unsqueeze_copy.default"):
         cls = original[key]
-        new[key] = type(cls.__name__, (cls,), {"define_node": _make_squeeze_define_node(cls.define_node)})
+        new[key] = type(
+            cls.__name__,
+            (cls,),
+            {"define_node": _make_squeeze_define_node(cls.define_node)},
+        )
     return new
 
 
@@ -1702,7 +1374,8 @@ _MAX_UNBOUNDED_PRODUCT = 2**24
 
 def _dim_floor(num_unbounded: int) -> int:
     """Cap floor for each of `num_unbounded` simultaneously-unbounded dims, sized so their product
-    stays near `_MAX_UNBOUNDED_PRODUCT` and clamped to ``[_MIN_DIM_FLOOR, _MAX_DIM_FLOOR]``."""
+    stays near `_MAX_UNBOUNDED_PRODUCT` and clamped to ``[_MIN_DIM_FLOOR, _MAX_DIM_FLOOR]``.
+    """
     per_dim = round(_MAX_UNBOUNDED_PRODUCT ** (1.0 / max(num_unbounded, 1)))
     return max(_MIN_DIM_FLOOR, min(_MAX_DIM_FLOOR, per_dim))
 
@@ -1900,7 +1573,14 @@ def _fix_python_sym_op(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     ``mul`` / etc. are also used for tensor-tensor ops, where the ``Scalar``
     overload fails at runtime with ``Cannot cast NotImplemented to number``.
     """
-    if node.target not in (torch.sym_float, torch.sym_max, torch.sym_min, math.ceil, math.trunc, round):
+    if node.target not in (
+        torch.sym_float,
+        torch.sym_max,
+        torch.sym_min,
+        math.ceil,
+        math.trunc,
+        round,
+    ):
         return False
     replacement = _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS.get(node.target)
     if replacement is None:

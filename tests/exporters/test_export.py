@@ -14,6 +14,7 @@
 
 import copy
 import functools
+import importlib.util
 import inspect
 import itertools
 import re
@@ -61,6 +62,30 @@ from transformers.testing_utils import (
 
 
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
+    "mlx.generate.static_cache": {
+        "LlamaForCausalLM": (
+            "MLX's native index_copy cache-update lowering assigns the same node to conflicting input/output slots. "
+            "Revisit when the backend supports static-cache mutation outputs."
+        ),
+        "Gemma3ForCausalLM": (
+            "MLX's native index_copy cache-update lowering assigns the same node to conflicting input/output slots. "
+            "Revisit when the backend supports static-cache mutation outputs."
+        ),
+        "Gemma3ForConditionalGeneration": (
+            "MLX lowering does not support the captured token_type_ids=None ConstantArgument. "
+            "Observed with static-cache generation in both shape modes; keep the normal fixture."
+        ),
+        "Gemma4ForConditionalGeneration": (
+            "MLX lowering does not support the captured attention_mask_sliding_attention=None ConstantArgument. "
+            "Observed with static-cache generation in both shape modes; keep the normal fixture."
+        ),
+    },
+    "mlx.generate": {
+        "Gemma4ForCausalLM": (
+            "The standard Gemma4 fixture enables MoE; MLX lowering does not yet support its histc and "
+            "grouped_mm_fallback expert operations. Keep the fixture unchanged; revisit when lowering supports them."
+        ),
+    },
     # Every backend, every variant.
     "all": {
         "VideoMAEForPreTraining": (
@@ -383,6 +408,22 @@ GENERATE_EXPORT_PARAMS = parameterized.expand(
 )
 
 
+_EXECUTORCH_BACKENDS = ("xnnpack", "mlx")
+EXECUTORCH_EXPORT_PARAMS = parameterized.expand(
+    list(itertools.product(_EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES)),
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}" + (f"_{p.args[0]}" if p.args[0] != "xnnpack" else "")
+    ),
+)
+EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
+    list(itertools.product(_EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS)),
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{p.args[0]}_{'dynamic' if p.args[1] else 'static'}"
+        + (f"_{p.args[2].cache_implementation}_cache" if p.args[2] is not None else "")
+    ),
+)
+
+
 def _needs_static_cache(generation_config) -> bool:
     """True if `generation_config` requests a cache the model must explicitly support (a static impl).
     Such variants only run on models that can (see the `_can_compile_fullgraph` gate in the tests)."""
@@ -611,6 +652,8 @@ class ExportTesterMixin:
             scopes.append(backend)
             if generate:
                 scopes.append(f"{backend}.generate")
+                if generation_config is not None and generation_config.cache_implementation is not None:
+                    scopes.append(f"{backend}.generate.{generation_config.cache_implementation}_cache")
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
@@ -730,24 +773,32 @@ class ExportTesterMixin:
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @EXECUTORCH_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export(self, dynamic):
+    def test_executorch_export(self, backend, dynamic):
         """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
+        if importlib.util.find_spec(f"executorch.backends.{backend}") is None:
+            self.skipTest(f"ExecuTorch backend {backend} is not installed")
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(dynamic=dynamic)
+        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
-        for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
-                continue
-
+        model_classes = [
+            model_class
+            for model_class in self.all_model_classes
+            if not any(
+                self._should_skip(model_class, dynamic=dynamic, backend=scope) for scope in ("executorch", backend)
+            )
+        ]
+        if not model_classes:
+            self.skipTest("No model classes support this export configuration")
+        for model_class in model_classes:
             # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
             # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
@@ -781,6 +832,18 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     stage into individual submodules via :func:`decompose_multimodal`.
     """
 
+    def _prepare_export_generate_fixture(self, model_class, device=torch_device):
+        """Create the normal generation fixture without decomposing or changing its inputs."""
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
+
+        set_config_for_less_flaky_test(config)
+        model = model_class(config).eval().to(device)
+        set_model_for_less_flaky_test(model)
+
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
+        return model, inputs_dict
+
     def _prepare_export_generate_model_and_inputs(
         self, model_class, device=torch_device, generation_config=None, multi_token_decode=False
     ):
@@ -804,15 +867,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         Returns:
             Dict of `{name: (model, inputs)}` — one entry per component.
         """
-        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
-
-        set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(device)
-        set_model_for_less_flaky_test(model)
-
-        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
-
+        model, inputs_dict = self._prepare_export_generate_fixture(model_class, device=device)
         return decompose_for_generation(
             model, inputs_dict, generation_config=generation_config, multi_token_decode=multi_token_decode
         )
@@ -892,38 +947,81 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @GENERATE_EXPORT_PARAMS
+    @EXECUTORCH_GENERATE_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, dynamic, generation_config):
-        """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
-
+    def test_executorch_export_generate(self, backend, dynamic, generation_config):
+        """Exercise the public generation API with normal fixtures on every backend and cache/shape mode."""
         self._skip_if_not_exportable()
+        if not self.all_generative_model_classes:
+            self.skipTest("No generative model classes to export")
+        if importlib.util.find_spec(f"executorch.backends.{backend}") is None:
+            self.skipTest(f"ExecuTorch backend {backend} is not installed")
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(dynamic=dynamic)
+        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(
-                model_class, generate=True, dynamic=dynamic, backend="executorch", generation_config=generation_config
+            if any(
+                self._should_skip(
+                    model_class, generate=True, dynamic=dynamic, backend=scope, generation_config=generation_config
+                )
+                for scope in ("executorch", backend)
             ):
+                scopes = (
+                    "all",
+                    "generate",
+                    "dynamic" if dynamic else "static",
+                    "generate.dynamic" if dynamic else "generate",
+                    "executorch",
+                    "executorch.generate",
+                    f"executorch.{'dynamic' if dynamic else 'static'}",
+                    backend,
+                    f"{backend}.generate",
+                    f"{backend}.{'dynamic' if dynamic else 'static'}",
+                )
+                if generation_config is not None and generation_config.cache_implementation is not None:
+                    scopes += tuple(
+                        f"{scope}.generate.{generation_config.cache_implementation}_cache"
+                        for scope in ("executorch", backend)
+                    )
+                reasons = [
+                    EXPORT_SKIPS[scope][model_class.__name__]
+                    for scope in scopes
+                    if model_class.__name__ in EXPORT_SKIPS.get(scope, {})
+                ]
+                with self.subTest(model=model_class.__name__):
+                    self.skipTest("; ".join(dict.fromkeys(reasons)) or "Model does not support static-cache export")
                 continue
-
-            components = self._prepare_export_generate_model_and_inputs(
-                model_class,
-                device="cpu",
-                generation_config=generation_config,
-                multi_token_decode=dynamic,
-            )
-            eager_outputs = self._collect_eager_outputs(components)
-
-            for name, (model, inputs) in components.items():
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
-                    executorch_outputs = _run_executorch_program(program, inputs)
-                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
-                        continue
-                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
+            with self.subTest(model=model_class.__name__):
+                set_seed(1234)
+                model, inputs = self._prepare_export_generate_fixture(model_class, device="cpu")
+                reference = copy.deepcopy(model)
+                # Capture a reference with the same seed, independently of the backend's lowering.
+                set_seed(1234)
+                components = decompose_for_generation(
+                    reference,
+                    copy.deepcopy(inputs),
+                    generation_config=copy.deepcopy(generation_config),
+                    multi_token_decode=dynamic,
+                )
+                set_seed(1234)
+                programs = exporter.export_for_generation(
+                    model,
+                    copy.deepcopy(inputs),
+                    config=config,
+                    generation_config=copy.deepcopy(generation_config),
+                    multi_token_decode=dynamic,
+                )
+                self.assertTrue(components, "Generation decomposition returned no components")
+                self.assertEqual(set(programs), set(components))
+                for name, program in programs.items():
+                    with self.subTest(component=name):
+                        component, forward_inputs = components[name]
+                        expected = self._collect_eager_outputs({name: (component, forward_inputs)})[name]
+                        actual = _run_executorch_program(program, copy.deepcopy(forward_inputs))
+                        if actual is not None:
+                            self.assertEqual(len(actual), len(expected))
