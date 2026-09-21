@@ -23,10 +23,8 @@ from .cache_pool import CachePool
 
 
 def compute_block_hash(parent_hash: int | None, tokens: list[int]) -> int:
-    """Computes the chained hash identifying a block's content: its tokens and its parent block's hash. blake2b is
-    used instead of the built-in hash because the latter is salted per-process, which would break hash consistency
-    across the ranks of a TP group."""
-    h = hashlib.blake2b(digest_size=8)
+    """Computes the hash of a block, from its parent's and the tokens it stores."""
+    h = hashlib.blake2b(digest_size=8)  # Used instead of "hash" because "hash" is salted per-process (would break TP)
     if parent_hash is not None:
         h.update(parent_hash.to_bytes(8, "little", signed=False))
     h.update(array("i", tokens).tobytes())
@@ -34,9 +32,12 @@ def compute_block_hash(parent_hash: int | None, tokens: list[int]) -> int:
 
 
 class BlockLedger:
-    """Tracks the logical state of an allocator's blocks: how many requests reference each shared block, the content
-    hash of each fully-written block, and the unreferenced blocks kept cached for de-duplication. A block absent from
-    every structure is either free in the pool or plainly owned by the one request whose block table holds it."""
+    """The ledger used by each CacheAllocator to track the state of its blocks. It tracks:
+        - how many requests reference each shared block
+        - the content hash of each fully-written block
+        - the unreferenced blocks kept cached for de-duplication
+    A block absent from every structure is either free in the pool or owned by a request.
+    """
 
     def __init__(self) -> None:
         # Reference counts of shared blocks: a block has an entry only when it is referenced by 2+ requests
@@ -101,18 +102,35 @@ class BlockLedger:
 
 
 class CacheAllocator(ABC):
-    """Base class for cache allocators. A cache allocator receives cache sectors from the PagedAttentionCache and
-    allocates them to the requests that need them. A single cache allocator takes care of all layers with a given
-    attention type (e.g. full attention, sliding attention, MLA, ...).
+    """Base class for cache allocators.
 
-    PAGE (for one layer, holds the whole cache of PAGE_SIZE tokens, e.g. both keys and values)
-    [  TOKEN 0  |  TOKEN 1  |  TOKEN 2  |  ...  |  TOKEN PAGE_SIZE  ]
+    A cache allocator receives cache sectors from the PagedAttentionCache and allocates them to the requests that need
+    them. A single cache allocator takes care of all layers with a given attention type (e.g. full attention, sliding
+    attention, MLA, ...). The cache allocators partition the memory using the following hierarchy:
 
-    BLOCK (for one request, one page per layer)
-    [  PAGE 0  |  PAGE 1  |  PAGE 2  |  ...  |  PAGE NUM_LAYERS  ]
+    PAGE:
+        A page is a unit of the cache dedicated to one layer. It stores "page_size" tokens for one layer. For example,
+        for a full attention layer, the page holds the cache of "page_size" tokens for both keys and values. A page
+        looks like this:
 
-    SECTOR (for one attention type)
-    [  BLOCK 0  |  BLOCK 1  |  BLOCK 2  |  ...  |  BLOCK N  ]
+            [  TOKEN 0  |  TOKEN 1  |  TOKEN 2  |  ...  |  TOKEN PAGE_SIZE  ]
+
+        The stride between two tokens depends on the attention type, and is called "block_physical_stride".
+
+    BLOCK:
+        A block is a unit of cache dedicated to one request. For a given attention type, if the model has X layers with
+        that attention type, the block will have X pages. Because of cache sharing, a block can be referenced by
+        multiple requests sharing the same cache. A block looks like this:
+
+            [  PAGE 0  |  PAGE 1  |  PAGE 2  |  ...  |  PAGE "num_layers_with_attn_type"  ]
+
+
+    SECTOR:
+        A sector is a unit of cache dedicated to one attention type. Free sectors don't have a set number of blocks
+        inside them, but depending on the attention type it gets assigned to, the sector will be partionned into
+        "N = sector_size / block_size[attn_type]" blocks. A sector looks like this:
+
+        [  BLOCK 0  |  BLOCK 1  |  BLOCK 2  |  ...  |  BLOCK N  ]
     """
 
     # These attributes depend on the attention type

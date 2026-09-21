@@ -1,4 +1,25 @@
+# Copyright 2026 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 class RegularTrees:
+    """
+    An object to represent a set of trees with depths two and at most "elems_per_tree" leaves.
+    Each tree has is defined by an integer root, say X, and starts with leaves [X, X+1, ..., X+elem_per_tree-1].
+    This is used to represent the free blocks in a cache pool.
+    """
+
     def __init__(self, elems_per_tree: int) -> None:
         self.elems_per_tree = elems_per_tree
         self.trees: dict[int, list[int]] = {}

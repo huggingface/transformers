@@ -74,31 +74,39 @@ class PagedAttentionCache:
     sectors to sub-allocators, each for a different kind of cache (full-attention layers, MSA layers, embeddings cache,
     etc.).
 
-    Virtually, the cache is allocated per layer in the form of *pages*: one page holds the whole cache (e.g. both keys
-    and values) of one layer for a number N of tokens. When several layers share a similar attention type, say full
-    attention, we group them and allocate the cache per *block*. For instance, this is how a block of full-attention
-    cache looks like, if there are 3 full-attention layers:
-
-    [ LAYER 0 KEYS | LAYER 0 VALUES | LAYER 1 KEYS | LAYER 1 VALUES | LAYER 2 KEYS | LAYER 2 VALUES ]
-    [ ----------- PAGE 0 ---------- | ----------- PAGE 1 ---------- | ----------- PAGE 2 ---------- ]
-    [ ------------------------------------------- BLOCK 0 ------------------------------------------]
+    The cache tensors are the physical memory on which the cache is stored.
+    Virtually, the cache is allocated in a tiered system (smaller units first):
+        - layer-level units: pages
+        - request-level units: blocks
+        - attention-type-level units: sectors
+    You can find a more detailled description in the CacheAllocator class documentation. The PagedAttentionCache object
+    only concerns itself with the sectors, and anything beyond that granularity is handled by the CacheAllocators.
 
     For a given attention type, there is only one allocator, which is responsible for the cache of all layers with that
-    attention type. For instance, in a 4 layers model with layer types ["full", "sliding", "sliding", "sliding"], there
-    are two allocators: one FullAttentionCacheAllocator (for layer 0) and one SlidingAttentionCacheAllocator (for layers
-    1, 2 and 3).
+    attention type. For instance, in a 4 layers model with layer types ["sliding", "full", "sliding", "sliding"], there
+    are two allocators: one FullAttentionCacheAllocator (for layer 1) and one SlidingAttentionCacheAllocator (for layers
+    0, 2 and 3).
     Because of this, the block size for the full attention allocator is not the same as the block size for the sliding
-    attention allocator. To compensate for that, we define * sectors * : a sector is a contiguous region of the cache
-    that is allocated to a single allocator. The size of a sector is computed so that all cache allocators can divide a
-    sector into blocks.
-    For instance, if there are 3 sliding layers for 1 full attention layer, then storing a single token would require 3
-    sliding pages (one per layer) and 1 full page. The amount of memory needed to store all sliding pages is x3 the
-    amount of memory needed to store one full page. Hence, one block of sliding cache is 3 blocks of full cache. Taking
-    the LCM(1, 3) = 3, we compute the size of a sector to be 3 blocks of full cache, or 1 block of sliding cache.
+    attention allocator. This is an issue: if the paged cache gave out similar-sized blocks to the two allocators, the
+    storage for the full attention allocator would be 3x what is necessary. Hence, we need to find a way to grow the
+    storage at different rates for the two allocators.
+
+    To do that, we define "sectors" : a sector is a contiguous region of the cache that is allocated to a single
+    allocator. The size of a sector is computed so that all cache allocators can divide a sector into blocks. The paged
+    attention cache delegates the responasibilty of managing blocks to the cache allocators, which only request sectors.
+    In our example, the amount of memory needed to store all sliding pages is x3 the amount of memory needed to store
+    one full page. Hence, one block of sliding cache is 3 blocks of full cache. Taking the LCM(1, 3) = 3, we compute the
+    size of a sector to be 3 blocks of full cache, or 1 block of sliding cache.
 
                            [ -------------------------------------- SECTOR -------------------------------------- ]
+
     used for full attn:    [ ------ FULL BLOCK 0 ------ | ------ FULL BLOCK 1 ------ | ------ FULL BLOCK 2 ------ ]
+                           [ ---- PAGE FOR LAYER 1 ---- | ---- PAGE FOR LAYER 1 ---- | ---- PAGE FOR LAYER 1 ---- ]
+
     used for sliding attn: [ ---------------------------------- SLIDING BLOCK 0 --------------------------------- ]
+                           [ ---- PAGE FOR LAYER 0 ---- | ---- PAGE FOR LAYER 2 ---- | ---- PAGE FOR LAYER 3 ---- ]
+
+    For a more in depth figure, check FullAttentionCacheAllocator.register_cache_tensor docstring.
 
     Physically, the cache is stored on a single flat tensor, whose first two sectors are never-allocated trash
     sectors used by padding tokens (see FullAttentionCacheAllocator.register_cache_tensor).
@@ -460,58 +468,6 @@ class PagedAttentionCache:
         for allocator in self.cache_allocators.values():
             free_bytes += allocator.pool.count_free_blocks(allocator.index) * allocator.bytes_per_block
         return free_bytes / (self.num_sectors * self.bytes_per_sector if relative else 1)
-
-    # def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:
-    #     """Returns the number of physical blocks needed to allocate (num_requested_blocks) blocks to a request that
-    #     already has (allocated_blocks) blocks. The number of newly allocated blocks needed is predicted by the
-    #     following rules:
-    #     - for full attention groups: since there is no sliding window for full attention layers, one requested block is
-    #         always equivalent to one newly allocated block for EACH full attention group
-    #     - for sliding window groups: because of the sliding window, the number of blocks allocated to a request is
-    #         capped. Using the number of already (allocated_blocks) we can compute the number of new blocks to actually
-    #         allocate to the request, which can be lower than the number of requested blocks. That number is the same for
-    #         all sliding window groups, as only one sliding window size is supported.
-    #     """
-    #     # This is not in a branch, because it is very rare to have zero full attention layer
-    #     needed_blocks = num_requested_blocks * self.num_full_attention_groups
-    #     # Only take this branch if the model has sliding window attention layers
-    #     if self.num_sliding_attention_groups:
-    #         blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)
-    #         needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
-    #     return needed_blocks
-
-    # def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
-    #     """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful."""
-    #     return self.blocks_needed(num_requested_blocks, allocated_blocks) <= self.get_num_free_blocks()
-
-    # def blocks_in_use(self, request_id: str) -> int:
-    #     """Returns the total number of physical blocks currently referenced by a request across all layer groups."""
-    #     return sum(len(cm.block_table.get(request_id, ())) for cm in self.group_cache_managers)
-
-    # def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
-    #     """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
-    #     managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
-    #     # First check allocation will be successful before starting, to avoid partial allocations
-    #     if not self.will_allocation_be_successful(n_blocks, allocated_blocks):
-    #         return None
-    #     # Allocate blocks across all cache managers
-    #     max_allocated = 0
-    #     for cm in self.group_cache_managers:
-    #         num_allocated_blocks = cm.allocate_blocks(n_blocks, request_id, self._block_manager)
-    #         if num_allocated_blocks is None:
-    #             raise ValueError(f"Failed to allocate {n_blocks} blocks for request {request_id}")
-    #         max_allocated = max(max_allocated, num_allocated_blocks)
-    #     return max_allocated
-
-    # def free_blocks(self, request_id: str) -> None:
-    #     """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
-    #     by the cache managers."""
-    #     for cm in self.group_cache_managers:
-    #         cm.free_blocks(request_id, self._block_manager)
-
-    # def get_num_free_blocks(self) -> int:
-    #     """Get the current number of unallocated blocks available for new requests."""
-    #     return self._block_manager.num_free_blocks
 
     def fill_block_table(
         self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor

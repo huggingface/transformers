@@ -64,13 +64,14 @@ class FullAttentionCacheAllocator(CacheAllocator):
         self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor, pool: CachePool
     ) -> None:
         """Registers the cache tensor so the allocator can use it for updates. For a full attention KV cache allocator
-        with 2 layers, the cache is arranged this way:
+        with 2 layers, the cache is arranged this way (L0 = Layer 0):
 
-        [ LAYER 0 KEYS | LAYER 0 VALUES | LAYER 1 KEYS | LAYER 1 VALUES | LAYER 2 KEYS | LAYER 2 VALUES | -------... ]
-        [ ----------- PAGE 0 ---------- | ----------- PAGE 1 ---------- | ----------- PAGE 2 ---------- | -------... ]
-        [ -------------------------- BLOCK 0 -------------------------- | ------------------ BLOCK 1 ------------... ]
+        [ L0 KEYS | L0 VALUES | L1 KEYS | L1 VALUES | L0 KEYS | L0 VALUES | L1 KEYS | L1 VALUES ]
+        [ ------ PAGE 0 ----- | ------ PAGE 1 ----- | ------ PAGE 2 ----- | ------ PAGE 3 ----- ]
+        [ ---------------- BLOCK 0 ---------------- | ---------------- BLOCK 1 ---------------- ]
+        [ --------------------------------------- SECTOR -------------------------------------- ]
 
-        The FIRST TWO sectors of the tensor are the trash sectors, shared by all allocators and never allocated from.
+        Here, a sector is dimensionned to hold 2 full attention blocks.
         """
         self.bytes_per_sector = bytes_per_sector
         # Byte view of the whole tensor as one row per block, used to copy blocks when forking
