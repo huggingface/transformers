@@ -572,6 +572,7 @@ def _flash_attention_forward(
         (indices_q, indices_k), (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = (
             prepare_fa_kwargs_from_attn_mask(attention_mask, query_length, key_length)
         )
+        # Unpad the query and key states
         query_states = query_states[indices_q]
         key_states, value_states = key_states[indices_k], value_states[indices_k]
     elif not is_fa_with_varlen_kwargs:
