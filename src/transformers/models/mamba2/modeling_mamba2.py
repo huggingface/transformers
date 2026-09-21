@@ -301,9 +301,7 @@ def mamba2_chunk_scan(
     L = torch.exp(segment_sum(A))
 
     # Contraction of C and B to get G (attention-weights like): sum over the state n, leaving a
-    # position-by-position score per head. (b,c,l,h,n) x (b,c,s,h,n) -> (b,c,l,s,h). Written as an
-    # einsum rather than a broadcast product then .sum(-1), which would materialise the un-summed
-    # (b,c,l,s,h,n) first -- 4 GiB per sequence at bamba-9B's shapes, where it OOMs a 22 GiB runner.
+    # position-by-position score per head. (b,c,l,h,n) x (b,c,s,h,n) -> (b,c,l,s,h).
     G = torch.einsum("bclhn,bcshn->bclsh", C, B)
 
     # Compute M, equivalent to applying attention mask to weights
