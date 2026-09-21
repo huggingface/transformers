@@ -576,15 +576,14 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
 class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
-    def __init__(self, config: MossTranscribeDiarizeConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = MossTranscribeDiarizeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    @auto_docstring
-    def get_audio_features(self, *args, **kwargs):
-        return self.model.get_audio_features(*args, **kwargs)
+    def get_audio_features(self, input_features, input_features_mask, **kwargs):
+        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring
