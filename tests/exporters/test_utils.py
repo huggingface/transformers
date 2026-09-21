@@ -62,7 +62,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DynamicCache, GenerationConfig, LlamaConfig, StaticCache
+    from transformers import DynamicCache, EncoderDecoderCache, GenerationConfig, LlamaConfig, StaticCache
     from transformers.exporters.utils import (
         cast_leaf_tensors,
         decompose_prefill_decode,
@@ -374,9 +374,19 @@ class ExecutorchBackendRecipeTest(unittest.TestCase):
         from transformers.exporters import exporter_dynamo
         from transformers.exporters import exporter_executorch as et
 
-        caches = (None, DynamicCache(), StaticCache(config=LlamaConfig(num_hidden_layers=1), max_cache_len=8))
-        for backend, cache in itertools.product(("xnnpack", "cuda", "mlx"), caches):
-            with self.subTest(backend=backend, cache=type(cache).__name__):
+        static_cache = StaticCache(config=LlamaConfig(num_hidden_layers=1), max_cache_len=8)
+        caches = {
+            "none": (None, False),
+            "dynamic": (DynamicCache(), False),
+            "static": (static_cache, True),
+            "encoder_decoder_dynamic": (EncoderDecoderCache(DynamicCache(), DynamicCache()), False),
+            "static_self_attention": (EncoderDecoderCache(static_cache, DynamicCache()), True),
+            "static_cross_attention": (EncoderDecoderCache(DynamicCache(), static_cache), True),
+            "encoder_decoder_static": (EncoderDecoderCache(static_cache, static_cache), True),
+        }
+        for backend, cache_name in itertools.product(("xnnpack", "cuda", "mlx"), caches):
+            cache, unsupported_on_mlx = caches[cache_name]
+            with self.subTest(backend=backend, cache=cache_name):
                 model = nn.Linear(2, 2)
                 inputs = {"input": torch.randn(2, 3).t(), "nested": [torch.ones(1), "keep"], "past_key_values": cache}
                 config = ExecutorchConfig(backend=backend, strict=True, dynamic=True, dynamic_shapes={})
@@ -414,7 +424,7 @@ class ExecutorchBackendRecipeTest(unittest.TestCase):
                     mock.patch.object(et, "EdgeCompileConfig") as compile_config,
                     mock.patch.object(et, "to_edge_transform_and_lower") as lower,
                 ):
-                    if backend == "mlx" and isinstance(cache, StaticCache):
+                    if backend == "mlx" and unsupported_on_mlx:
                         with self.assertRaisesRegex(
                             ValueError, "StaticCache is not supported by the ExecuTorch MLX backend.*Use DynamicCache"
                         ):

@@ -62,12 +62,6 @@ from transformers.testing_utils import (
 
 
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
-    "mlx.generate.static_cache": {
-        "LlamaForCausalLM": "MLX index_copy lowering assigns conflicting input/output slots to cache mutation results.",
-        "Gemma3ForCausalLM": "MLX index_copy lowering assigns conflicting input/output slots to cache mutation results.",
-        "Gemma3ForConditionalGeneration": "MLX lowering does not support token_type_ids=None inputs.",
-        "Gemma4ForConditionalGeneration": "MLX lowering does not support attention_mask_sliding_attention=None inputs.",
-    },
     "mlx.generate": {
         "Gemma4ForCausalLM": "MLX lowering does not support histc and grouped_mm_fallback in MoE layers.",
     },
@@ -638,8 +632,6 @@ class ExportTesterMixin:
             scopes.append(backend)
             if generate:
                 scopes.append(f"{backend}.generate")
-                if generation_config is not None and generation_config.cache_implementation is not None:
-                    scopes.append(f"{backend}.generate.{generation_config.cache_implementation}_cache")
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
@@ -941,6 +933,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
+        if backend == "mlx" and generation_config is not None and generation_config.cache_implementation == "static":
+            self.skipTest("StaticCache is not supported by the ExecuTorch MLX backend")
         if importlib.util.find_spec(f"executorch.backends.{backend}") is None:
             self.skipTest(f"ExecuTorch backend {backend} is not installed")
         exporter = ExecutorchExporter()

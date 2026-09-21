@@ -68,7 +68,7 @@ if is_torch_available():
     from torch.utils._sympy.value_ranges import ValueRanges
 
     from .. import masking_utils
-    from ..cache_utils import StaticCache
+    from ..cache_utils import EncoderDecoderCache, StaticCache
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -272,11 +272,15 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
 def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
-    if any(isinstance(value, StaticCache) for value in sample_inputs.values()):
-        raise ValueError(
-            "StaticCache is not supported by the ExecuTorch MLX backend. "
-            "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
-        )
+    for value in sample_inputs.values():
+        caches = [value]
+        if isinstance(value, EncoderDecoderCache):
+            caches = [value.self_attention_cache, value.cross_attention_cache]
+        if any(isinstance(cache, StaticCache) for cache in caches):
+            raise ValueError(
+                "StaticCache is not supported by the ExecuTorch MLX backend. "
+                "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
+            )
 
     from executorch.backends.mlx import MLXPartitioner
 
