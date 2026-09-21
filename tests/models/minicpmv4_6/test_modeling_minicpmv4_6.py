@@ -45,11 +45,11 @@ if is_torch_available():
 
 
 class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
-    base_model_class = MiniCPMV4_6Model if is_torch_available() else None
+    base_model_class = MiniCPMV4_6Model
     config_class = MiniCPMV4_6Config
-    text_config_class = Qwen3_5TextConfig if is_torch_available() else None
+    text_config_class = Qwen3_5TextConfig
     vision_config_class = MiniCPMV4_6VisionConfig
-    conditional_generation_class = MiniCPMV4_6ForConditionalGeneration if is_torch_available() else None
+    conditional_generation_class = MiniCPMV4_6ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
@@ -417,7 +417,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ("cuda", (10, 0)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
             }
         ).get_expectation()
@@ -499,7 +499,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ] * 2,
                 ("cuda", (10, 0)): [
                     "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
@@ -548,7 +548,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
                     "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
                 ],
                 ("cuda", (10, 0)): [
