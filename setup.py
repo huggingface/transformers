@@ -79,13 +79,13 @@ _deps = [
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers==0.35.2",  # Needed for VibeVoice TTS integration tests
-    "dill<0.3.5",
+    "dill>=0.3.8",
     "evaluate>=0.4.6",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "fugashi>=1.0",
-    "GitPython<3.1.19",
+    "GitPython>=3.1.41",
     "hf-doc-builder",
     "huggingface-hub>=1.31.0,<2.0",
     "ipadic>=1.0.0,<2.0",
@@ -94,14 +94,14 @@ _deps = [
     "kernels>=0.17.0,<0.18",
     "librosa",
     "mistral-common[image]>=1.11.7",
-    "nltk<=3.8.1",
+    "nltk>=3.9.1",
     "num2words",
     "numpy>=1.17",
     "openai>=1.98.0",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
-    "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
+    "pandas>=2.2.0",
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
     "peft>=0.20.0",
