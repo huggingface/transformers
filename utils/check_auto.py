@@ -143,7 +143,9 @@ def build_processor_mapping(
                     processor_name = node.name
 
         if processor_name is not None:
-            processor_mapping[model_type] = processor_name
+            processor_mapping[model_type] = (
+                processor_name if "video_processing" not in processor_filename else {"torchvision": processor_name}
+            )
 
     return processor_mapping
 

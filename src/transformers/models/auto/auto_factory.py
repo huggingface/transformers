@@ -378,7 +378,6 @@ class _BaseAutoModelClass:
 
         # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
-        print(has_remote_code, trust_remote_code, explicit_local_code, has_local_code)
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
             model_class = get_class_from_dynamic_module(

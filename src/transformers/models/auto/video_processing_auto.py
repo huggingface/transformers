@@ -482,6 +482,14 @@ class AutoVideoProcessor:
                 The configuration corresponding to the model to register.
             video_processor_class ([`BaseVideoProcessor`]):
                 The video processor to register.
+            video_processor_classes (`dict[str, type]`, *optional*):
+                Dictionary mapping backend names to video processor classes. Allows registering custom backends.
+                Example: `{"pil": MyPilVideoProcessor, "torchvision": MyTorchvisionVideoProcessor, "custom": MyCustomVideoProcessor}`
+            exist_ok (`bool`, *optional*, defaults to `False`):
+                If `True`, allow overwriting existing registrations. Note that this will not overwrite anything if the config is
+                a local `transformers` class.
+            overrides_ok (`bool`, *optional*, defaults to `False`):
+                If `True`, allow overwriting existing registrations, even if it is mapped to an existing `transformers` local config.
         """
         if video_processor_classes is None:
             # Legacy registering would pass a single torch-based class
