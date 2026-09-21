@@ -20,7 +20,6 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -41,8 +40,6 @@ if is_vision_available():
 class YolosImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     size = {"shortest_edge": 18, "longest_edge": 1333}
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
 
     def get_expected_values(self, image_inputs, batched=False):
         """

@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.cohere_compass.image_processing_cohere_compass import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -47,8 +46,6 @@ class CohereCompassImageProcessingTester(ImageProcessingTester):
     max_resolution = 1024
 
     # Image processor init kwargs
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
     do_resize = True
     patch_size = 14
     temporal_patch_size = 2
@@ -59,8 +56,6 @@ class CohereCompassImageProcessingTester(ImageProcessingTester):
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
             "min_pixels": self.min_pixels,
             "max_pixels": self.max_pixels,
             "patch_size": self.patch_size,

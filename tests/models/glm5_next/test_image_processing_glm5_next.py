@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -46,8 +45,6 @@ class Glm5NextImageProcessingTester(ImageProcessingTester):
     patch_size = 14
     merge_size = 2
     patch_expand_factor = 1
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
     min_image_tokens = 1
     max_image_tokens = 64
 
@@ -55,8 +52,6 @@ class Glm5NextImageProcessingTester(ImageProcessingTester):
         return {
             "do_rescale": self.do_rescale,
             "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
             "temporal_patch_size": self.temporal_patch_size,
             "patch_size": self.patch_size,
             "merge_size": self.merge_size,

@@ -15,7 +15,6 @@
 
 import unittest
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
@@ -26,8 +25,6 @@ class TextNetImageProcessingTester(ImageProcessingTester):
     size = {"shortest_edge": 20}
     do_center_crop = True
     crop_size = {"height": 18, "width": 18}
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
 
 
 @require_torch

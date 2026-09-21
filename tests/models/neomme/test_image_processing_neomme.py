@@ -38,8 +38,6 @@ class NeoMMEImageProcessingTester(ImageProcessingTester):
     do_rescale = True
     do_normalize = True
     rescale_factor = 1 / 127.5
-    image_mean = [1.0, 1.0, 1.0]
-    image_std = [1.0, 1.0, 1.0]
     patch_size = 4
 
     def prepare_image_processor_dict(self):
@@ -49,8 +47,6 @@ class NeoMMEImageProcessingTester(ImageProcessingTester):
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
             "patch_size": self.patch_size,
         }
 

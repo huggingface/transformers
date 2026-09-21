@@ -17,7 +17,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -38,8 +37,6 @@ class PerceiverImageProcessingTester(ImageProcessingTester):
 
     # Image processor init kwargs
     size = {"height": 224, "width": 224}
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]

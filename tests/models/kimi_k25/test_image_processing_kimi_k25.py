@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -43,8 +42,6 @@ class Kimi26ImageProcessingTester(ImageProcessingTester):
 
     # Image processor init kwargs
     size = {"max_height": 512, "max_width": 512}
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
     max_patches = 36
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):

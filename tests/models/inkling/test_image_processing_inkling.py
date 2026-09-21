@@ -37,8 +37,6 @@ class InklingImageProcessingTester(ImageProcessingTester):
 
     do_resize = True
     do_normalize = False
-    image_mean = [0.0, 0.0, 0.0]
-    image_std = [1.0, 1.0, 1.0]
 
 
 @require_torch

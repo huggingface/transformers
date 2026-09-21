@@ -15,7 +15,6 @@
 
 import unittest
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available
 
@@ -40,8 +39,6 @@ class Step3p7ImageProcessingTester(ImageProcessingTester):
     do_resize = True
     size = {"height": 64, "width": 64}
     patch_size = 32
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
 
     def prepare_image_processor_dict(self):
         return {
@@ -51,8 +48,6 @@ class Step3p7ImageProcessingTester(ImageProcessingTester):
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
         }
 

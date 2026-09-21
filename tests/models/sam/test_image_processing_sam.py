@@ -16,7 +16,6 @@
 import unittest
 
 from transformers.file_utils import is_torch_available
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
@@ -28,8 +27,6 @@ if is_torch_available():
 
 class SamImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
     size = {"longest_edge": 20}
     pad_size = {"height": 20, "width": 20}
     mask_size = {"longest_edge": 12}

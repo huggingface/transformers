@@ -14,7 +14,6 @@
 
 import unittest
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
@@ -24,8 +23,6 @@ class PoolFormerImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     size = {"shortest_edge": 30}
     crop_size = {"height": 30, "width": 30}
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
 
 
 @require_torch

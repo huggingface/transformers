@@ -36,6 +36,7 @@ if is_vision_available():
 class NougatImageProcessingTester(ImageProcessingTester):
     # Image processor init kwargs
     size = {"height": 20, "width": 20}
+    # test_expected_output pins the pixel mean with this normalization.
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     data_format = "channels_first"
