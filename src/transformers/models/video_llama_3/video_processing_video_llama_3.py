@@ -373,19 +373,24 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             `int`: Number of video patches per video.
         """
         size = videos_kwargs.get("size", None) or self.size
-        size = {
-            "shortest_edge": size["shortest_edge"],
-            "longest_edge": size["longest_edge"] // num_frames,
-        }  # diff from Qwen!
-        videos_kwargs = {**videos_kwargs, "size": size}
+        min_pixels = videos_kwargs.get("min_pixels", None)
+        max_pixels = videos_kwargs.get("max_pixels", None)
+        if min_pixels is None or max_pixels is None:
+            min_pixels, max_pixels = size["shortest_edge"], size["longest_edge"]
+        # The budget is spread across the sampled frames here, diff from Qwen!
+        videos_kwargs = {**videos_kwargs, "min_pixels": min_pixels, "max_pixels": max_pixels // num_frames}
         size = videos_kwargs.get("size") or self.size
+        min_pixels = videos_kwargs.get("min_pixels")
+        max_pixels = videos_kwargs.get("max_pixels")
+        if min_pixels is None or max_pixels is None:
+            min_pixels, max_pixels = size["shortest_edge"], size["longest_edge"]
         patch_size = videos_kwargs.get("patch_size") or self.patch_size
         merge_size = videos_kwargs.get("merge_size") or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size") or self.temporal_patch_size
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size

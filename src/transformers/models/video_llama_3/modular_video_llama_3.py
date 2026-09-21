@@ -1315,11 +1315,12 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
         size = videos_kwargs.get("size", None) or self.size
-        size = {
-            "shortest_edge": size["shortest_edge"],
-            "longest_edge": size["longest_edge"] // num_frames,
-        }  # diff from Qwen!
-        videos_kwargs = {**videos_kwargs, "size": size}
+        min_pixels = videos_kwargs.get("min_pixels", None)
+        max_pixels = videos_kwargs.get("max_pixels", None)
+        if min_pixels is None or max_pixels is None:
+            min_pixels, max_pixels = size["shortest_edge"], size["longest_edge"]
+        # The budget is spread across the sampled frames here, diff from Qwen!
+        videos_kwargs = {**videos_kwargs, "min_pixels": min_pixels, "max_pixels": max_pixels // num_frames}
         return super().get_num_of_video_patches(num_frames, height, width, videos_kwargs)
 
 

@@ -1,4 +1,4 @@
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -31,13 +30,13 @@ if is_vision_available():
     from PIL import Image
 
     from transformers.image_utils import get_image_size
-    from transformers.models.video_llama_3.video_processing_video_llama_3 import smart_resize
+    from transformers.models.minimax_m3_vl.video_processing_minimax_m3_vl import smart_resize
 
     if is_torchvision_available():
-        from transformers import VideoLlama3VideoProcessor
+        from transformers import MiniMaxM3VLVideoProcessor
 
 
-class VideoLlama3VideoProcessingTester:
+class MiniMaxM3VLVideoProcessingTester:
     def __init__(
         self,
         parent,
@@ -48,20 +47,17 @@ class VideoLlama3VideoProcessingTester:
         max_resolution=80,
         do_resize=True,
         size=None,
-        do_center_crop=True,
-        crop_size=None,
         do_normalize=True,
-        image_mean=IMAGENET_STANDARD_MEAN,
-        image_std=IMAGENET_STANDARD_STD,
+        image_mean=OPENAI_CLIP_MEAN,
+        image_std=OPENAI_CLIP_STD,
         do_convert_rgb=True,
         temporal_patch_size=2,
         patch_size=14,
         min_pixels=20 * 20,
-        max_pixels=100 * 100 * 8,
+        max_pixels=100 * 100,
         merge_size=2,
     ):
-        size = size if size is not None else {"shortest_edge": 400, "longest_edge": 80000}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+        size = size if size is not None else {"height": 672, "width": 672}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -70,8 +66,6 @@ class VideoLlama3VideoProcessingTester:
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -85,8 +79,6 @@ class VideoLlama3VideoProcessingTester:
     def prepare_video_processor_dict(self):
         return {
             "do_resize": self.do_resize,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -134,12 +126,12 @@ class VideoLlama3VideoProcessingTester:
 
 @require_torch
 @require_vision
-class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    fast_video_processing_class = VideoLlama3VideoProcessor if is_torchvision_available() else None
+class MiniMaxM3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = MiniMaxM3VLVideoProcessor if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.video_processor_tester = VideoLlama3VideoProcessingTester(self)
+        self.video_processor_tester = MiniMaxM3VLVideoProcessingTester(self)
 
     @property
     def video_processor_dict(self):
@@ -149,8 +141,6 @@ class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         video_processing = self.fast_video_processing_class(**self.video_processor_dict)
         self.assertTrue(hasattr(video_processing, "do_resize"))
         self.assertTrue(hasattr(video_processing, "size"))
-        self.assertTrue(hasattr(video_processing, "do_center_crop"))
-        self.assertTrue(hasattr(video_processing, "center_crop"))
         self.assertTrue(hasattr(video_processing, "do_normalize"))
         self.assertTrue(hasattr(video_processing, "image_mean"))
         self.assertTrue(hasattr(video_processing, "image_std"))
@@ -158,22 +148,12 @@ class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
 
     def test_video_processor_from_dict_with_kwargs(self):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
-        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 80000})
-        self.assertEqual(video_processor.crop_size, {"height": 18, "width": 18})
+        self.assertEqual(video_processor.size, {"height": 672, "width": 672})
 
         video_processor = self.fast_video_processing_class.from_dict(
-            self.video_processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
+            self.video_processor_dict, size={"height": 42, "width": 42}
         )
-        # min_pixels and max_pixels take precedence over size, like in the image processor.
-        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 80000})
-
-        processor_dict = self.video_processor_dict.copy()
-        processor_dict.pop("min_pixels")
-        processor_dict.pop("max_pixels")
-        video_processor = self.fast_video_processing_class.from_dict(
-            processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
-        )
-        self.assertEqual(video_processor.size, {"shortest_edge": 100, "longest_edge": 200})
+        self.assertEqual(video_processor.size, {"height": 42, "width": 42})
 
     def test_get_num_patches_without_videos(self):
         video_processing = self.fast_video_processing_class(**self.video_processor_dict)
@@ -181,36 +161,20 @@ class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         self.assertEqual(num_patches, 144)
 
         num_patches = video_processing.get_num_of_video_patches(num_frames=7, height=200, width=50, videos_kwargs={})
-        self.assertEqual(num_patches, 224)
+        self.assertEqual(num_patches, 112)
 
-        size = {"shortest_edge": 12544, "longest_edge": 47040000}
-        num_patches = video_processing.get_num_of_video_patches(
-            num_frames=8, height=480, width=640, videos_kwargs={"size": size}
-        )
-        self.assertEqual(num_patches, 6256)
-
-        num_patches = video_processing.get_num_of_video_patches(num_frames=8, height=480, width=640, videos_kwargs={})
-        self.assertEqual(num_patches, 192)
         num_patches = video_processing.get_num_of_video_patches(
             num_frames=8, height=480, width=640, videos_kwargs={"min_pixels": 400, "max_pixels": 5000}
         )
-        self.assertEqual(num_patches, 16)
+        self.assertEqual(num_patches, 64)
         num_patches = video_processing.get_num_of_video_patches(
-            num_frames=8, height=480, width=640, videos_kwargs={"max_pixels": 900}
+            num_frames=8, height=480, width=640, videos_kwargs={"max_pixels": 5000}
         )
-        self.assertEqual(num_patches, 192)
+        self.assertEqual(num_patches, 64)
         num_patches = video_processing.get_num_of_video_patches(
             num_frames=8, height=480, width=640, videos_kwargs={"min_pixels": 1000000, "max_pixels": 47040000}
         )
         self.assertEqual(num_patches, 20832)
-
-    def test_video_processor_to_json_string(self):
-        for video_processing_class in self.video_processor_list:
-            video_processor = video_processing_class(**self.video_processor_dict)
-            obj = json.loads(video_processor.to_json_string())
-            for key, value in self.video_processor_dict.items():
-                if key not in ["min_pixels", "max_pixels"]:
-                    self.assertEqual(obj[key], value)
 
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
@@ -299,99 +263,49 @@ class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             encoded_videos = video_processing(video_inputs_nested, return_tensors="pt")[self.input_name]
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
-    @unittest.skip("Skip for now, the test needs adjustment fo Qwen2VL")
+    @unittest.skip("Skip for now, the test needs adjustment for MiniMaxM3VL")
     def test_call_numpy_4_channels(self):
+        pass
+
+    def test_num_frames_equal_temporal_patch_size_plus_two(self):
         for video_processing_class in self.video_processor_list:
-            # Test that can process videos which have an arbitrary number of channels
-            # Initialize video_processing
-            video_processor = video_processing_class(**self.video_processor_dict)
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processor_dict["do_sample_frames"] = False
+            temporal_patch_size = 3
+            video_processor_dict["temporal_patch_size"] = temporal_patch_size
+            video_processing = video_processing_class(**video_processor_dict)
 
-            # create random numpy tensors
-            self.video_processor_tester.num_channels = 4
-            video_inputs = self.video_processor_tester.prepare_video_inputs(
-                equal_resolution=False, return_tensors="np"
-            )
+            n, w, h = 5, 28, 28
+            video_inputs = [(np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)) for _ in range(n)]
 
-            # Test not batched input
-            encoded_videos = video_processor(
-                video_inputs[0],
-                return_tensors="pt",
-                input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
+            video_processed = video_processing(video_inputs, return_tensors="pt")
+            encoded_videos = video_processed[self.input_name]
+            self.assertEqual(list(encoded_videos.shape), [8, temporal_patch_size * 3 * 14 * 14])
 
-            # Test batched
-            encoded_videos = video_processor(
-                video_inputs,
-                return_tensors="pt",
-                input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
+            video_grid_thw = video_processed["video_grid_thw"]
+            self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])
 
     def test_call_sample_frames(self):
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**self.video_processor_dict)
 
-            prev_num_frames = self.video_processor_tester.num_frames
-            self.video_processor_tester.num_frames = 8
             video_inputs = self.video_processor_tester.prepare_video_inputs(
-                equal_resolution=False,
+                equal_resolution=True,
                 return_tensors="torch",
             )
 
             # Force set sampling to False. No sampling is expected even when `num_frames` exists
             video_processing.do_sample_frames = False
 
-            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
-            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            expected_output_video_shape_batched = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertListEqual(list(encoded_videos.shape), expected_output_video_shape)
-            self.assertListEqual(list(encoded_videos_batched.shape), expected_output_video_shape_batched)
+            video_processed = video_processing(video_inputs[0], return_tensors="pt", num_frames=4)
+            self.assertEqual(video_processed["video_grid_thw"].tolist(), [[4, 6, 6]])
 
-            # Set sampling to True. Video frames should be sampled with `num_frames` in the output
+            # Sample with `fps` requires metadata to infer number of frames from total duration
             video_processing.do_sample_frames = True
-
-            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=4)[self.input_name]
-            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=4)[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
-                [video_inputs[0]], num_frames=4
-            )
-            expected_output_video_shape_batched = self.video_processor_tester.expected_output_video_shape(
-                video_inputs, num_frames=4
-            )
-            self.assertListEqual(list(encoded_videos.shape), expected_output_video_shape)
-            self.assertListEqual(list(encoded_videos_batched.shape), expected_output_video_shape_batched)
-
             metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
-            batched_metadata = metadata * len(video_inputs)
-            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
-                self.input_name
-            ]
-            encoded_videos_batched = video_processing(
-                video_inputs, return_tensors="pt", fps=3, video_metadata=batched_metadata
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
-                [video_inputs[0]], num_frames=6
-            )
-            expected_output_video_shape_batched = self.video_processor_tester.expected_output_video_shape(
-                video_inputs, num_frames=6
-            )
-            self.assertListEqual(list(encoded_videos.shape), expected_output_video_shape)
-            self.assertListEqual(list(encoded_videos_batched.shape), expected_output_video_shape_batched)
 
-            # We should raise error when asked to sample more frames than there are in input video
-            with self.assertRaises(ValueError):
-                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=10)[self.input_name]
-                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=10)[
-                    self.input_name
-                ]
+            video_processed = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)
+            self.assertEqual(video_processed["video_grid_thw"].tolist(), [[3, 6, 6]])
 
-            # Assign back the actual num frames in tester
-            self.video_processor_tester.num_frames = prev_num_frames
+            video_processed = video_processing(video_inputs[0], return_tensors="pt", fps=2, video_metadata=metadata)
+            self.assertEqual(video_processed["video_grid_thw"].tolist(), [[2, 6, 6]])

@@ -466,13 +466,13 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         size = videos_kwargs.get("size", self.size)
         patch_size = videos_kwargs.get("patch_size", self.patch_size)
         merge_size = videos_kwargs.get("merge_size", self.merge_size)
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
             height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        grid_t = num_frames + -num_frames % temporal_patch_size
+        # `_prepare_input_videos` copies the last frame if uneven, ignoring any kwarg
+        grid_t = num_frames + -num_frames % self.temporal_patch_size
         return grid_t * grid_h * grid_w
 
     def _preprocess(
