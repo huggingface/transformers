@@ -110,6 +110,10 @@ class PagedAttentionCache:
 
     Physically, the cache is stored on a single flat tensor, whose first two sectors are never-allocated trash
     sectors used by padding tokens (see FullAttentionCacheAllocator.register_cache_tensor).
+
+    The way this cache breaks down global cache into sectors was inspired by the mechanism described in this vLLM's PR
+    (https://github.com/vllm-project/vllm/issues/11382) and the Jenga paper (https://arxiv.org/html/2503.18292v1#S5),
+    so we would like to thank the vLLM team and the Jenga authors for their work.
     """
 
     def __init__(
