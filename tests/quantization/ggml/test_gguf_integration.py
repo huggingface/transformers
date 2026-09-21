@@ -284,6 +284,38 @@ class GgufIntegrationTest(unittest.TestCase):
 
         self.assertEqual(self.packed_modules(model), [], "blocks were kept with nothing able to read them")
         self.assertIn("Berlin", self.generates(model))
+        # Nothing is packed, so ggml's attention is not assumed either.
+        self.assertNotEqual(model.config._attn_implementation, "transformers-community/ggml-attn")
+
+    @require_torch_mps
+    @require_kernels
+    def test_defaults_to_ggml_attention(self):
+        """Packed weights already run on ggml's kernels, so its attention is the default too."""
+        model = self.load()
+
+        self.assertEqual(model.config._attn_implementation, "transformers-community/ggml-attn")
+        self.assertIn("Berlin", self.generates(model))
+
+    @require_torch_mps
+    @require_kernels
+    def test_explicit_attention_is_kept(self):
+        """Asking for an attention implementation overrides the default."""
+        model = self.load(attn_implementation="sdpa")
+
+        self.assertEqual(model.config._attn_implementation, "sdpa")
+
+    @require_torch_mps
+    @require_kernels
+    def test_falls_back_when_the_attention_kernel_cannot_be_fetched(self):
+        """An unreachable kernel is a warning and the usual default, not a failed load."""
+        with unittest.mock.patch(
+            "transformers.modeling_utils.lazy_import_flash_attention", side_effect=OSError("offline")
+        ):
+            model = self.load()
+
+        self.assertEqual(model.config._attn_implementation, "sdpa")
+        self.assertTrue(self.packed_modules(model), "the fallback must not unpack the weights")
+        self.assertIn("Berlin", self.generates(model))
 
     def test_load_accounts_for_every_key(self):
         """Nothing missing, nothing unexpected -- on the one file here that carries an MTP block."""
