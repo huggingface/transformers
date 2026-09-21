@@ -1278,6 +1278,8 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
                 " dictionary. Currently, only the Gemma4AssistantForCausalLM and Gemma4UnifiedAssistantForCausalLM support this."
             )
 
+        # Prepare the assistant and the embedding
+        self.assistant_model = assistant_model
         self.target_model_input_embeddings = target_model_input_embeddings
 
         self.assistant_generation_config = copy.deepcopy(assistant_model.generation_config)
