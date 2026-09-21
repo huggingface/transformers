@@ -313,6 +313,25 @@ class TokenizerUtilsTest(unittest.TestCase):
             self.assertIn("benign_repo_token", vocab)
             self.assertNotIn("secret_leaked_token", vocab)
 
+    def test_null_tokenizer_file_in_config_ignores_tokenizer_json(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48967: a repo can ship a stale
+        # `tokenizer.json` next to `vocab.txt` and set `"tokenizer_file": null` in `tokenizer_config.json`, which
+        # means "build the tokenizer from `vocab.txt`" and must not load `tokenizer.json`.
+        special_tokens = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]
+        with tempfile.TemporaryDirectory() as repo:
+            with open(os.path.join(repo, "vocab.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(special_tokens + ["hello", "world"]))
+            stale_tokenizer = Tokenizer(
+                WordPiece({token: i for i, token in enumerate(special_tokens)}, unk_token="[UNK]")
+            )
+            stale_tokenizer.save(os.path.join(repo, "tokenizer.json"))
+            with open(os.path.join(repo, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                json.dump({"tokenizer_class": "BertTokenizer", "tokenizer_file": None}, f)
+
+            tokenizer = AutoTokenizer.from_pretrained(repo)
+            self.assertIn("hello", tokenizer.get_vocab())
+            self.assertEqual(tokenizer("hello world")["input_ids"], [2, 5, 6, 3])
+
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):

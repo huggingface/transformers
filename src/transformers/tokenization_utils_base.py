@@ -1836,6 +1836,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # repo-resolved path take precedence; only an explicit caller-provided path (in `kwargs`)
             # is allowed to override it.
             if args_name not in kwargs or kwargs[args_name] is None:
+                # An explicit `"tokenizer_file": null` in the config means "do not use tokenizer.json" (v4 behavior).
+                # `None` is not a path so it is safe to honor, as long as another vocab file can build the tokenizer.
+                if (
+                    args_name == "tokenizer_file"
+                    and args_name in init_kwargs
+                    and init_kwargs[args_name] is None
+                    and any(v is not None for k, v in resolved_vocab_files.items() if k != "tokenizer_file")
+                ):
+                    continue
                 init_kwargs[args_name] = file_path
         tokenizer_file = resolved_vocab_files.get("tokenizer_file", None)
 
