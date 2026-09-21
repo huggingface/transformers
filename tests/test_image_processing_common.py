@@ -353,13 +353,15 @@ class ImageProcessingTestMixin:
 
         self.image_processing_tester = self.image_processing_tester_class(parent=self)
 
-    @property
-    def image_processor_tester(self):
-        return self.image_processing_tester
-
+    # For BC with old tests, prefer self.image_processor_classes instead
     @property
     def image_processing_classes(self):
         return self.image_processor_classes
+
+    # For BC with old tests, prefer self.image_processing_tester instead
+    @property
+    def image_processor_tester(self):
+        return self.image_processing_tester
 
     @property
     def image_processor_classes(self):
