@@ -28,9 +28,9 @@ import warnings
 from pathlib import Path
 from unittest.mock import patch
 
-import httpx
 import pytest
 from huggingface_hub import HfApi, snapshot_download, split_torch_state_dict_into_shards
+from huggingface_hub.utils import httpx
 from parameterized import parameterized
 from pytest import mark
 
@@ -2504,6 +2504,49 @@ class ModelUtilsTest(TestCasePlus):
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
 
+    def test_last_hidden_state_can_be_untied_from_config(self):
+        """Test that `config.tie_last_hidden_states` overrides the default of the `capture_outputs` decorator, so that
+        `hidden_states[-1]` stays the hidden state before the final norm (which embedding models dropping that norm
+        rely on). As for the test above, testing it on Llama is enough as the entry point is the general
+        `capture_outputs` decorator, so this cannot easily be made a common model test."""
+        from transformers import LlamaConfig, LlamaModel
+
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
+            hidden_size=32,
+            intermediate_size=64,
+            vocab_size=100,
+        )
+        model = LlamaModel(config).to(torch_device).eval()
+        input_ids = torch.randint(5, 95, (2, 17), device=torch_device)
+
+        # By default, the output of the last decoder layer is overwritten with the post-norm `last_hidden_state`
+        with torch.no_grad():
+            tied = model(input_ids, output_hidden_states=True)
+        torch.testing.assert_close(tied.hidden_states[-1], tied.last_hidden_state)
+
+        model.config.tie_last_hidden_states = False
+        with torch.no_grad():
+            untied = model(input_ids, output_hidden_states=True)
+
+        # Neither `last_hidden_state` nor the earlier hidden states are affected
+        torch.testing.assert_close(untied.last_hidden_state, tied.last_hidden_state)
+        for untied_hidden_state, tied_hidden_state in zip(untied.hidden_states[:-1], tied.hidden_states[:-1]):
+            torch.testing.assert_close(untied_hidden_state, tied_hidden_state)
+
+        # But `hidden_states[-1]` is now the input of the final norm instead of its output
+        torch.testing.assert_close(model.norm(untied.hidden_states[-1]), tied.hidden_states[-1])
+
+        # `None` means unset, i.e. fall back to the decorator default, as a config saved with an explicit
+        # `"tie_last_hidden_states": null` must not silently untie the model
+        model.config.tie_last_hidden_states = None
+        with torch.no_grad():
+            unset = model(input_ids, output_hidden_states=True)
+        torch.testing.assert_close(unset.hidden_states[-1], unset.last_hidden_state)
+
     def test_linear_attention_models_can_use_accelerate_hooks(self):
         """
         Test that linear attention models (here only tested on lfm2 as it has small checkpoints) can use device_map and
@@ -2569,6 +2612,28 @@ class ModelUtilsTest(TestCasePlus):
 
         # Raises `TypeError: ... different number of arguments` if the decorator hides the signature
         _validate_layer(check_cls=Qwen3_5GatedDeltaNet, cls=KernelGatedDeltaNet, repo="dummy-repo")
+
+    def test_accelerator_warmup_skipped_when_mem_get_info_unavailable(self):
+        """
+        Some backends cannot answer free-memory queries (e.g. Intel XPU under WSL2, where the Level Zero Sysman
+        interface is not exposed, so `torch.xpu.mem_get_info` raises). Warmup is a best-effort optimization and must
+        not turn such a failure into a model loading failure.
+        """
+        from transformers.modeling_utils import caching_allocator_warmup
+
+        model = LlamaForCausalLM(
+            LlamaConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37)
+        )
+        # Pretend everything is loaded on an accelerator; the warmup must bail out before touching the device
+        expanded_device_map = {name: "cuda:0" for name, _ in model.named_parameters()}
+
+        # The warning is emitted through `warning_once`, which is cached globally
+        logging.warning_once.cache_clear()
+        with patch("torch.cuda.mem_get_info", side_effect=RuntimeError("The device doesn't get_mem_info.")):
+            with CaptureLogger(logging.get_logger("transformers.modeling_utils")) as cl:
+                caching_allocator_warmup(model, expanded_device_map, None)
+
+        self.assertIn("Skipping caching allocator warmup", cl.out)
 
 
 @slow
