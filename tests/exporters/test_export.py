@@ -276,7 +276,19 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
     },
     # The runtime drives these, but not from a *merged* decode — every other variant is served.
-    "generate.runtime.multi_token": {},
+    "generate.runtime.multi_token": {
+        "ClvpForCausalLM": (
+            "Its merged decode graph carries a deferred assert the prompt cannot satisfy. Captured on "
+            "continuation steps only (cache 3, query 2, mask 5), the export derives "
+            "`attention_mask.size()[1] >= 4`; the prompt step is 3 wide, so driving the prompt through that "
+            "same graph trips it. Measured: nothing records it statically — `range_constraints` is empty and "
+            "it is a graph assert — so it is discoverable only by running the exported graph. The export "
+            "itself is fine, and so is the model with a separate prefill graph; it is one-graph mode it "
+            "cannot do. TODO: verify after export that the decode graph serves the prompt and keep the "
+            "prefill when it does not, rather than deciding from the model's shape alone "
+            "(`_needs_prefill_graph`)."
+        ),
+    },
     "generate.multi_token": {
         "ZayaForCausalLM": (
             "Its merged decode graph specializes the query axis instead of keeping it symbolic, which is the "
@@ -399,6 +411,19 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
     # `Same ... as` chain for the full description.
     "executorch": {
+        "Qwen3ASRForConditionalGeneration": (
+            "Its `.pte` loads until ExecuTorch fails to allocate a tensor: `getTensorDataPtr() failed: 0x21` "
+            "(`MemoryAllocationFailed`), surfaced as `execute() 0x12`. Not our sizing — the tensor is "
+            "`[64, 128, 32]` and the largest planned one in that program is ~2M elements — and not "
+            "adjustable from here: the Python runtime's `load_method` takes no allocator. The export itself "
+            "is fine (it stopped failing once `dim_order_from_stride` could order a data-dependent stride)."
+        ),
+        "Siglip2VisionModel": (
+            "`aten::_upsample_bilinear2d_aa.out` refuses its own output at run time: "
+            "`Check failed (out.size(2) == output_size[0])`. The portable kernel checks the extent it was "
+            "handed against the one it computes, and the two disagree once the axis is dynamic."
+        ),
+        "Siglip2ForImageClassification": "Same `_upsample_bilinear2d_aa` output-extent check as `Siglip2VisionModel`.",
         "JetMoeModel": (
             "MoE and mixture-of-attention route tokens with a data-dependent `inputs.split(expert_size)`, "
             "whose sizes come from the gate's `expert_size.tolist()` — unbacked scalars. What rejects them "
@@ -454,6 +479,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     "executorch.generate": {},
     "executorch.dynamic": {
+        "MaskFormerForInstanceSegmentation": (
+            "Lowering does not finish: >1000s inside sympy / `symbolic_shapes`, measured on an idle machine "
+            "(so not sweep contention). The time is symbolic-shape reasoning over the graph's dynamic axes, "
+            "not compute."
+        ),
+        "Qwen3_5ForCausalLM": "Same >1000s symbolic-shape lowering as `MaskFormerForInstanceSegmentation`.",
+        "Qwen3NextForCausalLM": "Same >1000s symbolic-shape lowering as `MaskFormerForInstanceSegmentation`.",
         # Timeouts, not lowering defects: windowed-attention vision stacks re-partition every window on a
         # symbolic H/W, and the lowering alone outruns the test budget. Measured in the ExecuTorch sweep of
         # 2026-08-25 (maskformer at the 1000s mark); the rest of the Swin family, `efficientnet` and
@@ -512,6 +544,19 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "TimesformerForVideoClassification": "Same `timeout` failure as `Mask2FormerModel`.",
     },
     "executorch.static": {
+        "SplinterForPreTraining": (
+            "`aten::nonzero.out` cannot size its output under a static-shape export: the extent is "
+            "data-dependent, so `resize_tensor` refuses it (`op_nonzero.cpp`). The dynamic variant passes."
+        ),
+        "MusicFlamingoForConditionalGeneration": (
+            "Same data-dependent `aten::nonzero.out` resize as `SplinterForPreTraining`; its audio encoder "
+            "additionally hits XNNPACK declining to propagate shapes (`xnn_status_invalid_parameter`)."
+        ),
+        "MusicFlamingoModel": "Same data-dependent `aten::nonzero.out` resize as `MusicFlamingoForConditionalGeneration`.",
+        "PaddleOCRVLForConditionalGeneration": (
+            "Its image encoder's `aten::view_copy.out` fails `check_view_copy_args` at run time — the view's "
+            "target extent is not the one the planned output carries once the axis is static."
+        ),
         "Wav2Vec2BertModel": (
             "Its conv feature extractor reshapes on the stacked floor-divisions its own stride chain "
             "produces (`((((s//4)+1)//2)+1)//2 …`), which ExecuTorch's lowering cannot satisfy: "
@@ -763,7 +808,7 @@ def disable_hub_kernels(test_fn):
 def _clean_inputs_for_export(inputs_dict, config):
     """Strip None values and export-incompatible keys from an inputs dict. Mutates config in-place."""
     inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
-    for key in ("labels", "future_values", "return_loss"):
+    for key in ("labels", "future_values", "return_loss", "target_values"):
         inputs_dict.pop(key, None)
     config.return_loss = False
     return inputs_dict
@@ -932,7 +977,10 @@ def _is_executorch_runtime_limit(exc):
     if load and f"0x{load.group(1)}" in _ET_LOAD_LIMIT_CODES:
         return True
     execute = re.search(r"execute\(\) failed with error 0x([0-9a-fA-F]+)", msg)
-    return bool(execute and f"0x{execute.group(1)}" in _ET_EXECUTE_LIMIT_CODES)
+    if not execute:
+        return False
+    code = f"0x{execute.group(1)}"
+    return code in _ET_EXECUTE_LIMIT_CODES
 
 
 def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:

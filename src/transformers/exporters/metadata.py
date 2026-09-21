@@ -255,6 +255,26 @@ class ExportMetadata:
         return _path_to_class(path) if path else None
 
     @property
+    def mask_rank(self) -> int | None:
+        """The rank the graph's `attention_mask` was traced with, `None` when it takes none.
+
+        `generate` upgrades a 2-D padding mask to the 4-D causal mask for any compileable cache, assuming
+        the model's forward wants one — but an exported graph starts *after* whatever mask building its
+        model does, so only the trace can say which it took. An alibi model (bloom) reads the 2-D padding
+        mask directly and compares its width to the cache length, so a 4-D mask fails a guard rather than
+        mismatching a shape. Recorded in kwarg space, not read off an artifact's declared shapes — those
+        are a different fact and gave this a different answer per backend."""
+        return self.kwargs.get("attention_mask", {}).get("rank")
+
+    @property
+    def mask_dtype(self) -> torch.dtype | None:
+        """The dtype the graph's `attention_mask` was traced with, `None` when it takes none. A model reads
+        a bool mask and a float one differently (a keep-mask vs an additive bias), so a mask the runtime
+        builds is built as the one the graph took."""
+        name = self.kwargs.get("attention_mask", {}).get("dtype")
+        return getattr(torch, name, None) if name else None
+
+    @property
     def mask_ranks(self) -> dict[str, int | None] | None:
         """`{attention type: rank}` when the graph was traced with a *dict* of masks, else `None`.
 

@@ -356,12 +356,14 @@ def runner_feed(runner, kwargs: dict, *, warn_unused: bool = False) -> dict:
     with, and a caller should be free to pass a processor's whole output. `warn_unused` says so out loud,
     which only the single-graph case wants (the loop drops `generate`'s bookkeeping every step).
     """
-    declared = set(runner.input_names)
-    if not declared:
+    if not runner.input_names:
         return dict(kwargs)
-    if warn_unused and (unused := [name for name in kwargs if name not in declared]):
-        logger.warning_once(f"Ignoring {unused}, which this graph was not traced with (it takes {sorted(declared)}).")
-    return {name: value for name, value in kwargs.items() if name in declared}
+    feed = {name: value for name, value in kwargs.items() if runner.declares(name, value)}
+    if warn_unused and (unused := [name for name in kwargs if name not in feed]):
+        logger.warning_once(
+            f"Ignoring {unused}, which this graph was not traced with (it takes {sorted(runner.input_names)})."
+        )
+    return feed
 
 
 # ── Recursive structure traversal ──────────────────────────────────────────
@@ -1096,6 +1098,61 @@ if is_torch_available():
                 features = {f"image_features.{llm}": project(layer, proj) for llm, layer, proj in specs}
             features["image_newline"] = self.model.image_newline
             return features
+
+    class CrossAttentionEncoder(_ModelComponent):
+        """The encoder, plus the cross-attention keys and values its output determines.
+
+        An encoder-decoder's decoder fills its cross cache on the *first* step and reads it on every later
+        one, so a decode graph traced after that step holds the read and not the projections that filled it.
+        That used to cost a second graph over the whole decoder — every decoder parameter shipped twice — to
+        have something that writes them. They are a function of the encoder's output, so they belong to the
+        graph that produces it: `forward` returns `last_hidden_state` alongside `cross_keys_<layer>` /
+        `cross_values_<layer>`, and the runtime seeds the cross cache with those before the first step.
+
+        The writers are whichever modules were seen filling that cache (`capture_cross_writers`), replayed
+        here with the arguments they were called with, so nothing names a projection or an attention class.
+        The replayed query is one zero token of the width that call used: the attention it computes is
+        discarded, only the keys and values it caches are wanted, and one token is the cheapest way to ask a
+        module for them through its own code path.
+        """
+
+        def __init__(self, encoder, writers: dict):
+            super().__init__(encoder)
+            self.writers = torch.nn.ModuleList(writer.module for _index, writer in sorted(writers.items()))
+            self._calls = [writer for _index, writer in sorted(writers.items())]
+
+        def forward(self, **encoder_inputs):
+            from ..cache_utils import DynamicCache, EncoderDecoderCache
+
+            encoded = self.model(**encoder_inputs)
+            states = encoded.last_hidden_state if hasattr(encoded, "last_hidden_state") else encoded[0]
+            cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            for writer in self._calls:
+                args, kwargs = list(writer.args), dict(writer.kwargs)
+                for slot, value in (
+                    (writer.states_at, states),
+                    (writer.cache_at, cache),
+                    # Live batch, captured width: the keys and values follow the encoder's batch, and a query
+                    # left at the captured one would not broadcast against them.
+                    (
+                        writer.query_at,
+                        None if writer.width is None else states.new_zeros(states.shape[0], 1, writer.width),
+                    ),
+                ):
+                    if slot is None or value is None:
+                        continue
+                    if slot[0] == "arg":
+                        args[slot[1]] = value
+                    else:
+                        kwargs[slot[1]] = value
+                writer.module(*args, **kwargs)
+            # Everything the encoder itself returned, not just the hidden states: parakeet attaches the
+            # frame mask its decoder reads, and dropping it would change the output the decode graph takes.
+            outputs = dict(get_leaf_tensors(encoded))
+            for index, layer in enumerate(cache.cross_attention_cache.layers):
+                outputs[f"cross_keys_{index}"] = layer.keys
+                outputs[f"cross_values_{index}"] = layer.values
+            return outputs
 
     class TokenEmbedder(_ModelComponent):
         """`input_ids -> inputs_embeds`, zeroing the placeholder ids (out of the text vocab) first, the way

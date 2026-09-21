@@ -39,6 +39,7 @@ edge deployment. The export pipeline runs:
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import math
 import operator
@@ -181,6 +182,47 @@ class ExecutorchExporter(DynamoExporter):
             artifact.write_to_file(file)
 
 
+@register_patch("executorch", "executorch.exir.program._program.serialize_for_executorch")
+def _patch_serialize_for_executorch(original):
+    """Settle the size-1 dim orders on the way into the binary.
+
+    `ExecutorchProgramManager` serializes in its constructor, so there is no moment afterwards at which the
+    program can still be edited — the bytes already exist. This is that moment.
+    """
+
+    def serialize_for_executorch(emitter_output, *args, **kwargs):
+        canonicalize_size_one_dim_orders(getattr(emitter_output, "program", None))
+        return original(emitter_output, *args, **kwargs)
+
+    return serialize_for_executorch
+
+
+def canonicalize_size_one_dim_orders(executorch_program) -> None:
+    """Order a tensor's size-1 axes the way every other tensor orders them.
+
+    A dim order is the axes sorted by stride, and a size-1 axis has no extent to sort by — it shares its
+    neighbour's stride, so whichever side of the tie it lands on is arbitrary. ExecuTorch's portable kernels
+    do not treat it as arbitrary: they require every operand of an op to carry the *same* dim order, and
+    refuse the call otherwise (`tensors_have_same_dim_order`, `0x12`) — which splinter hits on `aten::repeat`
+    with `[64, 64, 1]` ordered `[0, 2, 1]` against `[64, 64, 32]` ordered `[0, 1, 2]`.
+
+    So where the ambiguity is the only difference, it is settled one way: a tensor whose axes are in
+    canonical order once the size-1 ones are ignored gets the canonical order outright. A tensor that is
+    really laid out differently (channels-last, a transpose of two axes that both have extent) keeps what it
+    has — its order describes something.
+    """
+    for plan in getattr(executorch_program, "execution_plan", []):
+        for value in getattr(plan, "values", []):
+            tensor = getattr(value, "val", None)
+            sizes = getattr(tensor, "sizes", None)
+            dim_order = getattr(tensor, "dim_order", None)
+            if not sizes or not dim_order or 1 not in list(sizes):
+                continue
+            with_extent = [axis for axis in dim_order if sizes[axis] != 1]
+            if with_extent == sorted(with_extent):
+                tensor.dim_order = type(dim_order)(range(len(sizes)))
+
+
 @contextlib.contextmanager
 def keep_backed_symbols_symbolic(exported_program: ExportedProgram):
     """Selective: keep *backed* symbols symbolic through the lowering, let everything else proceed.
@@ -234,6 +276,8 @@ def _uses_channels_last(exported_program: ExportedProgram) -> bool:
     pattern, dozens per audio tower) is also a non-standard dim order, and keeping the dim-order ops for
     those graphs was measured to fix nothing while re-freezing the symbolic-size buffers the plain schemas
     keep dynamic (musicflamingo/qwen3_asr stayed red, deepseek_v3's merged decode broke)."""
+    from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode
+
     for node in exported_program.graph_module.graph.nodes:
         val = node.meta.get("val")
         tensors = val if isinstance(val, (tuple, list)) else [val]
@@ -241,8 +285,14 @@ def _uses_channels_last(exported_program: ExportedProgram) -> bool:
             if not isinstance(tensor, torch.Tensor) or tensor.dim() not in (4, 5):
                 continue
             layout = torch.channels_last if tensor.dim() == 4 else torch.channels_last_3d
-            if tensor.is_contiguous(memory_format=layout) and not tensor.is_contiguous():
-                return True
+            try:
+                if tensor.is_contiguous(memory_format=layout) and not tensor.is_contiguous():
+                    return True
+            except GuardOnDataDependentSymNode:
+                # Contiguity is a question about strides, and a tensor whose size is data-dependent cannot
+                # answer it — `is_contiguous` raises rather than returning. Count it as not channels-last,
+                # which is this function's default answer and the one that keeps the plain ATen schemas.
+                continue
     return False
 
 
@@ -419,6 +469,79 @@ def _has_unbacked_sizes(split_size_or_sections) -> bool:
         isinstance(size, torch.SymInt) and bool(free_unbacked_symbols(size.node.expr))
         for size in split_size_or_sections
     )
+
+
+@register_patch(
+    "executorch",
+    "executorch.exir.tensor.dim_order_from_stride",
+    "executorch.exir.tensor_layout.dim_order_from_stride",
+    "executorch.exir.emit._emitter.dim_order_from_stride",
+    "executorch.exir.passes.replace_view_copy_with_view_pass.dim_order_from_stride",
+)
+def _patch_dim_order_from_stride(original):
+    """Order a tensor's dims when one of its strides carries a data-dependent size.
+
+    ExecuTorch reads dim order by sorting strides, and its comparator already answers what it can without a
+    hint (`guard_or_false`), falling back to a plain `<` — which on `64*u21 < 64` has nothing to decide with
+    and raises `GuardOnDataDependentSymNode` from inside the lowering, after a graph exported cleanly.
+
+    The fallback is sorted *size-obliviously* instead. That is sound for this question: the symbol is
+    size-like, so it is at least one, so a stride of `64*u21` is at least the `64` it multiplies — and the
+    answer being sought is only which axis sits outermost, never the extent itself. Registered against
+    every call site, because three of the four imported the name rather than the module.
+    """
+    from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode, guard_or_false
+
+    def compare(left, right) -> int:
+        if guard_or_false(left == right):
+            return 0
+        if guard_or_false(left < right):
+            return -1
+        if guard_or_false(right < left):
+            return 1
+        return _compare_assuming_nonempty(left, right)
+
+    def dim_order_from_stride(stride):
+        try:
+            return original(stride)
+        except GuardOnDataDependentSymNode:
+            order = sorted(range(len(stride)), key=functools.cmp_to_key(lambda a, b: compare(stride[a], stride[b])))
+            return tuple(reversed(order))
+
+    return dim_order_from_stride
+
+
+def _compare_assuming_nonempty(left, right) -> int:
+    """`left` against `right` (-1, 0, 1) with every data-dependent size in it taken to be 2.
+
+    What `guard_size_oblivious` used to answer, written out because it is deprecated in favour of explicit
+    unbacked handling. Two is the size-oblivious convention: the symbol is a size, and the cases that make
+    an ordering question unanswerable are the degenerate 0 and 1. Substituting rather than guarding also
+    keeps the lowering's shape environment untouched, which is the point of `keep_backed_symbols_symbolic`.
+    """
+
+    def concrete(side):
+        node = getattr(side, "node", None)
+        if node is None:
+            return int(side)
+        expression = node.expr
+        # A stride mixes both kinds of symbol: a backed one stands for a real traced size and has a hint to
+        # put in its place, an unbacked one has none and takes the 2. Leaving either symbolic would make the
+        # comparison unanswerable again, and an unanswerable comparison is what puts two operands of one op
+        # in different dim orders — which ExecuTorch's kernels reject at run time (`0x12`).
+        shape_env = getattr(node, "shape_env", None)
+        hints = getattr(shape_env, "backed_var_to_val", None) or getattr(shape_env, "var_to_val", None) or {}
+        return int(expression.xreplace({symbol: hints.get(symbol, 2) for symbol in expression.free_symbols}))
+
+    try:
+        left_value, right_value = concrete(left), concrete(right)
+    except (TypeError, ValueError):
+        # Still not a number: treat the two as indistinguishable, which keeps the order they came in.
+        return 0
+    # Equal reads as equal, so the sort leaves them in place. Forcing an order on strides that are really
+    # the same (a size-1 axis has its neighbour's stride) is what puts two tensors of one op in different
+    # dim orders, and ExecuTorch's kernels reject that at run time.
+    return (left_value > right_value) - (left_value < right_value)
 
 
 @register_patch("executorch", "torch.split", "torch.Tensor.split")

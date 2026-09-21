@@ -562,6 +562,24 @@ class ModelRunner(ABC):
             if any(name.removeprefix("input.").startswith(kwarg) for name in self.input_names)
         )
 
+    def declares(self, name: str, value=None) -> bool:
+        """Whether this graph takes the feed entry `name` — directly, or as the pytree whose leaves it names.
+
+        A pytree kwarg (`encoder_outputs`, a mask dict, the cache) goes in under its *kwarg* name while each
+        backend names the leaves its own way (`encoder_outputs.last_hidden_state` for ONNX,
+        `encoder_outputs_last_hidden_state` for ExecuTorch, the kwarg itself for dynamo), so the kwarg's own
+        name is not always among `input_names`. Only a non-tensor is flattened, so a plain tensor must be
+        named outright — `input_features` is not declared by a graph that only takes `input_features_mask`.
+
+        The one rule for "does this graph take this", asked here by every caller: a feed built against a
+        weaker rule (an exact name match) silently loses whatever a flattening backend renamed.
+        """
+        if name in self.input_names or name == self.cache_input:
+            return True
+        return not isinstance(value, torch.Tensor) and any(
+            declared.removeprefix("input.").startswith((f"{name}.", f"{name}_")) for declared in self.input_names
+        )
+
     @functools.cached_property
     def cache_input(self) -> str | None:
         """The kwarg this graph takes its *primary* cache under — `"cache_params"` for a recurrent model
@@ -593,13 +611,25 @@ class ModelRunner(ABC):
         )
 
     @staticmethod
-    def resolve_metadata(injected, from_artifact) -> ExportMetadata:
+    def resolve_metadata(injected, read_baked) -> ExportMetadata:
         """The metadata a load passed in, else what the artifact itself carries.
 
-        `from_artifact` is called only when needed: reading it back out of an artifact costs something on
+        `read_baked` is called only when needed: reading it back out of an artifact costs something on
         some backends (ExecuTorch executes a baked constant method to get at it).
         """
-        return ExportMetadata.from_dict(injected) if injected is not None else from_artifact()
+        return ExportMetadata.from_dict(injected) if injected is not None else read_baked()
+
+    @classmethod
+    def from_artifact(cls, artifact, export_metadata=None, **kwargs) -> ModelRunner:
+        """Build the runner from an artifact still in memory — what an export hands back.
+
+        The in-memory counterpart of `from_pretrained`: `ExporterOutput.runtime()` calls this so a model
+        can be driven straight after exporting it, without a save and a reload in between.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} cannot be built from an in-memory artifact. Implement `from_artifact` to run "
+            "an export without saving it first."
+        )
 
     @classmethod
     def from_pretrained(cls, path: str | Path, **kwargs) -> ModelRunner:

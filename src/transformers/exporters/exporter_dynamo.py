@@ -148,7 +148,7 @@ class DynamoExporter(HfExporter):
         # whitelist of meta keys (a loaded program has only `treespec_namedtuple_fields`), where ONNX carries
         # the payload in `metadata_props` and ExecuTorch in a constant method — both inside the file. So
         # `save_artifact` copies it into `extra_files` and `DynamoModelRunner.from_pretrained` puts it back,
-        # which is what keeps `kv_geometry` / `mask_dict_ranks` / `input_shapes` / `cache_input` answerable
+        # which is what keeps `kv_geometry` / `mask_ranks` / `input_shapes` / `cache_input` answerable
         # for a program that has been through disk.
         metadata = build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
         exported_program.graph_module.meta[EXPORT_METADATA_KEY] = metadata

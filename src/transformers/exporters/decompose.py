@@ -34,10 +34,12 @@ from .cache import (
     _cache_kv_geometry,
     check_cache_geometry,
     indexer_layers_of,
+    keeps_write_once_state,
     kv_geometry_of,
     materialize_cache_layers,
 )
 from .utils import (
+    CrossAttentionEncoder,
     ModalityEncoder,
     PatchVisionEncoder,
     TokenEmbedder,
@@ -53,7 +55,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-    from ..cache_utils import DynamicCrossAttentionLayer
+    from ..cache_utils import Cache, DynamicCrossAttentionLayer, EncoderDecoderCache
     from ..modeling_utils import PreTrainedModel
 
 
@@ -99,6 +101,114 @@ def _capture_forward(module: torch.nn.Module):
     """Capture each `module(...)` call's kwargs -- `_capture_calls` on the method every module has."""
     with _capture_calls(module, "forward") as calls:
         yield calls
+
+
+class CrossWriter(NamedTuple):
+    """One module that fills the cross-attention cache, and how to call it again.
+
+    `args` / `kwargs` are the call that filled it, kept verbatim. The three slots say which argument is
+    which, so a replay can swap in live tensors without knowing what this family calls them: `states_at`
+    held the encoder's output, `query_at` the decoder hidden states (`width` wide), `cache_at` the cache.
+    A slot is `("arg", index)` or `("kwarg", name)`.
+    """
+
+    module: Any
+    args: tuple
+    kwargs: dict
+    states_at: tuple
+    query_at: tuple | None
+    width: int | None
+    cache_at: tuple
+
+
+def _slot_of(args: tuple, kwargs: dict, match) -> tuple | None:
+    """Where the first argument satisfying `match` sits, as `("arg", index)` / `("kwarg", name)`."""
+    for index, value in enumerate(args):
+        if match(value):
+            return ("arg", index)
+    for name, value in kwargs.items():
+        if match(value):
+            return ("kwarg", name)
+    return None
+
+
+def _argument(args: tuple, kwargs: dict, slot: tuple):
+    """The argument a `CrossWriter` slot points at."""
+    kind, key = slot
+    return args[key] if kind == "arg" else kwargs[key]
+
+
+@contextlib.contextmanager
+def capture_cross_writers(model: PreTrainedModel):
+    """Capture the modules that fill the cross-attention cache, with the calls that filled it.
+
+    An encoder-decoder computes its cross keys and values on the *first* decoder step and caches them; every
+    later step reads the cache. Which module does that, and what it is called with, differs per family
+    (`key_value_states` here, `encoder_hidden_states` there) — so nothing is looked up by name. A write to
+    the cross half of an `EncoderDecoderCache` is attributed to the innermost module whose `forward` was
+    running when it happened, which is the module that computed it, and the encoder's output is recognised
+    by identity among that call's arguments.
+
+    Yields `{layer index: CrossWriter}`, filled once the model has run.
+    """
+    writers: dict[int, CrossWriter] = {}
+    active: list[tuple] = []
+    encoder_states: list = []
+    hooks = []
+
+    def opened(module, args, kwargs):
+        active.append((module, args, kwargs))
+
+    def closed(module, args, output):
+        if active:
+            active.pop()
+
+    def encoded(module, args, output):
+        encoder_states.append(output.last_hidden_state if hasattr(output, "last_hidden_state") else output[0])
+
+    for module in model.get_decoder().modules():
+        hooks.append(module.register_forward_pre_hook(opened, with_kwargs=True))
+        hooks.append(module.register_forward_hook(closed))
+    hooks.append(model.get_encoder().register_forward_hook(encoded))
+
+    original_update = Cache.update
+
+    def update(self, key_states, value_states, layer_idx, *args, **kwargs):
+        if not active or layer_idx in writers or not encoder_states:
+            return original_update(self, key_states, value_states, layer_idx, *args, **kwargs)
+        module, call_args, call_kwargs = active[-1]
+        # The cross half, as the caller itself identifies it: the module was handed the whole
+        # `EncoderDecoderCache` and passed us one of its two halves.
+        cache_at = _slot_of(call_args, call_kwargs, lambda value: isinstance(value, EncoderDecoderCache))
+        paired = _argument(call_args, call_kwargs, cache_at) if cache_at else None
+        if paired is not None and paired.cross_attention_cache is self:
+            states = encoder_states[-1]
+            states_at = _slot_of(call_args, call_kwargs, lambda value: value is states)
+            query_at = _slot_of(
+                call_args,
+                call_kwargs,
+                lambda value: isinstance(value, torch.Tensor) and value is not states and value.dim() == 3,
+            )
+            if states_at is not None:
+                query = _argument(call_args, call_kwargs, query_at) if query_at else None
+                writers[layer_idx] = CrossWriter(
+                    module,
+                    call_args,
+                    call_kwargs,
+                    states_at,
+                    query_at,
+                    query.shape[-1] if query is not None else None,
+                    cache_at,
+                )
+        return original_update(self, key_states, value_states, layer_idx, *args, **kwargs)
+
+    Cache.update = update
+    try:
+        yield writers
+    finally:
+        Cache.update = original_update
+        for hook in hooks:
+            hook.remove()
 
 
 def _merge_decode_calls(decode_calls: list[dict], streamed: str | None = None) -> dict:
@@ -418,6 +528,45 @@ _MODALITY_SPECS = (
 _MODALITY_GETTERS = {name: getter for name, getter, *_ in _MODALITY_SPECS}
 
 
+def grid_renamed(key: str) -> str:
+    """`generate` names the grid per modality (`image_grid_thw` / `video_grid_thw`); the exported graph takes
+    the one the getter itself declares, `grid_thw`. The rename this undoes is `decompose_multimodal`'s."""
+    return "grid_thw" if key.endswith("_grid_thw") else key
+
+
+def pack_anyres_features(config, features, image_sizes, outputs) -> torch.Tensor:
+    """The packing `PatchVisionEncoder` leaves out of the graph: per image, the base patch's tokens followed
+    by its patch grid reshaped, unpadded to the image's aspect ratio and given a newline column per row.
+    Mirrors `pack_image_features`, calling the modeling's own grid/unpad helpers so the geometry lives in one
+    place — the split optimum-intel uses, and the reason the graph is dynamic in image count and resolution."""
+    from ..models.llava_next.modeling_llava_next import get_anyres_image_grid_shape, unpad_image
+    from .utils import _find_config_attr
+
+    newline = next((t for name, t in outputs.items() if name.endswith("image_newline")), None)
+    pinpoints = _find_config_attr(config, "image_grid_pinpoints")
+    tile = _find_config_attr(config, "image_size")
+    # Tokens per patch, not `image_size // patch_size`: a deepstack projector downsamples the token grid, so
+    # the square side has to come off the projected tensor rather than the vision config.
+    side = round(features.shape[1] ** 0.5)
+    packed = []
+    for index, feature in enumerate(torch.split(features, anyres_patch_counts(config, image_sizes), dim=0)):
+        if feature.shape[0] > 1:
+            base, patches = feature[0], feature[1:]
+            num_patch_height, num_patch_width = get_anyres_image_grid_shape(image_sizes[index], pinpoints, tile)
+            patches = patches.view(num_patch_height, num_patch_width, side, side, -1).permute(4, 0, 2, 1, 3)
+            patches = unpad_image(patches.flatten(1, 2).flatten(2, 3), image_sizes[index])
+            if newline is not None:
+                column = newline[:, None, None].expand(*patches.shape[:-1], 1).to(patches)
+                patches = torch.cat((patches, column), dim=-1)
+            packed.append(torch.cat((base, patches.flatten(1, 2).transpose(0, 1)), dim=0))
+        else:
+            feature = feature[0]
+            if newline is not None:
+                feature = torch.cat((feature, newline[None].to(feature)), dim=0)
+            packed.append(feature)
+    return torch.cat(packed, dim=0)
+
+
 def anyres_patch_counts(config: Any, image_sizes) -> list[int]:
     """Tiles each image snaps to, plus the base patch — the per-image split sizes `get_image_features`
     derives from `image_sizes`. Config-only, so the export and the runtime agree without a model."""
@@ -588,51 +737,130 @@ def decompose_multimodal(
     return components
 
 
-def _prefill_reason(model, stages: dict, components: dict, prefill_inputs: dict) -> str | None:
-    """Why the prompt needs a graph of its own, or `None` when the decode graph can serve it.
+def _needs_prefill_graph(model, stages: dict, components: dict, *, cross_written_by_encoder=None) -> bool:
+    """Whether the prompt needs a graph of its own, beside a *merged* decode graph that could serve it.
 
-    The merged decode graph covers a prompt on a fresh cache, so most models need no separate prefill.
-    These are the shapes where it cannot:
+    Asked only where the decode graph's query axis is symbolic (`multi_token_decode`), because that is what
+    lets one graph take both a whole prompt on a fresh cache and one token on a full one. Shipping a second
+    graph then costs a duplicate copy of every parameter, and buys nothing a merged decode has not already
+    given up: a query=1 decode is the shape worth capturing as a CUDA graph, and merging is what trades
+    that away. So the answer is "no" unless the decode graph provably cannot stand in.
 
-    - an encoder-decoder's prefill is the one graph that *writes* the cross-attention cache; the decode
-      graph is captured after it and only reads it (`is_updated` bakes as trace-time context);
-    - a modality that *streams* alongside the text unifies its token count with the query length in a
-      merged decode, then bakes a query-length branch, so that graph cannot serve single-token steps;
-    - a text stack whose layers keep written-once state (conv / linear-attention / indexer slots, or an
-      idefics-style gated cross-attention cache) has the same writer/reader split as the first case;
-    - the prompt carries a modality no component took — a model whose images enter through
-      cross-attention (mllama, idefics) has no `get_<modality>_features` getter to split out, so its vision
-      tower runs inside the prompt's own forward and the merged decode graph never sees pixels.
-
-    The last one asks only about the *features* a modality arrives as. Its other kwargs are a different
-    question: the runtime consumes `image_sizes` itself (it sizes the anyres merge, while the packed vision
-    graph takes the flattened patches), so a leftover of that kind says nothing about which graph runs.
+    The shapes where it cannot all come down to one thing: **the decode graph was traced after the branch**.
+    `torch.export` records the path a Python `if` took, not the `if`, so whatever the prompt's forward does
+    and a decode step does not is absent from the graph — not disabled, absent. A symbolic query axis does
+    not bring it back. Cross-attention is the clearest case: at decode time `is_updated` is `True`, so the
+    graph holds the cache *read* and the `k_proj`/`v_proj` that fill that cache were never traced.
     """
-    if "encoder" in stages:
-        return "encoder-decoder: the prefill writes the cross-attention cache"
+    # An encoder-decoder's prefill is the one graph that *writes* the cross-attention cache; the decode
+    # graph, captured after it, only reads it (`is_updated` bakes as trace-time context). Unless the encoder
+    # component writes it instead, which is the whole point of `CrossAttentionEncoder` — and then a second
+    # writer would be worse than redundant: the prefill graph was traced filling an *empty* cross cache, so
+    # handing it a seeded one does not match the spec it was traced against.
+    # Normally read off the encoder component; `cross_written_by_encoder` asks it hypothetically, which is
+    # how `_fold_cross_cache_into_encoder` finds out whether writing it there would buy anything.
+    writes_cross_cache = (
+        isinstance(stages.get("encoder", (None, None))[0], CrossAttentionEncoder)
+        if cross_written_by_encoder is None
+        else cross_written_by_encoder
+    )
+    if "encoder" in stages and not writes_cross_cache:
+        return True
+    # A modality that streams alongside the text unifies its token count with the query length in a merged
+    # decode and then bakes a query-length branch, so that graph cannot serve single-token steps.
     if streaming_embedder_spec(model.config) is not None:
-        return "a streaming modality bakes a query-length branch into the merged decode"
-    layers = getattr(stages["decode"][1].get("past_key_values"), "layers", [])
+        return True
+    # A text stack whose layers keep written-once state (conv / linear-attention / indexer slots, or an
+    # idefics-style gated cross-attention cache) has the same writer/reader split as the encoder-decoder.
+    # Under either name the decode capture took it: a recurrent model keeps its conv / SSM state in
+    # `cache_params`, and looking only at `past_key_values` misses exactly the layers this rule is about.
+    decode_inputs = stages["decode"][1]
+    cache = next(
+        (decode_inputs[name] for name in ("past_key_values", "cache_params") if decode_inputs.get(name) is not None),
+        None,
+    )
+    layers = getattr(cache, "layers", [])
     if any(
-        hasattr(layer, "conv_states")
-        or hasattr(layer, "recurrent_states")
-        or hasattr(layer, "idx_keys")
-        or isinstance(layer, DynamicCrossAttentionLayer)
+        keeps_write_once_state(layer)
+        # A gated cross-attention cache is written once like the rest — by the prompt, unless the encoder
+        # component now writes it.
+        or (isinstance(layer, DynamicCrossAttentionLayer) and not writes_cross_cache)
         for layer in layers
     ):
-        return "the text stack keeps state only the prompt's forward writes"
-    # Per modality, not per kwarg name: a getter takes its features under its own parameter name (the video
-    # one takes `pixel_values`, not `pixel_values_videos`), so the component's presence is the fact to read.
-    unserved = sorted(
-        key
+        return True
+    # A modality the prompt carries that no component took: a model whose images enter through
+    # cross-attention (mllama, idefics) has no `get_<modality>_features` getter to split out, so its vision
+    # tower runs inside the prompt's own forward and the decode graph never sees pixels. Asked per
+    # *modality*, not per kwarg name -- a getter takes its features under its own parameter name (the video
+    # one takes `pixel_values`, not `pixel_values_videos`), so the component's presence is the fact to read,
+    # and a leftover kwarg of another kind says nothing: the runtime consumes `image_sizes` itself.
+    prefill_inputs = stages["prefill"][1]
+    return any(
+        prefill_inputs.get(key) is not None
         for name, _getter, input_keys, *_ in _MODALITY_SPECS
         if name not in components
         for key in input_keys
-        if prefill_inputs.get(key) is not None
     )
-    if unserved:
-        return f"the prompt's own forward computes {unserved}"
-    return None
+
+
+def _cross_writing_encoder(encoder, writers: dict, encoder_inputs: dict, stages: dict):
+    """A `CrossAttentionEncoder` that reproduces this model's cross cache, or `None` if it cannot.
+
+    Replaying a writer gives the cache back only when the module's cross work is separable from the rest of
+    its call. It is not always: t5gemma2 merges self- and cross-attention into one module, so replaying it
+    also replays the self half against a mask and a cache from the step it was captured on. Rather than
+    keep a list of the modules that behave, the component is built and *checked* against the cache the model
+    itself filled — and where it disagrees the export keeps the prompt graph that was writing it before.
+    """
+    captured = stages["decode"][1].get("past_key_values")
+    layers = getattr(getattr(captured, "cross_attention_cache", None), "layers", [])
+    if not layers:
+        return None
+    # On copies of the captured call: the check runs a module that may write into its arguments in place,
+    # and those tensors are the ones the decode stage is about to be exported with.
+    copied = {
+        index: writer._replace(args=copy.deepcopy(writer.args), kwargs=copy.deepcopy(writer.kwargs))
+        for index, writer in writers.items()
+    }
+    component = CrossAttentionEncoder(encoder, copied).eval()
+    try:
+        with torch.no_grad():
+            produced = component(**copy.deepcopy(encoder_inputs))
+    except Exception:
+        logger.warning_once(
+            f"{type(encoder).__name__} cannot compute the decoder's cross-attention cache on its own, so the "
+            "export keeps a separate prompt graph to write it."
+        )
+        return None
+    for index, layer in enumerate(layers):
+        for kind, expected in (("keys", layer.keys), ("values", layer.values)):
+            actual = produced.get(f"cross_{kind}_{index}")
+            if expected is None:
+                continue
+            if actual is None or actual.shape != expected.shape or not torch.allclose(actual, expected, atol=1e-5):
+                logger.warning_once(
+                    f"{type(encoder).__name__} reproduces the decoder's cross-attention cache incorrectly at "
+                    f"layer {index}, so the export keeps a separate prompt graph to write it."
+                )
+                return None
+    return component
+
+
+def _fold_cross_cache_into_encoder(model, stages: dict, writers: dict, components: dict) -> dict:
+    """Let the encoder component write the decoder's cross-attention cache, when that buys the prompt graph.
+
+    Only then. The point is to ship one text stack instead of two, so if anything *else* already requires a
+    prompt graph — a vision tower inside the prompt's forward, written-once layer state — that graph writes
+    the cache as it always did, and a second writer in the encoder would be worse than redundant: the prompt
+    graph was traced filling an *empty* cross cache, and would be handed a seeded one.
+    """
+    if not writers or "encoder" not in stages:
+        return stages
+    if _needs_prefill_graph(model, stages, components, cross_written_by_encoder=True):
+        return stages
+    encoder, encoder_inputs = stages["encoder"]
+    component = _cross_writing_encoder(encoder, writers, encoder_inputs, stages)
+    return stages if component is None else {**stages, "encoder": (component, encoder_inputs)}
 
 
 def _materialize_stage_cache(model, stage_inputs: dict, decode_inputs: dict) -> None:
@@ -688,6 +916,7 @@ def decompose_for_generation(
         encoder features into the embeddings before running it.
     """
     recorded_features: dict[str, list] = {}
+    cross_writers: dict = {}
     if getattr(model.config, "is_encoder_decoder", False):
         # `generate` runs the encoder once outside the decoder loop (`get_encoder()(...)`), so it never
         # appears in the captured forwards — capture its call during the same generate to export it as its
@@ -701,6 +930,7 @@ def decompose_for_generation(
         }
         with contextlib.ExitStack() as stack:
             encoder_calls = stack.enter_context(_capture_calls(model.get_encoder(), "forward"))
+            cross_writers = stack.enter_context(capture_cross_writers(model))
             live = {
                 name: stack.enter_context(_capture_calls(owner, _MODALITY_GETTERS[name]))
                 for name, owner in modality_owners.items()
@@ -718,6 +948,17 @@ def decompose_for_generation(
     prefill_model, prefill_inputs = stages["prefill"]
 
     if not is_multimodal(prefill_model):
+        if multi_token_decode:
+            stages = _fold_cross_cache_into_encoder(model, stages, cross_writers, components={})
+        # One text stack, not two: a merged decode takes a symbolic query axis, so it serves the whole
+        # prompt as readily as one token. Shipping the captured prefill beside it would duplicate every
+        # parameter to buy a query=1 graph worth capturing as a CUDA graph -- which is precisely what a
+        # merged decode gives up anyway. A single-token decode is the other trade: its query axis bakes to
+        # 1, it cannot take a prompt, and the split is the point.
+        if multi_token_decode and not _needs_prefill_graph(model, stages, components={}):
+            # Everything but the prompt's own copy of the text stack — an encoder-decoder keeps its encoder,
+            # which is a different graph doing different work.
+            return {name: stage for name, stage in stages.items() if name != "prefill"}
         # Text path only — the multi-modal prefill is discarded after the submodule split, and materializing
         # it would leak cache inputs into the `text_decoder` component's capture. (Decode, captured
         # post-prefill, already holds a materialized cache.)
@@ -744,7 +985,13 @@ def decompose_for_generation(
         components["encoder"] = stages["encoder"]
     # One decision, made once: does the first step need a graph of its own, or can the decode graph serve
     # it? Three branches used to answer it with the same body; the reasons differ, the answer does not.
-    if "prefill" in stages and _prefill_reason(model, stages, components, prefill_inputs):
+    if multi_token_decode:
+        stages = _fold_cross_cache_into_encoder(model, stages, cross_writers, components)
+        if "encoder" in components:
+            components["encoder"] = stages["encoder"]
+    # The decode graph serves the prompt too, so the captured prefill is usually dropped here; it is kept
+    # as a component only for the shapes where it cannot (`_needs_prefill_graph`).
+    if "prefill" in stages and _needs_prefill_graph(model, stages, components):
         _materialize_stage_cache(model, stages["prefill"][1], stages["decode"][1])
         components["prefill"] = stages["prefill"]
 
