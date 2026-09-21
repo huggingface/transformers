@@ -86,8 +86,8 @@ class DynamoExporter(HfExporter):
     >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
 
     >>> exporter = DynamoExporter()
-    >>> exported = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
-    >>> outputs = exported.module()(**inputs)
+    >>> exported_artifacts = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
+    >>> outputs = exported_artifacts.module()(**inputs)
     ```
     """
 

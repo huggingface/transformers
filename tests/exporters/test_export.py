@@ -1248,7 +1248,7 @@ class ExportTesterMixin:
             *(spec[0] for spec in _MODALITY_SPECS),
             *(spec[0] for spec in _STREAMING_EMBEDDERS.values()),
         }
-        runners = {name: exported[name].runner() for name in components if name in wanted}
+        runners = {name: exported[name].runtime() for name in components if name in wanted}
         runtime = ExportedGenerator.from_runners(runners, model.config, model.generation_config)
         device = runtime.device
         model = model.to(device)
@@ -1367,7 +1367,7 @@ class ExportTesterMixin:
 
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        exported_outputs = output.runtime()(**copy.deepcopy(inputs))
                         self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
@@ -1462,7 +1462,7 @@ class ExportTesterMixin:
 
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        exported_outputs = output.runtime()(**copy.deepcopy(inputs))
                         self.assertTrue(exported_outputs, f"Compiled outputs are empty for {name}.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
@@ -1503,7 +1503,7 @@ class ExportTesterMixin:
 
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        exported_outputs = output.runtime()(**copy.deepcopy(inputs))
                         self.assertTrue(exported_outputs, f"Converted outputs are empty for {name}.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
@@ -1537,7 +1537,7 @@ class ExportTesterMixin:
                 model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
-                    onnx_outputs = output.runner()(**inputs)
+                    onnx_outputs = output.runtime()(**inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
 
@@ -1582,7 +1582,7 @@ class ExportTesterMixin:
                     # Building the runner stays *inside* the tolerance: loading the method is where
                     # ExecuTorch reports a missing kernel or an oversized arena.
                     with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
-                        outputs = output.runner()(**inputs)
+                        outputs = output.runtime()(**inputs)
                         tensors = [t for t in outputs.values() if isinstance(t, torch.Tensor)]
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
 
@@ -1690,7 +1690,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        exported_outputs = output.runtime()(**copy.deepcopy(inputs))
                         self.assertTrue(exported_outputs, "Exported outputs are empty.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
@@ -1762,7 +1762,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        exported_outputs = output.runtime()(**copy.deepcopy(inputs))
                         self.assertTrue(exported_outputs, "Compiled outputs are empty.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
@@ -1829,7 +1829,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        exported_outputs = output.runtime()(**copy.deepcopy(inputs))
                         self.assertTrue(exported_outputs, "Converted outputs are empty.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
@@ -1890,7 +1890,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
-                    onnx_outputs = output.runner()(**inputs)
+                    onnx_outputs = output.runtime()(**inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
                     exported[name] = output
@@ -1961,7 +1961,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     # Building the runner stays *inside* the tolerance: loading the method is where
                     # ExecuTorch reports a missing kernel or an oversized arena.
                     with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
-                        outputs = output.runner()(**inputs)
+                        outputs = output.runtime()(**inputs)
                         tensors = [t for t in outputs.values() if isinstance(t, torch.Tensor)]
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
                         # Only a component that ran is handed to the generate drive below.

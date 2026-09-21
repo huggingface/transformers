@@ -170,7 +170,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         decode = (
             DynamoExporter()
             .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .runner()
+            .runtime()
         )
 
         for query_len in (1, 2, 4):
@@ -201,7 +201,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         decode = (
             DynamoExporter()
             .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .runner()
+            .runtime()
         )
 
         past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
@@ -258,7 +258,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             "cache inputs have no matching outputs, so they cannot share a buffer",
         )
 
-        decode = exported.runner(device="cuda")
+        decode = exported.runtime(device="cuda").runner
         # Device-resident, because that is what makes the update in place: the runner binds what it is given
         # by pointer, but moves a tensor that lives elsewhere first — and writes would then land in the copy.
         past_key_values = torch.utils._pytree.tree_map(
@@ -414,7 +414,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         # The kernels are compiled for one kind of device, and the runner says so rather than failing
         # somewhere inside the first call.
         with self.assertRaises(ValueError):
-            exported.runners(device="meta")
+            exported.runtime(device="meta")
 
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)

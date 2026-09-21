@@ -21,7 +21,7 @@ Export any [`PreTrainedModel`] to ONNX, ExecuTorch, or a standalone PyTorch prog
 ```python
 exporter = DynamoExporter()  # or OnnxExporter, ExecutorchExporter
 config = DynamoConfig(dynamic=True)
-exported = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 The exporters live inside Transformers instead of a downstream library, so architecture changes,
@@ -52,7 +52,7 @@ export_config_dict = {"export_format": "onnx", "dynamic": True}
 config = AutoExportConfig.from_dict(export_config_dict)
 exporter = AutoHfExporter.from_config(config)
 
-exported = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 ## Installation
@@ -121,7 +121,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 
-exported = DynamoExporter().export(model, inputs, config=DynamoConfig(dynamic=True))
+exported_artifacts = DynamoExporter().export(model, inputs, config=DynamoConfig(dynamic=True))
 ```
 
 </hfoption>
@@ -135,7 +135,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 
-exported = OnnxExporter().export(model, inputs, config=OnnxConfig(dynamic=True))
+exported_artifacts = OnnxExporter().export(model, inputs, config=OnnxConfig(dynamic=True))
 ```
 
 </hfoption>
@@ -151,7 +151,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 
-exported = ExecutorchExporter().export(model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True))
+exported_artifacts = ExecutorchExporter().export(model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True))
 ```
 
 </hfoption>
@@ -163,7 +163,7 @@ exported = ExecutorchExporter().export(model, inputs, config=ExecutorchConfig(ba
 session, a loaded `.pte` — and returns its outputs as named tensors, whichever backend produced it.
 
 ```python
-outputs = exported.runner()(**inputs)
+outputs = exported_artifacts.runtime()(**inputs)
 logits = outputs["logits"]
 ```
 
@@ -172,14 +172,14 @@ logits = outputs["logits"]
 `generate` drives (see [Export for generation](#export-for-generation)).
 
 ```python
-outputs = exported.runtime()(**inputs)   # -> ModelOutput, so outputs.logits works
+outputs = exported_artifacts.runtime()(**inputs)   # -> ModelOutput, so outputs.logits works
 ```
 
 To reach the backend's own program object — for tooling that speaks ONNX or ExecuTorch directly — use
 `artifact`:
 
 ```python
-exported.artifact                        # ONNXProgram / ExportedProgram / ExecutorchProgramManager
+exported_artifacts.artifact                        # ONNXProgram / ExportedProgram / ExecutorchProgramManager
 ```
 
 ### Save and load it
@@ -190,7 +190,7 @@ about each graph — the precision it computes in, the cache it was traced again
 runner without that would have to infer them from tensor names and shapes, and get them wrong quietly.
 
 ```python
-exported.save_pretrained("qwen3-export")
+exported_artifacts.save_pretrained("qwen3-export")
 ```
 
 ```
@@ -225,8 +225,8 @@ which loads with no warm-up to pay.
 ```python
 from transformers.exporters import AotiExporter, AotiConfig
 
-exported = AotiExporter().export(model, inputs, config=AotiConfig(dynamic=True))
-exported.save_pretrained("qwen3-compiled")
+exported_artifacts = AotiExporter().export(model, inputs, config=AotiConfig(dynamic=True))
+exported_artifacts.save_pretrained("qwen3-compiled")
 ```
 
 Everything else is unchanged: the package loads through [`AutoExportedModel`] like any other export, and a
@@ -248,7 +248,7 @@ call — so it saves, loads and runs like any other export, and the runtime driv
 ```python
 from transformers.exporters import TensorrtConfig, TensorrtExporter
 
-exported = TensorrtExporter().export_for_generation(
+exported_artifacts = TensorrtExporter().export_for_generation(
     model, inputs, config=TensorrtConfig(dynamic=False), generation_config=generation_config
 )
 ```
@@ -295,7 +295,7 @@ config = DynamoConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-exported = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -322,7 +322,7 @@ config = OnnxConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-exported = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -350,7 +350,7 @@ config = ExecutorchConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-exported = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -362,17 +362,11 @@ For autoregressive generation, the model's `forward` has different shapes at the
 (full prompt, no KV cache) versus the decode step (single token, populated KV cache). Exporters
 expose [`~HfExporter.export_for_generation`], which splits both stages and exports each.
 
-For multi-modal generative models, the prefill additionally splits into an image or audio
-encoder, the language model, and `lm_head`. Encoder and language-model discovery uses
-[`~PreTrainedModel.get_encoder`] (`modality="image"` or `"audio"`) and
-[`~PreTrainedModel.get_decoder`] accessors, so any new architecture using these
-work out of the box.
-
-A projector component appears only when the model exposes one
-under an attribute name (`multi_modal_projector`, `connector`, `embed_vision`,
-`embed_audio`). Qwen2-VL below folds its projector into the vision tower, so its component dict
-has no separate `multi_modal_projector` key. New architectures must align their projector
-attribute to one of these names instead of growing the list.
+For multi-modal generative models the prompt splits further: one graph per modality from the model's own
+`get_<modality>_features` method (`image_encoder`, `audio_encoder` — the tower *and* its projector, since
+that method runs both), and `embed_tokens` for `input_ids -> inputs_embeds`. The text stack stays whole as
+`decode`, taking `inputs_embeds`, so the runtime scatters each modality's features into the embeddings
+before running it. Any architecture exposing those methods works without further wiring.
 
 <hfoptions id="generate">
 <hfoption id="Dynamo">
@@ -389,8 +383,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ExportedProgram, "language_model": ExportedProgram, "lm_head": ExportedProgram, "decode": ExportedProgram}
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
+# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
+# program through `exported_artifacts["decode"].artifact`
 ```
 
 </hfoption>
@@ -408,8 +403,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ONNXProgram, "language_model": ONNXProgram, "lm_head": ONNXProgram, "decode": ONNXProgram}
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
+# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
+# program through `exported_artifacts["decode"].artifact`
 ```
 
 </hfoption>
@@ -427,8 +423,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
+# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
+# program through `exported_artifacts["decode"].artifact`
 ```
 
 </hfoption>
@@ -457,15 +454,15 @@ Call `decompose_for_generation` directly to act between decomposing and exportin
 running an eager forward for verification, swapping a submodule's inputs, or skipping a stage.
 
 ```python
-from transformers.exporters.utils import decompose_for_generation
+from transformers.exporters.decompose import decompose_for_generation
 
 components = decompose_for_generation(model, inputs)
-# {"image_encoder": (submodel, fwd_kwargs), "language_model": (...), ..., "decode": (...)}
+# {"image_encoder": Component, "embed_tokens": Component, "decode": Component}
 
 artifacts, metadata = {}, {}
-for name, (submodel, subinputs) in components.items():
-    eager_outputs = submodel(**subinputs)  # sanity-check the eager forward before exporting
-    artifacts[name], metadata[name] = exporter.export_artifact(submodel, subinputs, config=config)
+for name, component in components.items():
+    eager_outputs = component.module(**component.inputs)  # sanity-check the eager forward before exporting
+    artifacts[name], metadata[name] = exporter.export_artifact(component.module, component.inputs, config=config)
 ```
 
 `export_for_generation` is this loop plus the [`~exporters.ExportArtifacts`] it wraps the results in.
@@ -488,7 +485,7 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
@@ -500,7 +497,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
@@ -512,7 +509,7 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
@@ -624,7 +621,7 @@ from transformers import GenerationConfig
 from transformers.exporters import OnnxExporter, OnnxConfig
 
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
-exported = OnnxExporter().export_for_generation(
+exported_artifacts = OnnxExporter().export_for_generation(
     model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
 )
 ```
@@ -635,7 +632,7 @@ ONNX Runtime and ExecuTorch.
 Straight from the export, without touching disk:
 
 ```python
-runtime = exported.runtime()
+runtime = exported_artifacts.runtime()
 ids = runtime.generate(**inputs, max_new_tokens=32)
 ```
 
@@ -644,7 +641,7 @@ Or save it and load it back, which is the deployment path:
 ```python
 from transformers.exporters import AutoExportedModel
 
-exported.save_pretrained("qwen3-generate")
+exported_artifacts.save_pretrained("qwen3-generate")
 
 runtime = AutoExportedModel.from_pretrained("qwen3-generate")   # a local directory or a Hub repo
 ids = runtime.generate(**inputs, max_new_tokens=32)
@@ -661,12 +658,15 @@ and encoder-decoder models.
 
 <summary>Driving the steps yourself</summary>
 
-`runners()` gives the graphs bound to their runtimes, keyed by component, for a loop you write yourself —
-custom serving, speculative decoding, anything `generate` does not cover. Each runner takes and returns
-named tensors whatever the backend produced it.
+For a loop you write yourself — custom serving, speculative decoding, anything `generate` does not cover —
+build the runners and assemble them: `load_export_runners` opens a saved export into `{component: runner}`,
+and [`~exporters.ExportedGenerator.from_runners`] turns those into a runtime. Each runner takes and returns
+named tensors whatever the backend produced it, so a step can be driven directly.
 
 ```python
-runners = exported.runners()
+from transformers.exporters.base import load_export_runners
+
+runners, manifest = load_export_runners("qwen3-generate")
 outputs = runners["decode"](input_ids=..., attention_mask=..., position_ids=..., past_key_values=...)
 logits = outputs["logits"]
 ```

@@ -194,17 +194,6 @@ class ExportArtifacts(Mapping):
         return any(component.role is ComponentRole.DECODE for component in self.components.values())
 
     @property
-    def component(self) -> ExportedComponent:
-        """The one component, for a single-graph export. Raises for a decomposed one, where there is no
-        single graph to mean."""
-        if len(self.components) != 1:
-            raise ValueError(
-                f"This export has {len(self.components)} components ({list(self.components)}); index it by "
-                "name instead of asking for `.component`."
-            )
-        return next(iter(self.components.values()))
-
-    @property
     def backend(self) -> type[HfExporter]:
         """The exporter class for this format — what knows the suffix and how to write the files. Resolved
         from the format the way a load resolves its runner, rather than held as a reference back to the
@@ -215,8 +204,14 @@ class ExportArtifacts(Mapping):
 
     @property
     def artifact(self):
-        """The one component's backend program — the shortcut for a single-graph export."""
-        return self.component.artifact
+        """The backend's own program, for a single-graph export. A decomposed one has no single graph to
+        mean, so it says which components it has rather than picking one."""
+        if len(self.components) != 1:
+            raise ValueError(
+                f"This export has {len(self.components)} components ({list(self.components)}), so there is "
+                "no single `.artifact`; index it by name and take that component's."
+            )
+        return next(iter(self.components.values())).artifact
 
     def save_pretrained(self, save_directory: str | Path) -> None:
         """Write the components, the configs, and the manifest that makes the directory loadable.
@@ -265,11 +260,12 @@ class ExportArtifacts(Mapping):
             )
             (directory / EXPORT_CONFIG_NAME).write_text(json.dumps(recipe, indent=2, default=str) + "\n")
 
-    def runners(self, components: Iterable[str] | None = None, **kwargs) -> dict[str, ModelRunner]:
+    def _runners(self, components: Iterable[str] | None = None, **kwargs) -> dict[str, ModelRunner]:
         """A runner per artifact, built in memory — the same runners a load builds, handed the same
         metadata, so an export can be checked in the process that produced it.
 
-        `components` limits which ones are built (opening a session has a cost); `kwargs` go to each
+        Internal: [`~ExportArtifacts.runtime`] is what an export is driven through, and it is these plus the
+        configs. `components` limits which ones are built (opening a session has a cost); `kwargs` go to each
         runner, `device=` among them.
         """
         from .auto import export_backend
@@ -281,20 +277,10 @@ class ExportArtifacts(Mapping):
             for name, component in wanted.items()
         }
 
-    def runner(self, **kwargs) -> ModelRunner:
-        """The one runner, for a single-component export — `.runners()` is the decomposed form, as
-        `.artifact` is to `[...]`."""
-        if len(self.components) != 1:
-            raise ValueError(
-                f"This export has {len(self.components)} components ({list(self.components)}); use "
-                "`.runners()` and pick by component name."
-            )
-        return next(iter(self.runners(**kwargs).values()))
-
     def runtime(self, **kwargs):
         """Something runnable, without going to disk: an [`ExportedGenerator`] for an export with a decode
         graph, an [`ExportedModel`] for a single one. Dispatches on the roles, exactly as a load does."""
-        runners = self.runners(**kwargs)
+        runners = self._runners(**kwargs)
         if self.can_generate():
             from .generator import ExportedGenerator
 
@@ -686,8 +672,8 @@ class ExportedModel:
     is for everything that is just a forward pass, and it is what [`~HfExporter.export`] produces.
 
     Example:
-        exported = OnnxExporter().export(model, inputs, OnnxConfig(dynamic=True))
-        exported.save_pretrained("out/")
+        exported_artifacts = OnnxExporter().export(model, inputs, OnnxConfig(dynamic=True))
+        exported_artifacts.save_pretrained("out/")
 
         classifier = ExportedModel.from_pretrained("out/")
         logits = classifier(input_ids=ids, attention_mask=mask).logits

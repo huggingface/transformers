@@ -237,11 +237,11 @@ class ExportedGenerator(GenerationMixin):
     `StaticCache`, whose `max_cache_len` a static-cache export should pin explicitly).
 
     Example:
-        exported = OnnxExporter().export_for_generation(model, inputs,
+        exported_artifacts = OnnxExporter().export_for_generation(model, inputs,
                                                         OnnxConfig(dynamic=True, external_data=False),
                                                         generation_config=generation_config,
                                                         multi_token_decode=True)
-        runtime = exported.runtime()
+        runtime = exported_artifacts.runtime()
         # Called like a normal model — the runtime builds the cache the exported graph needs.
         ids = runtime.generate(input_ids=prompt, max_new_tokens=32)
     """
@@ -328,7 +328,7 @@ class ExportedGenerator(GenerationMixin):
         **exported with** (it declares the cache the graphs were traced against — save it with the
         artifacts); when `None`, the model config's own generation defaults apply (a growing cache).
 
-        The runners are this runtime's own — `ExportArtifacts.runners()` in memory, or
+        The runners are this runtime's own — [`~ExportArtifacts.runtime`] builds them in memory, and
         [`~ExportedGenerator.from_pretrained`] from disk. Both hand each runner what the export recorded
         about its graph, which is what a runner reads its precision and cache layout from; one built around
         an artifact by hand has none of that and is refused when it is asked for them."""
@@ -337,7 +337,7 @@ class ExportedGenerator(GenerationMixin):
         # The scatter path applies when a graph takes embeddings where a plain model's takes token ids: the
         # decode graph (decoder-only VLMs) or the encoder graph (a multi-modal encoder-decoder like
         # florence2, whose decode then reads the merged features through `encoder_outputs`). Otherwise it
-        # runs as a plain generator even when an embed graph was exported.
+        # runs as a plain generator even when an embed graph was exported_artifacts.
         takes_embeds = text_input(runners["decode"]) == "inputs_embeds" or (
             "encoder" in runners and "inputs_embeds" in runners["encoder"].input_names
         )
@@ -388,8 +388,8 @@ class ExportedGenerator(GenerationMixin):
         the cache this builds.
 
         Example:
-            OnnxExporter().save_pretrained(programs, "out/", config=model.config,
-                                           generation_config=generation_config)
+            exported_artifacts = OnnxExporter().export_for_generation(model, inputs, config, generation_config=generation_config)
+            exported_artifacts.save_pretrained("out/")
             runtime = ExportedGenerator.from_pretrained("out/")
             ids = runtime.generate(input_ids=prompt, max_new_tokens=32)
         """
