@@ -203,6 +203,49 @@ class RegistrationTest(unittest.TestCase):
 
 
 @require_torch
+class ExecutorchBackendAvailabilityTest(unittest.TestCase):
+    def test_backend_availability(self):
+        from .test_export import ExportTesterMixin
+
+        cases = [
+            ("mlx", False, [], "backend mlx is not installed"),
+            ("mlx", True, ["XnnpackBackend"], "native MLXBackend registered"),
+            ("mlx", True, ["XnnpackBackend", "MLXBackend"], None),
+            ("xnnpack", False, [], "backend xnnpack is not installed"),
+            ("xnnpack", True, [], None),
+        ]
+        for backend, installed, registered, skip_reason in cases:
+            with self.subTest(backend=backend, installed=installed, registered=registered):
+                runtime = mock.Mock()
+                runtime.get.return_value.backend_registry.registered_backend_names = registered
+                with (
+                    mock.patch(
+                        "importlib.util.find_spec", return_value=mock.sentinel.backend_spec if installed else None
+                    ) as find_spec,
+                    mock.patch.dict(sys.modules, {"executorch.runtime": SimpleNamespace(Runtime=runtime)}),
+                ):
+                    if skip_reason is not None:
+                        with self.assertRaisesRegex(unittest.SkipTest, skip_reason):
+                            ExportTesterMixin._skip_if_executorch_backend_unavailable(self, backend)
+                    else:
+                        ExportTesterMixin._skip_if_executorch_backend_unavailable(self, backend)
+                find_spec.assert_called_once_with(f"executorch.backends.{backend}")
+                self.assertEqual(runtime.get.call_count, int(installed and backend == "mlx"))
+
+    def test_runtime_errors_are_not_skipped(self):
+        from .test_export import ExportTesterMixin
+
+        runtime = mock.Mock()
+        runtime.get.side_effect = RuntimeError("runtime initialization failed")
+        with (
+            mock.patch("importlib.util.find_spec", return_value=mock.sentinel.backend_spec),
+            mock.patch.dict(sys.modules, {"executorch.runtime": SimpleNamespace(Runtime=runtime)}),
+            self.assertRaisesRegex(RuntimeError, "runtime initialization failed"),
+        ):
+            ExportTesterMixin._skip_if_executorch_backend_unavailable(self, "mlx")
+
+
+@require_torch
 class ExecutorchImportIsolationTest(unittest.TestCase):
     def test_exporter_import_without_optional_backends(self):
         code = textwrap.dedent(

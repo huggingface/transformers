@@ -597,6 +597,15 @@ class ExportTesterMixin:
     submodule is tested independently.
     """
 
+    def _skip_if_executorch_backend_unavailable(self, backend):
+        if importlib.util.find_spec(f"executorch.backends.{backend}") is None:
+            self.skipTest(f"ExecuTorch backend {backend} is not installed")
+        if backend == "mlx":
+            from executorch.runtime import Runtime
+
+            if "MLXBackend" not in Runtime.get().backend_registry.registered_backend_names:
+                self.skipTest("ExecuTorch runtime does not have the native MLXBackend registered")
+
     def _skip_if_not_exportable(self):
         """Skip the test if the model architecture is not exportable."""
         if not self.test_torch_exportable:
@@ -762,8 +771,7 @@ class ExportTesterMixin:
         """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
-        if importlib.util.find_spec(f"executorch.backends.{backend}") is None:
-            self.skipTest(f"ExecuTorch backend {backend} is not installed")
+        self._skip_if_executorch_backend_unavailable(backend)
         exporter = ExecutorchExporter()
         config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
@@ -777,7 +785,6 @@ class ExportTesterMixin:
         if not model_classes:
             self.skipTest("No model classes support this export configuration")
         for model_class in model_classes:
-
             # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
             # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
@@ -935,8 +942,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         self._skip_if_not_exportable()
         if backend == "mlx" and generation_config is not None and generation_config.cache_implementation == "static":
             self.skipTest("StaticCache is not supported by the ExecuTorch MLX backend")
-        if importlib.util.find_spec(f"executorch.backends.{backend}") is None:
-            self.skipTest(f"ExecuTorch backend {backend} is not installed")
+        self._skip_if_executorch_backend_unavailable(backend)
         exporter = ExecutorchExporter()
         config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
@@ -953,7 +959,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         if not model_classes:
             self.skipTest("No model classes support this export configuration")
         for model_class in model_classes:
-
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 device="cpu",
