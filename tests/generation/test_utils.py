@@ -3006,13 +3006,11 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ]
             ]
         )
-        last_assistant_token_is_eos = False
         validated_tokens, n_matches = _speculative_sampling(
             candidate_input_ids,
             candidate_logits,
             candidate_length,
             new_logits,
-            last_assistant_token_is_eos,
         )
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
@@ -3049,7 +3047,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ]
             ]
         )
-        last_assistant_token_is_eos = False
         last_validated_token = []
         for _ in range(10_000):
             validated_tokens, n_matches = _speculative_sampling(
@@ -3057,7 +3054,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                last_assistant_token_is_eos,
             )
             self.assertTrue(n_matches.item() == 2)
             self.assertTrue(validated_tokens.tolist()[0][0] == 1)
@@ -3098,7 +3094,6 @@ class UtilsFunctionsTest(unittest.TestCase):
             candidate_logits,
             candidate_length,
             new_logits,
-            False,
             assistant_ensemble_weight=None,
         )
         # Matches the parent test exactly (i.e. backward compatible with w=None)
@@ -3130,7 +3125,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                False,
                 assistant_ensemble_weight=None,
             )
         with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
@@ -3139,7 +3133,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                False,
                 assistant_ensemble_weight=0.7,
             )
 
@@ -3172,7 +3165,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    False,
                     assistant_ensemble_weight=0.7,
                 )
 
@@ -3209,7 +3201,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    False,
                     assistant_ensemble_weight=0.5,
                 )
 
