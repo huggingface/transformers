@@ -417,7 +417,13 @@ class Mask2FormerHungarianMatcher(nn.Module):
         mask_labels: torch.Tensor,
         class_labels: torch.Tensor,
     ) -> list[tuple[Tensor]]:
-        """
+        """Performs the matching
+
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             masks_queries_logits (`torch.Tensor`):
                 A tensor of dim `batch_size, num_queries, num_labels` with the classification logits.
@@ -466,12 +472,6 @@ class Mask2FormerHungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
-            if not torch.isfinite(cost_matrix).any(-1).all():
-                # At least one row contains only NaN/inf
-                logger.warning_once(
-                    "Some predictions have NaN or inf cost for all targets. If the loss "
-                    "doesn't improve over the next steps the model has likely diverged."
-                )
             # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
             # these predictions only if there are no other valid predictions.
             max_value = torch.finfo(cost_matrix.dtype).max
