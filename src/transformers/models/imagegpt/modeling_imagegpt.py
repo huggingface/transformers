@@ -446,7 +446,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ImageGPTModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -521,6 +521,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
+                past_key_values=past_key_values,
             )
 
         if encoder_attention_mask is not None:
@@ -765,7 +766,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ImageGPTForImageClassification
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

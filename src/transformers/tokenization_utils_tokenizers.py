@@ -394,11 +394,18 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
+            from .integrations.gguf import GGUF_TOKENIZER_ARCHS, get_gguf_tokenizer, read_gguf_metadata
+
             gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
-            gguf_param = load_gguf_checkpoint(gguf_path)
-            architecture = gguf_param["config"]["model_type"]
-            tokenizer_dict = gguf_param["tokenizer"]
-            tokenizer_config = gguf_param["tokenizer_config"]
+            # The fast reader materializes the vocabulary and nothing else.
+            metadata, _ = read_gguf_metadata(gguf_path)
+            if metadata["general.architecture"] in GGUF_TOKENIZER_ARCHS:
+                architecture, tokenizer_dict, tokenizer_config = get_gguf_tokenizer(gguf_path)
+            else:
+                gguf_param = load_gguf_checkpoint(gguf_path)
+                architecture = gguf_param["config"]["model_type"]
+                tokenizer_dict = gguf_param["tokenizer"]
+                tokenizer_config = gguf_param["tokenizer_config"]
             fast_tokenizer, additional_kwargs = convert_gguf_tokenizer(architecture, tokenizer_dict)
             kwargs.update(tokenizer_config)
             if len(additional_kwargs) > 0:
@@ -1388,7 +1395,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         token=None,
         cache_dir=None,
         local_files_only=False,
-        _commit_hash=None,
+        revision=None,
         is_local=False,
         init_kwargs=None,
         fix_mistral_regex=None,
@@ -1432,9 +1439,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 cache_dir=cache_dir,
                 token=token,
                 local_files_only=local_files_only,
+                revision=revision,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
-                _commit_hash=_commit_hash,
             )
 
             # Detected using a (local) mistral tokenizer

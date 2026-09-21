@@ -276,6 +276,34 @@ class FalconH1ModelTester:
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
+    def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
+        """
+        Kernel kwargs given to the model must reach the Mamba2 mixer, which splats them into
+        the fused conv1d+scan, the conv and the chunk scan. This is how `seq_idx` reaches the
+        kernels for packed / variable-length batches.
+        """
+        model = FalconH1Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        mixer = model.layers[0].mamba
+        original_forward = mixer.forward
+        seen = []
+
+        def recording_forward(*fwd_args, **fwd_kwargs):
+            seen.append(set(fwd_kwargs))
+            return original_forward(*fwd_args, **fwd_kwargs)
+
+        mixer.forward = recording_forward
+
+        input_ids = input_ids.to(torch_device)
+        seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
+        with torch.no_grad():
+            model(input_ids, seq_idx=seq_idx)
+
+        self.parent.assertTrue(seen, "the Mamba2 mixer was never called")
+        self.parent.assertIn("seq_idx", seen[0])
+
 
 @require_torch
 class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -325,6 +353,10 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    def test_kwargs_reach_mamba2_mixer(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_kwargs_reach_mamba2_mixer(*config_and_inputs)
 
     @require_torch_accelerator
     @require_kernels
@@ -447,20 +479,20 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
 
             ### **Causes**
-            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (the American Revolution and the Seven Years' War), extravagant spending by the monarchy, and inefficient taxation.
-            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), debt, and inefficient taxation.
+            2. **Social Inequality**: The privileged classes (the nobility and clergy) enjoyed vast wealth and power, while the common people (the Third Estate) faced extreme poverty and lacked political representation.
             3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
-            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual abolition of the feudal system.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's declaration of itself as the National Assembly, marking the start of the revolution.
 
             ### **Key Events**
-            1. **Opening of the Revolution (1789)**:
-               - **Storming of the Bastille**: Symbolic of the fall of royal authority, marking the start of the revolution.
-               - **Declaration of the Rights of Man and of the Citizen**: A foundational document proclaiming liberty, equality, and fraternity.
+            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            2. **Declaration of the Rights of Man and of the Citizen (1789)**: A foundational document proclaiming liberty, equality, and fraternity.
+            3. **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre and the Committee of Public Safety, thousands of perceived enemies of the revolution were executed.
+            4. **Rise and Fall of Robespierre**: Robespierre's radical rule culminated in his own execution during the Thermidorian Reaction (July 1794).
+            5. **Royalist Restoration (1795)**: The monarchy was restored under Louis XVI, but he was forced to abdicate in favor of Louis XVI's younger brother, Louis XVI.
 
-            2. **Stages of the Revolution**:
-               - **Staffords' Reforms (1789–1791)**: Attempts to address grievances, including the abolition of feudal privileges and the introduction of the Civil Constitution of the Church.
-               - **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre, characterized by mass executions of perceived enemies of the revolution, including King Louis XVI and Queen Marie Antoinette.
-               - **Thermidorian Reaction (1794–1795)**: The fall of"""
+            ### **Impact**
+            1. **End of the"""
         )
 
         EXPECTED_TEXT_XPU = textwrap.dedent(

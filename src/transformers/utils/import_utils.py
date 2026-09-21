@@ -47,29 +47,41 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 
+def _candidate_distribution_names(pkg_name: str) -> list[str]:
+    """Distribution names to try for the import name `pkg_name`, most likely first.
+
+    The distribution name may differ from the import name (`PIL` is imported, but `pillow` is distributed), and
+    `packages_distributions()` maps one to the other -- but only for wheels shipping a `top_level.txt` on
+    Python < 3.12, which `torch` >= 2.14 does not. So keep the import name itself as a candidate.
+    """
+    # Per PEP 503, underscores and hyphens are equivalent in package names.
+    normalized_pkg_name = pkg_name.replace("_", "-")
+    distributions = PACKAGE_DISTRIBUTION_MAPPING.get(pkg_name, [])
+    candidates = [
+        *(name for name in (normalized_pkg_name, pkg_name) if name in distributions),
+        *distributions,
+        normalized_pkg_name,
+        pkg_name,
+    ]
+    return list(dict.fromkeys(candidates))  # de-duplicate, keeping first-seen order
+
+
 def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str]:
     """Check if `pkg_name` exist, and optionally try to get its version"""
     spec = importlib.util.find_spec(pkg_name)
     package_exists = spec is not None
     package_version = "N/A"
     if package_exists and return_version:
-        try:
-            # importlib.metadata works with the distribution package, which may be different from the import
-            # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
-            distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
-            # Per PEP 503, underscores and hyphens are equivalent in package names.
-            # Prefer the distribution that matches the (normalized) package name.
-            normalized_pkg_name = pkg_name.replace("_", "-")
-            if normalized_pkg_name in distributions:
-                distribution_name = normalized_pkg_name
-            elif pkg_name in distributions:
-                distribution_name = pkg_name
-            else:
-                distribution_name = distributions[0]
-            package_version = importlib.metadata.version(distribution_name)
-        except (importlib.metadata.PackageNotFoundError, KeyError):
-            # If we cannot find the metadata (because of editable install for example), try to import directly.
-            # Note that this branch will almost never be run, so we do not import packages for nothing here
+        for distribution_name in _candidate_distribution_names(pkg_name):
+            try:
+                package_version = importlib.metadata.version(distribution_name)
+                break
+            except importlib.metadata.PackageNotFoundError:
+                continue
+        else:
+            # No metadata under any candidate name (editable install without a `dist-info`, for example).
+            # Last resort: importing defeats the lazy imports these checks guard, costing every
+            # `import transformers` the package's whole import tree.
             package = importlib.import_module(pkg_name)
             package_version = getattr(package, "__version__", "N/A")
             # No version + no __file__ means a namespace package (PEP 420) shadowing on sys.path, not a real install.
@@ -119,7 +131,6 @@ def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Cal
         final_module = getattr(final_module, path, None)
         if not final_module:
             return None
-
     return final_module
 
 
@@ -151,8 +162,8 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.16.0"
-KERNELS_MAX_VERSION = "0.17.0"
+KERNELS_MIN_VERSION = "0.17.0"
+KERNELS_MAX_VERSION = "0.18.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
@@ -1183,7 +1194,7 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
     ]
 
     # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
-    if is_available and (is_torch_cuda_available() or is_torch_mlu_available()):
+    if is_available and (is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available()):
         try:
             return version.parse(flash_attn_version) >= version.parse("2.3.3")
         except packaging.version.InvalidVersion:
@@ -2498,6 +2509,10 @@ class _LazyModule(ModuleType):
         return result
 
     def __getattr__(self, name: str) -> Any:
+        import_error_message = (
+            f"Could not import module '{name}'. Are this object's requirements defined correctly? "
+            "Set the logging verbosity to DEBUG for the original import error."
+        )
         if name in self._objects:
             return self._objects[name]
         if name in self._object_missing_backend:
@@ -2626,25 +2641,22 @@ class _LazyModule(ModuleType):
                                             setattr(self, lookup_name, value)
                                         setattr(self, name, value)
                                         break
-                            except Exception as e:
-                                logger.debug(f"Could not create tokenizer alias: {e}")
+                            except Exception as alias_error:
+                                logger.debug(f"Could not create tokenizer alias: {alias_error}")
 
                         if value is None:
-                            raise ModuleNotFoundError(
-                                f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                            ) from e
+                            logger.debug(f"Original import error for '{name}': {e}")
+                            raise ModuleNotFoundError(import_error_message) from e
                 else:
-                    raise ModuleNotFoundError(
-                        f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                    ) from e
+                    logger.debug(f"Original import error for '{name}': {e}")
+                    raise ModuleNotFoundError(import_error_message) from e
 
         elif name in self._modules:
             try:
                 value = self._get_module(name)
             except (ModuleNotFoundError, RuntimeError) as e:
-                raise ModuleNotFoundError(
-                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                ) from e
+                logger.debug(f"Original import error for '{name}': {e}")
+                raise ModuleNotFoundError(import_error_message) from e
         else:
             # V5: If a *TokenizerFast symbol is requested but not present in the import structure,
             # try to resolve to the corresponding non-Fast symbol's module if available.
@@ -2916,10 +2928,12 @@ def requires(*, backends=()):
     return inner_fn
 
 
+_TORCHVISION_BACKEND_SUBCLASS = re.compile(r"^class\s+\w+\s*\([^)]*\bTorchvisionBackend\b", re.MULTILINE)
+
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
     lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
+    lambda name, content: "image_processing_" in name and _TORCHVISION_BACKEND_SUBCLASS.search(content): (
         "vision",
         "torch",
         "torchvision",
