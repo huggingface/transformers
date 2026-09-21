@@ -185,8 +185,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        from ..integrations.finegrained import disable_deepgemm_on_multi_device
+        from ..integrations.finegrained import disable_deepgemm_on_multi_device, keep_swizzle_reverse_for_save
 
+        keep_swizzle_reverse_for_save(model, self)
         disable_deepgemm_on_multi_device(model)
         return model
 
@@ -658,7 +659,22 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 # `base_model_prefix` and `force_cpu` are set on it before this hook runs and
                 # are not `__init__` arguments, so a fresh one silently loses them.
                 conv.operations = list(conv.operations) + layout_ops(expert_targets[0])
-                covered.update(re.sub(r".*experts\.|\$$", "", t) for t in expert_targets)
+                # A name counts as covered only when this converter can SOURCE the fused
+                # transformers-format key, not merely target it. A checkpoint that already ships
+                # fused (our own save, and any transformers-format one) names the scale
+                # `experts.gate_up_proj_scale_inv`, which the modelopt-style sources here
+                # (`...gate_proj.weight_scale`) never match — so keying on the target let those
+                # converters suppress the catch-all below and the scale arrived as a plain rename,
+                # carrying none of the layout ops. The module still ALLOCATES the swizzled grid,
+                # so the affine tensor lands in a 5-D slot: invisible on one device (the parameter
+                # is simply replaced and the kernels read the shape they are given) and a
+                # malformed DTensor under sharding, whose local is affine while its global says
+                # swizzled.
+                fused_probe = "model.layers.0.mlp.experts.{}"
+                for target in expert_targets:
+                    fused = re.sub(r".*experts\.|\$$", "", target)
+                    if any(re.search(pattern, fused_probe.format(fused)) for pattern in (conv.source_patterns or [])):
+                        covered.add(fused)
             updated.append(conv)
         # dense linears have no converter: their scale keys take the container cast alone
         updated.append(

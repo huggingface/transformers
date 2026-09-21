@@ -1934,6 +1934,44 @@ for mode in modes:
 """
 
 
+def _checkpoint_expert_shape(model_dir):
+    """The UNSHARDED `(experts, rows)` of the stacked gate|up projection the module holds.
+
+    Read from the checkpoint, which ships the experts either already fused
+    (`experts.gate_up_proj`) or one per expert (`experts.0.gate_proj.weight`, or DeepSeek's `w1`/`w3`,
+    whose rows are gate and up separately). The baseline a sharded leg is measured against has to come from outside
+    the sharded runs: taking it from whichever leg ran first compares one mode to another, and a
+    mode that placed nothing then still looks sharded.
+    """
+    import glob
+    import json
+    import os
+
+    from safetensors import safe_open
+
+    shards = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
+    index = os.path.join(model_dir, "model.safetensors.index.json")
+    if os.path.exists(index):
+        shards = sorted({os.path.join(model_dir, f) for f in json.load(open(index))["weight_map"].values()})
+
+    experts: set[int] = set()
+    rows = 0
+    for shard in shards:
+        with safe_open(shard, framework="pt") as handle:
+            for key in handle.keys():
+                shape = None
+                if re.search(r"\.experts\.gate_up_proj$", key):
+                    shape = handle.get_slice(key).get_shape()
+                    if len(shape) == 3:
+                        return (shape[0], shape[1])
+                if re.search(r"\.experts\.(\d+)\.(gate_proj|up_proj|w1|w3)\.weight$", key):
+                    experts.add(int(key.rsplit(".experts.", 1)[1].split(".", 1)[0]))
+                    rows = max(rows, handle.get_slice(key).get_shape()[0])
+    if not experts or not rows:
+        raise AssertionError(f"no expert projection in {model_dir} to size the shard against")
+    return (len(experts), 2 * rows)  # the module stacks gate and up into one row extent
+
+
 @require_torch_multi_accelerator
 class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
     """Expert parallelism and intra-expert tensor parallelism must both reproduce what
@@ -2130,7 +2168,9 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
                 {
                     "text_config": {
                         "hidden_size": 256,
-                        "intermediate_size": 256,
+                        # 512 so the 2-way split leaves 256: the experts' down projection
+                        # contracts over this, and a sharded 128 has no 128-wide swizzled tile
+                        "intermediate_size": 512,
                         "dense_intermediate_size": 256,
                         "shared_intermediate_size": 256,
                         "num_hidden_layers": 2,
@@ -2156,8 +2196,11 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
                         "index_local_blocks": 1,
                     },
                     "vision_config": {
-                        "hidden_size": 32,
-                        "intermediate_size": 64,
+                        # 256 so the 2-way SPLIT is still 128-aligned: an MXFP8 weight with
+                        # pre-swizzled scales is read in 128-wide K tiles, and a sharded 128 dim
+                        # leaves 64 — which has none to offer, and the tuner has no config at all
+                        "hidden_size": 256,
+                        "intermediate_size": 256,
                         "num_hidden_layers": 2,
                         "num_attention_heads": 4,
                         "num_channels": 3,
@@ -2205,7 +2248,12 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
         bf16_dir = os.path.join(self._tmp.name, label, "bf16")
         quant_dir = os.path.join(self._tmp.name, label, "quantized")
         torch.manual_seed(0)
-        model_cls(config).save_pretrained(bf16_dir, safe_serialization=True)
+        # BF16 is what every model here ships, and the dtype decides which kernel arms run: a
+        # float32 checkpoint (torch's default for a freshly built model, which `dtype="auto"`
+        # then faithfully reloads) sends the weight-only formats down arms `tl.dot_scaled`
+        # cannot serve at all, so the suite would exercise a dtype nobody deploys and leave the
+        # real one uncovered. Saving in bf16 makes `"auto"` mean bf16 for every load below.
+        model_cls(config).to(torch.bfloat16).save_pretrained(bf16_dir, safe_serialization=True)
         quantized = model_cls.from_pretrained(
             bf16_dir,
             dtype="auto",
@@ -2241,6 +2289,50 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
         del model
         torch.cuda.empty_cache()
         return logits
+
+    def _rounding_floor(self, model_dir, model_cls, reference):
+        """How far this model's logits move when every sharded block is perturbed by BF16 rounding.
+
+        Sharding cannot be bit-exact: a rowwise all-reduce sums the same terms in a different
+        order, so the first sharded op differs by an ULP. How far that travels is a property of
+        the MODEL, not of the sharding — a chain of MoE layers can amplify it a hundredfold while
+        a dense stack barely moves. Injecting the same magnitude on ONE device measures that
+        amplification directly, giving each model a budget its own conditioning earns.
+        """
+        import torch
+
+        model = model_cls.from_pretrained(
+            model_dir, dtype="auto", attn_implementation="eager", device_map="cuda:0"
+        ).eval()
+        # Perturb EVERY block a sharded reduction passes through, not one: TP re-orders the sum
+        # in each of them, so the rounding accumulates down the stack instead of cancelling.
+        # Perturbing a single site with random noise measured LESS movement than sharding caused
+        # even at 14x the magnitude, which is what accumulation looks like from the wrong model.
+        blocks = [
+            m
+            for n, m in model.named_modules()
+            if n.endswith((".self_attn", ".mlp", ".block_sparse_moe")) and n.count(".layers.") == 1
+        ]
+        generator = torch.Generator(device=model.device).manual_seed(0)
+
+        def perturb(module, args, output):
+            tensor = output[0] if isinstance(output, tuple) else output
+            if not torch.is_tensor(tensor):
+                return output
+            ulp = torch.finfo(tensor.dtype).eps * tensor.abs().max()
+            noise = torch.randn(tensor.shape, generator=generator, device=tensor.device, dtype=tensor.dtype) * ulp
+            tensor = tensor + noise
+            return (tensor,) + output[1:] if isinstance(output, tuple) else tensor
+
+        handles = [b.register_forward_hook(perturb) for b in blocks]
+        ids = torch.arange(16, dtype=torch.long, device=model.device).unsqueeze(0)
+        with torch.no_grad():
+            perturbed = model(ids).logits.float().cpu()
+        for handle in handles:
+            handle.remove()
+        del model
+        torch.cuda.empty_cache()
+        return (perturbed - reference).abs().max().item()
 
     def _sharded(self, model_dir, model_cls, modes):
         """`{mode: payload}` from one 2-rank `torchrun`, through the real EP / TP load path."""
@@ -2279,6 +2371,7 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
                 # since `auto` alone fits this whole model on one GPU and would quietly compare
                 # the sharded legs against a single-device load
                 reference = self._logits(model_dir, model_cls, device_map="auto", max_memory={0: "120MiB", 1: "40GiB"})
+                noise_floor = self._rounding_floor(model_dir, model_cls, reference)
 
                 # Only the modes this model's OWN plans shard experts under. A mode whose plan
                 # has no expert entry (GPT-OSS and DeepSeek-V4 ship no TP plan at all) places
@@ -2293,18 +2386,42 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
                     if any(".experts." in key for owner in owners for key in (getattr(owner, attr, None) or {}))
                 ]
                 self.assertTrue(modes, f"{label}: no plan shards experts, so nothing is under test")
-                whole = None
+                whole = _checkpoint_expert_shape(model_dir)
                 for mode, payload in self._sharded(model_dir, model_cls, modes).items():
                     with self.subTest(model=label, mode=mode):
                         local = payload["expert_local"]
-                        whole = whole or local
+                        # against the CHECKPOINT's own shape, never another mode's shard: seeding
+                        # this from the first leg made the second leg check EP against TP, so a
+                        # mode that placed nothing still looked sharded (glm4v's TP left its
+                        # experts replicated and passed).
                         self.assertLess(
                             local[0] * local[1],
-                            whole[0] * whole[1] * 2,
-                            f"{label}/{mode}: experts were not sharded ({local}) — this leg cannot catch a bad axis",
+                            whole[0] * whole[1],
+                            f"{label}/{mode}: experts were not sharded ({local} of {whole}) — "
+                            f"this leg cannot catch a bad axis",
                         )
-                        torch.testing.assert_close(payload["logits"], reference, rtol=2e-2, atol=2e-2)
-                        self.assertTrue(
-                            torch.equal(payload["logits"].argmax(-1), reference.argmax(-1)),
-                            f"{label}/{mode}: argmax diverged from the unsharded model",
+                        # Sharding reorders reductions (a rowwise all-reduce sums the same terms
+                        # in another order), so the legs differ by BF16 rounding at the first
+                        # sharded op whatever the axes. What that becomes at the logits is the
+                        # MODEL's business: the NVFP4 fixture amplifies it ~100x across two MoE
+                        # layers (measured: a 1e-3 perturbation moves its logits by 0.99 on ONE
+                        # device), while the dense fixtures barely amplify at all. A fixed
+                        # tolerance therefore asks the impossible of one model and nothing of
+                        # another. Compare against the model's OWN floor instead: perturb the
+                        # unsharded run by the same rounding and take the resulting logit shift as
+                        # the budget. A wrong shard axis lands orders of magnitude above it.
+                        budget = max(2e-2, noise_floor)
+                        gap = (payload["logits"] - reference).abs().max().item()
+                        self.assertLessEqual(
+                            gap,
+                            budget,
+                            f"{label}/{mode}: sharded logits differ by {gap:.4g}, beyond this "
+                            f"model's own rounding budget {budget:.4g} — that is a sharding bug, "
+                            f"not reduction order",
                         )
+                        if noise_floor <= 2e-2:
+                            # only meaningful where rounding does NOT already move the argmax
+                            self.assertTrue(
+                                torch.equal(payload["logits"].argmax(-1), reference.argmax(-1)),
+                                f"{label}/{mode}: argmax diverged from the unsharded model",
+                            )

@@ -884,6 +884,48 @@ class FineGrainedExpertsInterface(ExpertsInterface):
 ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
 
 
+def keep_swizzle_reverse_for_save(model, hf_quantizer) -> None:
+    """Keep the swizzle's reverse reachable at save time for a model quantized ON THE FLY.
+
+    `_weight_conversions` retains only converters that matched a checkpoint weight, and
+    quantizing a bf16 checkpoint CREATES the scale keys — so the converter carrying the
+    layout ops never matched, and saving would write the module's 5-D SWIZZLE_32_4_4 grid
+    where the checkpoint format is the affine one (silently: the module reads back whatever
+    it wrote, so only a re-save catches it).
+
+    Adds a converter that renames nothing and carries the swizzle alone, for scales no
+    retained converter already covers — reversing it is the unswizzle, which reads the
+    affine grid off the self-describing 5-D shape. Scoped that way because a converter
+    appended here is matched BEFORE the retained ones (the save reverses the list), so a
+    broader pattern would take keys away from the real converter and skip the rest of its
+    chain.
+    """
+    from ..core_model_loading import WeightConverter
+
+    conversions = list(getattr(model, "_weight_conversions", None) or [])
+    covered = {
+        target
+        for conv in conversions
+        if isinstance(conv, WeightConverter)
+        for target in (getattr(conv, "target_patterns", None) or [])
+    }
+    held_swizzled = {
+        name.rsplit(".", 1)[-1]
+        for name, param in model.named_parameters()
+        if param.ndim == 5 and name.rsplit(".", 1)[-1].endswith("_scale_inv")
+    }
+    missing = sorted(name for name in held_swizzled if not any(name in target for target in covered))
+    if not missing:
+        return
+    for name in missing:
+        conv = WeightConverter(
+            source_patterns=rf"{name}$", target_patterns=name, operations=[FineGrainedSwizzleScales(hf_quantizer)]
+        )
+        conv._was_used = True  # it describes a layout this quantizer applied, not one a checkpoint carried
+        conversions.append(conv)
+    model._weight_conversions = conversions
+
+
 def disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     """Flag every quantized module to skip DeepGEMM when the model spans >1 CUDA device in one
     process. DeepGEMM loads each kernel via `cuKernelGetFunction`, which binds the `CUfunction`
@@ -1315,7 +1357,14 @@ class FineGrainedInputScales(ConversionOps):
             value = torch.stack(value, dim=0) if isinstance(value, list) else value
             values.append(value.float())
         stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
-        per_expert = stacked.reshape(stacked.shape[0], -1).amax(dim=1)
+        # A scale is a MAGNITUDE (`amax(|x|) / 448`), so reduce over absolute values and keep it
+        # off zero. A signed reduce returns whatever the largest signed entry is, and the two
+        # degenerate results it admits are both fatal downstream: a negative scale flips the sign
+        # of every dequantized row, and a zero one divides the activations by zero — NaN logits
+        # on a SINGLE device, before any sharding is involved. Real calibrated checkpoints ship
+        # positive scales, so this is a no-op for them; it is the models whose scales are built
+        # rather than measured that reach here with a sign or a zero.
+        per_expert = stacked.reshape(stacked.shape[0], -1).abs().amax(dim=1).clamp(min=1e-12)
         one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")  # the NVFP4 global only
         return {full_layer_name: (per_expert.amax().reshape(1) if one_value else per_expert).contiguous()}
 
@@ -1369,6 +1418,21 @@ class FineGrainedQuantize(ConversionOps):
         return result
 
     @staticmethod
+    def _as_expert_rows(module, name: str, value: torch.Tensor) -> torch.Tensor:
+        """An expert stack with its contraction axis LAST, swapped to the ``(E, rows, K)`` the
+        module's slot and the kernels take. A model may store its experts transposed (GPT-OSS:
+        ``(E, H, 2I)``), and quantizing before the swap packs the wrong axis — the row count and
+        the byte-halved K then disagree, which the grouped op rejects at its first launch."""
+        if module is None or value.ndim != 3 or name not in ("gate_up_proj", "up_proj", "down_proj"):
+            return value
+        if name == "down_proj":
+            rows, in_dim = module.hidden_dim, module.intermediate_dim
+        else:
+            rows, in_dim = (2 if module.has_gate else 1) * module.intermediate_dim, module.hidden_dim
+        # only when the orientation is unambiguous: a square stack reads the same both ways
+        return value.transpose(1, 2).contiguous() if value.shape[1:] == (in_dim, rows) != (rows, in_dim) else value
+
+    @staticmethod
     def _weight_holder(model, key: str):
         """``(module, scale_param_name)`` when ``key`` is a finegrained module's weight, else ``None``."""
         if model is None:
@@ -1387,6 +1451,7 @@ class FineGrainedQuantize(ConversionOps):
             return {key: value}
         prefix = key.rsplit(".", 1)[0] + ".weight" if key.endswith(".weight") else key
         module = holder[0] if holder is not None else None
+        value = self._as_expert_rows(module, key.rsplit(".", 1)[1], value)
         held_scale = getattr(module, holder[1]) if holder is not None else None
         format_spec = weight_formats()[module.weight_format] if module is not None else None
         if format_spec is None or format_spec.scale_group is None:
