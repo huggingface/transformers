@@ -51,11 +51,8 @@ class Nemotron3DiarizationEncoderConfig(GlmAsrEncoderConfig):
     num_hidden_layers: int = 31
     num_attention_heads: int = 8
     intermediate_size: int = 2048
-    hidden_act: str = "gelu"
     subsampling_factor: int = 8
     max_position_embeddings: int = 5000
-    rope_parameters: RopeParameters | dict | None = None
-    initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 1.0)
