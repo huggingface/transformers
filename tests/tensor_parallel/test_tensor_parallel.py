@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
+from torch.distributed.tensor.placement_types import Shard
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
+from transformers.distributed.mixin import DistributedMixin
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -25,6 +28,8 @@ from transformers.distributed.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    ShardUnitsParallel,
+    get_shard_replication_factor,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -207,6 +212,7 @@ class TestTensorParallelLayer(TestCasePlus):
         op.device_mesh = mesh
         op.placements = (placement,)
         op.param_ndim = len(param_shape)
+        op.param_shape = tuple(param_shape)
         op._axis0_offset = 0
         op._axis0_local_size = local_shape[0]
         return op
@@ -222,6 +228,97 @@ class TestTensorParallelLayer(TestCasePlus):
 
         self.assertIn("lm_head", str(context.exception))
         self.assertIn("divisible", str(context.exception))
+
+    def test_get_shard_replication_factor(self):
+        self.assertEqual(get_shard_replication_factor(2, 4), 2)
+        self.assertEqual(get_shard_replication_factor(1, 4), 4)
+        self.assertEqual(get_shard_replication_factor(8, 4), 1)
+        self.assertEqual(get_shard_replication_factor(2, 1), 1)
+        with self.assertRaises(ValueError):
+            get_shard_replication_factor(3, 4)
+
+    def test_replicate_kv_heads_local_shape(self):
+        # 2 KV heads of size 8, sharded over 4 ranks -> each head is replicated twice
+        world_size, num_key_value_heads, head_dim = 4, 2, 8
+        module = torch.nn.Linear(32, num_key_value_heads * head_dim, bias=False)
+        module._tp_shard_units = num_key_value_heads
+        mesh = self.MockDeviceMesh(world_size=world_size, rank=0)
+
+        with patch.object(tensor_parallel.DTensor, "from_local", side_effect=lambda tensor, *a, **kw: tensor):
+            ShardUnitsParallel().shard_param(module, "weight", mesh)
+
+        self.assertEqual(tuple(module.weight.shape), (head_dim, 32))
+
+    def test_replicate_kv_heads_falls_back_to_colwise(self):
+        # 4 KV heads over 2 ranks: no replication needed, plain colwise sharding
+        world_size, num_key_value_heads, head_dim = 2, 4, 8
+        module = torch.nn.Linear(32, num_key_value_heads * head_dim, bias=False)
+        module._tp_shard_units = num_key_value_heads
+        mesh = self.MockDeviceMesh(world_size=world_size, rank=0)
+
+        placements = self._get_parameter_placements(module, ShardUnitsParallel(), mesh=mesh)
+
+        self.assertEqual(placements["weight"], Shard(0))
+
+    def test_kv_replication_reads_the_replicated_head_from_the_checkpoint(self):
+        world_size, num_key_value_heads, head_dim = 4, 2, 8
+        n_rep = world_size // num_key_value_heads
+        weight = torch.arange(num_key_value_heads * head_dim * 32, dtype=torch.float32).reshape(-1, 32)
+
+        for rank in range(world_size):
+            mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            # The parameter describes the expanded projection: `world_size` heads instead of `num_key_value_heads`
+            op = self._make_dtensor_shard_op(mesh, Shard(0), (world_size * head_dim, 32), (head_dim, 32))
+
+            expected = weight[(rank // n_rep) * head_dim : (rank // n_rep + 1) * head_dim]
+            torch.testing.assert_close(op.shard_tensor(weight), expected)
+
+    def test_kv_replication_only_updates_planned_attention_modules(self):
+        class Attention(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.head_dim = 8
+                self.num_key_value_groups = 8
+                self.q_proj = torch.nn.Linear(32, 32, bias=False)
+                self.k_proj = torch.nn.Linear(32, 16, bias=False)
+                self.v_proj = torch.nn.Linear(32, 16, bias=False)
+
+        model = torch.nn.Module()
+        model.layers = torch.nn.ModuleList([torch.nn.Module()])
+        model.layers[0].self_attn = Attention()
+        model.vision = torch.nn.Module()
+        model.vision.attn = Attention()
+        model.config = SimpleNamespace(get_text_config=lambda: SimpleNamespace(num_key_value_heads=2))
+        tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+        }
+
+        updated_plan = tensor_parallel._declare_attention_shard_units(model, tp_plan, tp_size=4)
+
+        self.assertEqual(updated_plan["layers.*.self_attn.k_proj"], "colwise_units")
+        self.assertEqual(updated_plan["layers.*.self_attn.v_proj"], "colwise_units")
+        self.assertEqual(model.layers[0].self_attn.num_key_value_groups, 1)
+        self.assertEqual(model.vision.attn.num_key_value_groups, 8)
+        self.assertEqual(model.layers[0].self_attn.k_proj._tp_shard_units, 2)
+
+    def test_kv_replication_updates_the_plan_that_is_actually_applied(self):
+        class Model(DistributedMixin, torch.nn.Module):
+            pass
+
+        model = Model()
+        model.config = SimpleNamespace(distributed_config=SimpleNamespace(enable_expert_parallel=True))
+        model._tp_plan = {}
+        model._ep_plan = {"layers.*.self_attn.k_proj": "colwise"}
+        replicated_plan = {"layers.*.self_attn.k_proj": "colwise_units"}
+
+        with patch.object(tensor_parallel, "_declare_attention_shard_units", return_value=replicated_plan):
+            tensor_parallel.apply_tensor_parallelism(model, self.MockDeviceMesh(world_size=4, rank=0))
+
+        # Under expert parallelism `model.tp_plan` reads `_ep_plan`, so that is the plan that must be updated
+        self.assertEqual(model._ep_plan, replicated_plan)
+        self.assertEqual(model._tp_plan, {})
 
     def test_colwise_uneven_local_shapes(self):
         module = torch.nn.Module()
