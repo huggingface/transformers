@@ -17,8 +17,8 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): prepare the model, sample inputs,
-   capture config, contexts, and deferred lowering settings for the selected backend.
+1. **Backend preparation** (`_BACKEND_PREPARE`): move the model to the target device/dtype
+   and build the partitioner list.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -41,9 +41,7 @@ from __future__ import annotations
 import math
 import operator
 import re
-from collections.abc import Callable, MutableMapping
-from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass, field
+from collections.abc import MutableMapping
 from typing import Any
 
 from ..utils import logging
@@ -70,6 +68,7 @@ if is_torch_available():
     from torch.utils._sympy.value_ranges import ValueRanges
 
     from .. import masking_utils
+    from ..cache_utils import StaticCache
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -80,34 +79,19 @@ if is_torch_available():
 
 
 if is_executorch_available():
-    from executorch.backends.xnnpack.partition.xnnpack_partitioner import (
-        XnnpackPartitioner,
-    )
+    from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
     from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import (  # type: ignore[import-not-found]
         XNNStaticReshape,
         XNode,
     )
     from executorch.backends.xnnpack.utils.utils import get_input_node
-    from executorch.exir.capture._config import (
-        EdgeCompileConfig,
-        ExecutorchBackendConfig,
-    )
+    from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
     from executorch.exir.dialects._ops import ops as exir_ops
-    from executorch.exir.passes.executorch_prim_ops_registry import (
-        _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS,
-    )
+    from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.passes.memory_planning_pass import MemoryPlanningPass
-    from executorch.exir.passes.replace_view_copy_with_view_pass import (
-        _VIEW_OP,
-        _is_view_copy,
-        _ViewSpec,
-    )
+    from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _is_view_copy, _ViewSpec
     from executorch.exir.passes.spec_prop_pass import _is_mutable_buffer
-    from executorch.exir.program import (
-        EdgeProgramManager,
-        ExecutorchProgramManager,
-        to_edge_transform_and_lower,
-    )
+    from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
     from executorch.exir.sym_util import eval_expr
     from executorch.exir.tensor import determine_tensor_dynanism
 
@@ -121,53 +105,6 @@ if is_executorch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-@dataclass(frozen=True)
-class _LoweringSettings:
-    """Inputs to the shared lowering pipeline for one export invocation.
-
-    Created by `_BackendPreparation.make_lowering_settings` after capture and FX
-    fixes, while the export context and shared/backend patch scopes remain active.
-    `make_backend_config` runs once after edge lowering succeeds, immediately before
-    `to_executorch`, inside those same scopes.
-
-    Fields describe common lowering inputs, not recipe internals. Keep cache layouts,
-    attention callbacks, and other backend-specific preparation state in the recipe.
-    """
-
-    partitioner: list[Any]
-    compile_config: EdgeCompileConfig
-    make_backend_config: Callable[[], ExecutorchBackendConfig | None]
-    transform_passes: list[Any] | None = None
-    constant_methods: dict[str, Any] | None = None
-    method_name: str | None = None
-
-
-@dataclass(frozen=True)
-class _BackendPreparation:
-    """Capture inputs and lifecycle hooks for one export invocation.
-
-    Backend preparation runs before any of these scopes are entered. `export_context`
-    surrounds capture, FX fixes, both lowering stages, and their configuration factories.
-    Shared/backend patch scopes are entered inside it. `capture_context` is nested inside
-    those scopes and covers only capture; it exits before FX fixes or lowering.
-
-    `make_lowering_settings` runs once after capture and FX fixes succeed, with the export
-    and patch scopes still active. Contexts unwind on failure; preparation-time model
-    mutations are not automatically rolled back.
-
-    Do not reuse this record across exports: its stored context managers may be single-use
-    generators. Create a fresh preparation for each invocation. Keep recipe-specific state
-    in the backend's own preparation object, passed through its hooks rather than new fields.
-    """
-
-    model: torch.nn.Module
-    sample_inputs: MutableMapping[str, Any]
-    capture_config: ExecutorchConfig
-    make_lowering_settings: Callable[[], _LoweringSettings]
-    export_context: AbstractContextManager = field(default_factory=nullcontext)
-    capture_context: AbstractContextManager = field(default_factory=nullcontext)
 
 
 class ExecutorchExporter(DynamoExporter):
@@ -202,43 +139,32 @@ class ExecutorchExporter(DynamoExporter):
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
-        prepared = prepare_for_backend(model, sample_inputs, config)
-        return self._export_prepared(prepared, config.backend)
 
-    def _export_prepared(self, prepared: _BackendPreparation, backend: str) -> ExecutorchProgramManager:
-        with prepared.export_context, apply_patches("executorch"), apply_patches(f"executorch.{backend}"):
-            with prepared.capture_context:
-                exported_program: ExportedProgram = super().export(
-                    prepared.model,
-                    prepared.sample_inputs,
-                    config=prepared.capture_config,
-                )
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+
+        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
+            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
-            settings = prepared.make_lowering_settings()
-            executorch_programs_manager = _lower_to_executorch(exported_program, settings)
+            transform_passes = None
+            if config.backend == "mlx":
+                from executorch.backends.mlx.passes import get_default_passes
+
+                transform_passes = get_default_passes()
+            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+                exported_program,
+                partitioner=partitioner,
+                compile_config=_get_edge_compile_config(config.backend),
+                transform_passes=transform_passes,
+            )
+            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
+                config=_get_backend_config(config)
+            )
 
         return executorch_programs_manager
 
 
-def _lower_to_executorch(exported_program: ExportedProgram, settings: _LoweringSettings) -> ExecutorchProgramManager:
-    """Lower every backend through the same edge and ExecuTorch conversion calls."""
-    programs = exported_program if settings.method_name is None else {settings.method_name: exported_program}
-    kwargs = {}
-    if settings.transform_passes is not None:
-        kwargs["transform_passes"] = settings.transform_passes
-    if settings.constant_methods is not None:
-        kwargs["constant_methods"] = settings.constant_methods
-    edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-        programs,
-        partitioner=settings.partitioner,
-        compile_config=settings.compile_config,
-        **kwargs,
-    )
-    return edge_program_manager.to_executorch(config=settings.make_backend_config())
-
-
-def _get_edge_compile_config() -> EdgeCompileConfig:
+def _get_edge_compile_config(backend: str = "xnnpack") -> EdgeCompileConfig:
     """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
 
     Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
@@ -248,6 +174,8 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     but aren't in the core ATen opset. The CPU portable kernels handle them at
     runtime; XNNPACK leaves them in the non-delegated CPU portion of the graph.
     """
+    if backend == "mlx":
+        return EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True)
     return EdgeCompileConfig(
         _core_aten_ops_exception_list=[
             torch.ops.aten._fft_c2c.default,
@@ -285,12 +213,12 @@ def _get_backend_config(config):
 
 
 # ── Stage 1: Backend preparation ──────────────────────────────────────────────
-# Each prepare_for_* function receives the original model, sample inputs, and config, applies backend-specific
-# preparation, and returns a _BackendPreparation for the shared capture/lowering pipeline. Common patterns include:
+# Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
+# and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
 # - Move the model to the target device.
 # - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
 # - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
-# MLX uses the same preparation and capture/lowering flow as the other backends.
+# To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
 
 
 def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
@@ -305,9 +233,7 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
-def prepare_for_xnnpack(
-    model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig
-) -> _BackendPreparation:
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """CPU inference via XNNPACK.
 
     Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
@@ -322,25 +248,10 @@ def prepare_for_xnnpack(
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
     partitioner = [XnnpackPartitioner()]
-
-    def make_lowering_settings():
-        return _LoweringSettings(
-            partitioner=partitioner,
-            compile_config=_get_edge_compile_config(),
-            make_backend_config=lambda: _get_backend_config(config),
-        )
-
-    return _BackendPreparation(
-        model=model,
-        sample_inputs=_make_contiguous(sample_inputs),
-        capture_config=config,
-        make_lowering_settings=make_lowering_settings,
-    )
+    return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_cuda(
-    model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig
-) -> _BackendPreparation:
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
     The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
@@ -356,55 +267,23 @@ def prepare_for_cuda(
         logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
         model = model.to(dtype=torch.bfloat16)
     partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
+    return model, _make_contiguous(sample_inputs), partitioner
 
-    def make_lowering_settings():
-        return _LoweringSettings(
-            partitioner=partitioner,
-            compile_config=_get_edge_compile_config(),
-            make_backend_config=lambda: _get_backend_config(config),
+
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+    """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
+    if any(isinstance(value, StaticCache) for value in sample_inputs.values()):
+        raise ValueError(
+            "StaticCache is not supported by the ExecuTorch MLX backend. "
+            "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
         )
 
-    return _BackendPreparation(
-        model=model,
-        sample_inputs=_make_contiguous(sample_inputs),
-        capture_config=config,
-        make_lowering_settings=make_lowering_settings,
-    )
-
-
-def prepare_for_mlx(
-    model: PreTrainedModel,
-    sample_inputs: MutableMapping[str, Any],
-    config: ExecutorchConfig,
-) -> _BackendPreparation:
-    """Inference via the ExecuTorch MLX backend, preserving native model attention and cache I/O."""
     from executorch.backends.mlx import MLXPartitioner
-    from executorch.backends.mlx.passes import get_default_passes
 
     model.requires_grad_(False)
     model = model.to(device="cpu")
-
-    def make_lowering_settings():
-        return _LoweringSettings(
-            partitioner=[MLXPartitioner()],
-            compile_config=EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True),
-            transform_passes=get_default_passes(),
-            make_backend_config=lambda: ExecutorchBackendConfig(
-                extract_delegate_segments=True,
-                memory_planning_pass=MemoryPlanningPass(
-                    alloc_graph_input=config.alloc_graph_input,
-                    alloc_graph_output=config.alloc_graph_output,
-                    alloc_mutable_buffers=config.alloc_mutable_buffers,
-                ),
-            ),
-        )
-
-    return _BackendPreparation(
-        model=model,
-        sample_inputs=_make_contiguous(sample_inputs),
-        capture_config=config,
-        make_lowering_settings=make_lowering_settings,
-    )
+    partitioner = [MLXPartitioner()]
+    return model, _make_contiguous(sample_inputs), partitioner
 
 
 _BACKEND_PREPARE = {
@@ -492,7 +371,7 @@ def _patch_topk(original):
 @register_patch("executorch.xnnpack", "torch.detach", "torch.Tensor.detach")
 @register_patch("executorch.cuda", "torch.detach", "torch.Tensor.detach")
 def _patch_detach(_original):
-    """No-op detach for XNNPACK/CUDA; MLX needs real detach during serialization."""
+    """No-op detach."""
 
     def patch(input):
         return input
@@ -509,13 +388,7 @@ def _patch_avg_pool2d(original):
     """
 
     def patch(
-        input,
-        kernel_size,
-        stride=None,
-        padding=0,
-        ceil_mode=False,
-        count_include_pad=True,
-        divisor_override=None,
+        input, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None
     ):
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
@@ -561,16 +434,7 @@ def _patch_searchsorted(original):
     bucketize). ``sorted_sequence`` is sorted, so the insertion index is the count of entries below.
     """
 
-    def patch(
-        sorted_sequence,
-        input,
-        *,
-        out_int32=False,
-        right=False,
-        side=None,
-        out=None,
-        sorter=None,
-    ):
+    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
         if side is not None:
             right = side == "right"
         seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
@@ -606,10 +470,7 @@ def _patch_adaptive_avg_pool2d(original):
             return [((i * size) // out, -(-(i + 1) * size // out)) for i in range(out)]
 
         rows = [
-            torch.cat(
-                [input[..., hs:he, ws:we].mean(dim=(-2, -1), keepdim=True) for ws, we in bounds(w, ow)],
-                dim=-1,
-            )
+            torch.cat([input[..., hs:he, ws:we].mean(dim=(-2, -1), keepdim=True) for ws, we in bounds(w, ow)], dim=-1)
             for hs, he in bounds(h, oh)
         ]
         return torch.cat(rows, dim=-2)
@@ -635,8 +496,7 @@ def _cumulative_reduce(input: torch.Tensor, dim: int, maximum: bool) -> torch.Te
 @register_patch("executorch", "torch.cummax", "torch.Tensor.cummax")
 def _patch_cummax(_original):
     """Decompose ``cummax`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
-    Returns ``(values, indices)`` like ``torch.cummax``; indices are zeros (callers use the values).
-    """
+    Returns ``(values, indices)`` like ``torch.cummax``; indices are zeros (callers use the values)."""
 
     def patch(input, dim):
         values = _cumulative_reduce(input, dim, maximum=True)
@@ -648,8 +508,7 @@ def _patch_cummax(_original):
 @register_patch("executorch", "torch.cummin", "torch.Tensor.cummin")
 def _patch_cummin(_original):
     """Decompose ``cummin`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
-    Returns ``(values, indices)`` like ``torch.cummin``; indices are zeros (callers use the values).
-    """
+    Returns ``(values, indices)`` like ``torch.cummin``; indices are zeros (callers use the values)."""
 
     def patch(input, dim):
         values = _cumulative_reduce(input, dim, maximum=False)
@@ -691,10 +550,7 @@ def _patch_broadcast_mask_expansion(_original):
         def _expanded(batch_arange, head_arange, q_arange, kv_arange):
             broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
             return mask_function(*broadcasted).expand(
-                batch_arange.shape[0],
-                head_arange.shape[0],
-                q_arange.shape[0],
-                kv_arange.shape[0],
+                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
             )
 
         return _expanded
@@ -749,16 +605,7 @@ def _patch_scaled_dot_product_attention(original):
         batch = t.shape[0]
         return isinstance(batch, torch.SymInt) and bool(free_unbacked_symbols(batch.node.expr))
 
-    def patch(
-        query,
-        key,
-        value,
-        attn_mask=None,
-        dropout_p=0.0,
-        is_causal=False,
-        scale=None,
-        **kwargs,
-    ):
+    def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
         needs_eager_attention = (
             query.device.type == "cuda"
             and (
@@ -787,14 +634,7 @@ def _patch_scaled_dot_product_attention(original):
             return torch.matmul(attn_weight, value)
         with sdpa_kernel(SDPBackend.MATH):
             return original(
-                query,
-                key,
-                value,
-                attn_mask=attn_mask,
-                dropout_p=dropout_p,
-                is_causal=is_causal,
-                scale=scale,
-                **kwargs,
+                query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
             ).clone(memory_format=torch.contiguous_format)
 
     return patch
@@ -832,7 +672,7 @@ def _normalize_tensor_shape_args(args, kwargs, keyword):
         args = (kwargs[keyword],)
     if not args:
         raise TypeError(f"Missing required {keyword} argument")
-    return args[0] if len(args) == 1 and isinstance(args[0], (tuple, list)) else args
+    return args[0] if len(args) == 1 and isinstance(args[0], tuple | list) else args
 
 
 @register_patch("executorch", "torch.Tensor.reshape")
@@ -918,8 +758,7 @@ def _patch_eval_upper_bound(original):
 
 
 @register_patch(
-    "executorch",
-    "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat",
+    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
 )
 def _patch_remove_empty_tensors_from_cat(_original):
     """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
@@ -950,10 +789,7 @@ def _patch_remove_empty_tensors_from_cat(_original):
     return patch
 
 
-@register_patch(
-    "executorch",
-    "executorch.exir.verification.verifier._check_tensor_args_matching_op_allowed_dtype",
-)
+@register_patch("executorch", "executorch.exir.verification.verifier._check_tensor_args_matching_op_allowed_dtype")
 def _patch_check_tensor_args_dtype(original):
     """Suppress complex-dtype violations in
     ``_check_tensor_args_matching_op_allowed_dtype``.
@@ -1016,10 +852,7 @@ def _patch_dim_order_from_stride(_original):
     return patch
 
 
-@register_patch(
-    "executorch",
-    "executorch.exir.passes.spec_prop_pass.SpecPropPass.update_placeholder_tensor_specs",
-)
+@register_patch("executorch", "executorch.exir.passes.spec_prop_pass.SpecPropPass.update_placeholder_tensor_specs")
 def _patch_update_placeholder_tensor_specs(_original):
     """Replacement for ``SpecPropPass.update_placeholder_tensor_specs``.
 
@@ -1111,13 +944,11 @@ def _view_replaceable_nodes(graph_module):
 
 
 @register_patch(
-    "executorch",
-    "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.call",
+    "executorch", "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.call"
 )
 def _patch_replace_view_copy_with_view_call(_original):
     """Replacement for ``ReplaceViewCopyWithViewPass.call`` that only replaces ``view_copy``
-    nodes whose shape dynamism matches their base's — see ``_view_replaceable_nodes``.
-    """
+    nodes whose shape dynamism matches their base's — see ``_view_replaceable_nodes``."""
 
     def patch(self, graph_module):
         n_replaced = 0
@@ -1135,8 +966,7 @@ def _patch_replace_view_copy_with_view_call(_original):
 
 
 @register_patch(
-    "executorch",
-    "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.ensures",
+    "executorch", "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.ensures"
 )
 def _patch_replace_view_copy_with_view_ensures(_original):
     """Companion to ``_patch_replace_view_copy_with_view_call``: the original ``ensures`` asserts
@@ -1187,13 +1017,7 @@ def _extend_sym_ops_allowlist(original):
 
     Trace-time-only ops don't need a runtime kernel; without this they still trip the verifier.
     """
-    return original | {
-        torch.sym_ite,
-        torch.sym_not,
-        torch.sym_int,
-        torch.sym_sum,
-        torch.sym_float,
-    }
+    return original | {torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float}
 
 
 def _make_squeeze_define_node(original):
@@ -1231,8 +1055,7 @@ def _make_squeeze_define_node(original):
 
 
 @register_patch(
-    "executorch",
-    "executorch.backends.transforms.remove_clone_ops.RemoveCloneOpsTransform._is_non_identity_clone",
+    "executorch", "executorch.backends.transforms.remove_clone_ops.RemoveCloneOpsTransform._is_non_identity_clone"
 )
 def _patch_is_non_identity_clone(original):
     """Keep identity clones that feed the graph output.
@@ -1258,8 +1081,7 @@ def _patch_is_non_identity_clone(original):
 
 
 @register_patch(
-    "executorch.xnnpack",
-    "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints",
+    "executorch.xnnpack", "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints"
 )
 def _patch_prelu_check_constraints(original):
     """Only delegate ``prelu`` to XNNPACK when its input is 4-D.
@@ -1320,10 +1142,7 @@ def _patch_flatc_compile_nonfinite(original):
     return patch
 
 
-@register_patch(
-    "executorch.xnnpack",
-    "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict",
-)
+@register_patch("executorch.xnnpack", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")
 def _patch_squeeze_node_visitors(original):
     """Swap the squeeze/unsqueeze visitor entries in ``_node_visitor_dict`` with subclasses
     whose ``define_node`` skips the strict reshape check.
@@ -1341,11 +1160,7 @@ def _patch_squeeze_node_visitors(original):
     new = dict(original)
     for key in ("aten.squeeze_copy.dim", "aten.unsqueeze_copy.default"):
         cls = original[key]
-        new[key] = type(
-            cls.__name__,
-            (cls,),
-            {"define_node": _make_squeeze_define_node(cls.define_node)},
-        )
+        new[key] = type(cls.__name__, (cls,), {"define_node": _make_squeeze_define_node(cls.define_node)})
     return new
 
 
@@ -1374,8 +1189,7 @@ _MAX_UNBOUNDED_PRODUCT = 2**24
 
 def _dim_floor(num_unbounded: int) -> int:
     """Cap floor for each of `num_unbounded` simultaneously-unbounded dims, sized so their product
-    stays near `_MAX_UNBOUNDED_PRODUCT` and clamped to ``[_MIN_DIM_FLOOR, _MAX_DIM_FLOOR]``.
-    """
+    stays near `_MAX_UNBOUNDED_PRODUCT` and clamped to ``[_MIN_DIM_FLOOR, _MAX_DIM_FLOOR]``."""
     per_dim = round(_MAX_UNBOUNDED_PRODUCT ** (1.0 / max(num_unbounded, 1)))
     return max(_MIN_DIM_FLOOR, min(_MAX_DIM_FLOOR, per_dim))
 
@@ -1573,14 +1387,7 @@ def _fix_python_sym_op(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     ``mul`` / etc. are also used for tensor-tensor ops, where the ``Scalar``
     overload fails at runtime with ``Cannot cast NotImplemented to number``.
     """
-    if node.target not in (
-        torch.sym_float,
-        torch.sym_max,
-        torch.sym_min,
-        math.ceil,
-        math.trunc,
-        round,
-    ):
+    if node.target not in (torch.sym_float, torch.sym_max, torch.sym_min, math.ceil, math.trunc, round):
         return False
     replacement = _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS.get(node.target)
     if replacement is None:

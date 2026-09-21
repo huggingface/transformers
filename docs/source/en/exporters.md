@@ -167,16 +167,15 @@ outputs = method.execute(list(inputs.values()))
 
 ## MLX backend
 
-Select `backend="mlx"` to use the ExecuTorch MLX backend. It uses the same `.export` and
-`export_for_generation` APIs and configuration options as XNNPACK. Pass the model's real inputs,
-including any masks or cache inputs needed by its forward method.
+Use `backend="mlx"` for Apple Silicon GPU inference. Export requires an ExecuTorch installation
+with the MLX backend. Running the exported programs requires the MLX delegate and its Metal libraries.
 
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters import ExecutorchConfig, ExecutorchExporter
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype=torch.bfloat16).to("cpu").eval()
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype=torch.bfloat16).eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 exporter = ExecutorchExporter()
@@ -184,33 +183,11 @@ config = ExecutorchConfig(backend="mlx", dynamic=True)
 
 program = exporter.export(model, inputs, config=config)
 components = exporter.export_for_generation(model, inputs, config=config)
-# This decoder-only model returns both "prefill" and "decode".
 ```
 
-The [generation options](#generative-models) below apply to MLX too: use the model's default cache
-or pass a `GenerationConfig`, and choose single-token or multi-token decode capture independently.
-`multi_token_decode=True` changes the decode capture; it does not remove prefill or internalize cache
-state. Static caches and multi-token capture are options, not MLX requirements.
-
-MLX uses normal model and input preparation, graph capture, and lowering to the MLX backend.
-The recipe leaves the model's native attention and cache implementations unchanged, preserving
-supplied masks and normal cache inputs and outputs. Cache state remains explicit between generation
-components and runtime calls.
-
-Unsupported backend operators can still cause lowering to fail. Known limitations include native
-static-cache mutation outputs and some captured `None` inputs, so some static-cache generation
-combinations remain unsupported. Model settings such as MoE or sliding-window sizes are not changed
-to obtain support.
-
-A compatible ExecuTorch installation must provide the MLX backend. Running its artifacts requires an
-ExecuTorch build with the MLX delegate and its Apple Silicon/Metal runtime dependencies. Dependency
-and operator support depend on the installed backend version.
-
-> [!WARNING]
-> Generation components preserve normal cache inputs and outputs. Runtime callers must bind each
-> component's exported signature and carry cache state between calls. An older C++ runner accepting
-> only `input_ids` and `cache_position` for a cache-owning artifact is not compatible with this API;
-> adapting that runner is separate from exporting these components.
+For [generation](#generative-models), pass cache outputs from one invocation as inputs to the next.
+Operator support depends on the installed MLX backend. Known lowering limitations include
+static-cache mutation outputs and some captured `None` inputs.
 
 ## Dynamic shapes
 
@@ -311,8 +288,6 @@ et_program = exporter.export(model, inputs, config=config)
 For autoregressive generation, the model's `forward` has different shapes at the prefill step
 (full prompt, no KV cache) versus the decode step (single token, populated KV cache). Exporters
 expose [`~HfExporter.export_for_generation`], which splits both stages and exports each.
-This decomposition is shared by every backend, including MLX, and returns the complete component
-dict. Changing the backend does not change component selection or cache ownership.
 
 For multi-modal generative models, the prefill additionally splits into an image or audio
 encoder, the language model, and `lm_head`. Encoder and language-model discovery uses
@@ -398,7 +373,7 @@ once and hooks `model.forward` to capture the real prefill and decode kwargs (an
 per-submodule kwargs via hooks on each encoder/projector/language model if the model is
 multi-modal). That's why it works for any architecture, including decoder-only, SSM,
 encoder-decoder, and multi-modal models, without per-model glue. `export_for_generation` is a
-shared decomposition followed by one `.export` call per component on every backend.
+one-liner over it.
 
 The capture runs the model eagerly on `inputs`, so pass small but representative values, such as a
 short prompt, a single small image, or a few audio frames. The exported program isn't tied to
@@ -478,11 +453,11 @@ cache handles where they land internally.
 
 `generate()` grows a `DynamicCache` by default, reallocating as the sequence extends — a moving target
 for an exported graph. A **static** cache is a fixed-size buffer, allocated once and written in place at
-the current position each step. Combined with a [multi-token decode](#multi-token-decode), the
-`decode` graph takes a fixed-size cache and a variable number of query tokens. The returned dict still
-includes prefill and all other discovered components; the cache remains part of the normal inputs.
-Export it by forwarding a `GenerationConfig` with `cache_implementation="static"` (and a
-`max_cache_len`) alongside `multi_token_decode=True`:
+the current position each step. Combined with a [multi-token decode](#multi-token-decode) it collapses
+generation into a single exported graph: the `decode` graph takes a fixed-size cache and a *variable*
+number of query tokens, so one graph serves both the prompt (empty cache → prefill) and each generated
+token (populated cache → decode). Export it by forwarding a `GenerationConfig` with
+`cache_implementation="static"` (and a `max_cache_len`) alongside `multi_token_decode=True`:
 
 <hfoptions id="static-cache">
 <hfoption id="Dynamo">

@@ -163,7 +163,7 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
-            - `"mlx"` — inference via the ExecuTorch MLX backend on Apple Silicon.
+            - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
