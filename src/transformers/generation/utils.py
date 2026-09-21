@@ -1980,6 +1980,7 @@ class GenerationMixin(ContinuousMixin):
             if any(heads % tp_size for heads in layer_heads):
                 # The model cannot be evenly sharded by head
                 return None
+            # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
             num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
         return num_heads, head_dim
 
