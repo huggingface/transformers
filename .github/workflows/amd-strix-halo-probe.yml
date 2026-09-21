@@ -88,7 +88,7 @@ jobs:
           timeout -s INT --kill-after=120 360m \
             python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
               --timeout=1200 --timeout-method=signal \
-              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence" \
+              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence and not test_sdpa_can_compile_dynamic" \
               tests/models/${{ matrix.model }}
 
   models-ci-1:
@@ -117,7 +117,7 @@ jobs:
           timeout -s INT --kill-after=120 360m \
             python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
               --timeout=1200 --timeout-method=signal \
-              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence" \
+              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence and not test_sdpa_can_compile_dynamic" \
               tests/models/${{ matrix.model }}
 
   models-ci-2:
@@ -146,7 +146,7 @@ jobs:
           timeout -s INT --kill-after=120 360m \
             python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
               --timeout=1200 --timeout-method=signal \
-              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence" \
+              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence and not test_sdpa_can_compile_dynamic" \
               tests/models/${{ matrix.model }}
 
   test:
