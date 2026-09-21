@@ -373,6 +373,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
         ("nemotron3_5_asr", "Nemotron3_5AsrForRNNT"),
+        ("nemotron3_diarization", "Nemotron3DiarizationModel"),
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),
         ("nemotron_h", "NemotronHModel"),
@@ -1842,6 +1843,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("data2vec-audio", "Data2VecAudioForAudioFrameClassification"),
+        ("nemotron3_diarization", "Nemotron3DiarizationForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
         ("wav2vec2-bert", "Wav2Vec2BertForAudioFrameClassification"),
