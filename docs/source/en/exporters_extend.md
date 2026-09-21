@@ -29,6 +29,18 @@ To add a whole backend rather than a workaround, subclass [`HfExporter`] and imp
 `export` / `export_for_generation` entry points, the [`~exporters.ExportArtifacts`] they return, and
 loading it back are built on those two and need no per-backend code.
 
+Pair it with a [`~exporters.ModelRunner`], which is what runs the artifact back: `from_artifact` and
+`from_pretrained` build one, `__call__` takes the graph's kwargs and returns its named tensor leaves.
+Register the config, the exporter and the runner under one format name with `@register_export_config`,
+`@register_exporter` and `@register_runner`, and every auto class and loader finds them.
+
+[`AotiExporter`] is the smallest worked example in the tree: it subclasses [`DynamoExporter`], compiles
+the program that one traces, and pairs with a runner that loads the result — a working backend in about
+150 lines across
+[exporter_aoti.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_aoti.py)
+and
+[runner_aoti.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/runner_aoti.py).
+
 ## Patches and fixes
 
 A workaround is either a patch or a fix. The two differ in whether they can be reverted.

@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     require_onnxscript,
     require_torch,
     require_torch_gpu,
+    require_torch_tensorrt,
     slow,
 )
 from transformers.utils import is_torch_available
@@ -329,6 +330,122 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             from_disk = loaded.generate(**inputs, max_new_tokens=4, do_sample=False)
 
         self.assertListEqual(from_disk.tolist(), in_memory.tolist())
+
+    # ─────────────────────── TensorRT ────────────────────────
+
+    @require_torch_gpu
+    @require_torch_tensorrt
+    @pytest.mark.torch_export_test
+    def test_compiled_engines_generate_like_eager(self):
+        """A graph whose convertible parts are TensorRT engines still drives `generate`.
+
+        Conversion is partial by nature — engines with torch segments between them — and the artifact stays
+        an `ExportedProgram`, so most of this backend is the `torch.export` one. What is worth holding onto
+        is what conversion changes underneath that: the program keeps no weights (they are inside the
+        engines), so the device has to come from what the export recorded, and the cache is written and read
+        across an engine boundary, which is where wrong numbers would show up as wrong tokens.
+        """
+        from transformers.exporters import TensorrtConfig, TensorrtExporter
+
+        torch.manual_seed(0)
+        model = self._tiny_model().to("cuda")
+        model.generation_config.pad_token_id = 0
+        prompt = torch.randint(0, 64, (1, 4), device="cuda")
+        inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
+        # A static cache, because TensorRT holds its engines to the shape range they were built for, and a
+        # growing cache asks the decode graph to take a length it never traced (zero, at the first step).
+        generation_config = GenerationConfig(
+            cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False
+        )
+        expected = model.generate(
+            **copy.deepcopy(inputs), generation_config=copy.deepcopy(generation_config), max_new_tokens=4
+        )
+
+        exported = TensorrtExporter().export_for_generation(
+            model,
+            copy.deepcopy(inputs),
+            config=TensorrtConfig(dynamic=False),
+            generation_config=copy.deepcopy(generation_config),
+        )
+        engines = sum(
+            str(node.target).count("tensorrt")
+            for component in exported.values()
+            for node in component.artifact.graph_module.graph.nodes
+        )
+        self.assertGreater(engines, 0, "Nothing was converted, so this would pass as plain torch.export.")
+
+        ids = exported.runtime().generate(
+            **copy.deepcopy(inputs), generation_config=copy.deepcopy(generation_config), max_new_tokens=4
+        )
+        self.assertListEqual(ids.tolist(), expected.tolist())
+
+    # ────────────────────── AOTInductor ──────────────────────
+
+    @pytest.mark.torch_export_test
+    def test_saved_compiled_package_generates_like_the_in_memory_one(self):
+        """The compiled counterpart of the test above, and the same deployment path end to end.
+
+        AOTInductor compiles the very graph the dynamo backend traces, so what is worth proving is
+        everything around the graph: that the package is called with the graph's own kwargs — the `Cache`
+        object included — that the metadata it bakes into the archive comes back on load, and that a
+        package which has been through disk generates what it generated in memory.
+        """
+        import tempfile
+
+        from transformers.exporters import AotiConfig, AotiExporter, AutoExportedModel
+
+        torch.manual_seed(0)
+        model = self._tiny_model()
+        model.generation_config.pad_token_id = 0
+        prompt = torch.randint(0, 64, (1, 4))
+        inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
+        expected = model.generate(**copy.deepcopy(inputs), max_new_tokens=4, do_sample=False)
+
+        exported = AotiExporter().export_for_generation(
+            model, copy.deepcopy(inputs), config=AotiConfig(dynamic=True), multi_token_decode=True
+        )
+        # Bytes, not a path: a package is a self-contained archive, so an export that has not been saved
+        # is the archive itself — which is what lets it be run and saved with no temporary file between.
+        self.assertIsInstance(exported["decode"].artifact, bytes)
+
+        in_memory = exported.runtime().generate(**copy.deepcopy(inputs), max_new_tokens=4, do_sample=False)
+        self.assertListEqual(in_memory.tolist(), expected.tolist())
+
+        # The kernels are compiled for one kind of device, and the runner says so rather than failing
+        # somewhere inside the first call.
+        with self.assertRaises(ValueError):
+            exported.runners(device="meta")
+
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            loaded = AutoExportedModel.from_pretrained(directory)
+            from_disk = loaded.generate(**copy.deepcopy(inputs), max_new_tokens=4, do_sample=False)
+
+        self.assertListEqual(from_disk.tolist(), in_memory.tolist())
+
+    @pytest.mark.torch_export_test
+    def test_saved_compiled_single_graph_matches_eager(self):
+        """A non-generative compiled export loads as an [`ExportedModel`] and forwards like the model it
+        came from — the same shape as the traced single-graph case, with kernels instead of a graph."""
+        import tempfile
+
+        from transformers.exporters import AotiConfig, AotiExporter, AutoExportedModel
+
+        torch.manual_seed(0)
+        model = self._tiny_model()
+        prompt = torch.randint(0, 64, (1, 4))
+        inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
+        with torch.no_grad():
+            expected = model(**copy.deepcopy(inputs)).logits
+
+        exported = AotiExporter().export(model, copy.deepcopy(inputs), config=AotiConfig(dynamic=True))
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            loaded = AutoExportedModel.from_pretrained(directory)
+            self.assertEqual(type(loaded).__name__, "ExportedModel")
+            outputs = loaded(**inputs)
+
+        torch.testing.assert_close(outputs.logits, expected, atol=1e-3, rtol=1e-3)
 
     @require_onnxscript
     @require_onnxruntime

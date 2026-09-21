@@ -48,11 +48,13 @@ from transformers.exporters.auto import (
 )
 from transformers.exporters.base import HfExporter
 from transformers.exporters.configs import (
+    AotiConfig,
     DynamoConfig,
     ExecutorchConfig,
     ExportConfigMixin,
     ExportFormat,
     OnnxConfig,
+    TensorrtConfig,
 )
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
@@ -75,6 +77,8 @@ from transformers.exporters.decompose import (
 
 
 CONCRETE_CONFIGS = [
+    (AotiConfig, ExportFormat.AOTI),
+    (TensorrtConfig, ExportFormat.TENSORRT),
     (OnnxConfig, ExportFormat.ONNX),
     (DynamoConfig, ExportFormat.DYNAMO),
     (ExecutorchConfig, ExportFormat.EXECUTORCH),

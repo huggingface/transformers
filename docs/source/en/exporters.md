@@ -36,6 +36,8 @@ Every exporter returns an [`~exporters.ExportArtifacts`]; `artifact` is the back
 | Exporter               | `artifact`                 | Runtime                                    |
 | ---------------------- | -------------------------- | ------------------------------------------ |
 | [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation       |
+| [`AotiExporter`]       | `bytes` (a `.pt2` package) | PyTorch, compiled ahead of time            |
+| [`TensorrtExporter`]   | `ExportedProgram`          | NVIDIA GPUs, through TensorRT engines      |
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)       |
 
@@ -67,6 +69,20 @@ Install the dependencies for the backend you plan to export to.
 
 ```bash
 pip install transformers "torch==2.12.0"
+```
+
+</hfoption>
+<hfoption id="AOTInductor">
+
+```bash
+pip install transformers "torch==2.12.0"   # plus a C++ toolchain: Inductor compiles the package it writes
+```
+
+</hfoption>
+<hfoption id="TensorRT">
+
+```bash
+pip install transformers torch torch-tensorrt   # the two are released in matched pairs
 ```
 
 </hfoption>
@@ -198,6 +214,53 @@ outputs = exported_model(**inputs)
 > Loading refuses a directory whose manifest has no recorded metadata rather than falling back to
 > inference, because a runner that guesses the precision or the cache layout still runs — and produces
 > quietly wrong numbers. Re-save with `save_pretrained` if you hit this.
+
+## Compile ahead of time
+
+[`AotiExporter`] compiles the same graph [`DynamoExporter`] traces. A `torch.export` program replays its
+ATen graph through the ordinary eager kernels, so tracing buys you a portable graph but not speed;
+handing that graph to AOTInductor generates and compiles kernels for it and packages them as a `.pt2`,
+which loads with no warm-up to pay.
+
+```python
+from transformers.exporters import AotiExporter, AotiConfig
+
+exported = AotiExporter().export(model, inputs, config=AotiConfig(dynamic=True))
+exported.save_pretrained("qwen3-compiled")
+```
+
+Everything else is unchanged: the package loads through [`AutoExportedModel`] like any other export, and a
+generative model decomposes and runs exactly as it does on the other backends.
+
+A package holds machine code for the device it was compiled on, so it cannot be moved afterwards — export
+again for another kind of device.
+
+```python
+AotiConfig(dynamic=True, inductor_configs={"max_autotune": True})   # tuning knobs go straight to Inductor
+```
+
+## Compile with TensorRT
+
+[`TensorrtExporter`] hands the same graph to TensorRT, through Torch-TensorRT's `dynamo` frontend. What
+comes back is still an `ExportedProgram`, with each engine sitting in the graph as a `tensorrt.execute_engine`
+call — so it saves, loads and runs like any other export, and the runtime drives it unchanged.
+
+```python
+from transformers.exporters import TensorrtConfig, TensorrtExporter
+
+exported = TensorrtExporter().export_for_generation(
+    model, inputs, config=TensorrtConfig(dynamic=False), generation_config=generation_config
+)
+```
+
+Conversion is partial by nature: TensorRT takes the subgraphs it can build engines for and leaves the rest
+as torch ops, so a converted model is engines with torch segments between them rather than one engine.
+`min_block_size` decides how small a run of ops is still worth an engine, and `torch_executed_ops` names the
+ones to leave alone — a cache write (`index_put`) is there by default, because the converter cannot build it.
+
+Export against a **static cache** (`cache_implementation="static"`). TensorRT holds its engines to the shape
+range they were built for, where `torch.export` treats that range as advisory, and a growing cache asks the
+decode graph to take a length it never traced — zero, at the first step, which TensorRT refuses outright.
 
 ## Dynamic shapes
 

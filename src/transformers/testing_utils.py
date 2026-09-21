@@ -168,6 +168,7 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
+    is_torch_tensorrt_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -640,6 +641,10 @@ def require_onnxruntime(test_case):
 
 def require_executorch(test_case):
     return unittest.skipUnless(is_executorch_available(), "test requires ExecuTorch")(test_case)
+
+
+def require_torch_tensorrt(test_case):
+    return unittest.skipUnless(is_torch_tensorrt_available(), "test requires Torch-TensorRT")(test_case)
 
 
 def require_timm(test_case):

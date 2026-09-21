@@ -26,11 +26,23 @@ from .auto import (
 )
 from .base import ExportArtifacts, ExportedModel, HfExporter, ModelRunner
 from .components import Component, ComponentRole, ExportedComponent
-from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig
+from .configs import (
+    AotiConfig,
+    DynamoConfig,
+    ExecutorchConfig,
+    ExportConfigMixin,
+    ExportFormat,
+    OnnxConfig,
+    TensorrtConfig,
+)
+from .exporter_aoti import AotiExporter
 from .exporter_dynamo import DynamoExporter
 from .exporter_executorch import ExecutorchExporter
 from .exporter_onnx import OnnxExporter
+from .exporter_tensorrt import TensorrtExporter
 from .generator import ExportedGenerator, Modality
+from .runner_aoti import AotiModelRunner
 from .runner_dynamo import DynamoModelRunner
 from .runner_executorch import ExecutorchModelRunner
 from .runner_onnx import OnnxModelRunner
+from .runner_tensorrt import TensorrtModelRunner

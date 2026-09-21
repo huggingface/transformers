@@ -234,6 +234,12 @@ class ExportMetadata:
         return dtype if isinstance(dtype, torch.dtype) else None
 
     @property
+    def device(self) -> torch.device | None:
+        """The device the graph was exported on — not read off weights a compiled artifact no longer has."""
+        device = self.raw.get("device")
+        return torch.device(device) if device else None
+
+    @property
     def constant_inputs(self) -> dict[str, Any]:
         """Declared inputs that carry no tensor, and the value each holds — a `None` mask slot the trace kept
         (see `input_names`). A positional backend fills these rather than skipping them."""
@@ -354,6 +360,11 @@ def build_export_metadata(
         "dtype": str(
             next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
         ).removeprefix("torch."),
+        # Where it was exported, for the backends whose artifact cannot say. A `torch.export` program keeps
+        # its weights and a runner reads the device off them, but a *compiled* one has none left to read —
+        # AOTInductor bakes them into the package and TensorRT folds them into its engines, and a runner
+        # that then assumed CPU had the generation loop building a CPU cache for a CUDA graph.
+        "device": str(next((p.device for p in model.parameters()), torch.device("cpu"))),
         "kwargs": {name: _traced_kwarg(value) for name, value in inputs.items()},
     }
     # What the *graph* is, as the trace saw it. Each backend used to rebuild these its own way — ExecuTorch

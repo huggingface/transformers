@@ -43,6 +43,17 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
     - export_artifact
     - save_artifact
 
+## AotiExporter
+
+[[autodoc]] exporters.exporter_aoti.AotiExporter
+    - export_artifact
+    - save_artifact
+
+## TensorrtExporter
+
+[[autodoc]] exporters.exporter_tensorrt.TensorrtExporter
+    - export_artifact
+
 ## OnnxExporter
 
 [[autodoc]] exporters.exporter_onnx.OnnxExporter
@@ -100,6 +111,10 @@ One exported graph, bound to the runtime that runs it.
 
 [[autodoc]] exporters.runner_dynamo.DynamoModelRunner
 
+[[autodoc]] exporters.runner_aoti.AotiModelRunner
+
+[[autodoc]] exporters.runner_tensorrt.TensorrtModelRunner
+
 [[autodoc]] exporters.runner_onnx.OnnxModelRunner
 
 [[autodoc]] exporters.runner_executorch.ExecutorchModelRunner
@@ -109,6 +124,10 @@ One exported graph, bound to the runtime that runs it.
 [[autodoc]] exporters.configs.DynamoConfig
 
 ## OnnxConfig
+
+[[autodoc]] exporters.configs.AotiConfig
+
+[[autodoc]] exporters.configs.TensorrtConfig
 
 [[autodoc]] exporters.configs.OnnxConfig
 

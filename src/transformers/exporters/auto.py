@@ -21,18 +21,18 @@ from dataclasses import dataclass
 
 from ..models.auto import AutoConfig
 from ..utils import logging
-from .base import ExportedModel, HfExporter, ModelRunner
-from .configs import ExportConfigMixin, ExportFormat
+from .base import EXPORT_CONFIG_NAME, ExportedModel, HfExporter, ModelRunner
+from .configs import AotiConfig, ExportConfigMixin, ExportFormat, TensorrtConfig
+from .exporter_aoti import AotiExporter
 from .exporter_dynamo import DynamoConfig, DynamoExporter
 from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from .exporter_onnx import OnnxConfig, OnnxExporter
+from .exporter_tensorrt import TensorrtExporter
+from .runner_aoti import AotiModelRunner
 from .runner_dynamo import DynamoModelRunner
 from .runner_executorch import ExecutorchModelRunner
 from .runner_onnx import OnnxModelRunner
-
-
-# The recipe a model owner publishes next to their weights, naming the export they validated.
-EXPORT_CONFIG_NAME = "export_config.json"
+from .runner_tensorrt import TensorrtModelRunner
 
 
 @dataclass
@@ -54,6 +54,8 @@ EXPORT_BACKENDS: dict[str, ExportBackend] = {
     "executorch": ExportBackend(ExecutorchConfig, ExecutorchExporter, ExecutorchModelRunner),
     "dynamo": ExportBackend(DynamoConfig, DynamoExporter, DynamoModelRunner),
     "onnx": ExportBackend(OnnxConfig, OnnxExporter, OnnxModelRunner),
+    "aoti": ExportBackend(AotiConfig, AotiExporter, AotiModelRunner),
+    "tensorrt": ExportBackend(TensorrtConfig, TensorrtExporter, TensorrtModelRunner),
 }
 
 

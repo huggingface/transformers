@@ -237,12 +237,11 @@ class ExportedGenerator(GenerationMixin):
     `StaticCache`, whose `max_cache_len` a static-cache export should pin explicitly).
 
     Example:
-        programs = OnnxExporter().export(model, inputs,
+        exported = OnnxExporter().export_for_generation(model, inputs,
                                                         OnnxConfig(dynamic=True, external_data=False),
                                                         generation_config=generation_config,
                                                         multi_token_decode=True)
-        session = ort.InferenceSession(programs["decode"].model_proto.SerializeToString())
-        runtime = ExportedGenerator(model.config, generation_config, OnnxModelRunner(session))
+        runtime = exported.runtime()
         # Called like a normal model — the runtime builds the cache the exported graph needs.
         ids = runtime.generate(input_ids=prompt, max_new_tokens=32)
     """
@@ -327,11 +326,12 @@ class ExportedGenerator(GenerationMixin):
         multi-modal when `"embed_tokens"` and `"<modality>_encoder"` runners are present; each modality's
         precompute is built from `config` alone. `generation_config` must be the one the model was
         **exported with** (it declares the cache the graphs were traced against — save it with the
-        artifacts); when `None`, the model config's own generation defaults apply (a growing cache). To
-        load from disk, build each `ModelRunner` from its saved artifact (e.g.
-        `OnnxModelRunner(onnxruntime.InferenceSession(path))`,
-        `DynamoModelRunner(torch.export.load(path).module())`) and pass a config from
-        `AutoConfig.from_pretrained(...)`."""
+        artifacts); when `None`, the model config's own generation defaults apply (a growing cache).
+
+        The runners are this runtime's own — `ExportArtifacts.runners()` in memory, or
+        [`~ExportedGenerator.from_pretrained`] from disk. Both hand each runner what the export recorded
+        about its graph, which is what a runner reads its precision and cache layout from; one built around
+        an artifact by hand has none of that and is refused when it is asked for them."""
         if generation_config is None:
             generation_config = GenerationConfig.from_model_config(config)
         # The scatter path applies when a graph takes embeddings where a plain model's takes token ids: the

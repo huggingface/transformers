@@ -45,6 +45,10 @@ logger = logging.get_logger(__name__)
 # runner inferring precision and cache layout when the format cannot (`torch.export` cannot).
 EXPORT_MANIFEST_FILE = "export.json"
 
+# The recipe an export was made with, and the one a model owner publishes next to their weights to say how
+# theirs should be made. Written by `ExportArtifacts.save_pretrained`, read by `AutoHfExporter.from_pretrained`.
+EXPORT_CONFIG_NAME = "export_config.json"
+
 
 if TYPE_CHECKING:
     if is_torch_available():
@@ -161,11 +165,15 @@ class ExportArtifacts(Mapping):
         export_format: ExportFormat,
         config: object | None = None,
         generation_config: GenerationConfig | None = None,
+        export_config: ExportConfigMixin | dict[str, ExportConfigMixin] | None = None,
     ):
         self.components = dict(components)
         self.export_format = export_format
         self.config = config
         self.generation_config = generation_config
+        # The settings this was traced under, so the directory can say how it was made and
+        # [`AutoHfExporter.from_pretrained`] can make it again the same way.
+        self.export_config = export_config
 
     def __getitem__(self, name: str) -> ExportedComponent:
         return self.components[name]
@@ -245,6 +253,17 @@ class ExportArtifacts(Mapping):
             self.config.save_pretrained(directory)
         if self.generation_config is not None:
             self.generation_config.save_pretrained(directory)
+        # How it was exported, in the file `AutoHfExporter.from_pretrained` reads a recipe from — the
+        # manifest names the format, and this names the settings behind it (dynamic shapes, opset, the
+        # backend an ExecuTorch lowering targeted). A per-component export writes a mapping instead of one
+        # recipe, since that is what it was given.
+        if self.export_config is not None:
+            recipe = (
+                {name: config.to_dict() for name, config in self.export_config.items()}
+                if isinstance(self.export_config, Mapping)
+                else self.export_config.to_dict()
+            )
+            (directory / EXPORT_CONFIG_NAME).write_text(json.dumps(recipe, indent=2, default=str) + "\n")
 
     def runners(self, components: Iterable[str] | None = None, **kwargs) -> dict[str, ModelRunner]:
         """A runner per artifact, built in memory — the same runners a load builds, handed the same
@@ -393,7 +412,9 @@ class HfExporter(ABC):
         # `getattr`, because a single graph is often a decomposed component rather than a whole model, and
         # those are plain `nn.Module`s: an encoder-decoder's `FSMTEncoder`, an RNN-T's decoder. Such an
         # export simply saves no `config.json`.
-        return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
+        return ExportArtifacts(
+            {"model": component}, self.export_format, config=getattr(model, "config", None), export_config=config
+        )
 
     def export_for_generation(
         self,
@@ -463,6 +484,7 @@ class HfExporter(ABC):
             self.export_format,
             config=getattr(model, "config", None),
             generation_config=generation_config,
+            export_config=config,
         )
 
     @classmethod
@@ -500,7 +522,6 @@ class ModelRunner(ABC):
     # was traced away. Where both could answer, the handle wins, because it is the thing that will refuse
     # the call. An accessor is the fallback for an artifact whose runner said nothing.
     export_metadata: ExportMetadata = ExportMetadata()
-    device: torch.device | str = "cpu"
 
     @functools.cached_property
     def input_names(self) -> tuple[str, ...]:
@@ -512,21 +533,37 @@ class ModelRunner(ABC):
         return self.export_metadata.input_names
 
     @functools.cached_property
+    def device(self) -> torch.device:
+        """Where this graph runs, and so where its outputs land.
+
+        A runner whose handle knows assigns `self.device` instead, which seeds this — a `torch.export`
+        program is a module and its weights say where they are. A compiled artifact has no weights left to
+        ask (AOTInductor bakes them into the package, TensorRT folds them into its engines), so it falls
+        back to what the export recorded, and to CPU only when nothing recorded anything."""
+        return self.export_metadata.device or torch.device("cpu")
+
+    @functools.cached_property
     def dtype(self) -> torch.dtype:
         """Precision the graph computes at, as recorded at export.
 
         The generation layer sizes the cache it feeds from this, and a half-precision export (a grouped-mm
-        MoE, a varlen-attention VLM) takes half-precision cache leaves — hand it the fp32 default and the
-        feed is refused when the artifact binds its inputs. An artifact carrying no metadata cannot say, so
-        it says so rather than sniffing whichever of its tensors happens to be floating point. A runner whose
-        handle knows better assigns `self.dtype` instead, which seeds this."""
+        MoE, a varlen-attention VLM) takes half-precision cache leaves — hand it an fp32 one and the feed is
+        refused when the artifact binds its inputs. A runner whose handle knows better assigns `self.dtype`
+        instead, which seeds this.
+
+        Refused rather than guessed. Every way the runtime builds a runner carries the metadata — the
+        in-memory path passes it, and a load goes through `read_export_manifest`, which refuses an export
+        that lost it — so an artifact without it is one this was never meant to run. Assuming fp32 is how a
+        half-precision export used to look like a backend limitation, which hid a real bug across every MoE
+        model."""
         if dtype := self.export_metadata.dtype:
             return dtype
-        logger.warning_once(
+        raise ValueError(
             f"This artifact carries no `{EXPORT_METADATA_KEY}`, so the precision it was exported at is "
-            f"unknown; assuming {torch.float32}. Re-export it to record the precision."
+            "unknown, and guessing it silently corrupts a half-precision export. Load it with "
+            "`ExportedGenerator.from_pretrained` / `AutoExportedModel.from_pretrained`, or run it from the "
+            "`ExportArtifacts` the export returned — both carry the metadata."
         )
-        return torch.float32
 
     @functools.cached_property
     def cache_inputs(self) -> tuple[str, ...]:

@@ -1050,6 +1050,10 @@ def is_executorch_available() -> bool:
     return _is_package_available("executorch")[0]
 
 
+def is_torch_tensorrt_available() -> bool:
+    return _is_package_available("torch_tensorrt")[0]
+
+
 @lru_cache
 @_make_compile_constant
 def is_flute_available() -> bool:

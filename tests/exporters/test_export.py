@@ -18,8 +18,10 @@ import inspect
 import itertools
 import os
 import re
+import subprocess
 import sys
 import tempfile
+import unittest
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
@@ -30,10 +32,13 @@ from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
 from transformers.exporters.components import Component, ComponentRole
+from transformers.exporters.configs import AotiConfig, TensorrtConfig
 from transformers.exporters.decompose import decompose_for_generation, decompose_multimodal, is_multimodal
+from transformers.exporters.exporter_aoti import AotiExporter
 from transformers.exporters.exporter_dynamo import _VARLEN_ATTENTION_PATHS, DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
+from transformers.exporters.exporter_tensorrt import TensorrtExporter
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     get_leaf_tensors,
@@ -46,6 +51,7 @@ from transformers.testing_utils import (
     require_onnxruntime,
     require_onnxscript,
     require_torch_greater_or_equal,
+    require_torch_tensorrt,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -770,6 +776,45 @@ EXPORT_TEST_TIMEOUT = 1000
 MIN_EXPORT_TORCH_VERSION = DynamoExporter.min_versions["torch"]
 
 
+@functools.lru_cache(maxsize=1)
+def _inductor_toolchain_problem() -> str | None:
+    """Why Inductor's C++ compiler cannot build what Inductor emits, or `None` when it can.
+
+    A compiled export needs a toolchain that takes those flags, and one that does not fails every
+    AOTInductor test in the sweep the same way (`-std=c++20` on a pre-gcc-10 compiler is the usual
+    reason). Asking the compiler once, and skipping, keeps an environment problem from reading as
+    hundreds of model failures — but it has to *say* so, or a whole sweep skips and looks like it ran.
+    """
+    from torch._inductor.cpp_builder import get_cpp_compiler
+
+    compiler = get_cpp_compiler()
+    try:
+        probe = subprocess.run(
+            [compiler, "-std=c++20", "-x", "c++", "-E", "-"],
+            input="",
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        return f"{compiler} could not be run ({type(error).__name__})"
+    if probe.returncode == 0:
+        return None
+    return f"{compiler} rejects the flags Inductor emits: {probe.stderr.strip().splitlines()[0]}"
+
+
+if (_TOOLCHAIN_PROBLEM := _inductor_toolchain_problem()) is not None:
+    warnings.warn(
+        f"Every AOTInductor export test will be skipped: {_TOOLCHAIN_PROBLEM}. Point `CXX` at a compiler "
+        "that accepts `-std=c++20` to run them.",
+        stacklevel=2,
+    )
+
+require_inductor_toolchain = unittest.skipUnless(
+    _TOOLCHAIN_PROBLEM is None, f"Inductor cannot compile here: {_TOOLCHAIN_PROBLEM}"
+)
+
+
 # ──────────────────────────── helpers ────────────────────────────
 
 
@@ -1382,6 +1427,87 @@ class ExportTesterMixin:
                             msg=lambda more, key=key: f"{name}: precomputed inputs change `{key}`\n{more}",
                         )
 
+    # ────────────────────── AOTInductor tests ────────────────────
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @require_inductor_toolchain
+    @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_aoti_export(self, dynamic, atol=1e-4, rtol=1e-4):
+        """Compile each model class with AOTInductor and verify outputs match eager within tolerance.
+
+        The graph is the one `test_torch_export` already sweeps, so what this adds is the lowering: a
+        model whose graph traces cleanly can still have an op Inductor cannot generate kernels for, or a
+        symbolic shape it refuses to compile against — neither of which a traced program ever hits.
+        """
+        self._skip_if_not_exportable()
+
+        exporter = AotiExporter()
+        config = AotiConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="aoti"):
+                continue
+
+            components = self._prepare_export_model_and_inputs(model_class, "aoti")
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    output = exporter.export(model, inputs, config=config)
+
+                    with torch.no_grad():
+                        set_seed(1234)
+                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        self.assertTrue(exported_outputs, f"Compiled outputs are empty for {name}.")
+
+                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+
+    # ─────────────────────── TensorRT tests ──────────────────────
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @require_torch_tensorrt
+    @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_tensorrt_export(self, dynamic, atol=1e-3, rtol=1e-3):
+        """Compile each model class with TensorRT and verify outputs match eager within tolerance.
+
+        The graph is the one `test_torch_export` sweeps, so what this covers is the conversion: which
+        subgraphs TensorRT will build engines for, and whether what they compute still matches. The
+        tolerance is looser than the traced backends' because an engine is free to reassociate the
+        arithmetic it fuses.
+        """
+        self._skip_if_not_exportable()
+
+        exporter = TensorrtExporter()
+        config = TensorrtConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="tensorrt"):
+                continue
+
+            components = self._prepare_export_model_and_inputs(model_class, "tensorrt")
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    output = exporter.export(model, inputs, config=config)
+
+                    with torch.no_grad():
+                        set_seed(1234)
+                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        self.assertTrue(exported_outputs, f"Converted outputs are empty for {name}.")
+
+                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+
     # ──────────────────────── ONNX tests ─────────────────────────
 
     @DYNAMIC_EXPORT_PARAMS
@@ -1589,6 +1715,140 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 ):
                     self._assert_generate_matches_eager(
                         components, exported, "dynamo", generation_config, dynamic, multi_token_decode
+                    )
+
+    # ────────────────────── AOTInductor tests ────────────────────
+
+    @GENERATE_EXPORT_PARAMS
+    @slow
+    @require_inductor_toolchain
+    @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_aoti_export_generate(self, dynamic, multi_token_decode, generation_config, atol=5e-4, rtol=1e-4):
+        """Compile the components a generation loop drives, and drive them.
+
+        Compiling each component is one question (the graphs a loop needs are not the single forward
+        `test_aoti_export` covers -- a decode step over a cache, a modality tower, an embedder); driving
+        the compiled set through `generate` is the other, and it is the one that catches a package whose
+        compiled-in shapes cannot serve the step the loop actually makes.
+        """
+        self._skip_if_not_exportable()
+
+        exporter = AotiExporter()
+        config = AotiConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class,
+                generate=True,
+                dynamic=dynamic,
+                backend="aoti",
+                multi_token=multi_token_decode,
+                generation_config=generation_config,
+            ):
+                continue
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, "aoti", generation_config=generation_config, multi_token_decode=multi_token_decode
+            )
+            eager_outputs = self._collect_eager_outputs(components)
+
+            exported = {}
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    output = exporter.export(model, inputs, config=config)
+
+                    with torch.no_grad():
+                        set_seed(1234)
+                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        self.assertTrue(exported_outputs, "Compiled outputs are empty.")
+
+                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                    exported[name] = output
+
+            # Same gate as the traced sweep: the loop runs wherever the exported graphs can serve it.
+            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
+            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
+                if not self._should_skip(
+                    model_class,
+                    generate=True,
+                    dynamic=dynamic,
+                    backend="aoti",
+                    multi_token=multi_token_decode,
+                    generation_config=generation_config,
+                    runtime=True,
+                ):
+                    self._assert_generate_matches_eager(
+                        components, exported, "aoti", generation_config, dynamic, multi_token_decode
+                    )
+
+    # ─────────────────────── TensorRT tests ──────────────────────
+
+    @GENERATE_EXPORT_PARAMS
+    @slow
+    @require_torch_tensorrt
+    @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_tensorrt_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
+        """Convert the components a generation loop drives, and drive them.
+
+        TensorRT holds an engine to the shape range it was built for, where `torch.export` treats that
+        range as advisory — so the variants that ask a graph for a length it never traced (a growing cache
+        is empty at the first step) are this backend's ceiling rather than a bug, and the ledger records
+        them per variant.
+        """
+        self._skip_if_not_exportable()
+
+        exporter = TensorrtExporter()
+        config = TensorrtConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class,
+                generate=True,
+                dynamic=dynamic,
+                backend="tensorrt",
+                multi_token=multi_token_decode,
+                generation_config=generation_config,
+            ):
+                continue
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, "tensorrt", generation_config=generation_config, multi_token_decode=multi_token_decode
+            )
+            eager_outputs = self._collect_eager_outputs(components)
+
+            exported = {}
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    output = exporter.export(model, inputs, config=config)
+
+                    with torch.no_grad():
+                        set_seed(1234)
+                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
+                        self.assertTrue(exported_outputs, "Converted outputs are empty.")
+
+                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                    exported[name] = output
+
+            # Same gate as the traced sweep: the loop runs wherever the exported graphs can serve it.
+            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
+            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
+                if not self._should_skip(
+                    model_class,
+                    generate=True,
+                    dynamic=dynamic,
+                    backend="tensorrt",
+                    multi_token=multi_token_decode,
+                    generation_config=generation_config,
+                    runtime=True,
+                ):
+                    self._assert_generate_matches_eager(
+                        components, exported, "tensorrt", generation_config, dynamic, multi_token_decode
                     )
 
     # ──────────────────────── ONNX tests ─────────────────────────
