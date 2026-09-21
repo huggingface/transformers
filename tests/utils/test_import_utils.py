@@ -3,11 +3,12 @@ from contextlib import contextmanager
 from types import ModuleType
 from unittest.mock import DEFAULT, MagicMock, patch
 
+import pytest
 from packaging.version import parse as parse_version
 from parameterized import parameterized
 
 from transformers import logging
-from transformers.testing_utils import CaptureLogger, LoggingLevel, require_torch, run_test_using_subprocess
+from transformers.testing_utils import CaptureLogger, LoggingLevel, require_torch, require_torchvision, run_test_using_subprocess
 from transformers.utils.import_utils import (
     _candidate_distribution_names,
     _is_package_available,
@@ -419,3 +420,62 @@ def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
         return x + 1 if helper(*args) else x - 1
 
     run(torch.zeros(3))  # a graph break inside the helper would raise here
+
+
+@run_test_using_subprocess
+def test_legacy_module_aliases_are_served_on_demand():
+    """
+    Deprecated module paths (`transformers.tokenization_utils_fast`, `transformers.models.x.image_processing_x_fast`,
+    ...) are served by a `sys.meta_path` finder and must not be pre-registered in `sys.modules`: tools that scan
+    `sys.modules` and probe attributes (unittest's `assertWarns`, `pickle`, `inspect`) would otherwise trigger imports
+    of optional heavy dependencies. Regression test for https://github.com/huggingface/transformers/issues/48966.
+    """
+    import unittest
+    import warnings
+
+    import transformers
+    from transformers.utils import import_utils
+
+    finders = [f for f in sys.meta_path if isinstance(f, import_utils._LegacyModuleAliasFinder)]
+    assert len(finders) == 1
+    finder = finders[0]
+    pre_registered = [name for name in sys.modules if finder.resolve(name) is not None]
+    assert pre_registered == [], f"legacy module paths pre-registered in sys.modules: {pre_registered}"
+    assert not any(name.startswith("image_processing_") for name in vars(transformers))
+
+    # Scanning `sys.modules` (what `assertWarns` does on entry) must not import anything.
+    modules_before = len(sys.modules)
+    with unittest.TestCase().assertWarns(UserWarning):
+        warnings.warn("probe", UserWarning)
+    assert len(sys.modules) == modules_before
+
+    # Legacy paths still work, as thin shims over the replacement module.
+    from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+
+    assert PreTrainedTokenizerFast is transformers.PreTrainedTokenizerFast
+    shim = sys.modules["transformers.tokenization_utils_fast"]
+    assert shim is transformers.tokenization_utils_fast
+    assert shim.__spec__.loader is finder
+    assert "PreTrainedTokenizerFast" in vars(shim)
+    # Module metadata is the shim's own, so attribute probes behave like on any other module.
+    assert getattr(shim, "__warningregistry__", None) is None
+    assert getattr(shim, "does_not_exist", None) is None
+
+    with pytest.raises(ModuleNotFoundError):
+        import transformers.models.aria.image_processing_nope_fast  # noqa: F401
+
+
+@require_torchvision
+def test_legacy_fast_image_processor_module_alias():
+    """`models/x/image_processing_x_fast.py` became `models/x/image_processing_x.py`; the old path is an alias."""
+    import transformers.models.aria.image_processing_aria_fast as legacy_module
+    from transformers.models.aria.image_processing_aria import AriaImageProcessor
+    from transformers.models.aria.image_processing_aria_fast import AriaImageProcessorFast  # legacy class name
+
+    assert AriaImageProcessorFast is AriaImageProcessor
+    assert legacy_module.AriaImageProcessor is AriaImageProcessor
+    assert legacy_module.__all__ == ["AriaImageProcessor"]
+
+    # Only paths that actually existed are aliased.
+    with pytest.raises(ModuleNotFoundError):
+        import transformers.models.aria.image_processing_pil_aria_fast  # noqa: F401

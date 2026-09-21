@@ -16,6 +16,7 @@ Import utilities: Utilities related to imports and our lazy inits.
 """
 
 import functools
+import importlib.abc
 import importlib.machinery
 import importlib.metadata
 import importlib.util
@@ -2800,6 +2801,40 @@ class _LazyModule(ModuleType):
 
 class OptionalDependencyNotAvailable(BaseException):
     """Internally used error class for signalling an optional dependency was not found."""
+
+
+class _LegacyModuleAliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """
+    Serves deprecated module paths as copies of their replacement, created only when actually imported. Nothing is
+    pre-registered in `sys.modules`, so tools that scan it and probe attributes (unittest's `assertWarns`, `pickle`,
+    `inspect`, ...) never trigger imports of optional heavy dependencies.
+    """
+
+    def __init__(self, resolve: Callable[[str], str | None]):
+        self.resolve = resolve  # legacy module name -> replacement module name, `None` if not an alias
+        self.replacements: dict[str, str] = {}
+
+    def find_spec(self, fullname, path=None, target=None):
+        replacement = self.resolve(fullname)
+        if replacement is None or importlib.util.find_spec(replacement) is None:
+            return None
+        self.replacements[fullname] = replacement
+        return importlib.util.spec_from_loader(fullname, self)
+
+    def exec_module(self, module):
+        # Import the replacement first: a missing optional dependency fails right here, at the user's import statement.
+        replacement = importlib.import_module(self.replacements[module.__name__])
+        vars(module).update({k: v for k, v in vars(replacement).items() if k == "__all__" or not k.startswith("__")})
+
+        def __getattr__(name):  # `XImageProcessorFast` classes were renamed `XImageProcessor`
+            if name.endswith("ImageProcessorFast") and hasattr(replacement, name[:-4]):
+                logger.warning_once(
+                    f"`{name}` is deprecated, use `{name[:-4]}` from `{replacement.__name__}` instead."
+                )
+                return getattr(replacement, name[:-4])
+            raise AttributeError(f"module {module.__name__!r} has no attribute {name!r}")
+
+        module.__getattr__ = __getattr__
 
 
 def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
