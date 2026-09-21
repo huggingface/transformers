@@ -102,6 +102,9 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
 
     processor.tokenizer.padding_side = "left"
     processor.tokenizer.init_kwargs["padding_side"] = "left"
+    processor.tokenizer.init_kwargs["padding"] = True
+    processor.tokenizer.init_kwargs["return_tensors"] = "pt"
+    processor.feature_extractor.return_attention_mask = True
 
     # 2) Convert state dict to match HF model structure
     logger.info("Converting state dict")

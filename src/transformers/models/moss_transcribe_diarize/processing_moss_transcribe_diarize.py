@@ -35,19 +35,7 @@ logger = logging.get_logger(__name__)
 
 
 class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-        "audio_kwargs": {
-            "padding": "max_length",
-            "return_attention_mask": True,
-        },
-    }
+    _defaults = {}
 
 
 # Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
@@ -133,7 +121,9 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":
@@ -196,6 +186,8 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 end = min((i + 1) * window_size, time_cap)
                 flat_chunks.append(waveform[start:end])
 
+        kwargs["padding"] = "max_length"
+        kwargs["return_attention_mask"] = True
         audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
