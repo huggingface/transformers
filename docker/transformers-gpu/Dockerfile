@@ -1,6 +1,8 @@
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
+FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 LABEL repository="transformers"
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && \
     apt install -y bash \
@@ -16,16 +18,10 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     python3 -m pip install --no-cache-dir \
     jupyter \
     torch
-RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/kernels@main#egg=kernels
-
-RUN git clone https://github.com/NVIDIA/apex
-RUN cd apex && \
-    python3 setup.py install && \
-    pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./
 
 WORKDIR /workspace
 COPY . transformers/
 RUN cd transformers/ && \
-    python3 -m pip install --no-cache-dir .
+    python3 -m pip install --no-cache-dir -e .
 
 CMD ["/bin/bash"]
