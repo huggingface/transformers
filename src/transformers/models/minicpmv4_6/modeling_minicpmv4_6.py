@@ -758,9 +758,15 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             1, pixel_values_videos.shape[1], pixel_values_videos.shape[2], -1
         )
         target_sizes = target_sizes_videos.repeat(num_frames, 1)
-        return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode, **kwargs)
+        return self.get_image_features(
+            pixel_values,
+            target_sizes,
+            downsample_mode=downsample_mode,
+            **kwargs,
+        )
 
 
+@auto_docstring
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

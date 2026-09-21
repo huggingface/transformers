@@ -460,6 +460,7 @@ _VARLEN_ATTENTION_PATHS = (
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
     # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
+    "transformers.models.minicpmv4_7.modeling_minicpmv4_7.MiniCPMV4_7VisionAttention.forward",
     # Audio attention: separate `_proj` + `.out_proj`, no rotary
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniAudioAttention.forward",
     "transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe.Qwen3OmniMoeAudioAttention.forward",
