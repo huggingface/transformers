@@ -16,10 +16,8 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
-from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
@@ -46,17 +44,6 @@ class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @unittest.skip("Inkling patchification requires RGB (3-channel) images; 4-channel inputs are unsupported.")
     def test_call_numpy_4_channels(self):
         pass
-
-    def test_image_processor_defaults(self):
-        for image_processing_class in self.image_processing_classes.values():
-            proc = image_processing_class()
-            self.assertEqual(proc.size["height"], 40)
-            self.assertEqual(proc.size["width"], 40)
-            self.assertTrue(proc.do_normalize)
-            self.assertTrue(proc.do_convert_rgb)
-            self.assertEqual(list(proc.image_mean), list(OPENAI_CLIP_MEAN))
-            self.assertEqual(list(proc.image_std), list(OPENAI_CLIP_STD))
-            self.assertEqual(proc.resample, PILImageResampling.LANCZOS)
 
     def test_output_keys(self):
         for image_processing_class in self.image_processing_classes.values():

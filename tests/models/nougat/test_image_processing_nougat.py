@@ -193,7 +193,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
                 self.assertEqual(
                     tuple(encoded_images.shape),
-                    (self.image_processing_tester.batch_size, *expected_output_image_shape),
+                    (self.image_processor_tester.batch_size, *expected_output_image_shape),
                 )
 
     def test_backends_equivalence(self):

@@ -40,11 +40,6 @@ class AriaImageProcessingTester(ImageProcessingTester):
     split_image = True
     size = {"longest_edge": max_resolution}
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "size" not in kwargs:
-            self.size = {"longest_edge": self.max_resolution}
-
     def expected_output_image_shape(self, images):
         return self.num_channels, self.max_image_size, self.max_image_size
 

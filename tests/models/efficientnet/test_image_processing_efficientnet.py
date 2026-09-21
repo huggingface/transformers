@@ -35,7 +35,7 @@ class EfficientNetImageProcessingTester(ImageProcessingTester):
     rescale_offset = True
     rescale_factor = 1 / 127.5
     size = {"height": 18, "width": 18}
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BILINEAR  # NEAREST is too different between PIL and torchvision
 
 
 @require_torch

@@ -20,7 +20,7 @@ import pytest
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
@@ -31,10 +31,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-
-if is_torchvision_available():
-    pass
 
 
 class Kosmos2_5ImageProcessingTester(ImageProcessingTester):

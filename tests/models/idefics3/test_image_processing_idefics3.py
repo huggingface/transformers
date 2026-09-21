@@ -42,11 +42,6 @@ class Idefics3ImageProcessingTester(ImageProcessingTester):
     size = {"longest_edge": max_resolution}
     max_image_size = {"longest_edge": 20}
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "size" not in kwargs:
-            self.size = {"longest_edge": self.max_resolution}
-
     def expected_output_image_shape(self, images):
         effective_nb_images = (
             self.num_images * 5 if self.do_image_splitting else 1

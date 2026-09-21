@@ -63,8 +63,7 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape),
-                (self.image_processing_tester.batch_size * 2, *expected_output_image_shape),
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size * 2, *expected_output_image_shape)
             )
 
     def test_call_numpy(self):
@@ -86,8 +85,7 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape),
-                (self.image_processing_tester.batch_size * 2, *expected_output_image_shape),
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size * 2, *expected_output_image_shape)
             )
 
     def test_call_pytorch(self):
@@ -110,8 +108,7 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape),
-                (self.image_processing_tester.batch_size * 2, *expected_output_image_shape),
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size * 2, *expected_output_image_shape)
             )
 
     def test_call_numpy_4_channels(self):

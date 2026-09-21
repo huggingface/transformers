@@ -44,13 +44,6 @@ class PaddleOCRVLImageProcessingTester(ImageProcessingTester):
     min_pixels = size["shortest_edge"]
     max_pixels = size["longest_edge"]
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "min_pixels" not in kwargs:
-            self.min_pixels = self.size["shortest_edge"]
-        if "max_pixels" not in kwargs:
-            self.max_pixels = self.size["longest_edge"]
-
     def expected_output_image_shape(self, images):
         """
         Returns the expected pixel_values shape for a batch of images.

@@ -18,7 +18,7 @@ import pathlib
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     AnnotationFormatTestMixin,
@@ -36,15 +36,12 @@ if is_vision_available():
     from PIL import Image
 
 
-if is_torchvision_available():
-    pass
-
-
 class GroundingDinoImageProcessingTester(ImageProcessingTester):
     num_queries = 5
     embed_dim = 5
 
     # Image processor init kwargs
+    # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
     size = {"shortest_edge": 18, "longest_edge": 1333}
 
     def get_fake_grounding_dino_output(self):

@@ -93,9 +93,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs_list[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(
-                image_inputs_list[0]
-            )
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
@@ -114,9 +112,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs_list[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(
-                image_inputs_list[0]
-            )
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
@@ -135,9 +131,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs_list[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(
-                image_inputs_list[0]
-            )
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
