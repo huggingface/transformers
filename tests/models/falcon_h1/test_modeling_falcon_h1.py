@@ -541,7 +541,4 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             outputs = model.generate(inputs, max_new_tokens=512, do_sample=False)
 
         generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        print("<<<CAPTURE falcon_h1_hard>>>")
-        print(generated_text)
-        print("<<<END falcon_h1_hard>>>")
         self.assertEqual(generated_text, EXPECTED_TEXT)
