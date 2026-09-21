@@ -1248,7 +1248,9 @@ class ExportTesterMixin:
             *(spec[0] for spec in _MODALITY_SPECS),
             *(spec[0] for spec in _STREAMING_EMBEDDERS.values()),
         }
-        runners = {name: exported[name].runtime() for name in components if name in wanted}
+        # The runners themselves, not the per-graph runtimes: `from_runners` assembles the generation
+        # loop out of `ModelRunner`s, and a single-graph runtime is an `ExportedModel` *wrapping* one.
+        runners = {name: exported[name].runtime().runner for name in components if name in wanted}
         runtime = ExportedGenerator.from_runners(runners, model.config, model.generation_config)
         device = runtime.device
         model = model.to(device)
