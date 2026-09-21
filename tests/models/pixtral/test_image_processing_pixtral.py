@@ -95,6 +95,22 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             padded_images = image_processing(image_inputs, do_pad=True).pixel_values
             self.assertEqual(padded_images.shape[-2:], (24, 24))
 
+    def test_rescale_and_normalize_does_not_modify_input(self):
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image = torch.rand(3, 8, 8)
+        original_image = image.clone()
+
+        image_processor.rescale_and_normalize(
+            image,
+            do_rescale=True,
+            rescale_factor=image_processor.rescale_factor,
+            do_normalize=True,
+            image_mean=image_processor.image_mean,
+            image_std=image_processor.image_std,
+        )
+
+        torch.testing.assert_close(image, original_image)
+
     # The following tests are overridden as PixtralImageProcessor can return images of different sizes
     # and thus doesn't support returning batched tensors
 
