@@ -1232,25 +1232,12 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
     *   **Use cross-attention** to allow Q from the assistant to attend to KV from the main model.
 
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
         assistant_model (`PreTrainedModel`):
             The model to be used for generating candidates. This model should be smaller than the main model.
         target_model_input_embeddings (`torch.nn.Embedding`):
             The input embedding table from main model, used to get the embeddings from the last seen token.
         generation_config (`~generation.GenerationConfig`, *optional*):
             The generation configuration to be used as base parametrization for the generation call.
-        model_kwargs (`dict`):
-            The keyword arguments that will be passed to the main model, and are used as base inputs for the assistant
-            model as well.
-        inputs_tensor (`torch.Tensor`, *optional*):
-            The model input tensor. In encoder-decoder models, this is the encoder input.
-        logits_processor (`LogitsProcessorList`, *optional*):
-            An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
-            used to modify the prediction scores of the language modeling head applied at each generation step.
-        eos_token_id (`int` or `list[int]` or `torch.Tensor`, *optional*):
-            The token id of the end of sequence token. If not `None`, only the provided values will be used. If None,
-            values will be inferred from the available `generation_config` and `assistant_generation_config`.
     """
 
     requires_model_outputs: bool = True
