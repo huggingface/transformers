@@ -25,6 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.import_utils import torch_compilable_check
 from ...video_utils import VideoInput, make_batched_videos
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
@@ -111,11 +112,10 @@ class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
         window_h, window_w = self.window_kernel_size
         window_size = window_h * window_w
         embed_dim = hidden_states.shape[-1]
-        if window_cu_seqlens.numel() - 1 != hidden_states.shape[1] // window_size:
-            raise ValueError(
-                f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}"
-            )
-
+        torch_compilable_check(
+            window_cu_seqlens.numel() - 1 == hidden_states.shape[1] // window_size,
+            f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}",
+        )
         patch = hidden_states.reshape(-1, window_size, embed_dim)
         flat = patch.flatten(1)
         patch_residual = patch.mean(dim=1)

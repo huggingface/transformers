@@ -258,11 +258,10 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
         window_h, window_w = self.window_kernel_size
         window_size = window_h * window_w
         embed_dim = hidden_states.shape[-1]
-        if window_cu_seqlens.numel() - 1 != hidden_states.shape[1] // window_size:
-            raise ValueError(
-                f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}"
-            )
-
+        torch_compilable_check(
+            window_cu_seqlens.numel() - 1 == hidden_states.shape[1] // window_size,
+            f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}",
+        )
         patch = hidden_states.reshape(-1, window_size, embed_dim)
         flat = patch.flatten(1)
         patch_residual = patch.mean(dim=1)
