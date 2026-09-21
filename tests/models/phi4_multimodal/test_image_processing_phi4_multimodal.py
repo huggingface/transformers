@@ -35,17 +35,17 @@ if is_vision_available():
 
 
 class Phi4MultimodalImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_size", 100)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 100, "width": 100})
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("dynamic_hd", 36)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    image_size = 100
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 100, "width": 100}
+    patch_size = 14
+    dynamic_hd = 36
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_convert_rgb = True
 
     def expected_output_image_shape(self, images):
         max_num_patches = 0

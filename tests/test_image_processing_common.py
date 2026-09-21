@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import importlib
 import inspect
 import json
@@ -181,39 +182,43 @@ def prepare_video_inputs(
 
 
 class ImageProcessingTester:
-    """Provides default kwargs and fixtures for ImageProcessingTestMixin.
+    """Provides default attributes and fixtures for ImageProcessingTestMixin.
 
-    Args:
-        parent:
+    Any class attributes are automatically used to initialize the processor class
+    under test if their name matches one of the args in the processor's init.
+
+    Attributes:
+        parent (`ImageProcessingTestMixin`):
             Subclass of ImageProcessingTestMixin, usually called <Model>ImageProcessingTest.
-        batch_size:
+        batch_size (`int`):
             Default batch size for creating random test inputs.
-        num_channels:
+        num_channels (`int`):
             Default number of channels for creating random test inputs.
-        min_resolution:
+        min_resolution (`int`):
             Default minimum height and width for creating random test inputs.
-        max_resolution:
+        max_resolution (`int`):
             Default maximum height and width for creating random test inputs.
-        **kwargs:
-            Any other arguments to store on the class. Arguments are automatically
-            used to initialize the processor class under test if their name matches
-            one of the args in the processor's init.
     """
+
+    # Attributes used to generate random inputs for tests. Not used for image processor initialization.
+    batch_size: int = 7
+    num_channels: int = 3
+    min_resolution: int = 30
+    max_resolution: int = 400
 
     def __init__(
         self,
         parent,
-        batch_size: int = 7,
-        num_channels: int = 3,
-        min_resolution: int = 30,
-        max_resolution: int = 400,
         **kwargs,
     ):
+        # Add defaults from class variables. We copy class variables to avoid accidental
+        # in-place mutation by tests which could leak into other tests.
+        for name, value in vars(type(self)).items():
+            if name.startswith("__") or callable(value) or isinstance(value, (property, staticmethod, classmethod)):
+                continue
+            kwargs.setdefault(name, copy.deepcopy(value))
+
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
 
         for key, value in kwargs.items():
             setattr(self, key, value)

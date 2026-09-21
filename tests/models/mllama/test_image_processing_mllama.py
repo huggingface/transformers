@@ -33,19 +33,19 @@ if is_torch_available():
 
 
 class MllamaImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_images", 18)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 224, "width": 224})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("max_image_tiles", 4)
-        super().__init__(**kwargs)
+    num_images = 18
+
+    # Image processor init kwargs
+    do_convert_rgb = True
+    do_resize = True
+    size = {"height": 224, "width": 224}
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_pad = True
+    max_image_tiles = 4
 
     def prepare_image_inputs(
         self,

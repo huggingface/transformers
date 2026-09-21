@@ -25,19 +25,19 @@ if is_vision_available():
 
 
 class FuyuImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("max_resolution", 360)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 180, "width": 360})
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("patch_size", {"height": 30, "width": 30})
-        super().__init__(**kwargs)
+    batch_size = 3
+    max_resolution = 360
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 180, "width": 360}
+    do_pad = True
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_rescale = True
+    rescale_factor = 1 / 255
+    patch_size = {"height": 30, "width": 30}
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Prepares a batch of images for testing"""

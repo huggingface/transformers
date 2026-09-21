@@ -20,16 +20,15 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class DINOv3ViTImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 20})
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
-        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 20}
+    do_center_crop = True
+    crop_size = {"height": 18, "width": 18}
+    do_normalize = True
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
+    do_convert_rgb = True
 
 
 @require_torch

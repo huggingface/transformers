@@ -38,16 +38,15 @@ if is_vision_available():
 
 
 class YolosImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 1333})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_pad", True)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 18, "longest_edge": 1333}
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_pad = True
 
     def get_expected_values(self, image_inputs, batched=False):
         """

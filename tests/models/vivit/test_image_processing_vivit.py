@@ -33,15 +33,15 @@ if is_vision_available():
 
 
 class VivitImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_frames", 10)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 18})
-        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
-        super().__init__(**kwargs)
+    num_frames = 10
+
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"shortest_edge": 18}
+    crop_size = {"height": 18, "width": 18}
 
     def expected_output_image_shape(self, images):
         return self.num_frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]

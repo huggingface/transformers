@@ -41,24 +41,24 @@ if is_vision_available():
 
 
 class OneFormerImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("repo_path", "shi-labs/oneformer_demo")
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("num_labels", 10)
-        kwargs.setdefault("do_reduce_labels", False)
-        kwargs.setdefault("ignore_index", 255)
-        kwargs.setdefault("class_info_file", "ade20k_panoptic.json")
-        kwargs.setdefault("num_text", 10)
-        kwargs.setdefault("num_queries", 10)
-        kwargs.setdefault("num_classes", 10)
-        kwargs.setdefault("height", 3)
-        kwargs.setdefault("width", 4)
-        super().__init__(**kwargs)
+    batch_size = 2
+    num_queries = 10
+    num_classes = 10
+    height = 3
+    width = 4
+
+    # Image processor init kwargs
+    repo_path = "shi-labs/oneformer_demo"
+    do_resize = True
+    size = {"shortest_edge": 32, "longest_edge": 1333}
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    num_labels = 10
+    do_reduce_labels = False
+    ignore_index = 255
+    class_info_file = "ade20k_panoptic.json"
+    num_text = 10
 
     def get_fake_oneformer_outputs(self):
         return OneFormerForUniversalSegmentationOutput(

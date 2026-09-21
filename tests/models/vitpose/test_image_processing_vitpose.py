@@ -35,15 +35,14 @@ if is_vision_available():
 
 
 class VitPoseImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_affine_transform", True)
-        kwargs.setdefault("size", {"height": 20, "width": 20})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_affine_transform = True
+    size = {"height": 20, "width": 20}
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
 
 
 @require_torch

@@ -37,20 +37,20 @@ if is_vision_available():
 
 
 class HunYuanVLImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("min_resolution", 32)
-        kwargs.setdefault("max_resolution", 64)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
-        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
-        kwargs.setdefault("min_pixels", 32 * 32)
-        kwargs.setdefault("max_pixels", 32 * 32)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("temporal_patch_size", 1)
-        kwargs.setdefault("merge_size", 1)
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    min_resolution = 32
+    max_resolution = 64
+
+    # Image processor init kwargs
+    do_normalize = True
+    do_resize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    min_pixels = 32 * 32
+    max_pixels = 32 * 32
+    patch_size = 16
+    temporal_patch_size = 1
+    merge_size = 1
+    do_convert_rgb = True
 
 
 @require_torch

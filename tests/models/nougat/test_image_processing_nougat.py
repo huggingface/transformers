@@ -34,18 +34,17 @@ if is_vision_available():
 
 
 class NougatImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_crop_margin", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 20, "width": 20})
-        kwargs.setdefault("do_thumbnail", True)
-        kwargs.setdefault("do_align_long_axis", False)
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("data_format", "channels_first")
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_crop_margin = True
+    do_resize = True
+    size = {"height": 20, "width": 20}
+    do_thumbnail = True
+    do_align_long_axis = False
+    do_pad = True
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    data_format = "channels_first"
 
     def prepare_dummy_image(self):
         revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"

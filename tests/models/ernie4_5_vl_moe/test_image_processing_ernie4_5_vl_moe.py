@@ -35,18 +35,18 @@ if is_vision_available():
 
 
 class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("min_resolution", 56)
-        kwargs.setdefault("max_resolution", 1024)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
-        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
-        kwargs.setdefault("size", {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28})
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("merge_size", 2)
-        super().__init__(**kwargs)
+    min_resolution = 56
+    max_resolution = 1024
+
+    # Image processor init kwargs
+    do_normalize = True
+    do_convert_rgb = True
+    do_resize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    size = {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28}
+    patch_size = 14
+    merge_size = 2
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

@@ -31,18 +31,17 @@ if is_vision_available():
 
 
 class PerceptionLMImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("tile_size", 16)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN)
-        kwargs.setdefault("image_std", IMAGENET_STANDARD_STD)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("max_num_tiles", 4)
-        kwargs.setdefault("vision_input_type", "thumb+tile")
-        kwargs.setdefault("resample", Image.Resampling.BICUBIC)
-        kwargs.setdefault("size", {"shortest_edge": 20})
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    tile_size = 16
+    do_normalize = True
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    do_convert_rgb = True
+    max_num_tiles = 4
+    vision_input_type = "thumb+tile"
+    resample = Image.Resampling.BICUBIC
+    size = {"shortest_edge": 20}
 
 
 @require_torch

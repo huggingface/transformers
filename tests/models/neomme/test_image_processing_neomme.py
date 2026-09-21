@@ -28,19 +28,19 @@ if is_vision_available():
 
 
 class NeoMMEImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 5)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("min_resolution", 30)
-        kwargs.setdefault("max_resolution", 80)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 127.5)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [1.0, 1.0, 1.0])
-        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
-        kwargs.setdefault("patch_size", 4)
-        super().__init__(**kwargs)
+    batch_size = 5
+    num_channels = 3
+    min_resolution = 30
+    max_resolution = 80
+
+    # Image processor init kwargs
+    do_resize = True
+    do_rescale = True
+    rescale_factor = 1 / 127.5
+    do_normalize = True
+    image_mean = [1.0, 1.0, 1.0]
+    image_std = [1.0, 1.0, 1.0]
+    patch_size = 4
 
     def prepare_image_processor_dict(self):
         """Return mixin kwargs without resolution budgets."""

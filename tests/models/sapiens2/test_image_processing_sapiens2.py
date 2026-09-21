@@ -36,15 +36,15 @@ if is_torch_available():
 
 
 class Sapiens2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_labels", 5)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 20, "width": 18})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.485, 0.456, 0.406])
-        kwargs.setdefault("image_std", [0.229, 0.224, 0.225])
-        kwargs.setdefault("do_reduce_labels", False)
-        super().__init__(**kwargs)
+    num_labels = 5
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 20, "width": 18}
+    do_normalize = True
+    image_mean = [0.485, 0.456, 0.406]
+    image_std = [0.229, 0.224, 0.225]
+    do_reduce_labels = False
 
 
 @require_torch

@@ -29,18 +29,18 @@ if is_torch_available():
 
 
 class EfficientNetImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_offset", True)
-        kwargs.setdefault("rescale_factor", 1 / 127.5)
-        kwargs.setdefault("batch_size", 13)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        kwargs.setdefault("resample", PILImageResampling.BILINEAR)
-        super().__init__(**kwargs)
+    batch_size = 13
+
+    # Image processor init kwargs
+    do_rescale = True
+    rescale_offset = True
+    rescale_factor = 1 / 127.5
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 18, "width": 18}
+    resample = PILImageResampling.BILINEAR
 
 
 @require_torch

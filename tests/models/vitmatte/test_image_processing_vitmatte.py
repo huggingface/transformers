@@ -42,15 +42,14 @@ if is_vision_available():
 
 
 class VitMatteImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 0.5)
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("size_divisor", 10)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_rescale = True
+    rescale_factor = 0.5
+    do_pad = True
+    size_divisor = 10
 
 
 @require_torch

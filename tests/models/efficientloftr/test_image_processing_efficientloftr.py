@@ -46,12 +46,12 @@ def random_tensor(size):
 class EfficientLoFTRImageProcessingTester(ImageProcessingTester):
     """Tester for EfficientLoFTRImageProcessor"""
 
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 6)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 480, "width": 640})
-        kwargs.setdefault("do_grayscale", True)
-        super().__init__(**kwargs)
+    batch_size = 6
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 480, "width": 640}
+    do_grayscale = True
 
     def expected_output_image_shape(self, images):
         return 2, self.num_channels, self.size["height"], self.size["width"]

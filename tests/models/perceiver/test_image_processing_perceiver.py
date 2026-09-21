@@ -33,20 +33,20 @@ if is_torch_available():
 
 
 class PerceiverImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_images", 1)
-        kwargs.setdefault("max_resolution", 40)
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_size", {"height": 256, "width": 256})
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 224, "width": 224})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("resample", PILImageResampling.BICUBIC)
-        super().__init__(**kwargs)
+    num_images = 1
+    max_resolution = 40
+
+    # Image processor init kwargs
+    do_center_crop = True
+    crop_size = {"height": 256, "width": 256}
+    do_resize = True
+    size = {"height": 224, "width": 224}
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    resample = PILImageResampling.BICUBIC
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]

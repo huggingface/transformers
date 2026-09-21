@@ -32,25 +32,22 @@ if is_vision_available():
 
 
 class LlavaNextImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 20})
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
-        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 20}
+    do_center_crop = True
+    crop_size = {"height": 18, "width": 18}
+    do_normalize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    do_convert_rgb = True
 
 
 @require_torch
 @require_vision
 class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
     image_processing_tester_class = LlavaNextImageProcessingTester
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
     def test_select_best_resolution(self):
         possible_resolutions = [[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]
 

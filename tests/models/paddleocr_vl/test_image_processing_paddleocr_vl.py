@@ -35,21 +35,28 @@ if is_vision_available():
 
 
 class PaddleOCRVLImageProcessingTester(ImageProcessingTester):
+    min_resolution = 56
+    max_resolution = 80
+
+    # Image processor init kwargs
+    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+    do_resize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    do_normalize = True
+    min_pixels = size["shortest_edge"]
+    max_pixels = size["longest_edge"]
+    patch_size = 14
+    temporal_patch_size = 1
+    merge_size = 2
+    do_convert_rgb = True
+
     def __init__(self, **kwargs):
-        kwargs.setdefault("size", {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280})
-        kwargs.setdefault("min_resolution", 56)
-        kwargs.setdefault("max_resolution", 80)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
-        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("min_pixels", kwargs["size"]["shortest_edge"])
-        kwargs.setdefault("max_pixels", kwargs["size"]["longest_edge"])
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("temporal_patch_size", 1)
-        kwargs.setdefault("merge_size", 2)
-        kwargs.setdefault("do_convert_rgb", True)
         super().__init__(**kwargs)
+        if "min_pixels" not in kwargs:
+            self.min_pixels = self.size["shortest_edge"]
+        if "max_pixels" not in kwargs:
+            self.max_pixels = self.size["longest_edge"]
 
     def expected_output_image_shape(self, images):
         """

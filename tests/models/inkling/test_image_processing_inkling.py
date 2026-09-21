@@ -32,14 +32,13 @@ if is_vision_available():
 
 
 class InklingImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("do_normalize", False)
-        kwargs.setdefault("image_mean", [0.0, 0.0, 0.0])
-        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("size", {"height": 40, "width": 40})
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    do_normalize = False
+    image_mean = [0.0, 0.0, 0.0]
+    image_std = [1.0, 1.0, 1.0]
+    do_convert_rgb = True
+    size = {"height": 40, "width": 40}
 
 
 @require_torch

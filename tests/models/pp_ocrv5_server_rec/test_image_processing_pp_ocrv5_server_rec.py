@@ -28,19 +28,19 @@ if is_vision_available():
 
 
 class PPOCRV5ServerRecImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("max_image_width", 3200)
-        kwargs.setdefault("min_resolution", 10)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 48, "width": 320})
-        kwargs.setdefault("keep_aspect_ratio", False)
-        kwargs.setdefault("do_pad", False)
-        super().__init__(**kwargs)
+    min_resolution = 10
+    keep_aspect_ratio = False
+
+    # Image processor init kwargs
+    do_rescale = True
+    rescale_factor = 1 / 255
+    max_image_width = 3200
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 48, "width": 320}
+    do_pad = False
 
     def get_expected_value(self, images):
         shape_list = []

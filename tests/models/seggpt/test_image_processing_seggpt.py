@@ -37,14 +37,14 @@ if is_vision_available():
 
 
 class SegGptImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_segmentation_labels", 5)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        super().__init__(**kwargs)
+    num_segmentation_labels = 5
+
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 18, "width": 18}
 
     def expected_post_processed_shape(self):
         return self.size["height"] // 2, self.size["width"]

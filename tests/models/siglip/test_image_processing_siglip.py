@@ -21,26 +21,21 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class SiglipImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 18, "width": 18}
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
 
 
 @require_torch
 @require_vision
-# Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Siglip
 class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = SiglipImageProcessingTester
 
-    # Ignore copy
-    # Ignore copy
     @unittest.skip(reason="not supported")
-    # Ignore copy
     def test_call_numpy_4_channels(self):
         pass

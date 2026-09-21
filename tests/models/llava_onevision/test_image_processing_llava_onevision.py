@@ -32,15 +32,15 @@ if is_vision_available():
 
 
 class LlavaOnevisionImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_size", 20)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 20, "width": 20})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
-        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    image_size = 20
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 20, "width": 20}
+    do_normalize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    do_convert_rgb = True
 
 
 @require_torch

@@ -28,14 +28,13 @@ if is_vision_available():
 
 
 class ViltImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 30})
-        kwargs.setdefault("size_divisor", 2)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"shortest_edge": 30}
+    size_divisor = 2
 
     def get_expected_values(self, image_inputs, batched=False):
         """

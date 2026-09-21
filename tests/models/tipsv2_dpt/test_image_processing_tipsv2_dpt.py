@@ -33,15 +33,15 @@ if is_torch_available():
 
 
 class Tipsv2DptImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_labels", 3)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", False)
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    num_labels = 3
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 18, "width": 18}
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = False
+    do_convert_rgb = True
 
 
 @require_torch

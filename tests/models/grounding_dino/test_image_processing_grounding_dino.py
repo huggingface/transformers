@@ -41,18 +41,18 @@ if is_torchvision_available():
 
 
 class GroundingDinoImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 1333})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("num_queries", 5)
-        kwargs.setdefault("embed_dim", 5)
-        super().__init__(**kwargs)
+    num_queries = 5
+    embed_dim = 5
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 18, "longest_edge": 1333}
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_pad = True
 
     def get_fake_grounding_dino_output(self):
         torch.manual_seed(42)

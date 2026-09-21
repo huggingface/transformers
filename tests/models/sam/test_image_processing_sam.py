@@ -26,17 +26,16 @@ if is_torch_available():
 
 
 class SamImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"longest_edge": 20})
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("pad_size", {"height": 20, "width": 20})
-        kwargs.setdefault("mask_size", {"longest_edge": 12})
-        kwargs.setdefault("mask_pad_size", {"height": 12, "width": 12})
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"longest_edge": 20}
+    do_pad = True
+    pad_size = {"height": 20, "width": 20}
+    mask_size = {"longest_edge": 12}
+    mask_pad_size = {"height": 12, "width": 12}
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.pad_size["height"], self.pad_size["width"]

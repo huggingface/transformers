@@ -41,20 +41,20 @@ if is_vision_available():
 
 
 class VideoLlama3ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_frames", 10)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("min_resolution", 56)
-        kwargs.setdefault("max_resolution", 1024)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN)
-        kwargs.setdefault("image_std", IMAGENET_STANDARD_STD)
-        kwargs.setdefault("min_pixels", 14 * 14 * 16)
-        kwargs.setdefault("max_pixels", 14 * 14 * 16384)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("merge_size", 1)
-        super().__init__(**kwargs)
+    num_frames = 10
+    min_resolution = 56
+    max_resolution = 1024
+
+    # Image processor init kwargs
+    do_normalize = True
+    do_convert_rgb = True
+    do_resize = True
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    min_pixels = 14 * 14 * 16
+    max_pixels = 14 * 14 * 16384
+    patch_size = 14
+    merge_size = 1
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

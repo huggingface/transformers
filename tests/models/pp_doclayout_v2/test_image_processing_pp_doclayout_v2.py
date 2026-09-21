@@ -20,13 +20,12 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPDocLayoutV2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 40, "width": 40})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.0, 0.0, 0.0])
-        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 40, "width": 40}
+    do_normalize = True
+    image_mean = [0.0, 0.0, 0.0]
+    image_std = [1.0, 1.0, 1.0]
 
 
 @require_torch

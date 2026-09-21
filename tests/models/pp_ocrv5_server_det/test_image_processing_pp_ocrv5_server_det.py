@@ -31,21 +31,21 @@ if is_torch_available():
 
 
 class PPOCRV5ServerDetImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("limit_side_len", 960)
-        kwargs.setdefault("limit_type", "max")
-        kwargs.setdefault("max_side_limit", 4000)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("min_resolution", 10)
-        kwargs.setdefault("image_mean", [0.485, 0.456, 0.406])
-        kwargs.setdefault("image_std", [0.229, 0.224, 0.225])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 512, "width": 512})
-        kwargs.setdefault("keep_aspect_ratio", False)
-        kwargs.setdefault("do_pad", False)
-        super().__init__(**kwargs)
+    min_resolution = 10
+    keep_aspect_ratio = False
+
+    # Image processor init kwargs
+    limit_side_len = 960
+    limit_type = "max"
+    max_side_limit = 4000
+    do_rescale = True
+    rescale_factor = 1 / 255
+    image_mean = [0.485, 0.456, 0.406]
+    image_std = [0.229, 0.224, 0.225]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 512, "width": 512}
+    do_pad = False
 
     def get_expected_value(self, image_inputs):
         image = image_inputs[0]

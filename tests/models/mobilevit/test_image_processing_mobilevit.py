@@ -34,15 +34,15 @@ if is_torch_available():
 
 
 class MobileViTImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_labels", 5)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 20})
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_flip_channel_order", True)
-        kwargs.setdefault("do_reduce_labels", False)
-        super().__init__(**kwargs)
+    num_labels = 5
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 20}
+    do_center_crop = True
+    crop_size = {"height": 18, "width": 18}
+    do_flip_channel_order = True
+    do_reduce_labels = False
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {

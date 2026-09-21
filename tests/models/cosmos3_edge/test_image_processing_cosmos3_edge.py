@@ -24,19 +24,19 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("min_resolution", 32)
-        kwargs.setdefault("max_resolution", 64)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 32 * 32, "longest_edge": 64 * 64})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("merge_size", 2)
-        super().__init__(**kwargs)
+    batch_size = 3
+    min_resolution = 32
+    max_resolution = 64
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 32 * 32, "longest_edge": 64 * 64}
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_convert_rgb = True
+    patch_size = 16
+    merge_size = 2
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Wrap one image per sample to exercise Edge's nested multimodal input form."""

@@ -21,15 +21,14 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class BlipImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 20, "width": 20})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
-        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("do_pad", False)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 20, "width": 20}
+    do_normalize = True
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
+    do_convert_rgb = True
+    do_pad = False
 
 
 @require_torch

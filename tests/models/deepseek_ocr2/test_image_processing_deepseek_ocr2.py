@@ -25,17 +25,17 @@ if is_torch_available():
 
 
 class DeepseekOcr2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("min_resolution", 500)
-        kwargs.setdefault("max_resolution", 800)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 512, "width": 512})
-        kwargs.setdefault("tile_size", 384)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    min_resolution = 500
+    max_resolution = 800
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 512, "width": 512}
+    tile_size = 384
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_convert_rgb = True
 
 
 @require_torch

@@ -32,20 +32,25 @@ if is_torch_available():
 
 
 class AriaImageProcessingTester(ImageProcessingTester):
+    max_resolution = 40
+    num_images = 1
+
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    max_image_size = 980
+    min_image_size = 336
+    split_resolutions = [[980, 980]]
+    split_image = True
+    do_convert_rgb = True
+    do_normalize = True
+    resample = PILImageResampling.BICUBIC
+    size = {"longest_edge": max_resolution}
+
     def __init__(self, **kwargs):
-        kwargs.setdefault("max_resolution", 40)
-        kwargs.setdefault("num_images", 1)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("max_image_size", 980)
-        kwargs.setdefault("min_image_size", 336)
-        kwargs.setdefault("split_resolutions", [[980, 980]])
-        kwargs.setdefault("split_image", True)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("resample", PILImageResampling.BICUBIC)
-        kwargs.setdefault("size", {"longest_edge": kwargs["max_resolution"]})
         super().__init__(**kwargs)
+        if "size" not in kwargs:
+            self.size = {"longest_edge": self.max_resolution}
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.max_image_size, self.max_image_size

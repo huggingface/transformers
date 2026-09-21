@@ -22,11 +22,10 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class UVDocImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_normalize", False)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_normalize = False
+    do_resize = True
+    size = {"height": 18, "width": 18}
 
 
 @require_torch

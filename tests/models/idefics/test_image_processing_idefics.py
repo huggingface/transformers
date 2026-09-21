@@ -43,11 +43,10 @@ if is_vision_available():
 
 
 class IdeficsImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_size", 18)
-        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
-        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_size = 18
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
 
     def prepare_image_processor_dict(self):
         return {**super().prepare_image_processor_dict(), "image_size": self.image_size}

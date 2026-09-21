@@ -35,16 +35,15 @@ if is_vision_available():
 
 
 class Gemma4UnifiedImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("do_normalize", False)
-        kwargs.setdefault("image_mean", [0.0, 0.0, 0.0])
-        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("patch_size", 6)
-        kwargs.setdefault("max_soft_tokens", 70)
-        kwargs.setdefault("pooling_kernel_size", 1)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    do_normalize = False
+    image_mean = [0.0, 0.0, 0.0]
+    image_std = [1.0, 1.0, 1.0]
+    do_convert_rgb = True
+    patch_size = 6
+    max_soft_tokens = 70
+    pooling_kernel_size = 1
 
     def expected_output_image_shape(self, images=None):
         """Return the expected per-image output shape: (max_soft_tokens, model_patch_size² * 3)."""

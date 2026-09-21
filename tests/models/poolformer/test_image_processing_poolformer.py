@@ -20,16 +20,15 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PoolFormerImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("size", {"shortest_edge": 30})
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_pct", 0.9)
-        kwargs.setdefault("crop_size", {"height": 30, "width": 30})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    size = {"shortest_edge": 30}
+    do_resize = True
+    do_center_crop = True
+    crop_pct = 0.9
+    crop_size = {"height": 30, "width": 30}
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
 
 
 @require_torch

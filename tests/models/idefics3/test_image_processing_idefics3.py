@@ -34,22 +34,27 @@ if is_torch_available():
 
 
 class Idefics3ImageProcessingTester(ImageProcessingTester):
+    max_resolution = 40
+    num_images = 1
+
+    # Image processor init kwargs
+    resample = PILImageResampling.LANCZOS
+    do_convert_rgb = True
+    do_resize = True
+    size = {"longest_edge": max_resolution}
+    max_image_size = {"longest_edge": 20}
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_pad = True
+    do_image_splitting = True
+
     def __init__(self, **kwargs):
-        kwargs.setdefault("max_resolution", 40)
-        kwargs.setdefault("num_images", 1)
-        kwargs.setdefault("resample", PILImageResampling.LANCZOS)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"longest_edge": kwargs["max_resolution"]})
-        kwargs.setdefault("max_image_size", {"longest_edge": 20})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("do_image_splitting", True)
         super().__init__(**kwargs)
+        if "size" not in kwargs:
+            self.size = {"longest_edge": self.max_resolution}
 
     def expected_output_image_shape(self, images):
         effective_nb_images = (

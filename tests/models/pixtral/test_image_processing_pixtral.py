@@ -37,16 +37,16 @@ if is_vision_available():
 
 
 class PixtralImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("max_num_images_per_sample", 3)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"longest_edge": 24})
-        kwargs.setdefault("patch_size", {"height": 8, "width": 8})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
-        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    max_num_images_per_sample = 3
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"longest_edge": 24}
+    patch_size = {"height": 8, "width": 8}
+    do_normalize = True
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
+    do_convert_rgb = True
 
     def expected_output_image_shape(self, images):
         if not isinstance(images, (list, tuple)):

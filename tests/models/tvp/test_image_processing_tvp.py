@@ -31,25 +31,25 @@ if is_vision_available():
 
 
 class TvpImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("crop_size", None)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("fill", 0)
-        kwargs.setdefault("pad_mode", "constant")
-        kwargs.setdefault("num_frames", 2)
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("min_resolution", 40)
-        kwargs.setdefault("max_resolution", 80)
-        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
-        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"longest_edge": 40})
-        kwargs.setdefault("do_rescale", False)
-        kwargs.setdefault("do_center_crop", False)
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("pad_size", {"height": 80, "width": 80})
-        super().__init__(**kwargs)
+    fill = 0
+    num_frames = 2
+    batch_size = 2
+    min_resolution = 40
+    max_resolution = 80
+
+    # Image processor init kwargs
+    crop_size = None
+    rescale_factor = 1 / 255
+    pad_mode = "constant"
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
+    do_normalize = True
+    do_resize = True
+    size = {"longest_edge": 40}
+    do_rescale = False
+    do_center_crop = False
+    do_pad = True
+    pad_size = {"height": 80, "width": 80}
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.pad_size["height"], self.pad_size["width"]

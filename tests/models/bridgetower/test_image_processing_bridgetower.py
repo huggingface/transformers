@@ -23,18 +23,17 @@ from ...test_processing_common import url_to_local_path
 
 
 class BridgeTowerImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
-        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 288})
-        kwargs.setdefault("size_divisor", 32)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_center_crop = True
+    do_pad = True
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
+    do_normalize = True
+    do_resize = True
+    size = {"shortest_edge": 288}
+    size_divisor = 32
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]

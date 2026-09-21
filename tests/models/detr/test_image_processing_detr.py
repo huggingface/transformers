@@ -42,20 +42,20 @@ if is_vision_available():
 
 
 class DetrImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 1333})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("num_labels", 5)
-        kwargs.setdefault("num_queries", 3)
-        kwargs.setdefault("height", 3)
-        kwargs.setdefault("width", 4)
-        super().__init__(**kwargs)
+    num_labels = 5
+    num_queries = 3
+    height = 3
+    width = 4
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 18, "longest_edge": 1333}
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_pad = True
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         from transformers.models.detr.modeling_detr import DetrSegmentationOutput

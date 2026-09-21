@@ -40,23 +40,23 @@ if is_vision_available():
 
 
 class CohereCompassImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 7)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("num_frames", 10)
-        kwargs.setdefault("min_resolution", 56)
-        kwargs.setdefault("max_resolution", 1024)
-        kwargs.setdefault("min_pixels", 56 * 56)
-        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
-        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("merge_size", 2)
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    batch_size = 7
+    num_channels = 3
+    num_frames = 10
+    min_resolution = 56
+    max_resolution = 1024
+
+    # Image processor init kwargs
+    min_pixels = 56 * 56
+    max_pixels = 28 * 28 * 1280
+    do_normalize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    do_resize = True
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
+    do_convert_rgb = True
 
     def prepare_image_processor_dict(self):
         return {

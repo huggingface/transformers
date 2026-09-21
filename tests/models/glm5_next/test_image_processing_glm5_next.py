@@ -33,22 +33,22 @@ if is_vision_available():
 
 
 class Glm5NextImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("min_resolution", 30)
-        kwargs.setdefault("max_resolution", 80)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("merge_size", 2)
-        kwargs.setdefault("patch_expand_factor", 1)
-        kwargs.setdefault("min_image_tokens", 1)
-        kwargs.setdefault("max_image_tokens", 64)
-        super().__init__(**kwargs)
+    batch_size = 3
+    num_channels = 3
+    min_resolution = 30
+    max_resolution = 80
+
+    # Image processor init kwargs
+    do_rescale = True
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    temporal_patch_size = 2
+    patch_size = 14
+    merge_size = 2
+    patch_expand_factor = 1
+    min_image_tokens = 1
+    max_image_tokens = 64
 
     def prepare_image_processor_dict(self):
         return {

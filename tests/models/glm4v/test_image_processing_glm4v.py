@@ -34,17 +34,17 @@ if is_vision_available():
 
 
 class Glm4vImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("max_resolution", 80)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"longest_edge": 20, "shortest_edge": 10})
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("merge_size", 2)
-        super().__init__(**kwargs)
+    max_resolution = 80
+
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"longest_edge": 20, "shortest_edge": 10}
+    temporal_patch_size = 2
+    patch_size = 14
+    merge_size = 2
 
     def expected_output_image_shape(self, images):
         grid_t = 1

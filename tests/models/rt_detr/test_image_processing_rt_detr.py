@@ -37,16 +37,16 @@ if is_torch_available():
 
 
 class RTDetrImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 4)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 640, "width": 640})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", False)
-        kwargs.setdefault("do_pad", False)
-        kwargs.setdefault("return_tensors", "pt")
-        super().__init__(**kwargs)
+    batch_size = 4
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 640, "width": 640}
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = False
+    do_pad = False
+    return_tensors = "pt"
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]

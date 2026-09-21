@@ -39,18 +39,18 @@ if is_vision_available():
 
 
 class EomtImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 18})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("num_labels", 10)
-        kwargs.setdefault("num_queries", 3)
-        kwargs.setdefault("height", 18)
-        kwargs.setdefault("width", 18)
-        super().__init__(**kwargs)
+    num_labels = 10
+    num_queries = 3
+    height = 18
+    width = 18
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 18, "longest_edge": 18}
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_pad = True
 
     def prepare_fake_eomt_outputs(self, batch_size, patch_offsets=None):
         return EomtForUniversalSegmentationOutput(

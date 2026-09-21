@@ -34,16 +34,15 @@ if is_vision_available():
 
 
 class DeepseekVLHybridImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("high_res_image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("high_res_image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        kwargs.setdefault("high_res_size", {"height": 36, "width": 36})
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    high_res_image_mean = [0.5, 0.5, 0.5]
+    high_res_image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 18, "width": 18}
+    high_res_size = {"height": 36, "width": 36}
 
     def expected_output_image_shape(self, images):
         max_size = max(self.size["height"], self.size["width"])

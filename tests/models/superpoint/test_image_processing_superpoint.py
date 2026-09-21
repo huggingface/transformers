@@ -28,11 +28,10 @@ if is_torch_available():
 
 
 class SuperPointImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 480, "width": 640})
-        kwargs.setdefault("do_grayscale", True)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 480, "width": 640}
+    do_grayscale = True
 
     def prepare_keypoint_detection_output(self, pixel_values):
         max_number_keypoints = 50

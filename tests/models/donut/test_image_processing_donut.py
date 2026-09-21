@@ -32,16 +32,15 @@ if is_vision_available():
 
 
 class DonutImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 20})
-        kwargs.setdefault("do_thumbnail", True)
-        kwargs.setdefault("do_align_long_axis", False)
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 18, "width": 20}
+    do_thumbnail = True
+    do_align_long_axis = False
+    do_pad = True
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
 
 
 @require_torch

@@ -34,14 +34,13 @@ if is_vision_available():
 
 
 class Sam3ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 20, "width": 20})
-        kwargs.setdefault("mask_size", {"height": 12, "width": 12})
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 20, "width": 20}
+    mask_size = {"height": 12, "width": 12}
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {

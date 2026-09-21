@@ -31,17 +31,17 @@ if is_torch_available():
 
 
 class SLANeXtImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("min_resolution", 10)
-        kwargs.setdefault("image_mean", [0.485, 0.456, 0.406])
-        kwargs.setdefault("image_std", [0.229, 0.224, 0.225])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 512, "width": 512})
-        kwargs.setdefault("do_pad", True)
-        super().__init__(**kwargs)
+    min_resolution = 10
+
+    # Image processor init kwargs
+    do_rescale = True
+    rescale_factor = 1 / 255
+    image_mean = [0.485, 0.456, 0.406]
+    image_std = [0.229, 0.224, 0.225]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 512, "width": 512}
+    do_pad = True
 
     def get_expected_value(self, image_inputs):
         image = image_inputs[0]

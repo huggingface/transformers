@@ -31,27 +31,23 @@ if is_vision_available():
 
 
 class LlavaImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_pad", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 20})
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
-        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_pad = True
+    do_resize = True
+    size = {"shortest_edge": 20}
+    do_center_crop = True
+    crop_size = {"height": 18, "width": 18}
+    do_normalize = True
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
+    do_convert_rgb = True
 
 
 @require_torch
 @require_vision
-# Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Llava
 class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = LlavaImageProcessingTester
 
-    # Ignore copy
-    # Ignore copy
     def test_padding(self):
         """
         LLaVA needs to pad images to square size before processing as per orig implementation.
@@ -152,6 +148,5 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 padded_image = image_processor.pad_to_square(image_inputs[0], background_color=(122, 104, 0, 0))
 
     @unittest.skip(reason="LLaVa does not support 4 channel images yet")
-    # Ignore copy
     def test_call_numpy_4_channels(self):
         pass

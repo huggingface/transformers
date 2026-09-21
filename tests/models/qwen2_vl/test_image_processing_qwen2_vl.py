@@ -41,21 +41,21 @@ if is_vision_available():
 
 
 class Qwen2VLImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_frames", 10)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("min_resolution", 56)
-        kwargs.setdefault("max_resolution", 1024)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
-        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
-        kwargs.setdefault("min_pixels", 56 * 56)
-        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("merge_size", 2)
-        super().__init__(**kwargs)
+    num_frames = 10
+    min_resolution = 56
+    max_resolution = 1024
+
+    # Image processor init kwargs
+    do_normalize = True
+    do_convert_rgb = True
+    do_resize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    min_pixels = 56 * 56
+    max_pixels = 28 * 28 * 1280
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

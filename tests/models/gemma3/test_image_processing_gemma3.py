@@ -31,18 +31,17 @@ if is_vision_available():
 
 
 class Gemma3ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN)
-        kwargs.setdefault("image_std", IMAGENET_STANDARD_STD)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("do_pan_and_scan", True)
-        kwargs.setdefault("pan_and_scan_min_crop_size", 10)
-        kwargs.setdefault("pan_and_scan_max_num_crops", 2)
-        kwargs.setdefault("pan_and_scan_min_ratio_to_activate", 1.2)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 18, "width": 18}
+    do_normalize = True
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    do_convert_rgb = True
+    do_pan_and_scan = True
+    pan_and_scan_min_crop_size = 10
+    pan_and_scan_max_num_crops = 2
+    pan_and_scan_min_ratio_to_activate = 1.2
 
 
 @require_torch

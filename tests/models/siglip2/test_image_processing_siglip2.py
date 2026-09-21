@@ -26,18 +26,17 @@ if is_vision_available():
 
 
 class Siglip2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("resample", Image.Resampling.BILINEAR)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("max_num_patches", 256)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    size = {"height": 18, "width": 18}
+    do_resize = True
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    resample = Image.Resampling.BILINEAR
+    patch_size = 16
+    max_num_patches = 256
 
     def expected_output_image_shape(self, images):
         return self.max_num_patches, self.patch_size * self.patch_size * self.num_channels
@@ -45,13 +44,9 @@ class Siglip2ImageProcessingTester(ImageProcessingTester):
 
 @require_torch
 @require_vision
-# Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Siglip2
 class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Siglip2ImageProcessingTester
 
-    # Ignore copy
-    # Ignore copy
     @unittest.skip(reason="not supported")
-    # Ignore copy
     def test_call_numpy_4_channels(self):
         pass

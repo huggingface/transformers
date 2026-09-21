@@ -37,21 +37,21 @@ if is_torch_available():
 
 
 class Lfm2VlImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_images", 1)
-        kwargs.setdefault("min_resolution", 256)
-        kwargs.setdefault("max_resolution", 1024)
-        kwargs.setdefault("downsample_factor", 2)
-        kwargs.setdefault("do_image_splitting", False)
-        kwargs.setdefault("min_tiles", 2)
-        kwargs.setdefault("max_tiles", 10)
-        kwargs.setdefault("use_thumbnail", True)
-        kwargs.setdefault("min_image_tokens", 64)
-        kwargs.setdefault("max_image_tokens", 256)
-        kwargs.setdefault("encoder_patch_size", 16)
-        kwargs.setdefault("tile_size", 512)
-        kwargs.setdefault("max_pixels_tolerance", 2.0)
-        super().__init__(**kwargs)
+    num_images = 1
+    min_resolution = 256
+    max_resolution = 1024
+
+    # Image processor init kwargs
+    downsample_factor = 2
+    do_image_splitting = False
+    min_tiles = 2
+    max_tiles = 10
+    use_thumbnail = True
+    min_image_tokens = 64
+    max_image_tokens = 256
+    encoder_patch_size = 16
+    tile_size = 512
+    max_pixels_tolerance = 2.0
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

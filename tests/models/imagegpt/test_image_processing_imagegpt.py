@@ -48,20 +48,16 @@ if is_vision_available():
 
 
 class ImageGPTImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault(
-            "clusters",
-            np.asarray(
-                [
-                    [0.8866443634033203, 0.6618829369544983, 0.3891746401786804],
-                    [-0.6042559146881104, -0.02295008860528469, 0.5423797369003296],
-                ]
-            ),
-        )
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_normalize", True)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    clusters = np.asarray(
+        [
+            [0.8866443634033203, 0.6618829369544983, 0.3891746401786804],
+            [-0.6042559146881104, -0.02295008860528469, 0.5423797369003296],
+        ]
+    )
+    do_resize = True
+    size = {"height": 18, "width": 18}
+    do_normalize = True
 
     def expected_output_image_shape(self, images):
         return (self.size["height"] * self.size["width"],)

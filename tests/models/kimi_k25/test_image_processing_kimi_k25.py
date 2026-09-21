@@ -37,20 +37,20 @@ if is_vision_available():
 
 
 class Kimi26ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("num_frames", 10)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("min_resolution", 56)
-        kwargs.setdefault("max_resolution", 1024)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
-        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
-        kwargs.setdefault("size", {"max_height": 512, "max_width": 512})
-        kwargs.setdefault("max_patches", 36)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("merge_size", 2)
-        super().__init__(**kwargs)
+    num_frames = 10
+    min_resolution = 56
+    max_resolution = 1024
+
+    # Image processor init kwargs
+    do_normalize = True
+    do_convert_rgb = True
+    do_resize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    size = {"max_height": 512, "max_width": 512}
+    max_patches = 36
+    patch_size = 14
+    merge_size = 2
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(

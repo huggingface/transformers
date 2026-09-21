@@ -21,13 +21,12 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PvtImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_mean", [0.485, 0.456, 0.406])
-        kwargs.setdefault("image_std", [0.229, 0.224, 0.225])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_mean = [0.485, 0.456, 0.406]
+    image_std = [0.229, 0.224, 0.225]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 18, "width": 18}
 
 
 @require_torch

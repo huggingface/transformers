@@ -38,13 +38,13 @@ if is_torchvision_available():
 
 
 class Kosmos2_5ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("size", {"height": 20, "width": 20})
-        kwargs.setdefault("patch_size", {"height": 16, "width": 16})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("max_patches_values", [512, 1024, 2048, 4096])
-        super().__init__(**kwargs)
+    max_patches_values = [512, 1024, 2048, 4096]
+
+    # Image processor init kwargs
+    size = {"height": 20, "width": 20}
+    patch_size = {"height": 16, "width": 16}
+    do_normalize = True
+    do_convert_rgb = True
 
     def prepare_dummy_image(self):
         img_url = url_to_local_path(

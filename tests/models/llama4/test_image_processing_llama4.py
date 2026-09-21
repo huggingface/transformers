@@ -21,16 +21,15 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class Llama4ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("max_patches", 1)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 20, "width": 20})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("do_pad", False)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    max_patches = 1
+    do_resize = True
+    size = {"height": 20, "width": 20}
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_convert_rgb = True
+    do_pad = False
 
 
 @require_torch

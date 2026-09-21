@@ -21,11 +21,10 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class LayoutLMv3ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        kwargs.setdefault("apply_ocr", True)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 18, "width": 18}
+    apply_ocr = True
 
 
 @require_torch

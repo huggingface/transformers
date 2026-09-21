@@ -45,32 +45,31 @@ else:
 
 
 class FlavaImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_mean", FLAVA_IMAGE_MEAN)
-        kwargs.setdefault("image_std", FLAVA_IMAGE_STD)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 224, "width": 224})
-        kwargs.setdefault("resample", PILImageResampling.BICUBIC)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_size", {"height": 224, "width": 224})
-        kwargs.setdefault("input_size_patches", 14)
-        kwargs.setdefault("total_mask_patches", 75)
-        kwargs.setdefault("mask_group_min_patches", 16)
-        kwargs.setdefault("mask_group_min_aspect_ratio", 0.3)
-        kwargs.setdefault("mask_group_max_aspect_ratio", 0.3)
-        kwargs.setdefault("codebook_do_resize", True)
-        kwargs.setdefault("codebook_size", {"height": 112, "width": 112})
-        kwargs.setdefault("codebook_resample", PILImageResampling.LANCZOS)
-        kwargs.setdefault("codebook_do_center_crop", True)
-        kwargs.setdefault("codebook_crop_size", {"height": 112, "width": 112})
-        kwargs.setdefault("codebook_do_map_pixels", True)
-        kwargs.setdefault("codebook_do_normalize", True)
-        kwargs.setdefault("codebook_image_mean", FLAVA_CODEBOOK_MEAN)
-        kwargs.setdefault("codebook_image_std", FLAVA_CODEBOOK_STD)
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_mean = FLAVA_IMAGE_MEAN
+    image_std = FLAVA_IMAGE_STD
+    do_normalize = True
+    do_resize = True
+    size = {"height": 224, "width": 224}
+    resample = PILImageResampling.BICUBIC
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_center_crop = True
+    crop_size = {"height": 224, "width": 224}
+    input_size_patches = 14
+    total_mask_patches = 75
+    mask_group_min_patches = 16
+    mask_group_min_aspect_ratio = 0.3
+    mask_group_max_aspect_ratio = 0.3
+    codebook_do_resize = True
+    codebook_size = {"height": 112, "width": 112}
+    codebook_resample = PILImageResampling.LANCZOS
+    codebook_do_center_crop = True
+    codebook_crop_size = {"height": 112, "width": 112}
+    codebook_do_map_pixels = True
+    codebook_do_normalize = True
+    codebook_image_mean = FLAVA_CODEBOOK_MEAN
+    codebook_image_std = FLAVA_CODEBOOK_STD
 
     def get_expected_image_size(self):
         return (self.size["height"], self.size["width"])

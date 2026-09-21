@@ -20,15 +20,13 @@ from transformers.testing_utils import require_torch, require_vision
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
-# Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester with ViT->DeepseekVL
 class DeepseekVLImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 18, "width": 18})
-        super().__init__(**kwargs)
+    # Image processor init kwargs
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_normalize = True
+    do_resize = True
+    size = {"height": 18, "width": 18}
 
     # Ignore copy
     def expected_output_image_shape(self, images):
@@ -41,7 +39,6 @@ class DeepseekVLImageProcessingTester(ImageProcessingTester):
 class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = DeepseekVLImageProcessingTester
 
-    # Ignore copy
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):
         pass

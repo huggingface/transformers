@@ -21,20 +21,20 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPLCNetImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("size", {"height": 256, "width": 256})
-        kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("image_mean", [0.406, 0.456, 0.485])
-        kwargs.setdefault("image_std", [0.225, 0.224, 0.229])
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("rescale_factor", 0.00392156862745098)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_size", {"height": 224, "width": 224})
-        kwargs.setdefault("resize_short", 256)
-        kwargs.setdefault("resample", 2)
-        super().__init__(**kwargs)
+    batch_size = 3
+
+    # Image processor init kwargs
+    size = {"height": 256, "width": 256}
+    image_mean = [0.406, 0.456, 0.485]
+    image_std = [0.225, 0.224, 0.229]
+    do_normalize = True
+    do_resize = True
+    rescale_factor = 0.00392156862745098
+    do_rescale = True
+    do_center_crop = True
+    crop_size = {"height": 224, "width": 224}
+    resize_short = 256
+    resample = 2
 
 
 @require_torch

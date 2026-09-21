@@ -26,21 +26,21 @@ if is_torch_available():
 
 
 class Step3p7ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("min_resolution", 30)
-        kwargs.setdefault("max_resolution", 50)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"height": 64, "width": 64})
-        kwargs.setdefault("patch_size", 32)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(**kwargs)
+    batch_size = 2
+    num_channels = 3
+    min_resolution = 30
+    max_resolution = 50
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"height": 64, "width": 64}
+    patch_size = 32
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_convert_rgb = True
 
     def prepare_image_processor_dict(self):
         return {

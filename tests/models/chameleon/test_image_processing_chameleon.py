@@ -31,18 +31,18 @@ if is_vision_available():
 
 
 class ChameleonImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("max_resolution", 200)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 18})
-        kwargs.setdefault("do_center_crop", True)
-        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [1.0, 1.0, 1.0])
-        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
-        kwargs.setdefault("do_convert_rgb", True)
-        kwargs.setdefault("resample", PILImageResampling.BILINEAR)
-        super().__init__(**kwargs)
+    max_resolution = 200
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 18}
+    do_center_crop = True
+    crop_size = {"height": 18, "width": 18}
+    do_normalize = True
+    image_mean = [1.0, 1.0, 1.0]
+    image_std = [1.0, 1.0, 1.0]
+    do_convert_rgb = True
+    resample = PILImageResampling.BILINEAR
 
 
 @require_torch

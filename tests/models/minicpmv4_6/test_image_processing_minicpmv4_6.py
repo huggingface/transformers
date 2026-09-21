@@ -32,22 +32,22 @@ if is_vision_available():
 
 
 class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("min_resolution", 64)
-        kwargs.setdefault("max_resolution", 128)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("rescale_factor", 1 / 255)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("max_slice_nums", 9)
-        kwargs.setdefault("scale_resolution", 448)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("slice_mode", True)
-        kwargs.setdefault("downsample_mode", "16x")
-        super().__init__(**kwargs)
+    batch_size = 2
+    min_resolution = 64
+    max_resolution = 128
+
+    # Image processor init kwargs
+    do_resize = True
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    max_slice_nums = 9
+    scale_resolution = 448
+    patch_size = 14
+    slice_mode = True
+    downsample_mode = "16x"
 
     def expected_output_image_shape(self, image_inputs):
         """Return the expected NaViT-packed shape [C, P, total_L] for pixel_values[0]."""

@@ -41,22 +41,22 @@ if is_vision_available():
 
 
 class Mask2FormerImageProcessingTester(ImageProcessingTester):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("size_divisor", 0)
-        kwargs.setdefault("num_labels", 10)
-        kwargs.setdefault("do_reduce_labels", True)
-        kwargs.setdefault("ignore_index", 255)
-        kwargs.setdefault("num_queries", 3)
-        kwargs.setdefault("num_classes", 2)
-        kwargs.setdefault("height", 3)
-        kwargs.setdefault("width", 4)
-        super().__init__(**kwargs)
+    batch_size = 2
+    num_queries = 3
+    num_classes = 2
+    height = 3
+    width = 4
+
+    # Image processor init kwargs
+    do_resize = True
+    size = {"shortest_edge": 32, "longest_edge": 1333}
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    size_divisor = 0
+    num_labels = 10
+    do_reduce_labels = True
+    ignore_index = 255
 
     def get_fake_mask2former_outputs(self):
         return Mask2FormerForUniversalSegmentationOutput(
