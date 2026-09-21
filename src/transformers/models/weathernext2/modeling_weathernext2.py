@@ -306,6 +306,7 @@ class WeatherNext2Attention(nn.Module):
             **kwargs,
         )
 
+        # Attention runs in fp32; restore the model dtype before the output projection.
         attn_output = attn_output.to(hidden_states.dtype).reshape(*input_shape, -1).contiguous()
         return self.o_proj(attn_output), attn_weights
 

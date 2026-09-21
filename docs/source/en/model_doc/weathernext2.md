@@ -84,18 +84,52 @@ The model itself works in a normalized space, and [`WeatherNext2FeatureExtractor
 normalization statistics, the calendar-derived forcings, and the residual connection that turns the model's output back
 into an atmospheric state.
 
+The official WeatherNext 2 demo publishes a 1° example batch in the `dm_graphcast` bucket. It is also the sample used
+by Earth2Studio's WeatherNext 2 wrapper. Install the packages used to read it with
+`pip install google-cloud-storage h5netcdf xarray`.
+
 ```python
 import numpy as np
 import torch
+import xarray
+from google.cloud import storage
 from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2FeatureExtractor
 
 model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini", device_map="auto")
 processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext2-mini")
 
-# `state` maps each input variable to its values. Time-varying variables are
-# [batch, num_input_timesteps, (levels,) lat, lon]; static ones are [lat, lon].
-state = ...
-valid_time = np.array([np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64)])
+# Download the three-frame HRES example batch used by Earth2Studio.
+data_path = "weathernext2/dataset/source-hres_forecast_init-2024-10-07 00:00:00_res-1.0_levels-13_steps-01.nc"
+data_file = "weathernext2-example.nc"
+client = storage.Client.create_anonymous_client()
+bucket = client.get_bucket("dm_graphcast")
+bucket.blob(data_path).download_to_filename(data_file)
+example_batch = xarray.load_dataset(data_file).compute()
+
+# The first two frames are the conditioning state. The processor derives the
+# clock forcings itself, so only physical fields are copied from the dataset.
+initial = example_batch.isel(time=slice(0, processor.num_input_timesteps))
+state = {}
+for name in processor.input_variables:
+    if name in processor.forcing_variables:
+        continue
+    field = initial[name]
+    if name in processor.static_variables:
+        field = field.isel({dim: -1 for dim in ("batch", "time") if dim in field.dims}, drop=True)
+        field = field.transpose("lat", "lon")
+    elif name in processor.atmospheric_variables:
+        field = field.sel(level=processor.pressure_levels).transpose("batch", "time", "level", "lat", "lon")
+    else:
+        field = field.transpose("batch", "time", "lat", "lon")
+    state[name] = field.values.astype(np.float32)
+
+# Derive the clock forcings for the two conditioning frames.
+conditioning_times = initial.datetime.values.astype("datetime64[s]").astype(np.int64)
+state.update(processor.compute_forcings(conditioning_times))
+
+# The third frame is the valid time of the forecast.
+valid_time = example_batch.datetime.isel(time=processor.num_input_timesteps).values
+valid_time = valid_time.astype("datetime64[s]").astype(np.int64)
 
 inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
 with torch.no_grad():
