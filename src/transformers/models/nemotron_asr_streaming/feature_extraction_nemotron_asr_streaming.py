@@ -209,13 +209,13 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
 
         is_batched_sequence = isinstance(raw_speech, (list, tuple))
         if is_batched_sequence:
-            for speech in raw_speech:
+            for idx_mono, speech in enumerate(raw_speech):
                 if len(speech.shape) > 1:
                     logger.warning(
                         f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
                         "We will take the mean of the channels to convert to mono."
                     )
-                    speech = speech.mean(-1)
+                    raw_speech[idx_mono] = speech.mean(-1)
 
         if is_batched_torch or is_batched_sequence:
             raw_speech = [speech[:, None].to(torch.float32) for speech in raw_speech]
