@@ -17,7 +17,6 @@ import functools
 import importlib
 import os
 import sys
-from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -26,8 +25,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps, Interleave
-from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
 from ..utils.import_utils import is_kernels_available
 from .deepgemm import (
@@ -83,13 +81,12 @@ class FineGrained:
     the two MoE forwards, with the weight format resolved off the weight/scale dtypes inside the
     kernel and the module's ``activation_format`` passed through unchanged — the kernels speak the
     same vocabulary (``None`` = the weights' format, ``"bf16"`` = weight-only). The experts
-    forwards hand the kernels' MoE forwards the module's tensors and let them run the chain
-    (scheduling, fused GLU + intermediate requant, biases, the routing-weighted reduce); an
-    activation outside ``get_supported_act_fns()`` is passed as the module's own callable and runs
-    on the host between the two GEMMs; a per-expert output norm the kernels implement
-    (``get_supported_norms()``) rides the same way, by name, and is fused into the chain's reduce. The quantizers serve
-    on-the-fly quantization into the group formats. All symbols are required — a build missing any
-    raises at load with the full list.
+    forwards hand the kernels' MoE forwards the module's tensors and let them run the whole chain:
+    scheduling, fused GLU + intermediate requant, biases, the routing-weighted reduce. What they
+    cannot fuse runs in between — an activation outside ``get_supported_act_fns()`` as the module's
+    own callable, a per-expert output norm by name where ``get_supported_norms()`` has it. The
+    quantizers serve on-the-fly quantization into the group formats. All symbols are required; a
+    build missing any raises at load with the full list.
     """
 
     matmul_2d: Callable
@@ -256,12 +253,10 @@ def _alloc_expert_proj(
 ) -> tuple[nn.Parameter, nn.Parameter]:
     """``(weight, weight_scale_inv)`` Parameters for one expert projection: the weight in the
     format's storage (FP4 packs two values per byte along K), the scale grid at the format's
-    granularity (``None`` = one scale per expert). ``min_scale_out`` floors the grid's output dim —
-    the fused gate_up projection keeps room for both halves (``2``) even when ``proj_out`` is
-    smaller than the block. ``swizzled`` allocates the grid in the ``SWIZZLE_32_4_4`` artifact
-    layout instead — 128-row blocks x 4-column groups of ``(2, 256)`` byte tiles, the expert axis
-    leading so EP shards and gathers it on dim 0 — which needs whole blocks; a projection that
-    does not tile stays affine, which the kernels read directly."""
+    granularity (``None`` = one scale per expert). ``min_scale_out`` floors the grid's output dim
+    so a fused gate_up keeps room for both halves. ``swizzled`` allocates the grid in the
+    ``SWIZZLE_32_4_4`` layout instead — expert axis leading, so EP shards it on dim 0 — which needs
+    whole blocks; a projection that does not tile stays affine."""
     weight = torch.empty(num_experts, proj_out, proj_in // format_spec.values_per_byte, dtype=format_spec.weight_dtype)
     if scale_group is None:
         scale_shape = (num_experts, max(1, min_scale_out), 1)
@@ -278,56 +273,17 @@ def _alloc_expert_proj(
 
 
 def _swizzles_scales(config, format_spec: WeightFormat, activation_format: str | None) -> bool:
-    """Whether an experts module holds its block scales in the ``SWIZZLE_32_4_4`` layout the Blackwell
-    tcgen05 scaled-MMA reads directly (plain row-major forces a per-tile gather that caps the scaled
-    dot below the fp8/fp4 peak): SM100, a triton dispatch (the fused forwards and the eager loop both
-    read it; the DeepGEMM backends read affine scales), a group-scaled format (MX group-32, NVFP4
-    group-16; block-FP8 reaches the scaled-MMA too under UE8M0, but by broadcasting one 128-block
-    scalar in-register across the group-32 columns it consumes, so it has no per-group grid to lay
-    out) and a chain that quantizes activations (weight-only reads scales per group affinely)."""
+    """Whether an experts module holds its block scales in the ``SWIZZLE_32_4_4`` layout the
+    Blackwell tcgen05 scaled-MMA reads directly (row-major forces a per-tile gather). Needs SM100,
+    a triton dispatch (the DeepGEMM backends read affine scales), a group-scaled format and a chain
+    that quantizes activations. Block-FP8 reaches the scaled-MMA under UE8M0 by broadcasting one
+    128-block scalar in-register, so it has no per-group grid to lay out."""
     return (
         getattr(config, "_experts_implementation", None) not in ("deepgemm", "deepgemm_megamoe")
         and format_spec.scale_group is not None
         and activation_format != "bf16"
-        and torch.cuda.is_available()
         and is_sm100()
     )
-
-
-def finegrained_triton_linear(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    weight_scale_inv: torch.Tensor,
-    bias: torch.Tensor | None = None,
-    activation_scale: torch.Tensor | None = None,
-    weight_global_scale: torch.Tensor | None = None,
-    input_global_scale: torch.Tensor | None = None,
-    activation_format: str | None = None,
-) -> torch.Tensor:
-    """Triton fine-grained linear: fused act-quant + matmul, then optional bias add.
-
-    The weight format is read off the tensors (see ``WeightFormat``); what the caller decides is
-    the activation side. ``activation_scale`` ``None`` quantizes inline per token, a scalar
-    quantizes statically against it, and ``activation_format`` picks the format where the weights
-    leave it open (``"bf16"`` = weight-only). The two NVFP4 globals are the checkpoint's
-    ``weight_scale_2`` and ``input_scale``; both come back on the accumulator.
-    """
-    kernel = load_finegrained_kernel()
-    original_shape = input.shape
-    output = kernel.matmul_2d(
-        input.reshape(-1, original_shape[-1]),
-        weight,
-        activation_scale,
-        weight_scale_inv,
-        activation_format=activation_format,
-        output_dtype=input.dtype,
-        a_global_scale=input_global_scale,
-        b_global_scale=weight_global_scale,
-    )
-    output = output.reshape(*original_shape[:-1], output.shape[-1])
-    if bias is not None:
-        output.add_(bias)
-    return output
 
 
 def finegrained_linear(
@@ -345,11 +301,10 @@ def finegrained_linear(
     """End-to-end FP8/FP4 linear used by `FineGrainedLinear` and the eager `FineGrainedExperts` loop.
 
     Dispatch order — both backends handle FP8 and FP4 weights with fp32 or UE8M0 scales:
-      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) — on the pre-SM100 shapes it supports (FP4,
-         UE8M0 SFs, 128×128 block FP8). Never preferred on SM100: the Triton path is tuned
-         per shape there and is the only one that reads the pre-swizzled SWIZZLE_32_4_4
-         scales, and DeepGEMM's context-bound kernels are the multi-device hazard below.
-      2. Triton finegrained fallback — everywhere else: SM100, an ``activation_scale``
+      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) where it can actually run and is faster — the
+         pre-SM100 shapes it supports (FP4, UE8M0 SFs, 128×128 block FP8). Never on SM100,
+         where Triton is tuned per shape and is the only path reading pre-swizzled scales.
+      2. Triton finegrained fallback everywhere else: SM100, an ``activation_scale``
          (DeepGEMM is dynamic-only), or any shape DeepGEMM declined.
 
     Args:
@@ -370,8 +325,8 @@ def finegrained_linear(
             (None for other formats).
         input_global_scale: the NVFP4 calibrated activation global, the checkpoint's
             ``input_scale`` (None = quantize against the block scales alone).
-        activation_format: the activation format where the weights leave it open (see
-            ``finegrained_triton_linear``).
+        activation_format: the activation format where the weights leave it open
+            (``"bf16"`` = weight-only).
     """
     if prefers_deepgemm_linear(
         weight,
@@ -405,16 +360,25 @@ def finegrained_linear(
                 "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
             )
 
-    return finegrained_triton_linear(
-        input,
+    # Triton arm: fused act-quant + matmul, then optional bias add. `activation_scale` None
+    # quantizes inline per token, a scalar quantizes statically against it; the two NVFP4 globals
+    # both come back on the accumulator.
+    kernel = load_finegrained_kernel()
+    original_shape = input.shape
+    output = kernel.matmul_2d(
+        input.reshape(-1, original_shape[-1]),
         weight,
-        weight_scale_inv,
-        bias,
         activation_scale,
-        weight_global_scale=weight_global_scale,
-        input_global_scale=input_global_scale,
+        weight_scale_inv,
         activation_format=activation_format,
+        output_dtype=input.dtype,
+        a_global_scale=input_global_scale,
+        b_global_scale=weight_global_scale,
     )
+    output = output.reshape(*original_shape[:-1], output.shape[-1])
+    if bias is not None:
+        output.add_(bias)
+    return output
 
 
 class _FineGrainedModule:
@@ -515,8 +479,8 @@ class FineGrainedEmbedding(nn.Embedding):
 
 
 class FineGrainedGroupedLinear(FineGrainedLinear):
-    """Quantized drop-in for block-diagonal grouped linears, in any format `FineGrainedLinear`
-    serves — block-FP8, MXFP8, MXFP4, NVFP4 or weight-only.
+    """Quantized drop-in for block-diagonal grouped linears. NOT the MoE experts path
+    (`FineGrainedExperts`): every group runs on every token, with no routing.
 
     The underlying nn.Linear stores a single `(n_groups * out_per_group, in_per_group)` weight;
     logically that is `n_groups` independent `(out_per_group, in_per_group)` sub-matrices, each
@@ -582,13 +546,6 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         return y
 
 
-def _norm_eps(norm: nn.Module) -> float:
-    """A norm module's epsilon, under either name transformers modules give it. ``nn.RMSNorm``
-    leaves it ``None`` and resolves it to the dtype's own, so this does the same."""
-    eps = _first_attr(norm, "eps", "variance_epsilon", raise_error=False)
-    return float(eps) if eps is not None else torch.finfo(norm.weight.dtype).eps
-
-
 def _moe_operands(kernel, module) -> dict:
     """Everything the kernels' MoE forwards take from the module: the two projections with their
     scales (held swizzled for dot_scaled chains), the per-expert globals and biases,
@@ -615,7 +572,12 @@ def _moe_operands(kernel, module) -> dict:
         # partial sum over the sharded intermediate. Fall back to the module, whose wrapped
         # forward does the all-reduce first.
         post_expert_norm = module.post_expert_norm_name
-        norm_weight, norm_eps = module.post_expert_norm.weight, _norm_eps(module.post_expert_norm)
+        norm = module.post_expert_norm
+        norm_weight = norm.weight
+        # the model owns this module, so take epsilon under either name; `nn.RMSNorm` leaves it
+        # None and resolves to the dtype's own
+        eps = _first_attr(norm, "eps", "variance_epsilon", raise_error=False)
+        norm_eps = float(eps) if eps is not None else torch.finfo(norm_weight.dtype).eps
     else:
         post_expert_norm = module._apply_post_norm
 
@@ -711,22 +673,22 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
         # Expert weight storage is declared by the QUANT config's format key, not the model
         # config: `weight_format` arrives from `replace_with_finegrained_layer` as the
-        # checkpoint's quant_method ("fp8", "mxfp8", "mxfp4", "nvfp4"). The DeepSeek V4-style
-        # `config.expert_dtype = "fp4"` model-config side-channel predates it and is kept as
-        # the legacy fallback when no format is passed (dsv4 fp4 experts under the "fp8" key).
+        # checkpoint's quant_method. `config.expert_dtype` is the legacy DeepSeek-V4 side-channel,
+        # kept as the fallback when no format is passed.
         if weight_format is None:
             weight_format = "mxfp4" if getattr(config, "expert_dtype", "fp8") == "fp4" else "fp8"
         self.weight_format = weight_format
         format_spec, scale_dtype, scale_group = resolve_weight_format(weight_format, scale_fmt, block_size)
-        # the format decides the second level: whether there is one, and the dtype it is held in
+        # the format decides the second level: None means there is none, else the dtype it is in
         self.global_scale_dtype = format_spec.global_scale_dtype
-        self.has_global_scale = self.global_scale_dtype is not None
 
         # What the module HOLDS, as the loader's conversion ops deliver it (and their reverses
         # restore for the checkpoint): gate|up rows in the kernels' interleaved order unless the
         # backend packs gate|up itself (DeepGEMM Mega MoE), block scales swizzled where the
         # scaled-MMA reads them. `is_concatenated` above is the checkpoint's own order: the
         # loader interleaves where the two disagree, and everything at runtime reads this one.
+        # FROZEN at load, not a property over `_experts_implementation`: it describes the bytes
+        # the tensors now hold, so re-deriving it would claim a layout they do not have.
         impl = getattr(config, "_experts_implementation", None)
         self.holds_interleaved_gate_up = self.has_gate and impl != "deepgemm_megamoe"
         swizzled = _swizzles_scales(config, format_spec, activation_format)
@@ -755,9 +717,11 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             _set_optional_parameter(
                 self,
                 f"{proj}_weight_global_scale",
-                torch.ones(self.num_experts, dtype=self.global_scale_dtype) if self.has_global_scale else None,
+                torch.ones(self.num_experts, dtype=self.global_scale_dtype)
+                if self.global_scale_dtype is not None
+                else None,
             )
-            calibrated = self.has_global_scale and self.activation_format != "bf16"
+            calibrated = self.global_scale_dtype is not None and self.activation_format != "bf16"
             _set_optional_parameter(
                 self,
                 f"{proj}_input_global_scale",
@@ -884,48 +848,6 @@ class FineGrainedExpertsInterface(ExpertsInterface):
 ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
 
 
-def keep_swizzle_reverse_for_save(model, hf_quantizer) -> None:
-    """Keep the swizzle's reverse reachable at save time for a model quantized ON THE FLY.
-
-    `_weight_conversions` retains only converters that matched a checkpoint weight, and
-    quantizing a bf16 checkpoint CREATES the scale keys — so the converter carrying the
-    layout ops never matched, and saving would write the module's 5-D SWIZZLE_32_4_4 grid
-    where the checkpoint format is the affine one (silently: the module reads back whatever
-    it wrote, so only a re-save catches it).
-
-    Adds a converter that renames nothing and carries the swizzle alone, for scales no
-    retained converter already covers — reversing it is the unswizzle, which reads the
-    affine grid off the self-describing 5-D shape. Scoped that way because a converter
-    appended here is matched BEFORE the retained ones (the save reverses the list), so a
-    broader pattern would take keys away from the real converter and skip the rest of its
-    chain.
-    """
-    from ..core_model_loading import WeightConverter
-
-    conversions = list(getattr(model, "_weight_conversions", None) or [])
-    covered = {
-        target
-        for conv in conversions
-        if isinstance(conv, WeightConverter)
-        for target in (getattr(conv, "target_patterns", None) or [])
-    }
-    held_swizzled = {
-        name.rsplit(".", 1)[-1]
-        for name, param in model.named_parameters()
-        if param.ndim == 5 and name.rsplit(".", 1)[-1].endswith("_scale_inv")
-    }
-    missing = sorted(name for name in held_swizzled if not any(name in target for target in covered))
-    if not missing:
-        return
-    for name in missing:
-        conv = WeightConverter(
-            source_patterns=rf"{name}$", target_patterns=name, operations=[FineGrainedSwizzleScales(hf_quantizer)]
-        )
-        conv._was_used = True  # it describes a layout this quantizer applied, not one a checkpoint carried
-        conversions.append(conv)
-    model._weight_conversions = conversions
-
-
 def disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     """Flag every quantized module to skip DeepGEMM when the model spans >1 CUDA device in one
     process. DeepGEMM loads each kernel via `cuKernelGetFunction`, which binds the `CUfunction`
@@ -983,6 +905,13 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
     # legacy `config.expert_dtype` model-config side-channel, which the ctor falls back to.
     weight_format = next((f for f in ("mxfp8", "mxfp4", "nvfp4") if quantization_config.quant_method == f), None)
 
+    # every swap reads the same three off the quant config; the branches differ only in shape
+    storage = {
+        "block_size": quantization_config.weight_block_size,
+        "activation_scheme": quantization_config.activation_scheme,
+        "scale_fmt": quantization_config.scale_fmt,
+    }
+
     has_been_replaced = False
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -991,29 +920,24 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
         new_module = None
         with torch.device("meta"):
             if module_name.endswith(".experts"):
-                has_gate = getattr(module, "has_gate", True)
-                has_bias = getattr(module, "has_bias", False)
-                is_concatenated = getattr(module, "is_concatenated", True)
-                config = getattr(module, "config", model.config.get_text_config())
-                # the decorator stamps these flags on the instance after __init__, so the model's
-                # own gate|up convention has to travel through it too
+                # the decorator stamps these on the instance after __init__, so the model's own
+                # gate|up convention has to travel through it as well as into the ctor
+                flags = {
+                    "has_gate": getattr(module, "has_gate", True),
+                    "has_bias": getattr(module, "has_bias", False),
+                    "is_concatenated": getattr(module, "is_concatenated", True),
+                }
                 new_class = use_experts_implementation(
                     experts_class=FineGrainedExperts,
                     experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
-                    has_bias=has_bias,
-                    has_gate=has_gate,
-                    is_concatenated=is_concatenated,
+                    **flags,
                 )
                 new_module = new_class(
-                    config=config,
-                    block_size=quantization_config.weight_block_size,
-                    activation_scheme=quantization_config.activation_scheme,
-                    scale_fmt=quantization_config.scale_fmt,
-                    has_bias=has_bias,
-                    has_gate=has_gate,
+                    config=getattr(module, "config", model.config.get_text_config()),
                     weight_format=weight_format,
-                    activation_format=getattr(quantization_config, "activation_format", None),
-                    is_concatenated=is_concatenated,
+                    activation_format=quantization_config.activation_format,
+                    **storage,
+                    **flags,
                 )
                 # A per-expert output norm belongs to the model, not the quantization, so the
                 # swap carries the submodule over; `_apply_post_norm` is the standard hook and
@@ -1025,32 +949,24 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
                     new_module.has_post_expert_norm = True
                     new_module.post_expert_norm_name = getattr(module, "post_expert_norm_name", None)
             elif type(module) is nn.Linear:
-                # Vanilla `nn.Linear` → standard FineGrainedLinear swap.
                 new_module = FineGrainedLinear(
                     in_features=module.in_features,
                     out_features=module.out_features,
-                    block_size=quantization_config.weight_block_size,
-                    activation_scheme=quantization_config.activation_scheme,
-                    scale_fmt=quantization_config.scale_fmt,
                     has_bias=module.bias is not None,
                     weight_format=weight_format or "fp8",
-                    activation_format=getattr(quantization_config, "activation_format", None),
+                    activation_format=quantization_config.activation_format,
+                    **storage,
                 )
             elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:
-                # Block-diagonal grouped linear (e.g. DSv4's `DeepseekV4GroupedLinear`):
-                # one underlying weight conceptually split into `n_groups` independent
-                # sub-matmuls fed by disjoint input slices. Vanilla `FineGrainedLinear` would
-                # collapse those groups into one giant linear and yield the wrong
-                # output dim, so swap to `FineGrainedGroupedLinear` which keeps the per-group
-                # bmm contract and runs each block as its own FP8 matmul.
+                # Block-diagonal grouped linear (e.g. DSv4's `DeepseekV4GroupedLinear`): a
+                # plain `FineGrainedLinear` would collapse the groups into one giant linear and
+                # yield the wrong output dim.
                 new_module = FineGrainedGroupedLinear(
                     in_features_per_group=module.in_features,
                     out_features=module.out_features,
                     n_groups=module.n_groups,
-                    block_size=quantization_config.weight_block_size,
-                    activation_scheme=quantization_config.activation_scheme,
-                    scale_fmt=quantization_config.scale_fmt,
                     has_bias=module.bias is not None,
+                    **storage,
                 )
             if new_module is not None:
                 # The kernels take raw pointers, so every operand must be a plain tensor. This is
@@ -1067,620 +983,3 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
             "found to convert. Please double check your model architecture."
         )
     return model
-
-
-# ---------------------------------------------------------------------------------------------------
-# Conversion ops. The loader runs a converter's ops on the rank-local tensors it collected for one
-# target, and `save_pretrained` runs their reverses on the gathered tensors, so everything below
-# maps a checkpoint layout onto the layout the modules above hold — and back.
-# ---------------------------------------------------------------------------------------------------
-
-
-def _keyed_by_target(input_dict: dict, target_patterns) -> dict:
-    """A converter's ops see their single tensor under the SOURCE pattern until an op re-keys it to the
-    target (the core ops do; the loader then expands the target into the full name) — so a
-    layout op that is first in its converter re-keys the same way. Multi-tensor dicts (a
-    deserializer's fully named outputs) pass through."""
-    if target_patterns and len(input_dict) == 1:
-        value = next(iter(input_dict.values()))
-        return {target_patterns[0]: value[0] if isinstance(value, list) else value}
-    return input_dict
-
-
-def _held_scale(model, full_layer_name, key):
-    """The finegrained module and its ``*_scale_inv`` Parameter a converter output fills, else
-    ``(None, None)``. A converter emitting several tensors names them fully (key); a single target's
-    name arrives as the pattern, its full name (with the ``_scale_inv`` suffix) in ``full_layer_name``."""
-    param_name = (key if key.endswith("_scale_inv") else full_layer_name).rpartition(".")[2]
-    if not param_name.endswith("_scale_inv") or model is None:
-        return None, None
-    module = model.get_submodule(full_layer_name.rpartition(".")[0])
-    if not isinstance(module, _FineGrainedModule):
-        return None, None
-    return module, getattr(module, param_name, None)
-
-
-def _recontain(scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    """The same bytes under a same-width dtype (uint8 <-> e8m0), an exact numeric cast otherwise."""
-    return scale.view(dtype) if scale.element_size() == dtype.itemsize else scale.to(dtype)
-
-
-class FineGrainedInterleaveGateUp(ConversionOps):
-    """Stacked ``[gate; up]`` expert rows into the kernels' ``[g0, u0, g1, u1, ...]`` order (weight,
-    scale grid and bias share the row axis) — the core ``Interleave`` along dim 1. Runs on load and
-    on save alike wherever the checkpoint's row order (``is_concatenated``) differs from the one
-    the experts hold (``holds_interleaved_gate_up``)."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
-
-    def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
-        input_dict = _keyed_by_target(input_dict, target_patterns)
-        experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None) if model else None
-        if experts is None or not (experts.is_concatenated and experts.holds_interleaved_gate_up):
-            return input_dict
-        interleave = Interleave(dim=1, inverse=not self.inverse)  # inverse=True is stacked -> interleaved
-        out = {}
-        for key, value in input_dict.items():
-            probe = value[0] if isinstance(value, list) and len(value) == 1 else value
-            # a per-tensor scale is ONE value covering the whole gate|up stack — no row axis to
-            # reorder, and reshaping its length-1 axis into pairs is what would fail
-            if getattr(probe, "ndim", 0) < 2 or probe.shape[1] < 2:
-                out[key] = value
-            else:
-                out[key] = interleave.convert({key: value}, None, [key])[key]
-        return out
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedInterleaveGateUp(self.hf_quantizer, inverse=not self.inverse)
-
-
-class FineGrainedScaleContainer(ConversionOps):
-    """A block scale into the dtype its module holds. UE8M0 ships in two containers: the exponent
-    byte under ``uint8`` (MiniMax mxfp8), reinterpreted into ``float8_e8m0fnu``, and its
-    power-of-two value in float32 (dsv4-flash-base), cast exactly. Anything else passes through.
-    The module records which one the checkpoint used, so the reverse restores it on save."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
-
-    def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
-        out = {}
-        for key, value in _keyed_by_target(input_dict, target_patterns).items():
-            value = value[0] if isinstance(value, list) else value
-            if self.inverse:
-                # one checkpoint, one container, recorded on the modules at load; e8m0 is only
-                # ever a scale, so the dtype alone picks the tensors to restore
-                modules = model.modules() if model is not None else ()
-                container = next((c for m in modules if (c := getattr(m, "scale_container_dtype", None))), None)
-                if container is not None and value.dtype == _get_ue8m0_dtype():
-                    value = _recontain(value, container)
-            else:
-                module, held = _held_scale(model, full_layer_name, key)
-                if held is not None and value.dtype != held.dtype:
-                    module.scale_container_dtype = value.dtype
-                    value = _recontain(value, held.dtype)
-            out[key] = value
-        return out
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedScaleContainer(self.hf_quantizer, inverse=not self.inverse)
-
-
-class FineGrainedSwizzleScales(ConversionOps):
-    """Expert block scales into the ``SWIZZLE_32_4_4`` layout their module holds (a 5-D Parameter,
-    see ``_swizzles_scales``): one triton launch per rank-local shard, values unchanged. Anything
-    else the converter carries passes through. The swizzle only ever covers whole 128-row blocks
-    and 4-column groups, so the reverse reads the affine grid back off the 5-D shape."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
-
-    def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
-        out = {}
-        for key, value in _keyed_by_target(input_dict, target_patterns).items():
-            value = value[0] if isinstance(value, list) else value
-            out[key] = self._unswizzle(value) if self.inverse else self._swizzle(key, value, model, full_layer_name)
-        return out
-
-    @staticmethod
-    def _unswizzle(value):
-        if value.ndim != 5:
-            return value
-        experts, row_blocks, col_groups = value.shape[:3]
-        kernel = load_finegrained_kernel()
-        return kernel.unswizzle_mx_scales(value, row_blocks * 128, col_groups * 4, num_experts=experts)
-
-    @staticmethod
-    def _swizzle(key, value, model, full_layer_name):
-        _, held = _held_scale(model, full_layer_name, key)
-        if held is None or held.ndim != 5 or value.ndim == 5:
-            return value
-        return load_finegrained_kernel().swizzle_mx_scales(value)
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedSwizzleScales(self.hf_quantizer, inverse=not self.inverse)
-
-
-class FineGrainedPackedBlocks(ConversionOps):
-    """GPT-OSS's ``{proj}_blocks`` ``(E, N, K/32, 16)`` uint8 — two low-nibble-first E2M1 values per
-    byte, 16 bytes per group of 32 — as the packed ``(E, N, K/2)`` int8 the kernels read: the same
-    bytes, grouped per row, folded back into 16-byte groups on the way out. Its ``{proj}_scales``
-    companion rides ``FineGrainedScaleContainer`` in its own converter."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
-
-    def convert(self, input_dict, target_patterns=None, **kwargs):
-        out = {}
-        for key, value in _keyed_by_target(input_dict, target_patterns).items():
-            value = value[0] if isinstance(value, list) else value
-            if "_scales" in key:  # a converter that carries the scale alongside (the dequant chain)
-                out[key] = value
-            elif self.inverse:
-                out[key] = value.view(torch.uint8).reshape(*value.shape[:-1], value.shape[-1] // 16, 16)
-            else:
-                out[key] = value.reshape(*value.shape[:-2], -1).view(torch.int8)
-        return out
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedPackedBlocks(self.hf_quantizer, inverse=not self.inverse)
-
-
-class FineGrainedViewPackedInt8(ConversionOps):
-    """Bitcast packed-FP4 uint8 checkpoint bytes to the int8 view the finegrained modules store:
-    ``copy_`` into an int8 param would numerically CONVERT and corrupt values >= 128. Non-uint8
-    tensors pass through, so this can ride converters that also match unquantized modules."""
-
-    def __init__(self, hf_quantizer=None, inverse: bool = False):
-        self.hf_quantizer = hf_quantizer
-        self.inverse = inverse
-
-    def convert(self, input_dict, target_patterns=None, **kwargs):
-        held, want = (torch.int8, torch.uint8) if self.inverse else (torch.uint8, torch.int8)
-        out = {}
-        for key, value in _keyed_by_target(input_dict, target_patterns).items():
-            value = value[0] if isinstance(value, list) else value
-            out[key] = value.view(want) if torch.is_tensor(value) and value.dtype == held else value
-        return out
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        # a bitcast is its own inverse; on save the int8 the module holds goes back out as the
-        # uint8 bytes the checkpoint packs fp4 into
-        return FineGrainedViewPackedInt8(self.hf_quantizer, inverse=not self.inverse)
-
-
-class FineGrainedWeightGlobals(ConversionOps):
-    """The second-level NVFP4 globals and the calibrated ``input_scale``, as the kernels index them:
-    one fp32 global per expert per projection, from either the per-expert checkpoint keys
-    (``experts.*.gate_proj.weight_scale_2``) or one stacked ``(E, 2)`` tensor per layer.
-
-    A gate|up stack arrives with two per expert, calibrated separately (up to 1.6x apart on
-    Muse-Spark, equal on GLM-5.2). Merging them is not local, which is why one op owns a layer's
-    whole set: the stack keeps the gate's, and the up half's leaves as a ratio. That is sound
-    because ``inter = silu(gate) * up`` is LINEAR in the up half — running the stack on the gate's
-    global alone scales the expert output by ``1 / ratio``, which the down projection's weight
-    global takes back. The down's calibrated input global moves the other way, since it is what
-    the fused epilogue normalizes the intermediate by before requantizing: without it the requant
-    drifts off the calibrated range and a large enough ratio pushes the e4m3 block scales past
-    their 448 ceiling. Rescaling the up half's block scales instead would re-round them against
-    codes chosen for the old global, moving every value in a block by up to 6%."""
-
-    def __init__(self, hf_quantizer=None):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, target_patterns=None, model=None, **kwargs):
-        sources = defaultdict(dict)
-        for key, value in input_dict.items():
-            # the loader hands a converter's tensors in a list; unwrapped, a fused `(E, 2)` pair
-            # reads as `(1, 2E)` and the per-half fold below silently does not fire
-            sources[_global_role(key)][key] = value[0] if isinstance(value, list) and len(value) == 1 else value
-        globals_ = {}
-        for target in target_patterns:
-            if role_sources := sources.get(_global_role(target)):
-                globals_[target] = _stack_globals(role_sources)
-        targets = {_global_role(target): target for target in globals_}
-        stack = targets.get(("gate_up", "weight"))
-
-        # a stack calibrated per half keeps the gate's global; the up half's leaves as a ratio,
-        # which the down's weight global takes on (scaling the expert output back up) and its
-        # input global gives back (keeping the requantized intermediate on the calibrated range)
-        if stack is not None and globals_[stack].shape[1] == 2:
-            self._assert_no_gate_up_bias(model)
-            gate, up = globals_[stack][:, 0], globals_[stack][:, 1]
-            globals_[stack] = gate
-            ratio = (up / gate)[:, None]
-            for role, factor in ((("down", "weight"), ratio), (("down", "input"), 1 / ratio)):
-                if target := targets.get(role):
-                    globals_[target] = globals_[target] * factor
-        return {target: value.reshape(-1).contiguous() for target, value in globals_.items()}
-
-    @staticmethod
-    def _assert_no_gate_up_bias(model) -> None:
-        """A gate|up bias is added AFTER the global, so merging the halves would have to divide
-        its up rows by the same ratio — in the bias converter, which the layout ops own. No
-        checkpoint pairs the two, so refuse rather than carry a silent half-correction."""
-        if model is not None and any(
-            isinstance(module, FineGrainedExperts) and module.has_bias for module in model.modules()
-        ):
-            raise NotImplementedError(
-                "this checkpoint calibrates the gate|up halves separately AND carries an expert "
-                "bias; the up half's bias would have to be folded with the globals."
-            )
-
-
-def _global_role(key: str) -> tuple[str, str]:
-    """What a global-scale key holds, for a checkpoint key and a module target alike: which
-    projection it belongs to, and which of modelopt's two levels it is — the weight's second-level
-    global (``weight_scale_2``) or the calibrated activation one (``input_scale``)."""
-    projection = "down" if "down_proj" in key or "w2" in key else "gate_up"
-    level = "input" if "input_scale" in key or "input_global" in key else "weight"
-    return projection, level
-
-
-def _stack_globals(sources: dict) -> torch.Tensor:
-    """One ``(E, calibrated projections)`` fp32 tensor from a layer's globals, gate column first:
-    two sources are the stack's halves, one source is the fused ``(E, 2)`` pair or a single
-    projection's ``(E,)``."""
-    columns = []
-    for key, value in sorted(sources.items(), key=lambda kv: 0 if "gate_proj" in kv[0] else 1):
-        value = torch.stack(value, dim=0) if isinstance(value, list) else value
-        columns.append(value.float().reshape(value.shape[0], -1))
-    return torch.cat(columns, dim=1)
-
-
-class FineGrainedInputScales(ConversionOps):
-    """A calibrated checkpoint's ``input_scale`` in the layout the module holds. One value per
-    quantized module, so a MoE brings one per expert, the gate|up pair reducing to their max —
-    both halves read the same rows.
-
-    The NVFP4 gate_up global collapses further, to ONE value: its rows are the hidden states,
-    quantized once BEFORE routing, and the global is a split of the block scale, exact for any
-    value the accumulator multiplies back. A static activation scale IS the quantization scale,
-    with no block level to absorb an inflated one, so it keeps its per-expert form."""
-
-    def __init__(self, hf_quantizer=None):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, full_layer_name=None, **kwargs):
-        values = []
-        for value in input_dict.values():
-            value = torch.stack(value, dim=0) if isinstance(value, list) else value
-            values.append(value.float())
-        stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
-        # A scale is a MAGNITUDE (`amax(|x|) / 448`), so reduce over absolute values and keep it
-        # off zero. A signed reduce returns whatever the largest signed entry is, and the two
-        # degenerate results it admits are both fatal downstream: a negative scale flips the sign
-        # of every dequantized row, and a zero one divides the activations by zero — NaN logits
-        # on a SINGLE device, before any sharding is involved. Real calibrated checkpoints ship
-        # positive scales, so this is a no-op for them; it is the models whose scales are built
-        # rather than measured that reach here with a sign or a zero.
-        per_expert = stacked.reshape(stacked.shape[0], -1).abs().amax(dim=1).clamp(min=1e-12)
-        one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")  # the NVFP4 global only
-        return {full_layer_name: (per_expert.amax().reshape(1) if one_value else per_expert).contiguous()}
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedInputScalesSplit(self.hf_quantizer)
-
-
-class FineGrainedInputScalesSplit(ConversionOps):
-    """Save reverse of :class:`FineGrainedInputScales`: the module's scale back onto every
-    projection key the checkpoint calibrated one for. The merge took a max — over the gate|up
-    pair, and for the NVFP4 gate_up global over the experts too — so the folded halves are gone
-    and each projection is written the value that covers it, which is what the module reads back.
-    A collapsed global re-expands per expert, since that is the shape the checkpoint holds."""
-
-    def __init__(self, hf_quantizer=None):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
-        value = next(iter(input_dict.values()))
-        value = value[0] if isinstance(value, list) else value
-        if value.numel() == 1 and model is not None:
-            experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None)
-            if experts is not None:
-                value = value.reshape(1).expand(experts.num_experts).contiguous()
-        return dict.fromkeys(target_patterns or list(input_dict), value)
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedInputScales(self.hf_quantizer)
-
-
-class FineGrainedQuantize(ConversionOps):
-    """Quantize a full-precision weight on load into the format its module holds, emitting the
-    scale (and the NVFP4 global) in the module's layout — the held container dtype, the swizzled
-    artifact where the module holds one. Block-FP8 is computed in torch (per-block E4M3, fp32 or
-    power-of-two UE8M0 inverse scales); the group formats run the kernels' row-wise quantizers
-    (``mxfp8_act_quant`` / ``mxfp4_act_quant`` / ``nvfp4_act_quant``), NVFP4 after normalizing by the
-    canonical per-tensor / per-expert global ``amax / (6 * 448)``.
-    Tensors that are not a finegrained module's weight (1-D norms, biases, shapes that don't tile)
-    pass through. Without a model (direct invocation) it quantizes block-FP8 from the config."""
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict: dict[str, torch.Tensor], model=None, **kwargs) -> dict[str, torch.Tensor]:
-        result: dict[str, torch.Tensor] = {}
-        for key, value in input_dict.items():
-            tensor = value[0] if isinstance(value, list) else value
-            result.update(self._quantize_one(key, tensor, self._weight_holder(model, key)))
-        return result
-
-    @staticmethod
-    def _as_expert_rows(module, name: str, value: torch.Tensor) -> torch.Tensor:
-        """An expert stack with its contraction axis LAST, swapped to the ``(E, rows, K)`` the
-        module's slot and the kernels take. A model may store its experts transposed (GPT-OSS:
-        ``(E, H, 2I)``), and quantizing before the swap packs the wrong axis — the row count and
-        the byte-halved K then disagree, which the grouped op rejects at its first launch."""
-        if module is None or value.ndim != 3 or name not in ("gate_up_proj", "up_proj", "down_proj"):
-            return value
-        if name == "down_proj":
-            rows, in_dim = module.hidden_dim, module.intermediate_dim
-        else:
-            rows, in_dim = (2 if module.has_gate else 1) * module.intermediate_dim, module.hidden_dim
-        # only when the orientation is unambiguous: a square stack reads the same both ways
-        return value.transpose(1, 2).contiguous() if value.shape[1:] == (in_dim, rows) != (rows, in_dim) else value
-
-    @staticmethod
-    def _weight_holder(model, key: str):
-        """``(module, scale_param_name)`` when ``key`` is a finegrained module's weight, else ``None``."""
-        if model is None:
-            return None
-        module, name = get_module_from_name(model, key)
-        if not isinstance(module, _FineGrainedModule) or getattr(module, name, None) is None:
-            return None
-        if name == "weight":
-            return module, "weight_scale_inv"
-        if name in ("gate_up_proj", "up_proj", "down_proj"):
-            return module, f"{name}_scale_inv"
-        return None
-
-    def _quantize_one(self, key: str, value: torch.Tensor, holder) -> dict[str, torch.Tensor]:
-        if value.ndim < 2:
-            return {key: value}
-        prefix = key.rsplit(".", 1)[0] + ".weight" if key.endswith(".weight") else key
-        module = holder[0] if holder is not None else None
-        value = self._as_expert_rows(module, key.rsplit(".", 1)[1], value)
-        held_scale = getattr(module, holder[1]) if holder is not None else None
-        format_spec = weight_formats()[module.weight_format] if module is not None else None
-        if format_spec is None or format_spec.scale_group is None:
-            if module is not None and module.block_size:
-                block = tuple(module.block_size)
-            else:
-                # no module (direct invocation): take the block from the config, and failing that
-                # put one scale over the whole matrix
-                config = self.hf_quantizer.quantization_config if self.hf_quantizer is not None else None
-                config_block = (
-                    config.get("weight_block_size")
-                    if isinstance(config, dict)
-                    else getattr(config, "weight_block_size", None)
-                )
-                block = tuple(config_block) if config_block else (value.shape[-2], value.shape[-1])
-            ue8m0 = (
-                held_scale.dtype == _get_ue8m0_dtype()
-                if held_scale is not None
-                else self.hf_quantizer.quantization_config.scale_fmt == "ue8m0"
-            )
-            quantized = self._quantize_block_fp8(value, block, ue8m0)
-            return {key: value} if quantized is None else {key: quantized[0], f"{prefix}_scale_inv": quantized[1]}
-
-        if value.device.type not in ("cuda", "xpu"):
-            # the kernels' quantizers are triton launches; the package builds for cuda, rocm
-            # (which torch reports as "cuda") and xpu
-            raise ValueError(
-                f"on-the-fly {module.weight_format} quantization runs the kernels' quantizers on an "
-                f"accelerator, but the weight is on {value.device.type}"
-            )
-        weight, scale, global_scale = self._quantize_group(value, format_spec)
-        scale = _recontain(scale, held_scale.dtype)
-        if held_scale.ndim == 5:
-            scale = load_finegrained_kernel().swizzle_mx_scales(scale)
-        out = {key: weight, f"{prefix}_scale_inv": scale}
-        if global_scale is not None:
-            # the experts name their global `<proj>_weight_global_scale`, a dense linear just
-            # `weight_global_scale` — both sit beside a `<stem>_scale_inv`, so ask for the slot
-            stem = holder[1].removesuffix("_scale_inv")
-            suffix = "_global_scale" if hasattr(module, f"{stem}_global_scale") else "_weight_global_scale"
-            out[f"{prefix}{suffix}"] = global_scale
-        # activations are quantized dynamically against the block scales alone here — there is no
-        # calibration pass — so the module's activation globals are the identity
-        held_input = getattr(module, holder[1].replace("_scale_inv", "_input_global_scale"), None)
-        if held_input is not None:
-            # on the weight's device, not the slot's: the module is still on meta here, and
-            # `ones_like` would inherit that and leave the parameter unmaterialized
-            out[f"{prefix}_input_global_scale"] = torch.ones(
-                held_input.shape, dtype=held_input.dtype, device=value.device
-            )
-        return out
-
-    @staticmethod
-    def _quantize_block_fp8(value: torch.Tensor, block: tuple[int, int], ue8m0: bool):
-        """``(E4M3 weight, inverse scale grid)`` for a ``(..., rows, cols)`` tensor at ``block``, or
-        ``None`` when the shape does not tile. UE8M0 rounds the inverse scale up to a power of two
-        before quantizing, so dequant multiplies by exactly the scale the weight was divided by."""
-        block_m, block_n = block
-        rows, cols = value.shape[-2], value.shape[-1]
-        if rows % block_m or cols % block_n:
-            return None
-        tiles = value.float().reshape(*value.shape[:-2], rows // block_m, block_m, cols // block_n, block_n)
-        max_abs = tiles.abs().amax(dim=(-3, -1))
-        inv_scale = torch.where(max_abs > 0, max_abs / _FP8_MAX, torch.ones_like(max_abs))
-        if ue8m0:
-            inv_scale = torch.pow(2.0, torch.ceil(torch.log2(inv_scale.clamp(min=torch.finfo(torch.float32).tiny))))
-        scaled = tiles / inv_scale.unsqueeze(-1).unsqueeze(-3)
-        quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE).reshape(value.shape)
-        return quantized, inv_scale.to(_get_ue8m0_dtype() if ue8m0 else torch.float32)
-
-    @staticmethod
-    def _quantize_group(value: torch.Tensor, format_spec: WeightFormat):
-        """``(weight, scale, global)`` for a ``(..., rows, K)`` tensor in a group-scaled format through the
-        kernels' row-wise quantizers, one launch per tensor; ``global`` is ``None`` unless the format has
-        one. NVFP4's global is per matrix (per expert for a stack, a scalar for a dense weight): the
-        smallest that keeps every E4M3 block scale in range, divided out before the block quant."""
-        kernel = load_finegrained_kernel()
-        rows = value.reshape(-1, value.shape[-1])
-        global_scale = None
-        if format_spec.global_scale_dtype is not None:
-            per_matrix = value.float().reshape(-1, value.shape[-2] * value.shape[-1]).abs().amax(-1) / (6.0 * 448.0)
-            global_scale = per_matrix.clamp(min=torch.finfo(torch.float32).tiny)
-            rows = (value.float() / global_scale.reshape(-1, *[1] * (value.ndim - 1))).reshape_as(rows)
-            packed, scale = kernel.nvfp4_act_quant(rows.contiguous())
-            global_scale = global_scale.reshape(()) if value.ndim == 2 else global_scale
-        else:
-            quantize = kernel.mxfp4_act_quant if format_spec.values_per_byte == 2 else kernel.mxfp8_act_quant
-            packed, scale = quantize(rows.to(torch.bfloat16).contiguous())
-        return (
-            packed.view(format_spec.weight_dtype).reshape(*value.shape[:-1], -1),
-            scale.reshape(*value.shape[:-1], -1),
-            global_scale,
-        )
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return FineGrainedDequantize(self.hf_quantizer)
-
-
-class FineGrainedDequantize(ConversionOps):
-    """A quantized weight folded back to full precision against its per-block scale grid.
-
-    Runs FIRST in its converter under ``dequantize=True``, which is why
-    :meth:`update_weight_conversions` attaches it to each of the model's own converters: the
-    merge / concat ops after it collapse the per-expert structure the (weight, scale) pairing
-    needs. It pairs each weight pattern with its sibling scale pattern by index and emits the
-    result under the weight key, dropping the scales so the rest of the chain sees weights only.
-    """
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def _scale_pattern_for(self, weight_pattern: str) -> str:
-        anchored = weight_pattern.endswith("$")
-        base = weight_pattern[:-1] if anchored else weight_pattern
-        if base.endswith("_blocks"):
-            # GPT-OSS packs its experts as `{proj}_blocks` + `{proj}_scales`
-            scale = base[: -len("_blocks")] + "_scales"
-        elif base.endswith(".weight"):
-            scale = base[: -len(".weight")] + ".weight_scale_inv"
-        elif base == "weight":
-            scale = "weight_scale_inv"
-        else:
-            scale = base + "_scale_inv"
-        return scale + "$" if anchored else scale
-
-    # packed-FP4 experts arrive as int8 / float4_e2m1fn_x2, two e2m1 nibbles per byte
-    _FP4_E2M1_LUT = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
-
-    def _unpack_fp4(self, packed: torch.Tensor) -> torch.Tensor:
-        """Two ``e2m1`` FP4 values per byte → float32 tensor twice as wide on the last dim."""
-        lut = torch.tensor(self._FP4_E2M1_LUT, dtype=torch.float32, device=packed.device)
-        u8 = packed.contiguous().view(torch.uint8)
-        low = (u8 & 0xF).long()
-        high = ((u8 >> 4) & 0xF).long()
-        unpacked = torch.stack([lut[low], lut[high]], dim=-1)
-        return unpacked.reshape(*packed.shape[:-1], 2 * packed.shape[-1])
-
-    def _dequantize_one(
-        self, quantized: torch.Tensor, scales: torch.Tensor, output_dtype: torch.dtype | None = None
-    ) -> torch.Tensor:
-        # unpacked first, so the rest of the routine sees a normal (rows, cols) float matrix
-        fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
-        if quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype):
-            quantized_fp32 = self._unpack_fp4(quantized)
-        else:
-            quantized_fp32 = quantized.to(torch.float32)
-        rows, cols = quantized_fp32.shape[-2:]
-        # the block comes from the scale grid, not the config: one checkpoint holds both a
-        # ``[1, 32]`` MXFP4 expert block and a ``[128, 128]`` FP8 dense one
-        try:
-            scale_rows, scale_cols = scales.shape[-2:]
-        except Exception:
-            # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
-            scale_rows, scale_cols = 1, 1
-        if rows % scale_rows or cols % scale_cols:
-            raise ValueError(
-                f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
-            )
-        block_m = rows // scale_rows
-        block_n = cols // scale_cols
-        # the math runs in fp32 either way (``float8_e8m0fnu`` has no ``mul`` kernel); the
-        # destination parameter's dtype wins when known, so an eager module keeps the model's
-        if output_dtype is None:
-            output_dtype = (
-                scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
-            )
-        # an MXFP8 checkpoint's uint8 scale is a biased E8M0 exponent, not a multiplier
-        if scales.dtype == torch.uint8:
-            s_fp32 = (scales.to(torch.float32) - 127.0).exp2()
-        else:
-            s_fp32 = scales.to(torch.float32)
-        original_shape = quantized_fp32.shape
-        q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
-        s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
-        return (q * s).to(output_dtype).reshape(original_shape)
-
-    def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
-        if model is None or full_layer_name is None:
-            return None
-        module, tensor_name = get_module_from_name(model, full_layer_name)
-        param = getattr(module, tensor_name, None)
-        return getattr(param, "dtype", None)
-
-    def convert(
-        self,
-        input_dict: dict[str, list[torch.Tensor] | torch.Tensor],
-        full_layer_name: str | None = None,
-        model: torch.nn.Module | None = None,
-        **kwargs,
-    ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
-        output_dtype = self._get_target_dtype(model, full_layer_name)
-        # The dense converter (``["weight$", "weight_scale_inv", "activation_scale"] -> weight``)
-        # hands one weight, with or without a scale (RMSNorm weights match ``weight$`` too).
-        if "weight$" in input_dict:
-            # the loader derives prefix/suffix from the output KEY; without a `full_layer_name`
-            # (direct invocation) key it by the converter's target
-            target_key = full_layer_name if full_layer_name is not None else "weight"
-            quantized = input_dict["weight$"]
-            quantized = quantized[0] if isinstance(quantized, list) else quantized
-            if "weight_scale_inv" in input_dict:
-                scales = input_dict["weight_scale_inv"]
-                scales = scales[0] if isinstance(scales, list) else scales
-                return {target_key: self._dequantize_one(quantized, scales, output_dtype=output_dtype)}
-            return {target_key: quantized}
-
-        # Generic chain path: dequantize every weight pattern that has a sibling scale.
-        consumed = {self._scale_pattern_for(key) for key in input_dict}
-        result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
-        for key, value in input_dict.items():
-            if "activation_scale" in key or key in consumed:
-                continue  # consumed by the dequant; drop from the chain
-            scale_key = self._scale_pattern_for(key)
-            if scale_key not in input_dict:
-                result[key] = value
-                continue
-            weights = value if isinstance(value, list) else [value]
-            scales = input_dict[scale_key]
-            scales = scales if isinstance(scales, list) else [scales]
-            if len(weights) != len(scales):
-                raise ValueError(
-                    f"FineGrainedDequantize: weight/scale count mismatch for {key} "
-                    f"({len(weights)} weights vs {len(scales)} scales)."
-                )
-            result[key] = [self._dequantize_one(w, s, output_dtype=output_dtype) for w, s in zip(weights, scales)]
-        return result
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        # a save re-quantizes, so the checkpoint keeps its format whether the in-memory
-        # state stayed quantized or was dequantized for compute
-        return FineGrainedQuantize(self.hf_quantizer)

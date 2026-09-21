@@ -21,6 +21,7 @@ import socket
 import subprocess
 import tempfile
 import unittest
+import warnings
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from unittest import mock
@@ -309,7 +310,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         m = self._experts(has_gate=True, weight_format="nvfp4")
         # the format table must resolve the ATTRIBUTE the forwards gate on, not just the
         # param allocation — a None here silently drops the global at every forward
-        self.assertIs(m.has_global_scale, True)
+        self.assertIsNotNone(m.global_scale_dtype)
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
             fg.finegrained_batched_mm_experts_forward(m, *self._route())
@@ -516,10 +517,19 @@ class FrozenFp8ShimTest(unittest.TestCase):
         import importlib
 
         import transformers.integrations.finegrained_fp8 as frozen
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+        from transformers.utils.quantization_config import FineGrainedFP8Config
 
-        # the notice rides the library logger, so it honours transformers' verbosity settings
-        with self.assertLogs("transformers.integrations.finegrained_fp8", level="WARNING") as captured:
+        # the notice fires when someone actually asks for the frozen scheme, not on import:
+        # importing is what every `transformers.integrations` consumer does
+        with warnings.catch_warnings(record=True) as raised:
+            warnings.simplefilter("always")
             importlib.reload(frozen)
+        self.assertEqual([w for w in raised if "frozen" in str(w.message)], [])
+
+        # ...and it rides the library logger, so it honours transformers' verbosity settings
+        with self.assertLogs("transformers.quantizers.quantizer_finegrained_fp8", level="WARNING") as captured:
+            FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
         self.assertTrue(any("frozen for backward compatibility" in line for line in captured.output))
         # distinct machinery: the frozen classes are not the live ones
         self.assertIsNot(frozen.FP8Linear, FineGrainedLinear)
@@ -630,10 +640,10 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         # order runs on each rank's shard, after sharding. The companions follow it.
         self.assertEqual(style("gate_up_proj"), "packed_colwise")
         for name in ("gate_up_proj_scale_inv", "gate_up_proj_bias"):
-            self.assertEqual(style(name), "moe_experts_packed_shard1", name)
+            self.assertEqual(style(name), "moe_experts_packed_colwise", name)
         # the down scale splits on dim 2 — the reduce axis affine and 5-D swizzled alike
         self.assertEqual(style("down_proj"), "rowwise")
-        self.assertEqual(style("down_proj_scale_inv"), "moe_experts_shard2")
+        self.assertEqual(style("down_proj_scale_inv"), "moe_experts_rowwise")
         # TP does not split experts, so anything indexed per expert stays whole
         for name in ("gate_up_proj_weight_global_scale", "down_proj_weight_global_scale", "down_proj_bias"):
             self.assertEqual(style(name), "moe_tp_experts", name)
@@ -644,7 +654,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         self.assertEqual(_get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj", plan_i), "colwise")
         self.assertEqual(
             _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan_i),
-            "moe_experts_shard1",
+            "moe_experts_colwise",
         )
 
     def test_dense_projections_that_share_a_name_are_left_alone(self):
@@ -679,7 +689,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         # the stacked experts still get theirs
         self.assertEqual(
             _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan),
-            "moe_experts_packed_shard1",
+            "moe_experts_packed_colwise",
         )
 
     def test_a_multimodal_models_expert_plans_are_reached(self):
@@ -746,14 +756,64 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         self.assertEqual(megamoe["layers.*.mlp.gate"], "megamoe_router")
         self.assertEqual(megamoe["layers.*.mlp.experts"], "megamoe_experts")
 
+    def test_a_models_own_plan_survives_the_update(self):
+        """`update_tp_plan` ADDS companions; it must never drop what the model ships.
+
+        The config here is a REAL one, which the `SimpleNamespace` the tests above use cannot
+        substitute for: a branch keyed on the config CLASS is invisible to a fake. A hardcoded
+        `"Qwen3" in config.__class__.__name__` override used to assign a dense plan over
+        `base_model_tp_plan`, dropping `q_norm`/`k_norm` on Qwen3 and — because the check is a
+        substring — the whole expert plan on Qwen3-MoE.
+        """
+        from transformers import Qwen3Config, Qwen3MoeConfig, Qwen3VLMoeConfig
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        for config_cls in (Qwen3Config, Qwen3MoeConfig):
+            with self.subTest(config=config_cls.__name__):
+                config = config_cls()
+                shipped = dict(config.base_model_tp_plan)
+                self.assertTrue(shipped, f"{config_cls.__name__} ships no plan to preserve")
+                FineGrainedHfQuantizer(FineGrainedConfig()).update_tp_plan(config)
+                for key, style in shipped.items():
+                    self.assertEqual(config.base_model_tp_plan.get(key), style, key)
+
+        # and a multimodal one keeps its plan on the SUB-config: the outer carries none, so
+        # nothing may be invented there. 25 config classes contain "Qwen3" — a name-substring
+        # branch reaches every one of them, including these.
+        multimodal = Qwen3VLMoeConfig()
+        FineGrainedHfQuantizer(FineGrainedConfig()).update_tp_plan(multimodal)
+        self.assertFalse(getattr(multimodal, "base_model_tp_plan", None) or {})
+        self.assertTrue(multimodal.text_config.base_model_tp_plan)
+
+    def test_a_real_moe_models_experts_gain_their_companions(self):
+        """The other half of the same invariant: preserving the model's entries is what lets the
+        companion pass find `moe_tp_experts` and give the expert scales an entry of their own."""
+        from transformers import Qwen3MoeConfig
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        config = Qwen3MoeConfig()
+        FineGrainedHfQuantizer(FineGrainedConfig()).update_tp_plan(config)
+        plan = config.base_model_tp_plan
+        self.assertEqual(plan["layers.*.mlp.experts"], "moe_tp_experts")
+        for companion in ("gate_up_proj_scale_inv", "down_proj_scale_inv", "gate_up_proj_bias"):
+            self.assertIn(f"layers.*.mlp.experts.{companion}", plan, companion)
+
 
 class SubtreePatternTest(unittest.TestCase):
     def test_a_checkpoints_glob_skip_list_is_bounded(self):
         """modelopt names skipped subtrees with globs. Passed through as regexes the dots match any
         character and the star is greedy, so "model.layers.1.*" also takes layers 10-19."""
-        from transformers.quantizers.quantizers_utils import should_convert_module, subtree_pattern_to_regex
+        from transformers.quantizers.quantizers_utils import should_convert_module
+        from transformers.utils.quantization_config import FineGrainedConfig
 
-        skip = [subtree_pattern_to_regex(g) for g in ("model.layers.0*", "model.layers.1.*", "self_attn")]
+        # as a modelopt checkpoint ships them, through the config that normalizes them
+        skip = FineGrainedConfig(
+            quant_method="modelopt",
+            quant_algo="NVFP4",
+            ignore=["model.layers.0*", "model.layers.1.*", "self_attn"],
+        ).modules_to_not_convert
         for name in ("model.layers.0.mlp", "model.layers.1.mlp.down_proj", "model.layers.2.self_attn.q_proj"):
             self.assertFalse(should_convert_module(name, skip), name)
         for name in ("model.layers.16.mlp.down_proj", "model.layers.2.mlp.gate_proj", "model.my_self_attn.q_proj"):
@@ -778,7 +838,10 @@ class FineGrainedMxfp4ConverterTest(unittest.TestCase):
         return (vals * torch.pow(torch.tensor(2.0), exp)).reshape(*blocks.shape[:2], -1)
 
     def test_blocks_and_scales_convert_to_the_kernel_pair_and_back(self):
-        from transformers.integrations.finegrained import FineGrainedPackedBlocks, FineGrainedScaleContainer
+        from transformers.integrations.finegrained_conversions import (
+            FineGrainedPackedBlocks,
+            FineGrainedScaleContainer,
+        )
 
         torch.manual_seed(0)
         E, N, K = 2, 8, 64  # N = 2I interleaved gate|up rows
@@ -949,7 +1012,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
         return kernel
 
     def test_swizzle_op_fills_only_the_scales_the_module_holds_swizzled(self):
-        from transformers.integrations.finegrained import FineGrainedSwizzleScales
+        from transformers.integrations.finegrained_conversions import FineGrainedSwizzleScales
 
         model, experts = self._experts("mxfp8")
         kernel = self._op_kernel()
@@ -992,7 +1055,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
         the op brings both into the held e8m0 (exact cast / same bytes), records the container on
         the module, and its reverse restores that container on save; weights and native scales
         pass both ways."""
-        from transformers.integrations.finegrained import FineGrainedScaleContainer
+        from transformers.integrations.finegrained_conversions import FineGrainedScaleContainer
 
         op = FineGrainedScaleContainer(hf_quantizer=None)
         native = torch.pow(2.0, torch.randint(-8, 8, (4, 256, 8)).float()).to(torch.float8_e8m0fnu)
@@ -1024,7 +1087,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
         self.assertIs(op.reverse_op.convert({"x": native}, model=model)["x"], native)  # nothing recorded: native stays
 
     def test_reverse_op_restores_the_affine_grid_from_the_artifact_alone(self):
-        from transformers.integrations.finegrained import FineGrainedSwizzleScales
+        from transformers.integrations.finegrained_conversions import FineGrainedSwizzleScales
 
         kernel = self._op_kernel()
         reverse = FineGrainedSwizzleScales(hf_quantizer=None).reverse_op
@@ -1067,7 +1130,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
 
     def test_quantizer_attaches_the_layout_ops_to_expert_converters(self):
         from transformers.core_model_loading import WeightConverter
-        from transformers.integrations.finegrained import (
+        from transformers.integrations.finegrained_conversions import (
             FineGrainedInterleaveGateUp,
             FineGrainedScaleContainer,
             FineGrainedSwizzleScales,
@@ -1097,7 +1160,10 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
 
     def test_blocks_scales_converters_carry_the_layout_ops(self):
         from transformers.core_model_loading import WeightConverter
-        from transformers.integrations.finegrained import FineGrainedInterleaveGateUp, FineGrainedSwizzleScales
+        from transformers.integrations.finegrained_conversions import (
+            FineGrainedInterleaveGateUp,
+            FineGrainedSwizzleScales,
+        )
 
         converters = self._quantizer("mxfp4")([])
         by_target = {_targets(c)[0]: c for c in converters if isinstance(c, WeightConverter)}
@@ -1178,7 +1244,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
         interleaved (`is_concatenated=False`, GPT-OSS) keeps them, Mega MoE packs gate|up itself
         and keeps the stack; every other case gets the interleaved order, and the reverse restores
         the stack."""
-        from transformers.integrations.finegrained import FineGrainedInterleaveGateUp
+        from transformers.integrations.finegrained_conversions import FineGrainedInterleaveGateUp
 
         stacked = torch.arange(2 * 6 * 4, dtype=torch.float32).reshape(2, 6, 4)  # rows [g0,g1,g2,u0,u1,u2]
         op = FineGrainedInterleaveGateUp(hf_quantizer=None)
@@ -1204,7 +1270,7 @@ class FineGrainedOnTheFlyQuantizeTest(unittest.TestCase):
         The finegrained chain has to land the same bf16 tensor, in the (E, hidden, 2I) orientation
         the unquantized experts hold — so it is compared against that integration directly."""
         from transformers.core_model_loading import Transpose
-        from transformers.integrations.finegrained import FineGrainedDequantize, FineGrainedPackedBlocks
+        from transformers.integrations.finegrained_conversions import FineGrainedDequantize, FineGrainedPackedBlocks
         from transformers.integrations.mxfp4 import convert_moe_packed_tensors
 
         torch.manual_seed(0)
@@ -1221,7 +1287,7 @@ class FineGrainedOnTheFlyQuantizeTest(unittest.TestCase):
         torch.testing.assert_close(next(iter(tensors.values())).float(), reference.float(), rtol=0, atol=0)
 
     def test_block_fp8_round_trips_within_its_floor(self):
-        from transformers.integrations.finegrained import FineGrainedDequantize, FineGrainedQuantize
+        from transformers.integrations.finegrained_conversions import FineGrainedDequantize, FineGrainedQuantize
 
         torch.manual_seed(0)
         cfg = _Cfg()
@@ -1415,7 +1481,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         every expert against the largest one's range. It stays per expert."""
         import torch
 
-        from transformers.integrations.finegrained import FineGrainedInputScales
+        from transformers.integrations.finegrained_conversions import FineGrainedInputScales
 
         sources = {
             "mlp.experts.*.gate_proj.input_scale": torch.tensor([1.0, 3.0]),
@@ -1431,7 +1497,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         where the kernels assert one per expert."""
         import torch
 
-        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+        from transformers.integrations.finegrained_conversions import FineGrainedWeightGlobals
 
         targets = [
             "experts.gate_up_proj_weight_global_scale",
@@ -1461,7 +1527,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         global and the down's weight global scales the expert output back. The down's calibrated
         input scale moves the other way, keeping the requantized intermediate on the range the
         checkpoint calibrated."""
-        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+        from transformers.integrations.finegrained_conversions import FineGrainedWeightGlobals
 
         gate, up = torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])
         down, down_input = torch.tensor([5.0, 6.0]), torch.tensor([0.5, 2.0])
@@ -1487,7 +1553,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
     def test_globals_with_one_calibrated_projection_pass_through(self):
         """A checkpoint that calibrates the stack as one matrix (its halves agree, or it ships a
         single global) has nothing to merge, so every global reaches its module unchanged."""
-        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+        from transformers.integrations.finegrained_conversions import FineGrainedWeightGlobals
 
         targets = [
             "experts.gate_up_proj_weight_global_scale",
@@ -1509,7 +1575,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
     def test_the_fused_layout_ships_both_halves_in_one_tensor(self):
         """Muse-Spark's `(E, 2)` `weight_scale_2` is the same pair as the per-expert layout's two
         keys, and merges the same way."""
-        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+        from transformers.integrations.finegrained_conversions import FineGrainedWeightGlobals
 
         targets = [
             "experts.gate_up_proj_weight_global_scale",
@@ -1529,7 +1595,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         """The gate_up quantizes the hidden states once, BEFORE routing, so its calibrated
         `input_scale` reduces to one value; the down's rows are per expert, so its stays per
         expert — the requant epilogue normalizes each row by its own expert's value."""
-        from transformers.integrations.finegrained import FineGrainedInputScales
+        from transformers.integrations.finegrained_conversions import FineGrainedInputScales
 
         up = FineGrainedInputScales().convert(
             {
@@ -1648,7 +1714,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         """MXFP8 / MXFP4 / NVFP4 on-the-fly quantization through the kernels' quantizers, emitted in
         the module's layout (swizzled where held so); dequantizing them back lands within each
         format's floor."""
-        from transformers.integrations.finegrained import FineGrainedDequantize, FineGrainedQuantize
+        from transformers.integrations.finegrained_conversions import FineGrainedDequantize, FineGrainedQuantize
 
         torch.manual_seed(0)
         cfg = _Cfg()
@@ -1689,7 +1755,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         globals. Returns the module, the exact dequantized weights (so the reference is the
         quantization floor rather than the pre-quant weight), and the dequantization a reader that
         applied ONE of the two globals to both halves would get."""
-        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+        from transformers.integrations.finegrained_conversions import FineGrainedWeightGlobals
 
         kernel = load_finegrained_kernel()
         experts = FineGrainedExperts(cfg, weight_format="nvfp4", activation_format=activation_format).cuda()
@@ -1828,7 +1894,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         """End-to-end over the integration: real MXFP8 experts hold swizzled scales, the loader's op
         fills them from the affine grid, the fused forward matches the affine module's, and the
         reverse op hands the affine grid back bitwise."""
-        from transformers.integrations.finegrained import FineGrainedSwizzleScales
+        from transformers.integrations.finegrained_conversions import FineGrainedSwizzleScales
 
         cfg = _Cfg()
         cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = (

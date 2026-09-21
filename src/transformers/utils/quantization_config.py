@@ -18,6 +18,7 @@ import copy
 import importlib.metadata
 import json
 import os
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Union
@@ -1762,14 +1763,21 @@ class FineGrainedConfig(QuantizationConfigMixin):
             # "modelopt" names the PRODUCER, not a format, so the algo it exported becomes the
             # format here and nothing downstream has to ask where a config came from.
             self.quant_method, algo_activation_format = _MODELOPT_ALGOS[quant_algo]
+            logger.info(
+                f"modelopt checkpoint exported with quant_algo={quant_algo!r}; loading it as "
+                f"{str(self.quant_method)!r}."
+            )
             self.activation_format = activation_format or algo_activation_format
             ignore = kwargs.pop("ignore", None) or kwargs.pop("exclude_modules", None)
             if modules_to_not_convert is None and ignore is not None:
-                # modelopt ships glob-style subtree entries, under `ignore` as "model.layers.0*" /
-                # "model.layers.1.*" and under `exclude_modules` bare ("self_attn", "layers.0.")
-                from ..quantizers.quantizers_utils import subtree_pattern_to_regex
-
-                modules_to_not_convert = [subtree_pattern_to_regex(g) for g in ignore]
+                # modelopt names skipped subtrees with GLOBS — "model.layers.0*", "model.layers.1.*",
+                # or bare "self_attn". Handed on as regexes they are wrong twice: the dots match any
+                # character, and the star is greedy, so "model.layers.1.*" also takes layers 10-19.
+                # Anchor each at a path boundary instead: the named module and everything under it.
+                modules_to_not_convert = []
+                for glob in ignore:
+                    subtree = glob[:-2] if glob.endswith(".*") else glob.rstrip("*").rstrip(".")
+                    modules_to_not_convert.append(r"(?:^|.*\.)" + re.escape(subtree) + r"(\..*)?$")
         self.modules_to_not_convert = modules_to_not_convert
         self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
@@ -1836,6 +1844,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
+        # TODO: check overlap with not to convert
         self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size

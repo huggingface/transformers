@@ -787,6 +787,13 @@ class ParallelInterface(GeneralInterface):
             "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
+            # a companion of an expert-stacked (E, N, K) projection — block scales, bias, NVFP4
+            # globals — shards on the projection's own axis while the experts stay whole, named
+            # for the weight split it follows. The built-in styles count axes from the END of the
+            # shape, which lands inside a swizzled scale grid's inner tile rather than on its rows.
+            "moe_experts_colwise": MoEParamShard(Shard(1)),
+            "moe_experts_packed_colwise": MoEParamShard(_StridedShard(dim=1, split_factor=2)),
+            "moe_experts_rowwise": MoEParamShard(Shard(2)),
             "ep_router": EpRouterParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeExpertsParallel(),

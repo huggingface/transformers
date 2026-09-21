@@ -924,8 +924,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
          the ``[E_local, 2*I, *]`` leading dims so downstream ``.size(...)`` reads
          stay valid.
 
-    Runs inside the first forward, where the parameters are already local: the module carries
-    ``_hf_quantized_needs_local_tp``, so the TP layer hands local shards rather than DTensors.
+    Runs inside the first forward, where the parameters are already local.
     """
     # The UE8M0 scale grid is group-32 along both dims, so the kernel's SF layout needs both divisible.
     intermediate_hidden = module.intermediate_dim

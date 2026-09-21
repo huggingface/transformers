@@ -1150,7 +1150,7 @@ def _internal_many_to_many_conversions() -> tuple[type[ConversionOps], ...]:
     whenever the integration is imported first (`cannot import name ... from partially initialized
     module`). Called once per `WeightConverter`, at construction.
     """
-    from .integrations.finegrained import FineGrainedWeightGlobals
+    from .integrations.finegrained_conversions import FineGrainedWeightGlobals
 
     return (
         ErnieFuseAndSplitTextVisionExperts,
