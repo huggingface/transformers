@@ -96,6 +96,11 @@ print(processed_video_inputs.pixel_values_videos.shape)
 [10, 3, 384, 384]
 ```
 
+## VideoProcessorMixin
+
+[[autodoc]] video_processing_utils.VideoProcessorMixin
+
+
 ## BaseVideoProcessor
 
 [[autodoc]] video_processing_utils.BaseVideoProcessor
