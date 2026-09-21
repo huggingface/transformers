@@ -27,7 +27,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..glmasr.configuration_glmasr import GlmAsrEncoderConfig
@@ -383,8 +383,11 @@ class Nemotron3DiarizationPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     _no_split_modules = ["Nemotron3DiarizationEncoderLayer"]
-    _supports_flash_attn = True
+    _skip_keys_device_placement = ["speaker_cache"]
+
+    supports_gradient_checkpointing = True
     _supports_sdpa = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
@@ -506,8 +509,9 @@ class Nemotron3DiarizationModel(Nemotron3DiarizationPreTrainedModel):
         self.classifier = Nemotron3DiarizationClassificationHead(config)
         self.post_init()
 
-    @auto_docstring
+    @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor | None = None,
@@ -545,8 +549,8 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         self.silence_embeds = nn.Parameter(torch.zeros(config.encoder_config.hidden_size))
         self.post_init()
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor,

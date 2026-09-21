@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, maybe_autocast
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_nemotron3_diarization import Nemotron3DiarizationConfig, Nemotron3DiarizationEncoderConfig
 
@@ -466,10 +466,13 @@ class Nemotron3DiarizationPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = "audio"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["Nemotron3DiarizationEncoderLayer"]
+    _skip_keys_device_placement = ["speaker_cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _supports_attention_backend = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": Nemotron3DiarizationEncoderLayer,
@@ -590,8 +593,9 @@ class Nemotron3DiarizationModel(Nemotron3DiarizationPreTrainedModel):
         self.classifier = Nemotron3DiarizationClassificationHead(config)
         self.post_init()
 
-    @auto_docstring
+    @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor | None = None,
@@ -629,8 +633,8 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         self.silence_embeds = nn.Parameter(torch.zeros(config.encoder_config.hidden_size))
         self.post_init()
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor,
