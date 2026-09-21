@@ -331,8 +331,9 @@ def mamba2_chunk_scan(
     C_times_states = torch.einsum("bclhn,bchpn->bclhp", C, states)
     Y_off = C_times_states * state_decay_out.permute(0, 2, 3, 1)[..., None]
 
-    # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
-    output = Y_diag + Y_off
+    # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks).
+    # `contiguous` because einsum may return a permuted view and callers `.view()` this.
+    output = (Y_diag + Y_off).contiguous()
     output = output.reshape(batch_size, -1, num_heads, head_dim)
 
     if D_residual is not None:
