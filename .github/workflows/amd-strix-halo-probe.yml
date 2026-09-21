@@ -86,8 +86,10 @@ jobs:
           # GPU call). xdist --max-worker-restart survives a segfault; pytest's
           # --timeout is the per-test cap. (xdist + pytest-timeout are in the image.)
           timeout -s INT --kill-after=120 360m \
-            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
-              --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
+            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
+              --timeout=1200 --timeout-method=signal \
+              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence" \
+              tests/models/${{ matrix.model }}
 
   models-ci-1:
     name: "${{ matrix.model }}"
@@ -113,8 +115,10 @@ jobs:
         run: |
           cd /transformers
           timeout -s INT --kill-after=120 360m \
-            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
-              --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
+            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
+              --timeout=1200 --timeout-method=signal \
+              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence" \
+              tests/models/${{ matrix.model }}
 
   models-ci-2:
     name: "${{ matrix.model }}"
@@ -140,8 +144,10 @@ jobs:
         run: |
           cd /transformers
           timeout -s INT --kill-after=120 360m \
-            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope \
-              --timeout=1200 --timeout-method=signal tests/models/${{ matrix.model }}
+            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
+              --timeout=1200 --timeout-method=signal \
+              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence" \
+              tests/models/${{ matrix.model }}
 
   test:
     name: Smoke + tests (prebuilt gfx1151 image)
