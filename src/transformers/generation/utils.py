@@ -123,11 +123,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-_UNSATISFIABLE_CONSTRAINTS_MESSAGE = (
-    "The logits processors masked every token of a sequence, so the generation constraints cannot be satisfied "
-    "(e.g. `prefix_allowed_tokens_fn` only allows tokens that are forbidden by `min_new_tokens` or `bad_words_ids`)."
-)
-
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
@@ -1288,14 +1283,6 @@ class GenerationMixin(ContinuousMixin):
                     use_cache=generation_config.use_cache,
                 )
             )
-        # Runs first, so the only `-inf` it may override is the model's own
-        if prefix_allowed_tokens_fn is not None:
-            processors.append(
-                PrefixConstrainedLogitsProcessor(
-                    prefix_allowed_tokens_fn,
-                    generation_config.num_beams,
-                )
-            )
         if generation_config.sequence_bias is not None:
             processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
 
@@ -1379,6 +1366,13 @@ class GenerationMixin(ContinuousMixin):
                     generation_config.min_new_tokens,
                     generation_config._eos_token_tensor,
                     device=device,
+                )
+            )
+        if prefix_allowed_tokens_fn is not None:
+            processors.append(
+                PrefixConstrainedLogitsProcessor(
+                    prefix_allowed_tokens_fn,
+                    generation_config.num_beams,
                 )
             )
         if generation_config.forced_bos_token_id is not None:
@@ -3005,7 +2999,6 @@ class GenerationMixin(ContinuousMixin):
         batch_size = input_ids.shape[0]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        constraints_conflict = torch.zeros((), dtype=torch.bool, device=input_ids.device)
 
         # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
         # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
@@ -3066,12 +3059,6 @@ class GenerationMixin(ContinuousMixin):
                 # pre-process distribution
                 next_token_scores = logits_processor(input_ids, next_token_logits)
 
-                # No valid token left: the constraints conflict. Stop and raise after the loop (no host sync)
-                dead_rows = ~torch.isfinite(next_token_scores.amax(dim=-1))
-                next_token_scores = next_token_scores.masked_fill(dead_rows[:, None], 0.0)
-                constraints_conflict |= (dead_rows & unfinished_sequences.bool()).any()
-                unfinished_sequences = unfinished_sequences * ~constraints_conflict
-
                 # Store scores, attentions and hidden_states when required
                 if return_dict_in_generate:
                     if output_scores:
@@ -3131,9 +3118,6 @@ class GenerationMixin(ContinuousMixin):
 
         if streamer is not None:
             streamer.end()
-
-        if constraints_conflict:
-            raise ValueError(_UNSATISFIABLE_CONSTRAINTS_MESSAGE)
 
         if return_dict_in_generate:
             cache = None
@@ -3522,7 +3506,6 @@ class GenerationMixin(ContinuousMixin):
 
         # per batch state bit indicating if there is a possibility to improve the best finished sentence.
         is_early_stop_heuristic_unsatisfied = torch.ones((batch_size, 1), dtype=torch.bool, device=input_ids.device)
-        constraints_conflict = torch.zeros((), dtype=torch.bool, device=input_ids.device)
 
         # per batch, beam-item state bit indicating if there are valid continuations.
         next_token_hits_stopping_criteria = torch.zeros(
@@ -3603,16 +3586,6 @@ class GenerationMixin(ContinuousMixin):
             log_probs = self._unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]
             log_probs = torch.reshape(log_probs, (batch_size, -1))  # The -1 dim is `num_beams * vocab_size`
-
-            # No valid candidate left for a member that could still improve: the constraints conflict (see `_sample`)
-            log_probs = log_probs.nan_to_num(nan=-torch.inf, posinf=torch.inf, neginf=-torch.inf)
-            dead_members = log_probs.amax(dim=-1).isneginf()
-            log_probs = log_probs.masked_fill(dead_members[:, None], 0.0)
-            members_done = is_sent_finished.all(dim=-1) & (early_stopping is True)
-            constraints_conflict |= (
-                dead_members & is_early_stop_heuristic_unsatisfied.squeeze(-1) & ~members_done
-            ).any()
-            is_early_stop_heuristic_unsatisfied &= ~constraints_conflict
 
             # c. Retrieve top-K continuations, i.e. select the next token (greedy or sampling) and then keep the best
             # continuations among all beams based on the accumulated scores.
@@ -3700,9 +3673,6 @@ class GenerationMixin(ContinuousMixin):
                 next_token_hits_stopping_criteria,
                 early_stopping,
             )
-
-        if constraints_conflict:
-            raise ValueError(_UNSATISFIABLE_CONSTRAINTS_MESSAGE)
 
         # 5. prepare outputs
         # Take best beams for each batch (the score is sorted in descending order)
