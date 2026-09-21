@@ -31,6 +31,9 @@ The main addition over 4.6 is *canvas M-RoPE*: instead of numbering visual token
 This model was contributed by [OpenBMB](https://huggingface.co/openbmb).
 The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
 
+> [!NOTE]
+> Passing `use_image_id` to a processor will number several images in one prompt so the text can refer to them individually. It applies to images only: a video is a single temporal sequence of frames rather than several addressable visuals, which is how the model was trained, so the setting is ignored for video inputs.
+
 ## Usage example
 
 ### Inference with Pipeline
@@ -85,23 +88,6 @@ decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip
 print(decoded_output)
 ```
 
-### Canvas M-RoPE
-
-The processor returns a `target_sizes_mrope` entry next to `input_ids` and `pixel_values`. It holds the patch grid of every visual input, in the order the placeholders appear in the prompt, and the model turns it into 3-D positions during `forward`. Both `apply_chat_template(..., tokenize=True, return_dict=True)` and a direct `processor(text=..., images=...)` call produce it, so the default path needs no extra work.
-
-The layout is recovered by scanning `input_ids` for the structural markers around each visual span, so the checkpoint config must carry their token ids:
-
-```python
-model.config.image_start_id, model.config.image_end_id
-model.config.slice_start_id, model.config.slice_end_id
-model.config.newline_id
-```
-
-The conversion script resolves these from the tokenizer and stores them in `config.json`, so released checkpoints already carry them. If a checkpoint ships without them, the model raises instead of quietly falling back to 1-D positions, because that fallback degrades quality on every image and video input.
-
-> [!TIP]
-> Canvas positions are built from `input_ids`. When you generate from `inputs_embeds` only, pass `input_ids` for the first forward pass as well, otherwise the model warns and falls back to 1-D positions.
-
 ### Downsampling mode
 
 MiniCPM-V 4.7 supports two visual downsampling modes:
@@ -145,22 +131,6 @@ inputs = processor.apply_chat_template(
 ).to(model.device, dtype=model.dtype)
 ```
 
-### Image processing backend
-
-MiniCPM-V 4.7 provides two image processing backends:
-
-- **torchvision** (default): Uses `torchvision.transforms` for image resizing.
-- **pil**: Uses `PIL.Image.resize`, matching the original implementation.
-
-To use the PIL backend:
-
-```python
-from transformers import AutoProcessor, AutoImageProcessor
-
-processor = AutoProcessor.from_pretrained(model_checkpoint)
-processor.image_processor = AutoImageProcessor.from_pretrained(model_checkpoint, backend="pil")
-```
-
 ### Video inference
 
 MiniCPM-V 4.7 supports video understanding.
@@ -186,11 +156,6 @@ decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip
 print(decoded_output)
 ```
 
-If you already have the rendered prompt string, you can call `processor(text=..., videos=[...])` directly instead.
-
-> [!NOTE]
-> `use_image_id` numbers several images in one prompt so the text can refer to them individually. It applies to images only: a video is a single temporal sequence of frames rather than several addressable visuals, which is how the model was trained, so the setting is ignored for video inputs.
-
 ## MiniCPMV4_7Config
 
 [[autodoc]] MiniCPMV4_7Config
@@ -198,6 +163,11 @@ If you already have the rendered prompt string, you can call `processor(text=...
 ## MiniCPMV4_7VisionConfig
 
 [[autodoc]] MiniCPMV4_7VisionConfig
+
+## MiniCPMV4_7VisionPreTrainedModel.
+
+[[autodoc]] MiniCPMV4_7VisionPreTrainedModel
+    - forward
 
 ## MiniCPMV4_7VisionModel
 

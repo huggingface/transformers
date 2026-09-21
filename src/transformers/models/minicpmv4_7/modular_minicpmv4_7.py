@@ -109,11 +109,6 @@ class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
         )
         hidden_states = residual[:, window_index, :] + hidden_states
 
-        # This is where 4.7 parts ways with 4.6. 4.6 un-permutes the stream with `argsort(window_index)`
-        # and then walks `target_sizes` image by image to reshape each one on its own. Here the stream is
-        # left in window order, where `window_index` already puts the patches of one window next to each
-        # other, so a single reshape merges every window at once and a batch whose images have different
-        # patch grids no longer needs a Python loop. `target_sizes` is only read for the guard below.
         window_h, window_w = self.window_kernel_size
         window_size = window_h * window_w
         embed_dim = hidden_states.shape[-1]
@@ -130,8 +125,9 @@ class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
         hidden_state = self.linear_1(hidden_state)
         hidden_state = self.act(hidden_state)
         hidden_state = self.linear_2(hidden_state)
+        hidden_state = (hidden_state + patch_residual).unsqueeze(0)
 
-        return (hidden_state + patch_residual).unsqueeze(0)
+        return hidden_state
 
 
 class MiniCPMV4_7Model(MiniCPMV4_6Model):
@@ -840,6 +836,7 @@ __all__ = [
     "MiniCPMV4_7Config",
     "MiniCPMV4_7VisionConfig",
     "MiniCPMV4_7PreTrainedModel",  # noqa: F822
+    "MiniCPMV4_7VisionPreTrainedModel",  # noqa: F822
     "MiniCPMV4_7VisionModel",  # noqa: F822
     "MiniCPMV4_7Model",
     "MiniCPMV4_7ForConditionalGeneration",

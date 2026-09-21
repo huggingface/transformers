@@ -255,11 +255,6 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
         )
         hidden_states = residual[:, window_index, :] + hidden_states
 
-        # This is where 4.7 parts ways with 4.6. 4.6 un-permutes the stream with `argsort(window_index)`
-        # and then walks `target_sizes` image by image to reshape each one on its own. Here the stream is
-        # left in window order, where `window_index` already puts the patches of one window next to each
-        # other, so a single reshape merges every window at once and a batch whose images have different
-        # patch grids no longer needs a Python loop. `target_sizes` is only read for the guard below.
         window_h, window_w = self.window_kernel_size
         window_size = window_h * window_w
         embed_dim = hidden_states.shape[-1]
@@ -276,8 +271,9 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
         hidden_state = self.linear_1(hidden_state)
         hidden_state = self.act(hidden_state)
         hidden_state = self.linear_2(hidden_state)
+        hidden_state = (hidden_state + patch_residual).unsqueeze(0)
 
-        return (hidden_state + patch_residual).unsqueeze(0)
+        return hidden_state
 
 
 class MiniCPMV4_7VisionEmbeddings(nn.Module):
@@ -617,6 +613,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         pixel_values: torch.FloatTensor,
         target_sizes: torch.IntTensor,
         downsample_mode: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         target_sizes (`torch.IntTensor` of shape `(num_images, 2)`):
@@ -633,6 +630,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             pixel_values,
             target_sizes=target_sizes,
             use_vit_merger=use_vit_merger,
+            **kwargs,
         )
 
         if use_vit_merger:
@@ -759,6 +757,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(1, channels, patch_size, seq_len)`):
@@ -776,7 +775,12 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             1, pixel_values_videos.shape[1], pixel_values_videos.shape[2], -1
         )
         target_sizes = target_sizes_videos.repeat(num_frames, 1)
-        return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
+        return self.get_image_features(
+            pixel_values,
+            target_sizes,
+            downsample_mode=downsample_mode,
+            **kwargs,
+        )
 
     @staticmethod
     def _frame_end_idx(last_crop_end_idx: int, input_ids: list[int], markers: tuple[int, ...], limit: int) -> int:
@@ -1384,6 +1388,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
 
 __all__ = [
     "MiniCPMV4_7PreTrainedModel",
+    "MiniCPMV4_7VisionPreTrainedModel",
     "MiniCPMV4_7VisionModel",
     "MiniCPMV4_7Model",
     "MiniCPMV4_7ForConditionalGeneration",

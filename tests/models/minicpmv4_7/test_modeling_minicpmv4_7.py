@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch MiniCPM-V 4.7 model."""
 
+import copy
 import unittest
 
 import pytest
@@ -20,9 +21,10 @@ import pytest
 from transformers import (
     AutoProcessor,
     MiniCPMV4_7Config,
+    MiniCPMV4_7VisionConfig,
+    Qwen3_5TextConfig,
     is_torch_available,
 )
-from transformers.models.minicpmv4_7.configuration_minicpmv4_7 import MiniCPMV4_7VisionConfig
 from transformers.testing_utils import (
     Expectations,
     require_torch,
@@ -32,7 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import floats_tensor
+from ...test_modeling_common import MODEL_MAPPING_NAMES, floats_tensor, get_values
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -41,7 +43,75 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, MiniCPMV4_7ForConditionalGeneration, MiniCPMV4_7Model
-    from transformers.models.qwen3_5.configuration_qwen3_5 import Qwen3_5TextConfig
+
+# Keep a list of inputs and expectation for MRoPE to test edge cases
+GOLDEN_CANVAS_LAYOUTS = {
+    "single image, no slices": {
+        "input_ids": [[1, 10, 100, 100, 100, 100, 11, 2]],
+        "grids": [[[8, 8]]],
+        "positions": [
+            [[0, 1, 1, 1, 1, 1, 1, 4]],
+            [[0, 0, 1, 1, 2, 2, 3, 4]],
+            [[0, 0, 1, 2, 1, 2, 3, 4]],
+        ],
+        "deltas": [[-3]],
+    },
+    "image with a 2x2 slice grid, rows split by a newline": {
+        "input_ids": [[1, 10, 100, 100, 100, 100, 11, 12, 100, 13, 12, 100, 13, 14, 12, 100, 13, 12, 100, 13, 2]],
+        "grids": [[[8, 8], [4, 4], [4, 4], [4, 4], [4, 4]]],
+        "positions": [
+            [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4]],
+            [[0, 0, 1, 1, 2, 2, 3, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 4]],
+            [[0, 0, 1, 2, 1, 2, 3, 1, 1, 1, 2, 2, 2, 3, 1, 1, 1, 2, 2, 2, 4]],
+        ],
+        "deltas": [[-16]],
+    },
+    "two images separated by text": {
+        "input_ids": [[1, 10, 100, 100, 100, 100, 11, 2, 10, 100, 100, 100, 100, 11, 3]],
+        "grids": [[[8, 8], [8, 8]]],
+        "positions": [
+            [[0, 1, 1, 1, 1, 1, 1, 4, 5, 5, 5, 5, 5, 5, 8]],
+            [[0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 8]],
+            [[0, 0, 1, 2, 1, 2, 3, 4, 4, 5, 6, 5, 6, 7, 8]],
+        ],
+        "deltas": [[-6]],
+    },
+    "one video, two frames, no separator between them": {
+        "input_ids": [[1, 10, 101, 101, 101, 101, 11, 10, 101, 101, 101, 101, 11, 2]],
+        "grids_videos": [[[8, 8], [8, 8]]],
+        "positions": [
+            [[0, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 7]],
+            [[0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7]],
+            [[0, 0, 1, 2, 1, 2, 3, 3, 4, 5, 4, 5, 6, 7]],
+        ],
+        "deltas": [[-6]],
+    },
+    "an image followed by a two-frame video": {
+        "input_ids": [[1, 10, 100, 100, 100, 100, 11, 2, 10, 101, 101, 101, 101, 11, 10, 101, 101, 101, 101, 11, 3]],
+        "grids": [[[8, 8]]],
+        "grids_videos": [[[8, 8], [8, 8]]],
+        "positions": [
+            [[0, 1, 1, 1, 1, 1, 1, 4, 5, 5, 5, 5, 5, 5, 8, 8, 8, 8, 8, 8, 11]],
+            [[0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 11]],
+            [[0, 0, 1, 2, 1, 2, 3, 4, 4, 5, 6, 5, 6, 7, 7, 8, 9, 8, 9, 10, 11]],
+        ],
+        "deltas": [[-9]],
+    },
+    "left-padded batch, mixed layouts": {
+        "input_ids": [
+            [0, 0, 0, 1, 10, 100, 100, 100, 100, 11, 2],
+            [1, 10, 100, 100, 100, 100, 11, 12, 100, 13, 2],
+        ],
+        "attention_mask": [[0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+        "grids": [[[8, 8], [8, 8], [4, 4]]],
+        "positions": [
+            [[0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 4], [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3]],
+            [[0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 4], [0, 0, 1, 1, 1, 1, 2, 1, 1, 1, 3]],
+            [[0, 0, 0, 0, 0, 1, 2, 1, 2, 3, 4], [0, 0, 1, 1, 1, 1, 2, 1, 1, 1, 3]],
+        ],
+        "deltas": [[-3], [-7]],
+    },
+}
 
 
 class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
@@ -254,13 +324,35 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_mismatching_num_image_tokens(self):
         pass
 
-    @unittest.skip(reason="MiniCPM-V uses custom pixel_values format (list-of-list), skipping common input tests")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V uses custom pixel_values format (list-of-list), skipping common input tests")
     def test_inputs_embeds_matches_input_ids(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_MAPPING_NAMES):
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            inputs.pop("pixel_values")
+            inputs.pop("target_sizes")
+            pad_token_id = (
+                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 1
+            )
+
+            wte = model.get_input_embeddings()
+            input_ids = inputs["input_ids"]
+            # some models infer position ids/attn mask differently when input ids
+            # by check if pad_token let's make sure no padding is in input ids
+            not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
+            input_ids[input_ids == pad_token_id] = not_pad_token_id
+            del inputs["input_ids"]
+            inputs_embeds = wte(input_ids)
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            torch.testing.assert_close(out_embeds, out_ids)
 
     @unittest.skip(reason="Compile not yet supported for MiniCPM-V models")
     @pytest.mark.torch_compile_test
@@ -269,14 +361,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("FlashAttention only supports fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V 4.6 uses Qwen3.5 hybrid cache layers that are incompatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
-        pass
-
-    @unittest.skip(reason="Conversion only for CausalLM loading from saved ConditionalLM")
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
     @unittest.skip(
@@ -293,32 +377,12 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_model_forward_default_config_values(self):
         pass
 
-    @unittest.skip(
-        reason="get_image_features uses a custom pipeline (vision_tower -> vit_merger -> merger) "
-        "that does not accept output_attentions/output_hidden_states kwargs"
-    )
+    @unittest.skip(reason="Vision backbone is packed Qwen-style and return no attentions yet")
     def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip(
-        reason="get_image_features uses a custom pipeline (vision_tower -> vit_merger -> merger) "
-        "that does not accept output_attentions/output_hidden_states kwargs"
-    )
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip(
-        reason="get_video_features uses a custom pipeline that does not accept "
-        "output_attentions/output_hidden_states kwargs"
-    )
+    @unittest.skip(reason="Vision backbone is packed Qwen-style and return no attentions yet")
     def test_get_video_features_attentions(self):
-        pass
-
-    @unittest.skip(
-        reason="get_video_features uses a custom pipeline that does not accept "
-        "output_attentions/output_hidden_states kwargs"
-    )
-    def test_get_video_features_hidden_states(self):
         pass
 
     @unittest.skip(reason="Batch splitting in compile test incompatible with list-of-list pixel_values")
@@ -410,11 +474,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
             )
 
-    # Canvas M-RoPE. `get_rope_index` is cheap and pure, so it is covered here with the same tiny
-    # model the rest of the suite uses. Tokens 100/101 are the image/video placeholders; 10/11 wrap
-    # an image, 12/13 wrap a slice. `target_sizes_mrope` carries one `(h, w)` patch grid per visual
-    # crop -- images, slices and video frames all go through this single list. The helpers that build
-    # these inputs live on `MiniCPMV4_7VisionText2TextModelTester`.
+    # Test thoroughly `model.get_rope_index` since model has a complicated pos ID construction
     def test_get_rope_index_image_lays_out_canvas(self):
         """A single 2x2 image: time is frozen over the span while H/W walk the patch grid."""
         # [bos, im_start, 4 visual patches, im_end, eos]
@@ -517,82 +577,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         position_ids = model._prepare_position_ids_for_generation(input_ids, model_kwargs)
 
         self.assertEqual(position_ids.tolist(), [[0, 1, 2, 3]])
-
-    # Golden canvas layouts, one entry per shape the processor can emit. The tests above assert
-    # canvas *properties*; these pin the exact `(3, batch, seq)` coordinates so the canvas internals
-    # stay refactorable without silently moving a single position. Ids: 1 bos, 2/3 text, 10/11 wrap
-    # an image, 12/13 wrap a slice, 14 is the "\n" between slice rows, 100 is an image token and 101
-    # a video token. `grids` are patch grids -- the default 16x downsample merges 4x4 patches into
-    # one LLM token, so an 8x8 patch grid is a 2x2 LLM grid worth 4 visual tokens.
-    GOLDEN_CANVAS_LAYOUTS = {
-        "single image, no slices": {
-            "input_ids": [[1, 10, 100, 100, 100, 100, 11, 2]],
-            "grids": [[[8, 8]]],
-            "positions": [
-                [[0, 1, 1, 1, 1, 1, 1, 4]],
-                [[0, 0, 1, 1, 2, 2, 3, 4]],
-                [[0, 0, 1, 2, 1, 2, 3, 4]],
-            ],
-            "deltas": [[-3]],
-        },
-        "image with a 2x2 slice grid, rows split by a newline": {
-            "input_ids": [[1, 10, 100, 100, 100, 100, 11, 12, 100, 13, 12, 100, 13, 14, 12, 100, 13, 12, 100, 13, 2]],
-            "grids": [[[8, 8], [4, 4], [4, 4], [4, 4], [4, 4]]],
-            "positions": [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4]],
-                [[0, 0, 1, 1, 2, 2, 3, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 4]],
-                [[0, 0, 1, 2, 1, 2, 3, 1, 1, 1, 2, 2, 2, 3, 1, 1, 1, 2, 2, 2, 4]],
-            ],
-            "deltas": [[-16]],
-        },
-        "two images separated by text": {
-            "input_ids": [[1, 10, 100, 100, 100, 100, 11, 2, 10, 100, 100, 100, 100, 11, 3]],
-            "grids": [[[8, 8], [8, 8]]],
-            "positions": [
-                [[0, 1, 1, 1, 1, 1, 1, 4, 5, 5, 5, 5, 5, 5, 8]],
-                [[0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 8]],
-                [[0, 0, 1, 2, 1, 2, 3, 4, 4, 5, 6, 5, 6, 7, 8]],
-            ],
-            "deltas": [[-6]],
-        },
-        "one video, two frames, no separator between them": {
-            "input_ids": [[1, 10, 101, 101, 101, 101, 11, 10, 101, 101, 101, 101, 11, 2]],
-            "grids_videos": [[[8, 8], [8, 8]]],
-            "positions": [
-                [[0, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 7]],
-                [[0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7]],
-                [[0, 0, 1, 2, 1, 2, 3, 3, 4, 5, 4, 5, 6, 7]],
-            ],
-            "deltas": [[-6]],
-        },
-        "an image followed by a two-frame video": {
-            "input_ids": [
-                [1, 10, 100, 100, 100, 100, 11, 2, 10, 101, 101, 101, 101, 11, 10, 101, 101, 101, 101, 11, 3]
-            ],
-            "grids": [[[8, 8]]],
-            "grids_videos": [[[8, 8], [8, 8]]],
-            "positions": [
-                [[0, 1, 1, 1, 1, 1, 1, 4, 5, 5, 5, 5, 5, 5, 8, 8, 8, 8, 8, 8, 11]],
-                [[0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 11]],
-                [[0, 0, 1, 2, 1, 2, 3, 4, 4, 5, 6, 5, 6, 7, 7, 8, 9, 8, 9, 10, 11]],
-            ],
-            "deltas": [[-9]],
-        },
-        "left-padded batch, mixed layouts": {
-            "input_ids": [
-                [0, 0, 0, 1, 10, 100, 100, 100, 100, 11, 2],
-                [1, 10, 100, 100, 100, 100, 11, 12, 100, 13, 2],
-            ],
-            "attention_mask": [[0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            "grids": [[[8, 8], [8, 8], [4, 4]]],
-            "positions": [
-                [[0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 4], [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3]],
-                [[0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 4], [0, 0, 1, 1, 1, 1, 2, 1, 1, 1, 3]],
-                [[0, 0, 0, 0, 0, 1, 2, 1, 2, 3, 4], [0, 0, 1, 1, 1, 1, 2, 1, 1, 1, 3]],
-            ],
-            "deltas": [[-3], [-7]],
-        },
-    }
 
     def test_get_rope_index_golden_canvas_layouts(self):
         """Exact canvas coordinates for every layout the processor can emit."""
