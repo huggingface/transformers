@@ -323,7 +323,7 @@ def get_inverse_sqrt_schedule(
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
 
 
-def _get_cosine_schedule_with_warmup_lr_lambda(
+def _get_cosine_with_min_lr_schedule_with_warmup_lr_lambda(
     current_step: int, *, num_warmup_steps: int, num_training_steps: int, num_cycles: float, min_lr_rate: float = 0.0
 ):
     if current_step < num_warmup_steps:
@@ -377,7 +377,7 @@ def get_cosine_with_min_lr_schedule_with_warmup(
         raise ValueError("One of min_lr or min_lr_rate should be set through the `lr_scheduler_kwargs`")
 
     lr_lambda = partial(
-        _get_cosine_schedule_with_warmup_lr_lambda,
+        _get_cosine_with_min_lr_schedule_with_warmup_lr_lambda,
         num_warmup_steps=num_warmup_steps,
         num_training_steps=num_training_steps,
         num_cycles=num_cycles,
