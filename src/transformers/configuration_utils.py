@@ -88,7 +88,6 @@ ALLOWED_LAYER_TYPES = ALLOWED_ATTN_LAYER_TYPES + ALLOWED_MLP_LAYER_TYPES
 
 # Mapping from old names to new names
 _LEGACY_LAYER_TYPE_REMAP = {
-    "conv": "linear_attention",  # only in LFMv2
     "mamba": "linear_attention",
     "attention": "full_attention",
     "deepseek_sparse_attention": "indexed_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
