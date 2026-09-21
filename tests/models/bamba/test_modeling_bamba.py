@@ -572,6 +572,9 @@ class BambaModelIntegrationTest(unittest.TestCase):
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
         expected = expectations.get_expectation()
+        print("<<<CAPTURE bamba_simple>>>")
+        print(output_sentence)
+        print("<<<END bamba_simple>>>")
         self.assertEqual(output_sentence, expected)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
@@ -624,6 +627,12 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
+        print("<<<CAPTURE bamba_batched_0>>>")
+        print(output_sentences[0])
+        print("<<<END bamba_batched_0>>>")
+        print("<<<CAPTURE bamba_batched_1>>>")
+        print(output_sentences[1])
+        print("<<<END bamba_batched_1>>>")
         self.assertEqual(output_sentences[0], EXPECTED_TEXT[0])
         self.assertEqual(output_sentences[1], EXPECTED_TEXT[1])
 
