@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..utils import is_scipy_available, is_vision_available, requires_backends
+from ..utils import is_scipy_available, is_vision_available, logging, requires_backends
 from .loss_for_object_detection import (
     box_iou,
     dice_loss,
@@ -32,6 +32,9 @@ if is_scipy_available():
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
+
+
+logger = logging.get_logger(__name__)
 
 
 # different for RT-DETR: not slicing the last element like in DETR one
@@ -68,6 +71,11 @@ class RTDetrHungarianMatcher(nn.Module):
     @torch.no_grad()
     def forward(self, outputs, targets):
         """Performs the matching
+
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
 
         Params:
             outputs: This is a dict that contains at least these entries:
@@ -112,6 +120,10 @@ class RTDetrHungarianMatcher(nn.Module):
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
         # Compute the final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+        # these predictions only if there are no other valid predictions.
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
@@ -127,21 +139,8 @@ class RTDetrLoss(nn.Module):
     prediction (supervise class and box).
 
     Args:
-        matcher (`DetrHungarianMatcher`):
-            Module able to compute a matching between targets and proposals.
-        weight_dict (`Dict`):
-            Dictionary relating each loss with its weights. These losses are configured in RTDetrConf as
-            `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
-        losses (`list[str]`):
-            List of all the losses to be applied. See `get_loss` for a list of all available losses.
-        alpha (`float`):
-            Parameter alpha used to compute the focal loss.
-        gamma (`float`):
-            Parameter gamma used to compute the focal loss.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
+        config (`RTDetrConfig`):
+            Configuration object holding the matcher settings, loss weights and class counts.
     """
 
     def __init__(self, config):
