@@ -398,7 +398,6 @@ class FlashAttentionKwargs(TypedDict, total=False):
 
 def _process_flash_attention_kwargs(
     query_length: int,
-    key_length: int,
     is_causal: bool,
     dropout: float = 0.0,
     softmax_scale: float | None = None,
@@ -456,7 +455,7 @@ def _process_flash_attention_kwargs(
     if supports_mapping["dropout_p"]:
         flash_kwargs["dropout_p"] = dropout
 
-    if supports_mapping["window_size"] and sliding_window is not None and key_length > sliding_window:
+    if supports_mapping["window_size"] and sliding_window is not None:
         # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
         # and the current token for a total size of 5. However, we usually define our window sizes by
         # their total window size (when causal). Encoder models as of now seldom use SWA and when they
@@ -566,7 +565,7 @@ def _flash_attention_forward(
         # This check is more compute heavy, so it is separate from the rest. Also, it's a user's responsibility to take
         # care of flattening `position_ids` if that's needed by the model. See #39121 for more information.
         if not _is_packed_sequence(position_ids, batch_size):
-            flash_kwargs = process_varlen_kwargs_fn(query_length=query_length, key_length=key_length, **kwargs)
+            flash_kwargs = process_varlen_kwargs_fn(query_length=query_length, **kwargs)
             out = flash_fn(query_states, key_states, value_states, **flash_kwargs)
             return out[0] if isinstance(out, tuple) else out
 
@@ -591,18 +590,14 @@ def _flash_attention_forward(
     # Compute the right seq_lens objects and call flash
     if is_fa_with_block_table:
         flash_kwargs = process_paged_kwargs_fn(
-            query_length, key_length, max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
+            query_length, max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
         )
         flash_kwargs["cache_seqlens"] = cache_seqlens
         out = flash_paged_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
 
     else:
         flash_kwargs = process_varlen_kwargs_fn(
-            query_length=query_length,
-            key_length=key_length,
-            max_seqlen_q=max_length_q,
-            max_seqlen_k=max_length_k,
-            **kwargs
+            query_length, max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, **kwargs
         )
         flash_kwargs["cu_seqlens_q"] = cu_seq_lens_q
         flash_kwargs["cu_seqlens_k"] = cu_seq_lens_k.clone()  # type: ignore | not cloning crashes on MPS and on CUDA
