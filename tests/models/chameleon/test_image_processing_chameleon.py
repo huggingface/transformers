@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import unittest
 
 import numpy as np
@@ -21,6 +22,8 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+from transformers.models.chameleon.image_processing_pil_chameleon import ChameleonImageProcessorPil
 
 
 if is_torch_available():
@@ -115,6 +118,21 @@ class ChameleonImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+
+    def test_convert_to_rgb_handles_png_trns(self):
+        def _trns_image():
+            image = Image.new("RGB", (2, 2), (255, 0, 0))
+            image.paste((0, 0, 255), (0, 0, 1, 1))
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG", transparency=(255, 0, 0))
+            buffer.seek(0)
+            return Image.open(buffer)
+
+        convert = ChameleonImageProcessorPil()
+        image = _trns_image()
+        self.assertEqual(image.mode, "RGB")
+        self.assertIn("transparency", image.info)
+        self.assertEqual(convert.convert_to_rgb(image).getpixel((1, 1)), (255, 255, 255))
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

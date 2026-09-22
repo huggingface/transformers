@@ -342,7 +342,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     if not is_vision_available() or not isinstance(image, Image.Image):
         return image
 
-    if image.mode == "RGB":
+    if image.mode == "RGB" and image.info.get("transparency") is None:
         return image
 
     image_rgba = image.convert("RGBA")
