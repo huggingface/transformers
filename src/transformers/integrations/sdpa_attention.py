@@ -111,6 +111,8 @@ def sdpa_attention_forward(
             write_index=kwargs["write_index"],
         )
         key, value = key.transpose(1, 2), value.transpose(1, 2)
+        # Continuous batching prepares one mask per attention type, select the one for this layer
+        attention_mask = cache.select_attention_mask(module.layer_idx, attention_mask)  # type: ignore
 
     sdpa_kwargs = {}
     if getattr(module, "num_key_value_groups", 0) > 1:

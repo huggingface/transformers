@@ -63,7 +63,6 @@ from transformers.generation.continuous_batching.requests import (
     get_device_and_memory_breakdown,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
-from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
 from transformers.testing_utils import (
     backend_empty_cache,
     backend_memory_allocated,
@@ -265,13 +264,12 @@ def _make_allocator(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
-    @parameterized.expand(
-        [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_paged_forward)]
-    )
+    @parameterized.expand([("paged|eager", eager_paged_attention_forward)])
     def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
-        # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
-        # written for the packed inputs and the 4D mask continuous batching prepares, so they would silently attend
-        # bidirectionally instead of causally: refuse the call rather than return a wrong result.
+        # A standard forward on a model switched to a paged implementation reaches this with no cache. It is written
+        # for the packed inputs and the 4D mask continuous batching prepares, so it would silently attend
+        # bidirectionally instead of causally: refuse the call rather than return a wrong result. `paged|sdpa` maps to
+        # the regular sdpa forward, which falls back to a causal forward without a cache, so it is not tested here.
         module = torch.nn.Module()
         module.layer_idx = 0
         module.num_key_value_groups = 1
@@ -2078,15 +2076,16 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Generate with flash_attn_with_kvcache path for decode
         continuous_batching_config.max_blocks_per_request = 16
-        # This context manager ensures that the varlen path is used
-        og_get_block_table_key = PagedAttentionCache.get_block_table_key
+        # `get_cache_for_block_table` is only called when a layer takes the block table path, so patching it ensures that
+        # the decode fast path was actually used
+        og_get_cache_for_block_table = PagedAttentionCache.get_cache_for_block_table
         with patch.object(
-            PagedAttentionCache, "get_block_table_key", autospec=True, side_effect=og_get_block_table_key
-        ) as mock_get_block_table_key:
+            PagedAttentionCache, "get_cache_for_block_table", autospec=True, side_effect=og_get_cache_for_block_table
+        ) as mock_get_cache_for_block_table:
             outputs_kvcache = model.generate_batch(
                 inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
             )
-            self.assertTrue(mock_get_block_table_key.called, "get_block_table_key method was not called.")
+            self.assertTrue(mock_get_cache_for_block_table.called, "the block table path was not used.")
 
         self.assertEqual(len(outputs_varlen), len(outputs_kvcache))
         for (_, out_fa2), (_, out_fa3) in zip(outputs_varlen.items(), outputs_kvcache.items()):

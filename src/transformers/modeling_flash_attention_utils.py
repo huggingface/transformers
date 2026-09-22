@@ -543,7 +543,7 @@ def _flash_attention_forward(
         attn_implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
         block_table (`torch.Tensor`, *optional*):
-            The block table to use if this is a call to flash_kv_fn, which updates the cache in-place.
+            The block table to use if this is a call to flash_paged_fn, which updates the cache in-place.
     """
     batch_size, query_length = query_states.shape[:2]
     key_length = key_states.shape[1]
@@ -617,9 +617,3 @@ def _flash_attention_forward(
         return padded_out.view(batch_size, query_length, *out.shape[1:])
 
     return out.view(batch_size, -1, *out.shape[-2:])
-
-
-#   - paged|sdpa passes the mask dict straight to SDPA. Continuous batching always builds a per-layer-type mask dict for paged|sdpa, since attn_mask_is_needed returns true for it.
-#     sdpa_attention_forward has no dict handling, so both use_gqa_in_sdpa and scaled_dot_product_attention receive a dict. It needs the same per-layer selection eager does.
-#     Eager still derives the key from module.sliding_window at eager_paged.py:58, which can disagree with the cache's grouping, so I would have both read
-#     cache.layer_to_allocator[module.layer_idx].layer_type instead.

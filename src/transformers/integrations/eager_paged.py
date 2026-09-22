@@ -24,7 +24,7 @@ def eager_paged_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: torch.Tensor | None,  # shape [seqlen_q, seqlen_k]
+    attention_mask: dict[str, torch.Tensor] | None,  # one mask per attention type, shape [1, 1, seqlen_q, seqlen_k]
     scaling: float,
     **kwargs,
 ):
@@ -53,13 +53,8 @@ def eager_paged_attention_forward(
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
 
-    # Get the right causal mask for the current layer
-    if isinstance(attention_mask, dict):
-        sliding_window = getattr(module, "sliding_window", 1)
-        layer_type = "full_attention" if sliding_window == 1 or sliding_window is None else "sliding_attention"
-        causal_mask = attention_mask[layer_type]
-    else:
-        causal_mask = attention_mask
+    # Continuous batching prepares one mask per attention type, select the one for this layer
+    causal_mask = cache.select_attention_mask(module.layer_idx, attention_mask)
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if causal_mask is not None:

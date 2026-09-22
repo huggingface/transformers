@@ -410,6 +410,15 @@ class PagedAttentionCache:
         )
         return key_states.unsqueeze(0), value_states.unsqueeze(0)
 
+    def select_attention_mask(
+        self, layer_idx: int, attention_mask: dict[str, torch.Tensor] | None
+    ) -> torch.Tensor | None:
+        """Selects the mask matching the attention type of the given layer, from the dict of masks continuous batching
+        prepares (one mask per attention type). Returns None if no mask was prepared."""
+        if attention_mask is None:
+            return None
+        return attention_mask[self.layer_to_allocator[layer_idx].layer_type]
+
     def specialize_kwargs(self, layer_idx: int, num_sequences: int, kwargs: dict) -> bool:
         """Selects the right cu_seqlen and max_seqlen inside the kwargs for the given layer, based on its layer type.
         This modifies the kwargs in place. Returns True the cache needs to be updated, False otherwise."""
