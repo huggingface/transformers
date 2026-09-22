@@ -223,18 +223,15 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         config = self.model_tester.get_config()
         self.assertIsInstance(AutoModel.from_config(config.audio_config), Nemotron3DiarizationAudioModel)
 
-    def test_published_checkpoint_layout_roundtrip(self):
-        """
-        The published checkpoint names the encoder `encoder.` and the speaker projection
-        `head.speaker_projection.`; `conversion_mapping.py` maps both onto `model.` and `head.proj.`, in both
-        directions.
-        """
+    def test_save_load_roundtrip(self):
+        """The checkpoint is saved under the model's own parameter names: no conversion mapping is involved."""
         model = Nemotron3DiarizationForAudioFrameClassification(self.model_tester.get_config()).eval()
         with tempfile.TemporaryDirectory() as directory:
             model.save_pretrained(directory)
             saved = load_file(os.path.join(directory, "model.safetensors"))
-            self.assertIn("head.speaker_projection.weight", saved)
-            self.assertTrue(any(name.startswith("encoder.layers.") for name in saved))
+            self.assertEqual(set(saved), set(model.state_dict()))
+            self.assertIn("head.proj.weight", saved)
+            self.assertTrue(any(name.startswith("model.layers.") for name in saved))
 
             restored, info = Nemotron3DiarizationForAudioFrameClassification.from_pretrained(
                 directory, output_loading_info=True
