@@ -234,19 +234,6 @@ def fast_all(tensor: torch.BoolTensor) -> torch.BoolTensor:
     return tensor.sum() == tensor.numel()
 
 
-def _cannot_decide_skip_while_tracing(padding_mask: torch.Tensor | None) -> bool:
-    """Whether the skip conditions cannot be evaluated because we are tracing.
-
-    Export hard-codes the decision into the exported forward, which is in general wrong (see
-    https://github.com/pytorch/pytorch/issues/108108). Reading the values of a `padding_mask` is
-    data-dependent. Without one, the remaining conditions are static and dynamo simply guards on them.
-
-    NOTE: until torch 2.14 (pytorch#176499), dynamo also reported exporting under `torch.compile`, so
-    older versions keep the previous behavior of never skipping while compiling.
-    """
-    return is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask))
-
-
 def _ignore_causal_mask_sdpa(
     padding_mask: torch.Tensor | None,
     q_length: int,
@@ -267,7 +254,14 @@ def _ignore_causal_mask_sdpa(
         mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
-    if _cannot_decide_skip_while_tracing(padding_mask):
+    # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
+    # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
+    # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
+    # `ignore_causal_mask = True` if we are not tracing
+    # Under `torch.compile` we can still skip, but only if we do not have to read the values of the `padding_mask`.
+    # NOTE: this requires torch>=2.14. Before pytorch#176499, dynamo replaced `torch.compiler.is_exporting()` by a
+    # constant `True`, so older versions keep the previous behavior of never skipping while compiling.
+    if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
@@ -301,7 +295,7 @@ def _can_skip_bidirectional_mask_xpu(
     - Skip if no padding and no local attention constraint
     """
 
-    if _cannot_decide_skip_while_tracing(padding_mask):
+    if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
         return False
 
     # Check local attention constraint (same as CUDA)
@@ -334,8 +328,10 @@ def _ignore_bidirectional_mask_sdpa(
         # - Skip if no padding and no local attention constraint
         return _can_skip_bidirectional_mask_xpu(padding_mask, kv_length, local_attention_size)
 
+    # When using `torch.export` or `torch.onnx.dynamo_export`, we need to avoid to check the contents of the mask;
+    # otherwise, we will encounter dynamic control flows
     if (
-        not _cannot_decide_skip_while_tracing(padding_mask)
+        not (is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)))
         and (padding_mask is None or padding_mask.all())
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)

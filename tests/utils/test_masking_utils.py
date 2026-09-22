@@ -178,9 +178,9 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         # cannot be skipped under compile, should result into a triu mask
         self.assertTrue(torch.equal(~torch.ones(*causal_mask.shape).triu(diagonal=1).bool(), causal_mask))
 
-    # `torch.compiler.is_exporting()` was hard-coded to `True` by dynamo, i.e. it also reported exporting under
-    # `torch.compile`, until https://github.com/pytorch/pytorch/pull/176499 (torch 2.14). On older versions we keep
-    # the conservative behavior of never skipping while tracing, so the mask is still materialized.
+    # Before https://github.com/pytorch/pytorch/pull/176499 (torch 2.14), dynamo replaced calls to
+    # `torch.compiler.is_exporting()` by a constant `True`, so we treated `torch.compile` as export and never
+    # skipped. On older versions the mask is therefore still materialized.
     @require_torch_greater_or_equal("2.14")
     def test_mask_skip_without_padding_mask_under_compile(self):
         """
