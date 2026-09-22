@@ -1498,8 +1498,8 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
 
 
 def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
-    """Returns a tuple `(num_heads, head_dim)`, each of them either a single int for all layers, or a list of int with
-    the value for each layer."""
+    """Returns a tuple `(num_kv_heads, head_dim)`, each of them either a single int for all layers, or a list of int
+    with the value for each layer."""
     # Some models (e.g. Gemma4) have different head_dim and num_heads depending on layer type
     per_layer_attributes = config.per_layer_attributes or ()
     # Layers sharing kv states have no kv cache of their own, so they are excluded.
@@ -1511,11 +1511,11 @@ def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
     if "num_key_value_heads" in per_layer_attributes:
-        num_heads = [config.per_layer_config[layer].num_key_value_heads for layer in layers]
+        num_kv_heads = [config.per_layer_config[layer].num_key_value_heads for layer in layers]
     else:
-        num_heads = getattr(config, "num_key_value_heads", None) or config.num_attention_heads
+        num_kv_heads = getattr(config, "num_key_value_heads", None) or config.num_attention_heads
 
-    return num_heads, head_dim
+    return num_kv_heads, head_dim
 
 
 PreTrainedConfig.push_to_hub = copy_func(PreTrainedConfig.push_to_hub)
