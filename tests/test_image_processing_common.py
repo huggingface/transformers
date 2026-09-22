@@ -52,6 +52,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+    from transformers.image_transforms import get_size_with_aspect_ratio
+
 
 _parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(os.path.join(_parent_dir, "utils"))
@@ -296,8 +298,9 @@ class ImageProcessingTester:
 
         if "shortest_edge" in self.size:
             # Images are resized so that their shortest edge matches `size["shortest_edge"]` while keeping the aspect
-            # ratio, then padded to the largest height and width in the batch.
+            # ratio and respecting the optional longest edge, then padded to the largest height and width in the batch.
             shortest_edge = self.size["shortest_edge"]
+            longest_edge = self.size.get("longest_edge")
             expected_sizes = []
             for image in images:
                 if isinstance(image, Image.Image):
@@ -306,12 +309,7 @@ class ImageProcessingTester:
                     height, width = image.shape[0], image.shape[1]
                 else:
                     height, width = image.shape[1], image.shape[2]
-                if width < height:
-                    expected_sizes.append((int(shortest_edge * height / width), shortest_edge))
-                elif width > height:
-                    expected_sizes.append((shortest_edge, int(shortest_edge * width / height)))
-                else:
-                    expected_sizes.append((shortest_edge, shortest_edge))
+                expected_sizes.append(get_size_with_aspect_ratio((height, width), shortest_edge, longest_edge))
             expected_height = max(expected_size[0] for expected_size in expected_sizes)
             expected_width = max(expected_size[1] for expected_size in expected_sizes)
             return self.num_channels, expected_height, expected_width

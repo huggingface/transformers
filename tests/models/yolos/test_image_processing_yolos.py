@@ -40,8 +40,7 @@ if is_vision_available():
 class YolosImageProcessingTester(ImageProcessingTester):
     def __init__(self, **kwargs):
         # Image processor init kwargs
-        # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
-        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 1333})
+        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 240})
 
         super().__init__(**kwargs)
 
