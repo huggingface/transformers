@@ -157,7 +157,7 @@ def convert_vision_state_dict(original_state_dict: dict[str, torch.Tensor]) -> d
 
 def load_vision_tokenizer(checkpoint_dir: str) -> Apertus1p5VisionTokenizerModel:
     """Convert and strictly validate the original vision tokenizer without saving an intermediate checkpoint."""
-    with open(os.path.join(checkpoint_dir, CONFIG_NAME)) as f:
+    with open(os.path.join(checkpoint_dir, CONFIG_NAME), encoding="utf-8") as f:
         config = convert_vision_config(json.load(f))
     state_dict = convert_vision_state_dict(load_file(os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME)))
     _check_fp32_tokenizer_source("vision tokenizer", state_dict)
@@ -223,7 +223,7 @@ def build_config(
     apertus_checkpoint: str, vision_tokenizer_checkpoint: str, audio_tokenizer_checkpoint: str
 ) -> Apertus1p5Config:
     """Merge the three source configurations into an Apertus 1.5 composite configuration."""
-    with open(os.path.join(apertus_checkpoint, "config.json")) as f:
+    with open(os.path.join(apertus_checkpoint, "config.json"), encoding="utf-8") as f:
         text_config = json.load(f)
     text_config.pop("architectures", None)
     text_config.pop("transformers_version", None)
@@ -236,10 +236,10 @@ def build_config(
             f"{text_model_type!r}, expected 'apertus' or 'apertus1p5_text'."
         )
     text_config["model_type"] = "apertus1p5_text"
-    with open(os.path.join(vision_tokenizer_checkpoint, "config.json")) as f:
+    with open(os.path.join(vision_tokenizer_checkpoint, "config.json"), encoding="utf-8") as f:
         vision_config = json.load(f)
     vision_config = convert_vision_config(vision_config)
-    with open(os.path.join(audio_tokenizer_checkpoint, "config.json")) as f:
+    with open(os.path.join(audio_tokenizer_checkpoint, "config.json"), encoding="utf-8") as f:
         audio_config = json.load(f)
     if audio_config.get("model_type") != "wavtokenizer":
         raise ValueError(
@@ -288,7 +288,7 @@ def _shard_filenames(checkpoint_dir: str) -> list[str]:
     """List the safetensors shards of a single- or multi-shard checkpoint, in a stable order."""
     index_path = os.path.join(checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
     if os.path.exists(index_path):
-        with open(index_path) as f:
+        with open(index_path, encoding="utf-8") as f:
             index = json.load(f)
         return sorted(set(index["weight_map"].values()))
     return [SAFE_WEIGHTS_NAME]
@@ -587,7 +587,7 @@ def convert(
             os.remove(path)
             logger.info(f"removed stale weight file {path}")
 
-    with open(os.path.join(output_dir, SAFE_WEIGHTS_INDEX_NAME), "w") as f:
+    with open(os.path.join(output_dir, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8") as f:
         json.dump({"metadata": {"total_size": total_size}, "weight_map": weight_map}, f, indent=2)
 
     write_processor(apertus_checkpoint, audio_tokenizer_checkpoint, output_dir)
@@ -598,7 +598,7 @@ def write_processor(apertus_checkpoint: str, audio_tokenizer_checkpoint: str, ou
     """Write the tokenizer, image processor, audio feature extractor, and unified processor configuration."""
     _check_output_is_not_a_source(output_dir, apertus_checkpoint, audio_tokenizer_checkpoint)
     os.makedirs(output_dir, exist_ok=True)
-    with open(os.path.join(audio_tokenizer_checkpoint, "config.json")) as f:
+    with open(os.path.join(audio_tokenizer_checkpoint, "config.json"), encoding="utf-8") as f:
         audio_config = json.load(f)
     processor = build_processor(apertus_checkpoint, audio_config)
     processor.save_pretrained(output_dir)
