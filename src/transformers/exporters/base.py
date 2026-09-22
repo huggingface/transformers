@@ -501,16 +501,16 @@ class ModelRunner(ABC):
     runner, so nobody has to pass them in.
     """
 
-    # What the exporter recorded about this graph (`build_export_metadata`), parsed — the trace's own
-    # account of itself, and what every accessor below reads. Empty for an artifact written without it.
-    #
-    # Who owns which fact, once, for all of them: the *handle* answers what it can observe about itself —
-    # what it declares, in what order, at what shapes — and a runner states that by assigning the attribute
-    # in `__init__`, which seeds the accessor below. The *metadata* answers what no handle can state: the
-    # precision the graph computes in, the cache's per-layer geometry and sizes, the rank of a mask that
-    # was traced away. Where both could answer, the handle wins, because it is the thing that will refuse
-    # the call. An accessor is the fallback for an artifact whose runner said nothing.
+    # What the exporter recorded about this graph, parsed. The handle answers what it can observe — the
+    # names it declares, their order and shapes — and a runner assigns that in `__init__`; the metadata
+    # answers what no handle states: precision, per-layer cache geometry, the rank of a mask traced away.
+    # Where both could answer the handle wins, being the thing that will refuse the call.
     export_metadata: ExportMetadata = ExportMetadata()
+
+    # Whether the graph carries its KV cache itself rather than taking and returning it. An OpenVINO
+    # export folds the cache into internal variables the plugin keeps between calls, so the loop neither
+    # feeds one nor reads one back — see `ExportedGenerator.forward`.
+    owns_state: bool = False
 
     @functools.cached_property
     def input_names(self) -> tuple[str, ...]:

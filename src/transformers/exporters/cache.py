@@ -191,12 +191,9 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
     cache_updates = [
         (name, value) for name, value in outputs.items() if name.startswith(("past_key_values", "cache_params"))
     ]
-    # Two ways a backend names what it gives back, and a graph's outputs are all of one kind — so which
-    # scheme is in play is decided here, once, rather than re-read from the names further down.
-    # A dotted name is the leaf's *path* in the cache (`layers.0.conv_states.0`, `layers.1.keys`), which is
-    # the only alignment that holds when the graph returns entries the cache has no leaf for: a recurrent
-    # layer keeps its `conv_states` / `recurrent_states` as `None` until a step produces them, so counting
-    # leaves would run off the end.
+    # A dotted name is the leaf's path in the cache (`layers.0.conv_states.0`), the only alignment that
+    # holds when the graph returns entries the cache has no leaf for: a recurrent layer keeps its states
+    # `None` until a step produces them, so counting leaves would run off the end.
     for name, new in cache_updates:
         if "." in name:
             _assign_cache_entry(past_key_values, name.split(".")[1:], new)
@@ -411,13 +408,11 @@ def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry, i
     """`materialize_cache_layers` for one flat cache — see there."""
     by_layer = kv_cache_geometry(config) or []
     for layer_idx, layer in enumerate(cache.layers):
-        # A sparse-indexer layer (deepseek_v32, axk2, glm_moe_dsa) caches a *third* tensor beside keys and
-        # values, and it is a graph input like the others — leave it lazy and every later cache leaf shifts
-        # by one. Its own `lazy_initialization` covers only the main K/V, so this cannot wait behind the
-        # `is_initialized` skip below: `early_initialization` marks the layer initialized while the indexer
-        # (and its cpu `indexer_cumulative_length` counter) is still untouched.
-        # Unless the trace says this layer had none: hy_v4's "shared" indexer layers reuse the last full
-        # layer's tensor and never write their own, so filling one in here adds a leaf the graph never took.
+        # A sparse-indexer layer (deepseek_v32, axk2, glm_moe_dsa) caches a third tensor beside keys and
+        # values; leave it lazy and every later cache leaf shifts by one. It cannot wait behind the
+        # `is_initialized` skip below, which `early_initialization` sets while the indexer is untouched.
+        # Unless the trace says this layer had none — hy_v4's shared indexer layers write no tensor of
+        # their own, and filling one in would add a leaf the graph never took.
         traced_indexer = indexer_layers.get(layer_idx, True) if indexer_layers else True
         if traced_indexer and hasattr(layer, "is_indexer_initialized") and not layer.is_indexer_initialized:
             index_head_dim = config.get_text_config().index_head_dim

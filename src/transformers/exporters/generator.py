@@ -487,6 +487,12 @@ class ExportedGenerator(GenerationMixin):
         `torch.export` bakes real tensors into the graph's input spec, so the lazily-uninitialized layers
         `generate` hands back have to be filled in (`materialize_cache_layers`, the helper the capture uses
         too)."""
+        # A backend that owns its state keeps it in the runtime, where it outlives the cache this loop
+        # holds, so one `generate` would otherwise carry on from what the last one left in the variables.
+        # This runs once per call, before the loop, which is exactly where a sequence starts.
+        for runner in (self._prefill_runner, self._decode_runner):
+            if runner.owns_state:
+                runner.reset_state()
         super()._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
@@ -750,6 +756,7 @@ class ExportedGenerator(GenerationMixin):
         encoder_outputs=None,
         cache_params=None,
         image_sizes=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         # First step (empty cache) is the prefill; subsequent steps are decode. With no dedicated prefill
@@ -765,11 +772,21 @@ class ExportedGenerator(GenerationMixin):
         # streamed-modality window are. One answer per step: every reader here means the same thing by it.
         past_len = _cache_length(past_key_values) if past_key_values is not None else 0
         runner = self._prefill_runner if past_len == 0 else self._decode_runner
+        # A backend that owns its state keeps the sequence inside the runtime, so the cache the loop holds
+        # never grows and cannot say how far along we are — the runner does.
+        if runner.owns_state:
+            past_len = runner.state_length
         text_ids = decoder_input_ids if decoder_input_ids is not None else input_ids
         feed = self._text_feed(runner, text_ids, kwargs, image_sizes)
         text = feed[text_input(runner)]
         if position_ids is not None and "position_ids" in runner.input_names:
             feed["position_ids"] = position_ids
+        # Declaring the parameter is what makes `generate` supply it (`_supports_logits_to_keep` reads this
+        # forward's signature), and what it supplies is the 1 row generation reads — or the candidate window,
+        # when assisted decoding asks for more. Left unfed, a graph that traced the knob keeps every row and
+        # runs the LM head over the whole prompt.
+        if logits_to_keep is not None and "logits_to_keep" in runner.input_names:
+            feed["logits_to_keep"] = logits_to_keep
         if encoder_outputs is not None and any(n.startswith("encoder_outputs") for n in runner.input_names):
             feed["encoder_outputs"] = encoder_outputs
         feed.update(self._step_kwargs(runner, kwargs, feed, text.shape[1]))
@@ -780,7 +797,7 @@ class ExportedGenerator(GenerationMixin):
         # query. Growing vs fixed-size is the layer's *kind*, not what `get_max_length` reports — a
         # `DynamicSlidingWindowLayer` grows and crops, yet reports its whole window (4096 on a gemma2 text
         # config), padding the mask to a width the graph never declared (`set_inputs` then refuses it).
-        cache_len = mask_width(past_key_values, text.shape[1])
+        cache_len = past_len + text.shape[1] if runner.owns_state else mask_width(past_key_values, text.shape[1])
         feed.update(self._mask_feed(runner, attention_mask, position_ids, cache_len))
         # A graph that names the decoder's mask separately gets the causal one here — `attention_mask` is
         # the *encoder's* on those models. `generate` supplies neither this nor decoder positions (the
@@ -793,14 +810,16 @@ class ExportedGenerator(GenerationMixin):
             feed[decoder_mask] = self._causal_mask(decoder_positions, cache_len)
         # Under the name this graph declares, and only if it declares one: a model whose `generate` hands
         # back a cache the exported graph does not take (xlstm) would otherwise be fed an input it never had.
-        if past_key_values is not None and runner.cache_input is not None:
+        if past_key_values is not None and runner.cache_input is not None and not runner.owns_state:
             feed[runner.cache_input] = past_key_values
         # Only what this graph declares: a model whose decode graph takes its text some other way
         # (higgs_audio_v2 embeds it upstream) would otherwise be handed an `input_ids` it never had. Pytree
         # kwargs are the exception — see `declares`, which knows a graph naming only their leaves still takes
         # them (the cache, `encoder_outputs`, a mask dict).
         outputs = runner(**{name: value for name, value in feed.items() if runner.declares(name, value)})
-        if past_key_values is not None:
+        # Nothing to advance when the runtime holds the cache: it wrote this step's keys and values into its
+        # own variables, and `state_length` is what the next step reads instead of a cache's shape.
+        if past_key_values is not None and not runner.owns_state:
             past_key_values = _advance_cache(past_key_values, outputs, num_new_tokens=text.shape[1])
         # A recurrent model's state is not a KV cache and `generate` must not carry it back as one; which
         # kind the graphs hold is `_is_recurrent`, read off the kwarg the decode graph takes it under.

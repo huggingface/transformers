@@ -1360,13 +1360,10 @@ class MllamaModel(MllamaPreTrainedModel):
             )
 
         if cross_attention_mask is not None:
-            # `generate` slices the mask down to the tokens being processed (see
-            # `prepare_inputs_for_generation`), but a caller driving the model itself passes the whole mask
-            # alongside a cache. Its last `seq_len` rows are the step's either way: an already-sliced mask
-            # is taken whole, a grown one gives the rows this step adds, and one that was never grown gives
-            # its last row -- the row `_update_model_kwargs_for_generation` would have appended, since each
-            # is a copy of the one before. Unconditional on purpose: comparing widths would read the cache
-            # length, which under export is data-dependent, and would guard on the mask's own width.
+            # `generate` slices the mask to the tokens being processed, but a caller driving the model
+            # itself passes the whole mask. Its last `seq_len` rows are the step's either way: an
+            # already-sliced mask is taken whole, a grown one gives the rows this step adds. Unconditional
+            # on purpose — comparing widths would read a cache length that is data-dependent under export.
             seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
             cross_attention_mask = cross_attention_mask[:, -seq_len:]
 

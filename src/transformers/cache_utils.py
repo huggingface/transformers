@@ -1784,12 +1784,10 @@ def kv_cache_geometry(config) -> list[tuple[int, int, int]] | None:
         layer_config = per_layer[index] if per_layer is not None else text_config
         if getattr(layer_config, "num_attention_heads", None) is None:
             return None
-        # Latent attention (deepseek_v2/v3/v32, kimi_linear, minicpm3, glm_moe_dsa, axk, hy_v4, …) caches the
-        # *compressed* latent rather than one entry per KV head, and `kv_lora_rank` is what says so: every
-        # such model measured caches exactly `(1, kv_lora_rank, qk_rope_head_dim)` — one head holding the
-        # latent as keys and the shared rope part as values, so the key and value dims differ. A model that
-        # carries those fields and still caches decompressed keys is caught by `check_cache_geometry` rather
-        # than silently mis-shaped, which is why this reads the config instead of keeping a list of models.
+        # Latent attention (deepseek_v2/v3, kimi_linear, minicpm3, …) caches the compressed latent rather
+        # than one entry per KV head, and `kv_lora_rank` is what says so: one head holding the latent as
+        # keys and the shared rope part as values, so the key and value dims differ. Read from the config
+        # rather than a list of models — `check_cache_geometry` catches one that disagrees.
         kv_lora_rank = getattr(layer_config, "kv_lora_rank", None)
         if kv_lora_rank is not None:
             geometry.append((1, kv_lora_rank, getattr(layer_config, "qk_rope_head_dim", None) or kv_lora_rank))

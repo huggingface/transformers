@@ -1076,6 +1076,19 @@ def needs_half_precision_export(model) -> bool:
 # ──────────────────────────── mixins ────────────────────────────
 
 
+def _assert_openvino_output_names(case, runtime, actual: dict, expected: dict) -> None:
+    """Every leaf eager returns is accounted for — as an output, or as folded state.
+
+    An OpenVINO export turns each round-tripped cache tensor into an internal variable the plugin keeps
+    between calls, so the graph returns logits and the cache stays behind its `Assign` sinks. Reading it
+    back off those sinks is what lets this compare the whole set rather than excusing what is missing.
+    """
+    case.assertTrue(actual, "OpenVINO outputs are empty.")
+    runner = getattr(runtime, "runner", None)
+    folded = runner.state_tensors() if runner is not None and runner.owns_state else {}
+    case.assertEqual(set(actual) | set(folded), set(expected))
+
+
 class ExportTesterMixin:
     """Mixin providing non-generative export tests for Dynamo, ONNX, and ExecuTorch backends.
 
@@ -1293,14 +1306,10 @@ class ExportTesterMixin:
         self.assertEqual(
             len(exported_out.scores), len(eager_out.scores), "exported runtime generated a different number of steps"
         )
-        # Ids step by step, for as long as the two runs stay on the same prefix. This check is about
-        # *wiring* — numeric fidelity is asserted per component above (`_check_outputs_close`) — so it
-        # deliberately puts no score bar on an fp32 export: how far a backend's kernels drift is
-        # model-specific (an ONNX chameleon drifts past 1e-3 where kosmos2_5 stays at 6e-5, a dynamo export
-        # lands at ~1e-9), and a tiny random model routinely has top-2 gaps of a few 1e-3, so its argmax
-        # flips on that drift while saying nothing about correctness. Half precision, whose rounding scale
-        # is uniform and knowable, compares the scores themselves on every step. A real wiring bug (wrong
-        # cache / mask / positions) shows up as a different token while eager was sure of its own.
+        # Ids step by step, while the two runs stay on the same prefix. This is a wiring check — numeric
+        # fidelity is asserted per component above — so it puts no score bar on an fp32 export: kernel
+        # drift is model-specific, and a tiny random model's top-2 gaps are small enough that argmax flips
+        # on it while saying nothing. Half precision, whose rounding scale is knowable, compares scores.
         half = module_dtype(model) in (torch.float16, torch.bfloat16)
         atol = rtol = 1.6e-2
         tie_threshold = 2 * atol if half else 5e-3
@@ -1701,12 +1710,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
                     exported[name] = output
 
-            # End-to-end id-parity (text and VLM), over both cache kinds (static `cache_implementation`
-            # and the default growing `DynamicCache`). Runs whenever the exported graphs can serve
-            # `generate`'s loop: via the dedicated `prefill` graph (always under dynamic
-            # shapes; under static shapes only with a static cache, whose frozen prefill/decode shapes
-            # reproduce every step, while a growing cache changes shape each step), or via the multi-token
-            # decode serving prefill and decode from one graph.
+            # End-to-end id-parity over both cache kinds, whenever the graphs can serve `generate`'s loop:
+            # via the dedicated `prefill` graph (always under dynamic shapes, under static ones only with
+            # a static cache, whose frozen shapes reproduce every step), or via the multi-token decode
+            # serving prefill and decode from one graph.
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
                 if not self._should_skip(
@@ -1941,9 +1948,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
-                    ov_outputs = output.runtime()(**inputs)
-                    self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
-                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
+                    runtime = output.runtime()
+                    ov_outputs = runtime(**inputs)
+                    _assert_openvino_output_names(self, runtime, ov_outputs, eager_outputs[name])
 
     @GENERATE_EXPORT_PARAMS
     @slow
@@ -1979,10 +1986,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     output = exporter.export(model, inputs, config=config)
-                    ov_outputs = output.runtime()(**inputs)
-                    self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
-                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
-
+                    runtime = output.runtime()
+                    ov_outputs = runtime(**inputs)
+                    _assert_openvino_output_names(self, runtime, ov_outputs, eager_outputs[name])
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 

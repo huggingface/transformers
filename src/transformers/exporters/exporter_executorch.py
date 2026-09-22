@@ -51,7 +51,7 @@ from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig, ExportFormat
 from .decompose import _MODALITY_SPECS
-from .exporter_dynamo import DynamoExporter, varlen_attn_masked_sdpa
+from .exporter_dynamo import DynamoExporter
 from .metadata import (
     EXPORT_METADATA_KEY,
 )
@@ -91,6 +91,7 @@ if is_executorch_available():
     )
     from executorch.backends.xnnpack.utils.utils import get_input_node
     from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
+    from executorch.exir.dialects._ops import ops as exir_ops
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.passes.memory_planning_pass import MemoryPlanningPass
     from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _is_view_copy, _ViewSpec
@@ -820,6 +821,38 @@ def _patch_avg_pool2d(original):
     return patch
 
 
+@register_patch(
+    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
+)
+def _patch_remove_empty_tensors_from_cat(_original):
+    """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
+
+    The original checks ``input.numel() != 0`` directly; for tensors with
+    unbacked dynamic shapes (e.g. ``74 * u176``) that raises
+    ``GuardOnDataDependentSymNode`` because ``Ne(74*u176, 0)`` can't be proved
+    either way at trace time. Using ``guard_or_true`` keeps unbacked-shape
+    inputs conservatively (the pass is purely an optimisation).
+    """
+    from torch.fx.experimental.symbolic_shapes import guard_or_true
+
+    def patch(self, graph_module, cat_node):
+        pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
+        cat_node.args = (pruned,) + cat_node.args[1:]
+        if not pruned:
+            cat_tensor = cat_node.meta["val"]
+            with graph_module.graph.inserting_after(cat_node):
+                full_like = graph_module.graph.create_node(
+                    "call_function",
+                    target=exir_ops.edge.aten.full.default,
+                    args=(tuple(cat_tensor.shape), 0),
+                    kwargs={"dtype": cat_tensor.dtype},
+                )
+                full_like.meta = cat_node.meta
+                cat_node.replace_all_uses_with(full_like)
+
+    return patch
+
+
 @register_patch("executorch", "torch.nn.functional.pad")
 def _patch_pad(original):
     """Split a negative pad into the crop it means plus the non-negative remainder — torch treats a negative
@@ -941,19 +974,6 @@ def _patch_bernoulli(_original):
         return out.copy_(result) if out is not None else result
 
     return patch
-
-
-@register_patch("executorch", "torch.nn.attention.varlen.varlen_attn")
-def _patch_varlen_attn(original):
-    """The chunked vision/audio attention patch calls `varlen_attn`, whose CUDA flash op stays opaque
-    through edge lowering (its aux outputs trip the edge-dialect verifier). Swap it for the block-diagonal
-    masked SDPA — core-aten ops ExecuTorch can lower — returning just the output tensor (`varlen_attn`'s
-    contract, vs the underlying op's `(output, *aux)` tuple)."""
-
-    def varlen_attn(*args, **kwargs):
-        return varlen_attn_masked_sdpa(*args, **kwargs)
-
-    return varlen_attn
 
 
 @register_patch("executorch", "torch.nn.functional.scaled_dot_product_attention")

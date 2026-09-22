@@ -720,6 +720,7 @@ def _fix_overload_with_twin(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bo
             return False
 
 
+@register_fx_node_fix("onnx")
 def _fix_slice_implicit_start(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Spell out a slice's implicit start as ``0``.
 

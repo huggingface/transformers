@@ -259,9 +259,10 @@ class OpenVINOConfig(DynamoConfig):
         output_path (`str` or `PathLike`, *optional*):
             Output path for the `.xml` file (the matching `.bin` is written alongside). When
             `None` (default) the converted model is kept in memory as an ``openvino.Model``.
-        compress_to_fp16 (`bool`, *optional*, defaults to `True`):
-            Compress floating-point weights to FP16 when saving — halves on-disk size with
-            negligible accuracy impact on most models. Only applied when ``output_path`` is set.
+        compress_to_fp16 (`bool`, *optional*, defaults to `False`):
+            Halve `float32` weights to `float16` when saving. Off by default: an export answers like the
+            model it came from, and `float16` carries a narrower exponent range than the `float32` it
+            replaces. `bfloat16` weights are left alone either way — only `float32` is compressed.
         stateful (`bool`, *optional*, defaults to `True`):
             Fold round-tripped state tensors (KV cache, SSM states, …) into internal OV
             variables (``ReadValue``/``Assign``). The runtime then carries state across
@@ -274,5 +275,5 @@ class OpenVINOConfig(DynamoConfig):
     export_format: ExportFormat = ExportFormat.OPENVINO
 
     output_path: str | PathLike | None = None
-    compress_to_fp16: bool = True
+    compress_to_fp16: bool = False
     stateful: bool = True

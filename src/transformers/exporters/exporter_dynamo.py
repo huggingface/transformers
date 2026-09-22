@@ -149,17 +149,10 @@ class DynamoExporter(HfExporter):
         # carry them.
         exported_program = drop_unused_weights(exported_program)
 
-        # What the graph is, recorded on the program itself: `graph_module.meta` survives `.module()`, so a
-        # `DynamoModelRunner` reads the trace's own account of itself the way the ONNX and ExecuTorch runners
-        # read theirs, and every backend gets it here — `self.required_packages` is the subclass's, so the
-        # versions name whichever exporter is running.
-        #
-        # Unlike those two it does NOT survive serialization on its own: `torch.export.save` keeps a
-        # whitelist of meta keys (a loaded program has only `treespec_namedtuple_fields`), where ONNX carries
-        # the payload in `metadata_props` and ExecuTorch in a constant method — both inside the file. So
-        # `save_artifact` copies it into `extra_files` and `DynamoModelRunner.from_pretrained` puts it back,
-        # which is what keeps `kv_geometry` / `mask_ranks` / `input_shapes` / `cache_input` answerable
-        # for a program that has been through disk.
+        # The trace's own account of itself, on the program: `graph_module.meta` survives `.module()`, and
+        # every backend records it here. Unlike ONNX and ExecuTorch it does not survive serialization —
+        # `torch.export.save` keeps a whitelist of meta keys — so `save_artifact` copies it into
+        # `extra_files` and `DynamoModelRunner.from_pretrained` puts it back.
         metadata = build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
         exported_program.graph_module.meta[EXPORT_METADATA_KEY] = metadata
         return exported_program, metadata
@@ -648,16 +641,11 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
         attributes = dict(vars(obj))
-        # A growing sliding layer's `cumulative_length` counts steps, so leaving it here pins the graph to the
-        # step it was traced at. `_patch_sliding_window_length` makes the traced arithmetic read the length off
-        # the keys tensor instead, so the counter is no longer load-bearing — normalise it and a graph traced
-        # at one step accepts a cache at another.
-        # Normalised before the walk, never after: while tracing, a scalar counter is a dynamic `SymInt`
-        # that the walk would collect as a graph leaf (and so a graph output), and zeroing the context
-        # afterwards would orphan it — flatten then reports one more leaf than unflatten consumes. Dynamo
-        # carries the stray symbolic output regardless; ExecuTorch's lowering has no symbolic-int output to
-        # put it in and drops it, surfacing the gap as a `treespec.unflatten` length mismatch. A tensor
-        # counter is left alone and rides along as a leaf, which is why the zeroing cannot be unconditional.
+        # A growing sliding layer's `cumulative_length` counts steps, which would pin the graph to the step
+        # it was traced at; `_patch_sliding_window_length` reads the length off the keys instead, so the
+        # counter can be normalised. Before the walk, never after: a scalar counter traces as a `SymInt` the
+        # walk would collect as a leaf, and zeroing it afterwards orphans that leaf. A tensor counter is a
+        # leaf in its own right, so it is left alone.
         if "sliding_window" in attributes and not isinstance(attributes.get("cumulative_length", 0), torch.Tensor):
             attributes["cumulative_length"] = 0
         # A *static* sliding layer keeps the same counter under `cumulative_length_int` (its
@@ -796,7 +784,13 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
 # `DynamoConfig.dynamic` is True and no explicit `dynamic_shapes` are provided.
 
 
-def _auto_dynamic_shape(tensor: torch.Tensor, is_cache_tensor: bool = False) -> dict[int, torch.export.Dim]:
+# An embedding input's last axis is the model's hidden size — architecture, like a cache's head layout.
+_EMBEDDING_INPUTS = frozenset({"inputs_embeds", "decoder_inputs_embeds"})
+
+
+def _auto_dynamic_shape(
+    tensor: torch.Tensor, is_cache_tensor: bool = False, is_embedding: bool = False
+) -> dict[int, torch.export.Dim]:
     """Generate a dynamic shape with all dimensions set to Dim.AUTO.
 
     A `[batch, heads, seq, head_dim]` KV cache tensor keeps its heads and head_dim axes static: they are
@@ -804,12 +798,19 @@ def _auto_dynamic_shape(tensor: torch.Tensor, is_cache_tensor: bool = False) -> 
     geometry (every axis comes back symbolic), which the runtime needs to size the cache it feeds back. Only
     that rank qualifies — a recurrent layer's states or a sliding layer's scalars ride in the same cache
     without the same layout, so they stay fully dynamic.
+
+    An `inputs_embeds` keeps its feature axis static for the same reason: the hidden size is the
+    architecture's, never the batch's. Left symbolic, every per-layer reshape below it becomes runtime shape
+    arithmetic — a smolvlm decode graph grows 4k synthesized `Reshape` nodes and the CPU plugin can no longer
+    match its attention, which costs more than the dynamic axis ever buys.
     """
     static_dims = (1, 3) if is_cache_tensor and tensor.dim() == 4 else ()
+    if is_embedding and tensor.dim():
+        static_dims = (*static_dims, tensor.dim() - 1)
     return {dim: torch.export.Dim.AUTO for dim in range(tensor.dim()) if dim not in static_dims}
 
 
-def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False) -> Any:
+def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False, is_embedding: bool = False) -> Any:
     """Recursively build dynamic shapes for any input value.
 
     - Tensors → per-dimension Dim.AUTO spec.
@@ -824,13 +825,13 @@ def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False) -> Any:
     - Everything else → None.
     """
     if isinstance(inputs, torch.Tensor):
-        return _auto_dynamic_shape(inputs, is_cache_tensor)
+        return _auto_dynamic_shape(inputs, is_cache_tensor, is_embedding)
     if inputs is None or isinstance(inputs, (int, float, bool, str)):
         return None
     if type(inputs) in (list, tuple, set, frozenset):
         return type(inputs)(get_auto_dynamic_shapes(v, is_cache_tensor) for v in inputs)
     if type(inputs) is dict:
-        return {k: get_auto_dynamic_shapes(v, is_cache_tensor) for k, v in inputs.items()}
+        return {k: get_auto_dynamic_shapes(v, is_cache_tensor, k in _EMBEDDING_INPUTS) for k, v in inputs.items()}
     if (node := torch.utils._pytree.SUPPORTED_NODES.get(type(inputs))) is not None:
         # Registered pytree node (a `ModelOutput`, a `Cache` subclass, ...). Mirror one level of its
         # registered flatten and recurse, so a field holding a container keeps that container in the

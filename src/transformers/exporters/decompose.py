@@ -367,10 +367,11 @@ def decompose_prefill_decode(
             "for this architecture."
         )
 
-    # Remove `logits_to_keep` from the captured calls — it's a generation-time hint for the model's
-    # internal top-k pruning, not a forward input. The export graph should not depend on it.
-    for call in calls:
-        call.pop("logits_to_keep", None)
+    # `logits_to_keep` is kept, wherever `generate` passed it. Generation reads one row of logits per call
+    # — the last — and a model that takes the hint computes only that row, so the graph stops carrying a
+    # `[batch, tokens, vocab]` tensor nothing reads: 311 MB for a 512-token prompt at Qwen3's vocabulary,
+    # copied out of the runtime on every call. It matters for the prompt, and again for a merged
+    # multi-token decode, which is several tokens wide for the same single row of output.
 
     # A single-token decode specializes its query-sequence axis to 1 (never dynamic). When
     # `multi_token_decode`, merge the two decode steps into one multi-token decode so that axis stays

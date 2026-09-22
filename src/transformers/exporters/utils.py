@@ -54,6 +54,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
+    from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
 
 
@@ -209,6 +210,239 @@ def apply_fx_node_fixes(backend: str, graph_module) -> None:
 # definitions apiece that had drifted in wording and in one case in behaviour.
 
 
+@register_patch("onnx", "transformers.models.blt.modeling_blt.byte_group_hash_function")
+@register_patch("openvino", "transformers.models.blt.modeling_blt.byte_group_hash_function")
+def _patch_byte_group_hash(original):
+    """Evaluate BLT's rolling hash in base-256 limbs, which both backends need for different reasons.
+
+    The hash multiplies each byte of a group by ``prime ** k`` and relies on int64 semantics. ONNX
+    Runtime multiplies int64 exactly but reduces through a float: ``sum`` turns `7000000049` into
+    `7000000000`, losing everything below fp32's mantissa. OpenVINO's CPU plugin is narrower still —
+    it executes every internal node in `i32`, so `1000000007 ** 2` saturates at `2147483647`. Either
+    way the hash reads the wrong embedding rows.
+
+    The powers are compile-time constants and the hash reaches the model only as ``hash % max_hash``,
+    so it is computed here as a sum of 8-bit limbs: the single pass below carries each lane and folds
+    it into the running remainder, keeping every intermediate small enough to be exact in both
+    backends. Each limb is taken with `BitwiseAnd`, the only division is by 256 of a value already a
+    multiple of it, and dropping the last carry is the int64 wraparound.
+    """
+    limb_bits = 8
+    limb = 1 << limb_bits
+    limb_count = 64 // limb_bits
+
+    def patch(token_ids, group_size: int = 2, prime: int = 1000000007, max_hash: int = 30000):
+        # Beyond a 16-bit table the limb products leave the window where the plugin's `%` is exact
+        if max_hash > (1 << 16):
+            return original(token_ids, group_size=group_size, prime=prime, max_hash=max_hash)
+
+        powers = [pow(prime, index, 1 << 64) for index in range(group_size)]
+        limbs = torch.tensor(
+            [[(power >> (limb_bits * position)) % limb for power in powers] for position in range(limb_count)],
+            dtype=torch.int64,
+            device=token_ids.device,
+        )
+        padding = torch.zeros(token_ids.shape[0], group_size - 1, dtype=torch.int64, device=token_ids.device)
+        windows = torch.cat([padding, token_ids.to(torch.int64)], dim=1).unfold(1, group_size, 1)
+        lanes = (windows.unsqueeze(-2) * limbs).sum(-1)
+
+        value = carry = torch.zeros_like(lanes[..., 0])
+        for position in range(limb_count):
+            total = lanes[..., position] + carry
+            digit = torch.bitwise_and(total, limb - 1)
+            carry = (total - digit) // limb
+            value = (value + digit * ((1 << (limb_bits * position)) % max_hash)) % max_hash
+        # Those limbs spell the *unsigned* value; eager took the remainder of a signed int64, which
+        # is 2**64 lower whenever the top bit -- the last digit's -- is set.
+        negative = (digit >= limb // 2).to(torch.int64)
+        return (value - negative * ((1 << 64) % max_hash) + max_hash) % max_hash
+
+    return patch
+
+
+@register_patch("onnx", "torch.histc")
+@register_patch("openvino", "torch.histc")
+def _patch_histc(original):
+    """Replace `torch.histc` with a statically-shaped, deterministic `zeros` + `scatter_add_`.
+
+    torchlib's `aten_histc` rejects integer input and casting to float calls the nondeterministic
+    `_histc_cuda`; OV has no `aten.histc` lowering at all. `bincount`, the obvious replacement, has
+    an unbacked SymInt output that trips downstream meta-shape guards (grouped_mm's `offs` check).
+    """
+
+    def patch(input, bins=100, min=0, max=0, *, out=None):
+        flat = input.reshape(-1)
+        if max == min == 0:
+            min_val = flat.min().float()
+            max_val = flat.max().float()
+        else:
+            min_val = torch.tensor(float(min), device=flat.device)
+            max_val = torch.tensor(float(max), device=flat.device)
+        bin_width = (max_val - min_val) / bins
+        idx = ((flat.float() - min_val) / bin_width).long().clamp_(0, bins - 1)
+        out_dtype = input.dtype if input.is_floating_point() else torch.float
+        counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
+        return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
+
+    return patch
+
+
+@register_fx_node_fix("onnx")
+@register_fx_node_fix("openvino")
+def _fix_scatter_reduce(gm, node):
+    """Lower ``aten.scatter_reduce.two`` at the FX level — OV's frontend has no translation,
+    and its ``ScatterElementsUpdate`` op can't accept the ``reduce`` string as a constant input.
+
+    Handles two patterns the MoE/SSM models use:
+      * ``reduce="sum", include_self=True`` → ``aten.scatter_add`` (BLT/JetMoe/NemotronH router).
+      * ``reduce="amax"/"amin", include_self=False`` → masked extremum over a one-hot expansion of
+        ``index`` (BLT byte-pooling, tapas segment reduction).
+      * ``reduce="sum"/"mean", include_self=False`` → ``scatter_add`` onto zeros, divided by a
+        scattered count for the mean (tapas segment reductions).
+
+    Other combinations fall through to the generic OpConversionFailure.
+    """
+    if node.target is not torch.ops.aten.scatter_reduce.two:
+        return False
+    if len(node.args) < 5:
+        return False
+    reduce = node.args[4]
+    include_self = node.kwargs.get("include_self", True)
+    self_arg, dim, index, src = node.args[0:4]
+
+    if reduce == "sum" and include_self is True:
+        with gm.graph.inserting_before(node):
+            new = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(self_arg, dim, index, src))
+            new.meta.update(node.meta)
+        node.replace_all_uses_with(new)
+        gm.graph.erase_node(node)
+        return True
+
+    if reduce in ("sum", "mean") and include_self is False:
+        # ``include_self=False``: a position that receives at least one source element reduces over
+        # *only* those elements, while a position nothing scatters to keeps ``self``. Scattering onto
+        # zeros gives the former, and scattering ones alongside counts the contributors — which both
+        # divides the mean and says which positions were touched at all.
+        self_val = self_arg.meta.get("val")
+        src_val = src.meta.get("val")
+        if self_val is None or src_val is None:
+            return False
+        with gm.graph.inserting_before(node):
+            zeros = gm.graph.call_function(torch.ops.aten.zeros_like.default, args=(self_arg,))
+            sums = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(zeros, dim, index, src))
+            ones = gm.graph.call_function(torch.ops.aten.ones_like.default, args=(src,))
+            counts = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(zeros, dim, index, ones))
+            values = sums
+            if reduce == "mean":
+                # clamped so untouched positions divide by 1 instead of 0 — `where` discards them anyway
+                divisor = gm.graph.call_function(torch.ops.aten.clamp_min.default, args=(counts, 1))
+                values = gm.graph.call_function(torch.ops.aten.div.Tensor, args=(sums, divisor))
+            # OV's frontend has no ``gt.Scalar`` translation, so compare against a 0-dim tensor
+            zero_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default,
+                args=(0,),
+                kwargs={"dtype": src_val.dtype, "device": src_val.device},
+            )
+            touched = gm.graph.call_function(torch.ops.aten.gt.Tensor, args=(counts, zero_tensor))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(touched, values, self_arg))
+            result.meta.update(node.meta)
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+
+    if reduce in ("amax", "amin") and include_self is False:
+        # ``amax``/``amin`` with ``include_self=False``: each source element competes for the extremum
+        # at ``index[j]``; positions no source scatters to keep ``self``'s original value. Decompose to
+        # a broadcast comparison + reduction: build a one-hot mask ``(index.unsqueeze(dim) ==
+        # arange(K))``, reduce ``src`` where the mask is set (the opposite extreme elsewhere, so it
+        # never wins), then fall back to ``self`` for positions with no scatter.
+        self_val = self_arg.meta.get("val")
+        src_val = src.meta.get("val")
+        if self_val is None or src_val is None or not src_val.dtype.is_floating_point:
+            return False
+        ndim = self_val.ndim
+        d = dim if dim >= 0 else dim + ndim
+        k_size = self_val.shape[d]
+        # the identity for the reduction: an element that never wins
+        finfo = torch.finfo(src_val.dtype)
+        fill_value = finfo.min if reduce == "amax" else finfo.max
+        reduction = torch.ops.aten.amax.default if reduce == "amax" else torch.ops.aten.amin.default
+        k_shape = [1] * (ndim + 1)
+        k_shape[d] = -1
+        with gm.graph.inserting_before(node):
+            # ``k_size`` is symbolic under dynamic shapes (e.g. BLT's ``max_num_patches``); baking
+            # the ``SymInt`` as an ``arange`` literal makes OV decode it as a malformed inlined
+            # constant. Feed the dimension through a ``sym_size`` node so it stays a real Range input.
+            arange_size = (
+                k_size
+                if isinstance(k_size, int)
+                else gm.graph.call_function(torch.ops.aten.sym_size.int, args=(self_arg, d))
+            )
+            arange = gm.graph.call_function(
+                torch.ops.aten.arange.default, args=(arange_size,), kwargs={"device": self_val.device}
+            )
+            k_range = gm.graph.call_function(torch.ops.aten.view.default, args=(arange, k_shape))
+            index_unsq = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(index, d))
+            mask = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(index_unsq, k_range))
+            src_unsq = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(src, d))
+            # OV's frontend has no ``where.ScalarOther`` translation, so materialise the scalar
+            # branches as 0-dim tensors and use ``where.self`` (broadcasts the same way).
+            scalar_kwargs = {"dtype": src_val.dtype, "device": src_val.device}
+            fill_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default, args=(fill_value,), kwargs=scalar_kwargs
+            )
+            masked = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, src_unsq, fill_tensor))
+            extrema = gm.graph.call_function(reduction, args=(masked, [d + 1]))
+            any_match = gm.graph.call_function(torch.ops.aten.any.dim, args=(mask, d + 1))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, extrema, self_arg))
+            result.meta.update(node.meta)
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+
+    return False
+
+
+@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("openvino", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
+def _patch_broadcast_mask_expansion(_original):
+    """Replace vmap-based mask expansion with broadcast expansion.
+
+    No backend traces `torch.vmap`: OV's frontend sees inputs that "escaped" the vmap context,
+    and `aot_autograd`/`gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering.
+    """
+
+    def patch(mask_function):
+        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
+            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
+            return mask_function(*broadcasted).expand(
+                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
+            )
+
+        return _expanded
+
+    return patch
+
+
+@register_patch("executorch", "torch.nn.attention.varlen.varlen_attn")
+def _patch_varlen_attn(original):
+    """Lower `varlen_attn` to the block-diagonal masked SDPA it stands for.
+
+    The chunked vision/audio attention patch calls it to express packed sequences as one op, and
+    ExecuTorch cannot take it from there: the edge-dialect verifier trips on the CUDA flash op's aux
+    outputs. The masked form is core-aten. Returns just the output tensor, which is `varlen_attn`'s
+    contract — the underlying op's is `(output, *aux)`. OpenVINO keeps the op and converts it instead
+    (`_convert_varlen_attn`), which is where a packed lowering belongs.
+    """
+    from .exporter_dynamo import varlen_attn_masked_sdpa
+
+    def varlen_attn(*args, **kwargs):
+        return varlen_attn_masked_sdpa(*args, **kwargs)
+
+    return varlen_attn
+
+
 @register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
 @register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
 def _patch_reshape(original):
@@ -256,6 +490,7 @@ def _patch_bucketize(_original):
 
 
 @register_patch("onnx", "torch.searchsorted")
+@register_patch("openvino", "torch.searchsorted")
 @register_patch("executorch", "torch.searchsorted")
 def _patch_searchsorted(_original):
     """Decompose `searchsorted` the same way as `bucketize`: for a sorted sequence the insertion index is

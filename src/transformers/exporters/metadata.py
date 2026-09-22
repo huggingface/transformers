@@ -398,12 +398,9 @@ def build_export_metadata(
         metadata["cache"] = {
             "class": type(cache).__name__,
             "layers": [
-                # Plus what the trace says about the layer's own state: its geometry, and the length it
-                # was sized for when it was sized at all. The runtime builds to that length rather than
-                # re-deriving a size, because `generate` sizes a fixed cache from the prompt in front of it
-                # and from per-model facts (mllama's vision length), so the same config gives a different
-                # cache elsewhere -- and a graph carries its cache's sizes in the input spec it refuses to
-                # be called against anything else.
+                # Plus the layer's own state: its geometry, and the length it was sized for. The runtime
+                # builds to that rather than re-deriving a size, because `generate` sizes a fixed cache
+                # from the prompt in front of it, and a graph carries its cache's sizes in the input spec.
                 {"class": type(layer).__name__, **layout.get(index, {})}
                 for index, layer in enumerate(layers)
             ],

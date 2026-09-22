@@ -72,7 +72,8 @@ if is_openvino_available():
     import numpy as np
     import openvino
     import openvino.opset14 as ov_ops
-    from openvino._offline_transformations import apply_make_stateful_transformation
+    from openvino import Model, PartialShape, Type
+    from openvino._offline_transformations import apply_make_stateful_transformation, compress_model_transformation
     from openvino.frontend.pytorch import ConversionExtension
     from openvino.frontend.pytorch.fx_decoder import TorchFXPythonDecoder
     from openvino.frontend.pytorch.torchdynamo.export_decompositions import ops_to_not_decompose
@@ -131,8 +132,13 @@ class OpenVINOExporter(DynamoExporter):
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
 
+        if config.compress_to_fp16:
+            # Here rather than at save time, so what runs in memory is what lands on disk — and so writing an
+            # artifact out stays a matter of the format alone, with no recipe to carry along.
+            compress_model_transformation(ov_model)
+
         if config.output_path is not None:
-            openvino.save_model(ov_model, config.output_path, compress_to_fp16=config.compress_to_fp16)
+            openvino.save_model(ov_model, config.output_path, compress_to_fp16=False)
 
         # What the trace meant, beside what the IR declares: an `openvino.Model` reports port names, shapes
         # and element types, and nothing about precision, cache layout or mask rank. It travels in the
@@ -141,8 +147,12 @@ class OpenVINOExporter(DynamoExporter):
 
     @classmethod
     def save_artifact(cls, artifact, path) -> None:
-        """`save_model` writes the `.xml` graph and the `.bin` weights beside it, named after the `.xml`."""
-        openvino.save_model(artifact, path)
+        """`save_model` writes the `.xml` graph and the `.bin` weights beside it, named after the `.xml`.
+
+        Written at the precision the model holds: `save_model` would otherwise halve `f32` weights on its
+        own, and whether that was wanted was settled at export.
+        """
+        openvino.save_model(artifact, path, compress_to_fp16=False)
 
 
 # ── Conversion helpers ──────────────────────────────────────────────────────
@@ -312,6 +322,15 @@ def _fix_non_tensor_inputs(ov_model: openvino.Model, graph_module) -> None:
 _STATE_BATCH_DIM = 0  # transformers-native caches are batch-first
 
 
+def _state_leaf_tensors(sample_inputs: MutableMapping[str, Any], state_roots: set) -> list:
+    """The rank-4 cache tensors among `sample_inputs`, which are the ones a state pair is made of."""
+    return [
+        tensor
+        for path, tensor in get_leaf_tensors(sample_inputs).items()
+        if path.partition(".")[0] in state_roots and tensor.dim() >= 3
+    ]
+
+
 def _find_state_pairs(ov_model: openvino.Model, sample_inputs: MutableMapping[str, Any]) -> dict[str, str]:
     """Return ``{input_port_name: output_port_name}`` for every round-tripped state tensor.
 
@@ -321,6 +340,13 @@ def _find_state_pairs(ov_model: openvino.Model, sample_inputs: MutableMapping[st
     is a regular output.
     """
     state_roots = {key for key, value in sample_inputs.items() if is_cache_object(value)}
+    # A cache the trace found empty is written, not carried: that is a prefill, which runs once and reads
+    # nothing back. Folding it in would pin the variable to the length the prefill *produces* while its
+    # initializer stays the empty tensor it was given, and the two cannot be reconciled under static shapes.
+    # The decode graph — the one called per token, where carrying the state in-plugin is the whole point —
+    # is unaffected, since its cache arrives with the prompt already in it.
+    if all(not tensor.shape[-2] for tensor in _state_leaf_tensors(sample_inputs, state_roots)):
+        return {}
     input_names = {name for port in ov_model.inputs for name in port.get_names()}
     pairs = {}
     for port in ov_model.outputs:
@@ -601,6 +627,12 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
             if all(t == 0 for t in target):
                 continue
             pinned = ov_ops.reshape(update, ov_ops.constant(np.array(target, dtype=np.int64)), special_zero=True)
+            # Only when it buys a shape the update did not already have. The comparison above is against the
+            # *variable*, which a `special_zero` pin cannot always reach — so without this the next round
+            # pins the pin, once per variable per round, and the graph leaves with a chain of identity
+            # reshapes long enough to hide the attention from the plugin's fusion.
+            if pinned.get_output_partial_shape(0) == update_shape:
+                continue
             op.input(0).replace_source_output(pinned.output(0))
             changed = True
         if not changed:
@@ -732,6 +764,25 @@ def _rename_bare_node_names(graph_module) -> None:
 # repair at the FX level than to patch around at the torch op level.
 #
 # To add a new fix: define a `_fix_*` callable and decorate it.
+
+
+@register_fx_node_fix("openvino")
+def _fix_varlen_attn_getitem(gm, node):
+    """Drop the `getitem` that unpacks `_varlen_attn`'s first output.
+
+    The op declares `(out, softmax_lse, rng_state)` and the traced graph reads `[0]`. OV's frontend selects
+    a port that way only for an op it has not converted; for a converted one it reads `getitem` as an index
+    into the tensor and gathers row 0. Erasing it leaves the conversion free to hand back the output itself
+    (`_convert_varlen_attn`), which is the only one anything reads.
+    """
+    if node.target is not operator.getitem or node.args[1] != 0:
+        return False
+    source = node.args[0]
+    if not isinstance(source, torch.fx.Node) or "_varlen_attn" not in str(source.target):
+        return False
+    node.replace_all_uses_with(source)
+    gm.graph.erase_node(node)
+    return True
 
 
 @register_fx_node_fix("openvino")
@@ -1053,13 +1104,16 @@ def _fix_view_inferred_dim(gm, node):
     if not isinstance(shape, (list, tuple)):
         return False
     minus_one = [i for i, dim in enumerate(shape) if isinstance(dim, int) and dim == -1]
-    has_symbolic = any(not isinstance(dim, int) for dim in shape)
-    if len(minus_one) != 1 or not has_symbolic:
+    if len(minus_one) != 1:
         return False
+    index = minus_one[0]
     out_val = node.meta.get("val")
     if out_val is None:
         return False
-    index = minus_one[0]
+    # The trace's own answer for that axis, and only when it is a plain number: an axis inferred from a
+    # count that varies (`view(batch, -1)` over a growing sequence) comes back as a symbol, and pinning it
+    # would be a lie. Left inferred, a decode step's head count goes dynamic, and that is what stops the
+    # CPU plugin fusing attention with its KV cache — a copy of the whole cache every step.
     resolved = out_val.shape[index]
     if not isinstance(resolved, int):
         return False
@@ -1245,12 +1299,10 @@ def _patch_sdpa(original):
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
-        # OV's SDPA does not match aten on a *boolean* mask -- it diverges from torch and ONNX even
-        # when nothing is masked, and returns `NaN` for a row that masks every key, taking the whole
-        # batch entry with it (https://github.com/openvinotoolkit/openvino/issues/31630). Such rows are
-        # legitimate: left padding under a causal mask leaves query 0 with no visible key. Hand OV an
-        # additive mask instead, so the op never takes its boolean path, and use fp16's minimum as the
-        # masked value to keep the arithmetic in range -- the same workaround optimum-intel applies.
+        # OV's SDPA diverges from aten on a boolean mask even when nothing is masked, and returns `NaN`
+        # for a row that masks every key (openvinotoolkit/openvino#31630) — rows left padding makes
+        # legitimate. Hand it an additive mask so it never takes that path, with fp16's minimum as the
+        # masked value to keep the arithmetic in range, as optimum-intel does.
         unattended = None
         if attn_mask is not None:
             masked_value = torch.finfo(query.dtype).min
@@ -1286,30 +1338,6 @@ def _patch_sdpa(original):
                 unattended, torch.zeros((), dtype=attn_output.dtype, device=attn_output.device), attn_output
             )
         return attn_output
-
-    return patch
-
-
-@register_patch(
-    "openvino",
-    "transformers.integrations.sdpa_attention.repeat_kv",
-    "transformers.integrations.eager_paged.repeat_kv",
-    "transformers.integrations.flex_attention.repeat_kv",
-)
-def _patch_repeat_kv(original):
-    """Expand GQA K/V heads via ``repeat_interleave`` instead of a 5-D ``expand`` + ``reshape``.
-
-    The stock ``repeat_kv`` unsqueezes to ``[b, kv_heads, 1, kv_seq, head_dim]`` then
-    ``expand``s the new axis to ``n_rep``. OV's frontend can't keep the ``kv_seq`` axis dynamic
-    through that 5-D broadcast in stateful decode (``Broadcast Check 'input_shape[j] == 1'`` on
-    dim 3), baking it to the traced length. ``repeat_interleave`` on the head axis is the exact
-    equivalent (per ``repeat_kv``'s own docstring) and lowers to an OV op that stays dynamic.
-    """
-
-    def patch(hidden_states, n_rep):
-        if n_rep == 1:
-            return hidden_states
-        return hidden_states.repeat_interleave(n_rep, dim=1)
 
     return patch
 
@@ -1892,6 +1920,67 @@ def _patch_scatter_reduce(original):
 # ``_OV_CONVERSION_EXTENSIONS``.
 
 
+def _convert_varlen_attn(context):
+    """Convert ``torch_attn::_varlen_attn`` — packed variable-length attention — into an OV ``Loop``.
+
+    The chunked vision/audio export patch packs several sequences into one flat `[L, heads, dim]` tensor and
+    marks their boundaries with `cu_seqlens`, so a token attends only within its own segment. OV has no rule
+    for the op, and lowering it at the torch level would force every backend to take the same expansion;
+    converting it here keeps the traced graph the packed one it was.
+
+    One iteration per segment, each a dense SDPA over that segment's `n_i` tokens, concatenated onto a
+    loop-carried output — `sum(n_i^2)` work and no `L x L` mask, which is the shape the flash kernel this op
+    names would do. The segment bounds come from `cu_seqlens` inside the body, so the slices vary per
+    iteration; that is why the output is carried (`set_merged_input`) rather than a scan output, whose
+    slices must all be the same size.
+    """
+    query, key, value = (context.get_input(index) for index in range(3))
+    cu_seqlens = ov_ops.convert(context.get_input(3), "i64")
+    element_type = query.get_element_type()
+    axis0 = ov_ops.constant(np.array([0], dtype=np.int64))
+    one = ov_ops.constant(np.array([1], dtype=np.int64))
+
+    # Body: (iteration, condition, q, k, v, cu, carried output) -> (grown output, condition)
+    iteration = ov_ops.parameter([], Type.i64)
+    condition = ov_ops.parameter([], Type.boolean)
+    body_q, body_k, body_v = (ov_ops.parameter(PartialShape([-1, -1, -1]), element_type) for _ in range(3))
+    body_cu = ov_ops.parameter(PartialShape([-1]), Type.i64)
+    carried = ov_ops.parameter(PartialShape([-1, -1, -1]), element_type)
+
+    index = ov_ops.reshape(iteration, one, False)
+    start = ov_ops.gather(body_cu, index, axis0)
+    stop = ov_ops.gather(body_cu, ov_ops.add(index, one), axis0)
+
+    def _segment(tensor):
+        """This iteration's slice, as `[1, heads, n_i, dim]` — OV's SDPA is batch-first."""
+        rows = ov_ops.slice(tensor, start, stop, one, axis0)
+        return ov_ops.unsqueeze(ov_ops.transpose(rows, ov_ops.constant(np.array([1, 0, 2], dtype=np.int64))), axis0)
+
+    attention = ov_ops.scaled_dot_product_attention(_segment(body_q), _segment(body_k), _segment(body_v), causal=False)
+    segment = ov_ops.transpose(ov_ops.squeeze(attention, axis0), ov_ops.constant(np.array([1, 0, 2], dtype=np.int64)))
+    grown = ov_ops.concat([carried, segment], axis=0)
+    body = Model(
+        [ov_ops.result(grown), ov_ops.result(condition)],
+        [iteration, condition, body_q, body_k, body_v, body_cu, carried],
+    )
+
+    # As many iterations as there are segments: one fewer than the boundaries `cu_seqlens` names.
+    segments = ov_ops.squeeze(
+        ov_ops.subtract(ov_ops.shape_of(cu_seqlens, "i64"), one), ov_ops.constant(np.array([0], dtype=np.int64))
+    )
+    loop = ov_ops.loop(segments, ov_ops.constant(np.array(True)))
+    loop.set_function(body)
+    # `[iteration parameter, condition result]` — which body ports carry the loop's own bookkeeping.
+    loop.set_special_body_ports([0, 1])
+    for parameter, source in ((body_q, query), (body_k, key), (body_v, value), (body_cu, cu_seqlens.output(0))):
+        loop.set_invariant_input(parameter, source)
+    # Starts empty and grows by a segment each iteration, which is what makes the slices free to differ.
+    empty = ov_ops.slice(query, ov_ops.constant(np.array([0], dtype=np.int64)), axis0, one, axis0)
+    loop.set_merged_input(carried, empty.output(0), grown.output(0))
+    loop.validate_and_infer_types()
+    return [loop.get_iter_value(grown.output(0), -1)]
+
+
 def _convert_grouped_mm(context):
     """Convert ``aten._grouped_mm`` / ``transformers.grouped_mm_fallback`` to OV ops.
 
@@ -2127,6 +2216,16 @@ def _convert_sdpa(context):
     kwargs = {"causal": is_causal}
     if mask is not None:
         kwargs["attention_mask"] = mask
+    # OV's own default, stated rather than left implicit: the CPU plugin folds attention and its KV cache
+    # into one op only for the five-input form, and a four-input SDPA reads its cache through a Concat it
+    # then has to materialise — the whole cache, on every decode step. The value is what the op would apply
+    # anyway (`_patch_sdpa` has already folded any non-default scale into the query).
+    head_dim = q.get_partial_shape()[-1]
+    if head_dim.is_static:
+        # In the query's own type: OV's SDPA merges the element types of all its inputs, so an `f32` scale
+        # beside `bf16` queries is a conversion failure rather than a promotion.
+        scale = np.array(head_dim.get_length() ** -0.5).astype(q.get_element_type().to_dtype())
+        kwargs["scale"] = ov_ops.constant(scale, q.get_element_type())
     return [ov_ops.scaled_dot_product_attention(q, k, v, **kwargs).output(0)]
 
 
@@ -2235,6 +2334,7 @@ if is_openvino_available():
             ConversionExtension("aten._to_copy.default", _convert_to_copy),
             ConversionExtension("aten.layer_norm.default", _convert_layer_norm),
             ConversionExtension("aten.scaled_dot_product_attention.default", _convert_sdpa),
+            ConversionExtension("torch_attn._varlen_attn.default", _convert_varlen_attn),
             ConversionExtension("aten.bitwise_not.default", _convert_bitwise_not),
             # SymInt builtins — see comment block above.
             ConversionExtension("<built-in function add>", _convert_sym_binop(ov_ops.add)),

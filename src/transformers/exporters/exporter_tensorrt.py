@@ -114,14 +114,10 @@ class TensorrtExporter(DynamoExporter):
             raise TypeError(f"Expected config to be a TensorrtConfig or dict, got {type(config)}")
 
         program, metadata = super().export_artifact(model, sample_inputs, config)
-        # Kwargs, because that is how the graph was traced: the model's forward takes them by name. The
-        # converter's input parser takes tensors and plain containers of them and refuses everything else,
-        # so anything that is not a tensor -- a cache, a bare `use_cache=True` -- goes in as its leaves,
-        # which is all the parser reads them for (their shapes and dtypes).
-        # Deep copies throughout: the converter *runs* the graph to infer shapes, and a cache it ran
-        # against comes back holding this step's keys and values. Retracing below against that mutated
-        # cache would bake an input spec with more leaves than the graph declares, and the runtime's feed
-        # is then refused for a structure it never had.
+        # Kwargs, because that is how the graph was traced. The converter's parser takes tensors and plain
+        # containers of them, so anything else goes in as its leaves — shapes and dtypes are all it reads.
+        # Deep copies throughout: the converter *runs* the graph, and a cache it ran against comes back
+        # holding this step's keys and values, which would retrace into a spec the graph never declared.
         example_inputs = {
             name: value if isinstance(value, torch.Tensor) else pytree.tree_leaves(value)
             for name, value in copy.deepcopy(dict(sample_inputs)).items()
@@ -142,13 +138,10 @@ class TensorrtExporter(DynamoExporter):
             # pass does not fail, it returns wrong logits -- so it is off unless the caller asks for it.
             **{"attn_bias_is_causal": False, **(config.compiler_options or {})},
         )
-        # Back to an `ExportedProgram`. What comes out of the converter is a `GraphModule` holding engine
-        # submodules, which nothing but Torch-TensorRT's own saver knows how to write; re-exporting turns
-        # each engine into a `tensorrt.execute_engine` node, and from there the artifact is an ordinary
-        # exported program that this backend's inherited `save_artifact` writes like any other.
-        # Under the same dynamic shapes the trace used. A retrace against plain example tensors would
-        # specialize every axis the export had left symbolic, and the graph would then refuse the first
-        # step whose query length is not the captured one.
+        # Back to an `ExportedProgram`: the converter hands back a `GraphModule` holding engine submodules
+        # that only Torch-TensorRT's saver can write, and re-exporting turns each into a
+        # `tensorrt.execute_engine` node. Under the trace's own dynamic shapes — plain example tensors
+        # would specialize every axis the export left symbolic.
         dynamic_shapes = config.dynamic_shapes
         if config.dynamic and dynamic_shapes is None:
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
