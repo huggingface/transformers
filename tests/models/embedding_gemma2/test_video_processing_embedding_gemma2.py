@@ -76,7 +76,6 @@ class EmbeddingGemma2VideoProcessingTester:
             "max_soft_tokens": self.max_soft_tokens,
             "pooling_kernel_size": self.pooling_kernel_size,
             "do_sample_frames": False,
-            "num_frames": self.num_frames,
         }
 
     def expected_output_video_shape(self, videos=None):
