@@ -56,9 +56,9 @@ class GraniteForDoclingProcessor(ProcessorMixin):
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
         self.global_image_tag = "<global-img>"
         self.image_seq_len = image_seq_len
+        tokenizer.add_special_tokens({"additional_special_tokens": [self.fake_image_token, self.image_token]})
         self.fake_image_token_id = tokenizer.convert_tokens_to_ids(self.fake_image_token)
         self.global_image_token_id = tokenizer.convert_tokens_to_ids(self.global_image_tag)
-        tokenizer.add_special_tokens({"additional_special_tokens": [self.fake_image_token, self.image_token]})
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
