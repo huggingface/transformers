@@ -86,10 +86,10 @@ class TestCheckDocstrings(unittest.TestCase):
                     return result
             """)
 
-            with open(test_file, "w") as f:
+            with open(test_file, "w", encoding="utf-8") as f:
                 f.write(original)
 
-            with open(test_file, "r") as f:
+            with open(test_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
             items = _build_ast_indexes(content)
@@ -104,7 +104,7 @@ class TestCheckDocstrings(unittest.TestCase):
             # Generate placeholders (overwrite=True)
             update_file_with_new_docstrings(test_file, lines, items, content, overwrite=True)
 
-            with open(test_file, "r") as f:
+            with open(test_file, "r", encoding="utf-8") as f:
                 updated = f.read()
 
             # Verify results
@@ -140,10 +140,10 @@ class TestCheckDocstrings(unittest.TestCase):
                         return self.layer(input_ids) * scale_factor
             """)
 
-            with open(test_file, "w") as f:
+            with open(test_file, "w", encoding="utf-8") as f:
                 f.write(original)
 
-            with open(test_file, "r") as f:
+            with open(test_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
             items = _build_ast_indexes(content)
@@ -166,7 +166,7 @@ class TestCheckDocstrings(unittest.TestCase):
             # Update file
             update_file_with_new_docstrings(test_file, lines, items, content, overwrite=True)
 
-            with open(test_file, "r") as f:
+            with open(test_file, "r", encoding="utf-8") as f:
                 updated = f.read()
 
             # Verify updates and preservation
@@ -217,10 +217,10 @@ class TestCheckDocstrings(unittest.TestCase):
             has_decorator = os.path.join(tmpdir, "modeling.py")
             no_decorator = os.path.join(tmpdir, "utils.py")
 
-            with open(has_decorator, "w") as f:
+            with open(has_decorator, "w", encoding="utf-8") as f:
                 f.write("@auto_docstring\ndef forward(self): pass")
 
-            with open(no_decorator, "w") as f:
+            with open(no_decorator, "w", encoding="utf-8") as f:
                 f.write("def helper(): pass")
 
             found = find_files_with_auto_docstring([has_decorator, no_decorator])

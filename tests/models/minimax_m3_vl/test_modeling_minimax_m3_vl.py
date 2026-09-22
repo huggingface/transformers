@@ -497,7 +497,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         image_processor = MiniMaxM3VLImageProcessorFast.from_pretrained(self.model_id)
         video_processor = MiniMaxM3VLVideoProcessor.from_pretrained(self.model_id)
-        with open(cached_file(self.model_id, "chat_template.jinja")) as f:
+        with open(cached_file(self.model_id, "chat_template.jinja"), encoding="utf-8") as f:
             chat_template = f.read()
         return MiniMaxM3VLProcessor(
             image_processor=image_processor,
