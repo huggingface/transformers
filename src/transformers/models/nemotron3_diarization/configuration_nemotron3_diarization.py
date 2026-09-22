@@ -212,9 +212,6 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
                 f"({min_speaker_cache_length})."
             )
 
-    def get_text_config(self, *args, **kwargs):
-        return self.audio_config
-
 
 __all__ = [
     "Nemotron3DiarizationAudioConfig",
