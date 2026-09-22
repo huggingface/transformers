@@ -241,7 +241,6 @@ class AutoVideoProcessorTest(unittest.TestCase):
                 LlavaOnevisionConfig,
                 video_processor_classes={"cv2": Cv2VideoProcessor},
                 exist_ok=True,
-                overrides_ok=True,
             )
 
             with tempfile.TemporaryDirectory() as tmpdirname:

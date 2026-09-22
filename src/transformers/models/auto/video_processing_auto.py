@@ -42,6 +42,7 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .image_processing_auto import _resolve_auto_map_class_ref
 
 
 logger = logging.get_logger(__name__)
@@ -109,24 +110,6 @@ def video_processor_class_from_name(class_name: str):
         return getattr(main_module, class_name)
 
     return None
-
-
-def _resolve_auto_map_class_ref(auto_map, backend):
-    """Extract the class reference string from an auto_map entry based on backend preference.
-
-    Returns:
-        A string that may be:
-        - A simple class name (e.g. `"MyImageProcessor"`)
-        - A Hub reference in the form `upstream_repo--path/to/file.py::ClassName`, where the part before
-          `--` is the upstream repo ID (used for trust_remote_code resolution).
-    """
-    if isinstance(auto_map, dict):
-        return auto_map.get(backend) or next(iter(auto_map.values()))
-    if isinstance(auto_map, (list, tuple)):
-        if backend == "torchvision" and len(auto_map) > 1 and auto_map[1] is not None:
-            return auto_map[1]
-        return auto_map[0]
-    return auto_map
 
 
 def _load_backend_class(video_processor_class_name: str, backend: str):
@@ -483,7 +466,6 @@ class AutoVideoProcessor:
         video_processor_class: type | None = None,
         video_processor_classes: dict[str, type] | None = None,
         exist_ok: bool = False,
-        overrides_ok: bool = False,
     ):
         """
         Register a new video processor for this class.
@@ -499,8 +481,6 @@ class AutoVideoProcessor:
             exist_ok (`bool`, *optional*, defaults to `False`):
                 If `True`, allow overwriting existing registrations. Note that this will not overwrite anything if the config is
                 a local `transformers` class.
-            overrides_ok (`bool`, *optional*, defaults to `False`):
-                If `True`, allow overwriting existing registrations, even if it is mapped to an existing `transformers` local config.
         """
         if video_processor_classes is None:
             # Legacy registering would pass a single torch-based class
@@ -512,9 +492,7 @@ class AutoVideoProcessor:
             existing_mapping.update(video_processor_classes)
             video_processor_classes = existing_mapping
 
-        VIDEO_PROCESSOR_MAPPING.register(
-            config_class, video_processor_classes, exist_ok=exist_ok, overrides_ok=overrides_ok
-        )
+        VIDEO_PROCESSOR_MAPPING.register(config_class, video_processor_classes, exist_ok=exist_ok)
 
 
 __all__ = ["VIDEO_PROCESSOR_MAPPING", "AutoVideoProcessor"]

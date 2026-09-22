@@ -726,7 +726,6 @@ class AutoImageProcessor:
         fast_image_processor_class: type | None = None,
         image_processor_classes: dict[str, type] | None = None,
         exist_ok: bool = False,
-        overrides_ok: bool = False,
     ):
         """
         Register a new image processor for this class.
@@ -744,8 +743,6 @@ class AutoImageProcessor:
             exist_ok (`bool`, *optional*, defaults to `False`):
                 If `True`, allow overwriting existing registrations. Note that this will not overwrite anything if the config is
                 a local `transformers` class.
-            overrides_ok (`bool`, *optional*, defaults to `False`):
-                If `True`, allow overwriting existing registrations, even if it is mapped to an existing `transformers` local config.
         """
         # Handle backward compatibility: convert old parameters to new format
         if image_processor_classes is None:
@@ -777,9 +774,7 @@ class AutoImageProcessor:
                     f"Image processor class for backend '{backend_key}' must inherit from `BaseImageProcessor`. "
                     f"Got: {processor_class}"
                 )
-        IMAGE_PROCESSOR_MAPPING.register(
-            config_class, image_processor_classes, exist_ok=exist_ok, overrides_ok=overrides_ok
-        )
+        IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_classes, exist_ok=exist_ok)
 
 
 __all__ = ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"]

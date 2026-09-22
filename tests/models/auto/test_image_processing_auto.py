@@ -253,7 +253,6 @@ class AutoImageProcessorTest(unittest.TestCase):
                 CLIPConfig,
                 image_processor_classes={"cv2": Cv2ImageProcessor},
                 exist_ok=True,
-                overrides_ok=True,
             )
 
             with tempfile.TemporaryDirectory() as tmpdirname:
