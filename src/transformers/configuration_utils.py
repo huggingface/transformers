@@ -572,10 +572,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             layers = getattr(self, layer_types, None)
             if not (layers is not None and hasattr(self, "num_hidden_layers")):
                 return
-            if self.is_custom_code():
-                # Custom code may have legacy layer types that need to be remapped
-                remap_legacy_layer_types(config=self)
-                layers = getattr(self, layer_types, None)
+
             if not all(layer_type in allowed_types for layer_type in layers):
                 raise ValueError(f"The `{layer_types}` entries must be in {allowed_types} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
