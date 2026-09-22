@@ -287,14 +287,20 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
         overflow_strategy: str | None = None,
         **kwargs,
     ) -> np.ndarray:
+        if kwargs.get("num_frames") is not None:
+            raise ValueError(
+                f"Sampling with `num_frames` is not supported for {self.__class__.__name__}. "
+                "Please use `fps` and `max_frames` to control video sampling."
+            )
+
         # 1) Sample to match the taget `fps` if it is set, otherwise keep the whole video
         if fps is None:
             indices = np.arange(metadata.total_num_frames, dtype=int)
         else:
-            if metadata.fps is None:
+            if metadata.fps is None or metadata.duration is None:
                 raise ValueError(
-                    "Asked to sample uniformly with `fps`, but no video metadata was provided or "
-                    "`fps` is missing. Please pass in `VideoMetadata` object with valid `fps`."
+                    "Asked to sample uniformly with `fps`, but no `fps` or `duration` was provided in "
+                    "video metadata. Please pass in `VideoMetadata` object with valid `fps` and `duration`."
                 )
             step = metadata.fps / fps  # native frames per sampled frame
             num_sampled = max(1, int(metadata.duration * fps))
@@ -309,11 +315,18 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
                     f"You must pass `max_frames` when requesting an overflow_strategy={overflow_strategy}!"
                 )
 
-            if overflow_strategy == "truncate":
+            # If video is too short, do no accidentally pad inputs when trying to re-sample
+            if len(indices) <= max_frames:
+                pass
+            elif overflow_strategy == "truncate":
                 indices = indices[:max_frames]
             elif overflow_strategy == "uniform":
                 linspace_idx = np.linspace(0, len(indices) - 1, max_frames, dtype=int)
                 indices = np.array([indices[i] for i in linspace_idx], dtype=int)
+            else:
+                raise ValueError(
+                    f"You passed `overflow_strategy={overflow_strategy}` but expected one of ['truncate', 'uniform']"
+                )
 
         return indices
 

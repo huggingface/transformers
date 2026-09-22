@@ -51,8 +51,6 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
         Spatial pooling kernel size applied after patchification.
     exclude_timestamps (`bool`, *optional*):
         Whether to exclude frame timestamps from the video placeholder expansion.
-    load_audio_from_video (`bool`, *optional*):
-        Whether to load the audio track of an input video or not.
     max_frames (`int`, *optional*):
         The maximum number of frames to sample. If set, the sampled indices will
         be uniformly re-sampled to fit the budget.
@@ -67,9 +65,8 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
     pooling_kernel_size: int
 
     exclude_timestamps: bool
-    load_audio_from_video: bool
-    max_frames: int
-    overflow_strategy: str
+    max_frames: int | None
+    overflow_strategy: str | None
 
 
 class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):

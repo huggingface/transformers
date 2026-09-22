@@ -132,7 +132,9 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
 
             video_processing.do_sample_frames = True
             encoded = video_processing(video_inputs[0], return_tensors="pt", fps=None, max_frames=3)[self.input_name]
-            encoded_batched = video_processing(video_inputs, return_tensors="pt", fps=None, max_frames=3)[self.input_name]
+            encoded_batched = video_processing(video_inputs, return_tensors="pt", fps=None, max_frames=3)[
+                self.input_name
+            ]
             self.assertEqual(encoded.shape[1], 3)
             self.assertEqual(encoded_batched.shape[1], 3)
 
