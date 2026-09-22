@@ -41,6 +41,13 @@ class TrainSettings:
             bf16 needs no loss scaling, which removes a whole class of silent divergence.
         checkpoint_seconds: wall time between checkpoints.
         log_every: steps between log lines.
+        stage: ``"pretrain"`` trains everything on reanalysis, where the label is the next state and the
+            corpus is effectively unlimited. ``"finetune"`` freezes the backbone and trains only the storm
+            heads on best tracks. That split is what makes an 89M model safe to point at 55,230 track
+            points: under a million parameters are ever fitted to them.
+        ema_decay: exponential moving average of the weights, evaluated instead of the raw ones. Cheap,
+            and it consistently helps on small fine-tuning sets where the last step is noisy.
+        early_stopping_patience: validation evaluations without improvement before stopping. ``0`` disables.
     """
 
     learning_rate: float = 3e-4
@@ -56,6 +63,9 @@ class TrainSettings:
     hub_repo: str | None = None
     hub_push_seconds: float = 900.0
     log_every: int = 10
+    stage: str = "pretrain"
+    ema_decay: float = 0.999
+    early_stopping_patience: int = 0
 
 
 def build_scheduler(optimizer, settings: TrainSettings):
@@ -120,6 +130,14 @@ class Trainer:
         )
         self.state = TrainingState()
         self._stop = False
+        self._since_improvement = 0
+        self.ema = None
+        if settings.ema_decay and settings.ema_decay > 0:
+            self.ema = {name: p.detach().clone() for name, p in model.named_parameters() if p.requires_grad}
+        if settings.stage == "finetune":
+            trainable, total = model.freeze_backbone(True)
+            print(f"[train] fine-tuning stage: {trainable:,} of {total:,} parameters trainable "
+                  f"({trainable / total:.1%}) -- the backbone is frozen", flush=True)
         self._install_signal_handlers()
 
     def _install_signal_handlers(self) -> None:
@@ -200,7 +218,21 @@ class Trainer:
                 self.state.step += 1
                 self.state.samples_seen += int(batch["calendar"].shape[0]) * settings.grad_accum
                 self.state.wall_seconds = time.time() - started
-                self.state.best_loss = min(self.state.best_loss, parts["total"])
+                if parts["total"] < self.state.best_loss:
+                    self.state.best_loss = parts["total"]
+                    self._since_improvement = 0
+                else:
+                    self._since_improvement += 1
+                if self.ema is not None:
+                    decay = settings.ema_decay
+                    with torch.no_grad():
+                        for name, parameter in self.model.named_parameters():
+                            if name in self.ema:
+                                self.ema[name].mul_(decay).add_(parameter.detach(), alpha=1 - decay)
+                if (settings.early_stopping_patience
+                        and self._since_improvement >= settings.early_stopping_patience):
+                    print(f"[train] no improvement for {self._since_improvement} steps; stopping", flush=True)
+                    self._stop = True
 
                 if self.state.step % settings.log_every == 0:
                     self.state.history.append({"step": self.state.step, **parts})
@@ -219,6 +251,33 @@ class Trainer:
         self.save(force=True)
         print(f"[train] stopped at step {self.state.step} after {self.state.wall_seconds / 60:.1f} min", flush=True)
         return self.state
+
+
+def apply_ema(model: NatureV1, ema: dict) -> None:
+    """Copy the averaged weights into the model, for evaluation or export."""
+    with torch.no_grad():
+        for name, parameter in model.named_parameters():
+            if name in ema:
+                parameter.copy_(ema[name])
+
+
+def next_state_targets(sequence: torch.Tensor, lead_steps: int = 1) -> dict:
+    """
+    Build self-supervised targets from a reanalysis sequence: the future is the label.
+
+    This is what makes stage one unlimited. Given frames ``t-5..t``, the target is the state at ``t+k``,
+    which needs no annotation and exists for every one of the 92,040 timesteps in the archive. No storm
+    database is involved and none is needed -- the backbone is learning what the atmosphere does, not
+    what a hurricane is called.
+
+    Args:
+        sequence: ``(B, T + lead_steps, N, C)`` a window of consecutive analysis states.
+        lead_steps: how far ahead to predict.
+
+    Returns:
+        ``{"analysis": inputs, "field_target": future}``.
+    """
+    return {"analysis": sequence[:, :-lead_steps], "field_target": sequence[:, -1]}
 
 
 def load_for_inference(

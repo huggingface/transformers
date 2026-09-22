@@ -41,6 +41,13 @@ SURFACE_FIELDS = (
     "precip_rate",  # mm/hr
     "cloud",        # cloud fraction
 )
+#: Rapid-intensification thresholds, in knots gained over 24 hours. 30 kt is the National Hurricane
+#: Center's definition; the others bracket it so the head learns a curve rather than one cut point.
+#: Measured base rates in the Atlantic record: 6.65%, 4.11% and 2.24% respectively.
+RI_THRESHOLDS_KT = (25.0, 30.0, 35.0)
+#: Wind-radius thresholds (kt) reported per quadrant NE/SE/SW/NW -- the storm's actual wind footprint.
+WIND_RADII_THRESHOLDS_KT = (34.0, 50.0, 64.0)
+
 #: "Will it rain or be sunny" as a calibrated categorical, not a threshold on a regression.
 WEATHER_TYPES = ("clear", "partly_cloudy", "overcast", "light_rain", "heavy_rain", "thunderstorm", "snow")
 
@@ -60,6 +67,10 @@ class NatureConfig:
         hidden_size / num_layers / num_heads / num_kv_heads / head_dim: the processor.
         latent_points: samples on the shared global mesh everything is read onto.
         lead_times_hours: forecast lead times the heads predict at.
+        environment_channels: channels of the slow environmental field -- sea-surface temperature, deep
+            ocean heat content, vertical wind shear, mid-level humidity. These are the actual physical
+            predictors of rapid intensification, so they are supplied explicitly rather than left to be
+            inferred from imagery.
         track_modes: how many distinct scenarios the track head may propose. This is what lets the model
             say "most likely it recurves, but there is a 22% branch where it does not" rather than
             averaging the two into a track that goes somewhere neither would.
@@ -68,6 +79,7 @@ class NatureConfig:
 
     satellite_channels: int = 6
     analysis_channels: int = 24
+    environment_channels: int = 8
     hidden_size: int = 512
     num_layers: int = 17
     num_heads: int = 8
@@ -204,6 +216,77 @@ class TrackHead(nn.Module):
         }
 
 
+class EyewallHead(nn.Module):
+    """
+    The storm's core: peak eyewall wind, the radius it occurs at, and the wind footprint around it.
+
+    Radius of maximum wind is the direct measure of eyewall size, and it is brutally scarce -- reported
+    on under 5% of Atlantic best-track points, almost all of them after 2004. The wind radii (how far
+    34, 50 and 64 kt winds extend into each quadrant) are far better populated and describe the same
+    structure from outside in, so they are predicted jointly: they supervise the same representation and
+    carry it when RMW is missing, which is most of the time.
+    """
+
+    def __init__(self, config: "NatureConfig") -> None:
+        super().__init__()
+        self.leads = config.num_leads
+        self.quadrants = 4
+        self.thresholds = len(WIND_RADII_THRESHOLDS_KT)
+        hidden = config.hidden_size
+        self.peak_wind = nn.Linear(hidden, config.num_leads * 2)        # mean, log-variance
+        self.rmw = nn.Linear(hidden, config.num_leads * 2)
+        self.wind_radii = nn.Linear(hidden, config.num_leads * self.thresholds * self.quadrants * 2)
+
+    def forward(self, summary: torch.Tensor) -> dict[str, torch.Tensor]:
+        batch = summary.shape[0]
+        peak = self.peak_wind(summary).view(batch, self.leads, 2)
+        rmw = self.rmw(summary).view(batch, self.leads, 2)
+        radii = self.wind_radii(summary).view(batch, self.leads, self.thresholds, self.quadrants, 2)
+        return {
+            "eyewall_peak_wind_kt": peak[..., 0],
+            "eyewall_peak_wind_log_var": peak[..., 1].clamp(-8.0, 8.0),
+            # Softplus keeps a radius positive without a hard clamp that would kill its gradient.
+            "eyewall_rmw_nmi": F.softplus(rmw[..., 0]) + 1.0,
+            "eyewall_rmw_log_var": rmw[..., 1].clamp(-8.0, 8.0),
+            "wind_radii_nmi": F.softplus(radii[..., 0]),
+            "wind_radii_log_var": radii[..., 1].clamp(-8.0, 8.0),
+        }
+
+
+class RapidIntensificationHead(nn.Module):
+    """
+    Rapid intensification: will this storm gain 25/30/35 kt in the next 24 hours.
+
+    RI fires on about 4% of eligible track points at the 30-knot threshold, which is the number that
+    dictates everything about how this head is built and judged. A classifier that always answers "no"
+    scores 96% accuracy and saves nobody, so the loss is weighted toward the positive class and the
+    metrics that matter are precision, recall and Brier score, not accuracy.
+
+    Alongside the classification it regresses the actual 24-hour intensity change, which is a denser
+    signal than the rare binary and pulls the shared representation toward the physics -- shear,
+    ocean heat, inner-core structure -- rather than toward the threshold itself.
+    """
+
+    def __init__(self, config: "NatureConfig") -> None:
+        super().__init__()
+        self.thresholds = RI_THRESHOLDS_KT
+        hidden = config.hidden_size
+        self.trunk = nn.Sequential(nn.Linear(hidden, hidden), nn.SiLU(), nn.Linear(hidden, hidden // 2), nn.SiLU())
+        self.classifier = nn.Linear(hidden // 2, len(RI_THRESHOLDS_KT))
+        self.magnitude = nn.Linear(hidden // 2, 2)   # 24h wind change: mean and log-variance
+        self.onset = nn.Linear(hidden // 2, config.num_leads)   # when in the window it is most likely
+
+    def forward(self, summary: torch.Tensor) -> dict[str, torch.Tensor]:
+        features = self.trunk(summary)
+        magnitude = self.magnitude(features)
+        return {
+            "ri_logits": self.classifier(features),
+            "ri_delta_wind_kt": magnitude[..., 0],
+            "ri_delta_log_var": magnitude[..., 1].clamp(-8.0, 8.0),
+            "ri_onset_logits": self.onset(features),
+        }
+
+
 class NatureV1(nn.Module):
     """
     The model. Reads any number of geolocated sources, forecasts fields and storm behaviour with
@@ -224,6 +307,10 @@ class NatureV1(nn.Module):
 
         self.satellite_encoder = SourceEncoder(config, config.satellite_channels, geometry, config.encode_radius_km)
         self.analysis_encoder = SourceEncoder(config, config.analysis_channels, geometry, config.encode_radius_km * 3)
+        # The environment moves slowly and over long distances, so it is read with a much wider radius.
+        self.environment_encoder = SourceEncoder(
+            config, config.environment_channels, geometry, config.encode_radius_km * 6
+        )
         self.mesh_seed = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         # Calendar time matters physically -- solar angle, season -- so it is given, not inferred.
         self.time_embed = nn.Sequential(nn.Linear(6, 256), nn.SiLU(), nn.Linear(256, config.hidden_size))
@@ -249,6 +336,8 @@ class NatureV1(nn.Module):
         self.landfall_head = nn.Linear(hidden, leads * 2)      # logit, and log-variance of the timing
         self.intensity_head = nn.Linear(hidden, leads * 4)     # max wind, min pressure, each with log-variance
         self.enso_head = nn.Linear(hidden, 2)                  # Nino 3.4 index and its log-variance
+        self.eyewall_head = EyewallHead(config)
+        self.ri_head = RapidIntensificationHead(config)
 
         self.apply(self._init)
         self._links: dict[tuple, GridLink] = {}
@@ -276,6 +365,8 @@ class NatureV1(nn.Module):
         analysis: torch.Tensor | None,
         analysis_grid: FieldGrid | None,
         calendar: torch.Tensor,
+        environment: torch.Tensor | None = None,
+        environment_grid: FieldGrid | None = None,
         neighbours: int = 24,
     ) -> torch.Tensor:
         """
@@ -284,9 +375,10 @@ class NatureV1(nn.Module):
         Sources are optional and independent: a scene with no satellite coverage, or an analysis-only
         step, simply contributes nothing rather than breaking the forward pass.
         """
-        if satellite is None and analysis is None:
-            raise ValueError("Give at least one of satellite or analysis input.")
-        reference = satellite if satellite is not None else analysis
+        available = [x for x in (satellite, analysis, environment) if x is not None]
+        if not available:
+            raise ValueError("Give at least one of satellite, analysis or environment input.")
+        reference = available[0]
         batch, steps = reference.shape[0], reference.shape[1]
         folded = batch * steps
         latent = self.latent_grid
@@ -303,6 +395,11 @@ class NatureV1(nn.Module):
             total = total + self.analysis_encoder(
                 analysis.reshape(folded, analysis_grid.num_points, -1), mesh, link
             )
+        if environment is not None:
+            link = self.link(latent, environment_grid, neighbours)
+            total = total + self.environment_encoder(
+                environment.reshape(folded, environment_grid.num_points, -1), mesh, link
+            )
         total = total + self.time_embed(calendar).reshape(folded, 1, -1)
         return total.view(batch, steps, latent.num_points, -1)
 
@@ -313,6 +410,8 @@ class NatureV1(nn.Module):
         analysis: torch.Tensor | None = None,
         analysis_grid: FieldGrid | None = None,
         calendar: torch.Tensor | None = None,
+        environment: torch.Tensor | None = None,
+        environment_grid: FieldGrid | None = None,
         output_grid: FieldGrid | None = None,
         neighbours: int = 24,
     ) -> dict[str, torch.Tensor]:
@@ -330,7 +429,8 @@ class NatureV1(nn.Module):
             A dict of forecasts. Gridded entries are ``(B, P, leads, ...)``; storm-scale entries are
             ``(B, ...)``. Every one carries an uncertainty.
         """
-        latent = self.encode(satellite, satellite_grid, analysis, analysis_grid, calendar, neighbours)
+        latent = self.encode(satellite, satellite_grid, analysis, analysis_grid, calendar,
+                             environment, environment_grid, neighbours)
         for block in self.blocks:
             latent = block(latent, self.latent_grid)
         latent = self.norm(latent)
@@ -370,10 +470,37 @@ class NatureV1(nn.Module):
             "enso_mean": enso[..., 0],
             "enso_log_var": enso[..., 1].clamp(-10.0, 10.0),
             **self.track_head(summary),
+            **self.eyewall_head(summary),
+            **self.ri_head(summary),
         }
 
     def num_parameters(self) -> int:
         return sum(p.numel() for p in self.parameters())
+
+    def storm_head_parameters(self):
+        """
+        The heads that learn from best-track labels, which is the scarce data.
+
+        Freezing everything else and training only these is what keeps an 88M network from memorising
+        two thousand storms: the number of parameters actually fit to the small labels is this, not the
+        whole model.
+        """
+        for module in (self.track_head, self.eyewall_head, self.ri_head,
+                       self.landfall_head, self.intensity_head, self.summary_pool, self.summary_norm):
+            yield from module.parameters()
+
+    def freeze_backbone(self, frozen: bool = True) -> tuple[int, int]:
+        """
+        Freeze everything except the storm heads. Returns ``(trainable, total)`` parameter counts.
+
+        Use after self-supervised pretraining on reanalysis, before fine-tuning on best tracks.
+        """
+        for parameter in self.parameters():
+            parameter.requires_grad = not frozen
+        for parameter in self.storm_head_parameters():
+            parameter.requires_grad = True
+        trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        return trainable, self.num_parameters()
 
 
 def calendar_features(timestamps: torch.Tensor) -> torch.Tensor:

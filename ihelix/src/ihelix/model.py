@@ -282,7 +282,32 @@ def init_weights(module: nn.Module, config: IHelixConfig) -> None:
             module.level_bias.zero_()
 
 
-class IHelixField(nn.Module):
+class GradientCheckpointing:
+    """
+    Mixin adding ``gradient_checkpointing_enable()`` to a stack of blocks.
+
+    Checkpointing trades compute for memory: a block's activations are thrown away on the forward pass
+    and recomputed during the backward one, costing roughly a third more time and saving most of the
+    activation memory. On a large card that is not a consolation prize -- it is how you convert spare
+    VRAM into a bigger batch or a longer history, which is usually worth far more than the time it costs.
+    """
+
+    gradient_checkpointing: bool = False
+
+    def gradient_checkpointing_enable(self, enable: bool = True) -> None:
+        """Turn activation recomputation on or off for every block."""
+        self.gradient_checkpointing = enable
+
+    def _run_blocks(self, x: torch.Tensor, grid: FieldGrid) -> torch.Tensor:
+        for block in self.blocks:
+            if self.gradient_checkpointing and self.training and x.requires_grad:
+                x = torch.utils.checkpoint.checkpoint(block, x, grid, use_reentrant=False)
+            else:
+                x = block(x, grid)
+        return x
+
+
+class IHelixField(GradientCheckpointing, nn.Module):
     """
     The processor: blocks operating directly on the grid the data lives on.
 
@@ -314,9 +339,7 @@ class IHelixField(nn.Module):
             values = values.unsqueeze(1)
         if values.shape[-2] != grid.num_points:
             raise ValueError(f"Field has {values.shape[-2]} samples but the grid has {grid.num_points}.")
-        x = self.embed(values)
-        for block in self.blocks:
-            x = block(x, grid)
+        x = self._run_blocks(self.embed(values), grid)
         out = self.head(self.norm(x))
         return out.squeeze(1) if squeezed else out
 
@@ -324,7 +347,7 @@ class IHelixField(nn.Module):
         return sum(p.numel() for p in self.parameters())
 
 
-class IHelixFieldModel(nn.Module):
+class IHelixFieldModel(GradientCheckpointing, nn.Module):
     """
     Encode onto a fixed internal mesh, process there, decode back out.
 
@@ -405,9 +428,7 @@ class IHelixFieldModel(nn.Module):
             seed + self.encoder(seed, source, self.link(latent, input_grid, self.config.encode_neighbours))
         )
 
-        x = x.view(batch, steps, latent.num_points, -1)
-        for block in self.blocks:
-            x = block(x, latent)
+        x = self._run_blocks(x.view(batch, steps, latent.num_points, -1), latent)
         x = self.norm(x).reshape(batch * steps, latent.num_points, -1)
 
         target_seed = self.latent_token.expand(batch * steps, output_grid.num_points, -1)

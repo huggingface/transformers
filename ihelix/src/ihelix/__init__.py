@@ -42,9 +42,9 @@ Made by Nathan.
 from .attention import CrossAttention, GeodesicAttention, GridLink, IndexAttention, RelativeEncoder
 from .geometry import EARTH_RADIUS_KM, Axis, Geometry
 from .grid import FieldGrid, fibonacci_sphere, latlon_grid
-from .model import IHelixBlock, IHelixConfig, IHelixField, IHelixFieldModel, TemporalStrand
+from .model import GradientCheckpointing, IHelixBlock, IHelixConfig, IHelixField, IHelixFieldModel, TemporalStrand
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "Nathan"
 
 __all__ = [
@@ -54,6 +54,7 @@ __all__ = [
     "FieldGrid",
     "GeodesicAttention",
     "Geometry",
+    "GradientCheckpointing",
     "GridLink",
     "IHelixBlock",
     "IHelixConfig",

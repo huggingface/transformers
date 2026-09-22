@@ -23,6 +23,8 @@ they are computed once at startup and amortize to nothing.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import torch
 
 from .geometry import Geometry
@@ -191,6 +193,32 @@ class FieldGrid:
         )
 
     @classmethod
+    def source(cls, coords: torch.Tensor, geometry: Geometry, weights: torch.Tensor | None = None) -> FieldGrid:
+        """
+        A grid that is only ever read *from*, never processed on.
+
+        A satellite scene is the usual case: the model cross-attends to it and never runs a block on it,
+        so its own neighbour graph and hierarchy are built and then never touched. Skipping them is the
+        difference between a quadratic neighbour search over a few hundred thousand pixels and no search
+        at all -- which is what makes full-resolution imagery affordable as an input.
+        """
+        coords = torch.as_tensor(coords)
+        grid = cls.__new__(cls)
+        grid.geometry = geometry
+        grid.coords = coords
+        grid.points = geometry.embed(coords)
+        if weights is None:
+            weights = torch.ones(coords.shape[0], dtype=coords.dtype, device=coords.device)
+        weights = torch.as_tensor(weights, dtype=coords.dtype, device=coords.device)
+        grid.weights = weights / weights.sum().clamp_min(1e-12)
+        grid.cluster_size = 0
+        # Anything that would need these is a processing step, which a source grid never takes part in.
+        grid.neighbours = grid.neighbour_distances = grid.neighbour_offsets = None
+        grid.neighbour_alignment = grid.cluster_members = grid.cluster_valid = None
+        grid.cluster_points = grid.cluster_weights = grid.order = None
+        return grid
+
+    @classmethod
     def from_points(
         cls,
         coords: torch.Tensor,
@@ -245,6 +273,40 @@ class FieldGrid:
         # One past the fullest neighbourhood: the K-th neighbour then lies strictly outside the cutoff,
         # which is what guarantees nothing inside it was dropped.
         return min(int(within.max()) + 1, self.num_points)
+
+    def save(self, path: str | Path) -> Path:
+        """
+        Write the built grid to disk.
+
+        Building one is the expensive part -- the neighbour search and the hierarchy -- and for a fixed
+        forecast grid the answer never changes between runs. Saving turns a slow startup into a load.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "tensors": {k: v for k, v in self.__dict__.items() if isinstance(v, torch.Tensor)},
+                "cluster_size": self.cluster_size,
+                "axes": [
+                    {"kind": a.kind, "scale": a.scale, "period": a.period, "reference": a.reference}
+                    for a in self.geometry.axes
+                ],
+            },
+            path,
+        )
+        return path
+
+    @classmethod
+    def load(cls, path: str | Path, map_location: str = "cpu") -> FieldGrid:
+        """Restore a grid written by :meth:`save`, without redoing the neighbour search."""
+        from .geometry import Axis
+
+        payload = torch.load(path, map_location=map_location, weights_only=False)
+        grid = cls.__new__(cls)
+        grid.__dict__.update(payload["tensors"])
+        grid.geometry = Geometry([Axis(**spec) for spec in payload["axes"]])
+        grid.cluster_size = payload["cluster_size"]
+        return grid
 
     def to(self, device: torch.device | str) -> FieldGrid:
         """Move every cached tensor to ``device``."""

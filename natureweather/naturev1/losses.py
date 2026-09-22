@@ -102,6 +102,48 @@ def weather_type_loss(logits: torch.Tensor, target: torch.Tensor, mask: torch.Te
     return loss.mean()
 
 
+def focal_bce(
+    logits: torch.Tensor, target: torch.Tensor, alpha: float = 0.75, gamma: float = 2.0,
+    mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """
+    Focal binary cross-entropy, for a target that is almost always zero.
+
+    Rapid intensification fires on about 4% of eligible track points, so plain cross-entropy is dominated
+    by the easy negatives and the model learns to say "no" forever. Focal loss down-weights examples it
+    already gets right by ``(1 - p)^gamma``, so the gradient keeps coming from the hard and the rare;
+    ``alpha`` tilts the remaining weight toward positives.
+
+    Accuracy is not the metric for this head. Precision, recall and Brier score are.
+    """
+    probability = torch.sigmoid(logits)
+    p_t = probability * target + (1 - probability) * (1 - target)
+    alpha_t = alpha * target + (1 - alpha) * (1 - target)
+    loss = alpha_t * (1 - p_t).clamp_min(1e-6) ** gamma * F.binary_cross_entropy_with_logits(
+        logits, target, reduction="none"
+    )
+    if mask is not None:
+        loss = loss * mask
+        return loss.sum() / mask.sum().clamp_min(1.0)
+    return loss.mean()
+
+
+def masked_gaussian_nll(mean: torch.Tensor, log_var: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """
+    Gaussian likelihood that simply skips missing targets, taking NaN as "not observed".
+
+    Radius of maximum wind is reported on under 5% of best-track points and wind radii only since 2004.
+    Treating those gaps as zeros would teach the model that storms routinely have no eyewall; masking
+    them means the head learns from the points that were actually measured and stays silent elsewhere.
+    """
+    observed = torch.isfinite(target)
+    if not bool(observed.any()):
+        return torch.zeros((), device=mean.device, dtype=mean.dtype)
+    safe = torch.where(observed, target, torch.zeros_like(mean))
+    loss = 0.5 * (log_var + (safe - mean) ** 2 / log_var.exp() + math.log(2 * math.pi))
+    return (loss * observed).sum() / observed.sum().clamp_min(1)
+
+
 #: Per-field loss weights. Pressure and wind carry the storm's structure, so they lead; precipitation is
 #: noisy and heavy-tailed, so it is damped to stop it dominating the gradient.
 FIELD_WEIGHTS = {
@@ -123,7 +165,8 @@ def total_loss(outputs: dict, batch: dict, field_names: tuple[str, ...], weights
     Returns:
         ``(loss, parts)`` where ``parts`` holds detached scalars for logging.
     """
-    weights = {"field": 1.0, "type": 0.3, "track": 1.0, "landfall": 0.5, "intensity": 0.5, "enso": 0.1, **(weights or {})}
+    weights = {"field": 1.0, "type": 0.3, "track": 1.0, "landfall": 0.5, "intensity": 0.5, "enso": 0.1,
+               "ri": 2.0, "ri_delta": 0.5, "eyewall": 1.0, **(weights or {})}
     device = outputs["field_mean"].device
     parts: dict[str, float] = {}
     loss = torch.zeros((), device=device)
@@ -165,6 +208,41 @@ def total_loss(outputs: dict, batch: dict, field_names: tuple[str, ...], weights
                             batch["intensity_target"], batch.get("intensity_mask"))
         loss = loss + weights["intensity"] * term
         parts["intensity"] = float(term.detach())
+
+    if "ri_target" in batch:
+        # Classification over thresholds, plus the denser regression on the actual 24-hour change, which
+        # keeps the representation pointed at the physics rather than at the cut point.
+        term = focal_bce(outputs["ri_logits"], batch["ri_target"], mask=batch.get("ri_mask"))
+        loss = loss + weights["ri"] * term
+        parts["ri"] = float(term.detach())
+        if "ri_delta_target" in batch:
+            delta = masked_gaussian_nll(
+                outputs["ri_delta_wind_kt"], outputs["ri_delta_log_var"], batch["ri_delta_target"]
+            )
+            loss = loss + weights["ri_delta"] * delta
+            parts["ri_delta"] = float(delta.detach())
+
+    if "eyewall_target" in batch:
+        # Peak wind is well observed; RMW is not; wind radii sit in between. All three are masked, so
+        # each contributes exactly where it was measured.
+        peak = masked_gaussian_nll(
+            outputs["eyewall_peak_wind_kt"], outputs["eyewall_peak_wind_log_var"], batch["eyewall_target"]
+        )
+        term = peak
+        parts["eyewall_peak"] = float(peak.detach())
+        if "rmw_target" in batch:
+            rmw = masked_gaussian_nll(
+                outputs["eyewall_rmw_nmi"], outputs["eyewall_rmw_log_var"], batch["rmw_target"]
+            )
+            term = term + rmw
+            parts["eyewall_rmw"] = float(rmw.detach())
+        if "wind_radii_target" in batch:
+            radii = masked_gaussian_nll(
+                outputs["wind_radii_nmi"], outputs["wind_radii_log_var"], batch["wind_radii_target"]
+            )
+            term = term + radii
+            parts["wind_radii"] = float(radii.detach())
+        loss = loss + weights["eyewall"] * term
 
     if "enso_target" in batch:
         term = gaussian_nll(outputs["enso_mean"], outputs["enso_log_var"], batch["enso_target"])

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "naturev1"
-version = "0.1.0"
+version = "0.2.0"
 description = "Probabilistic weather and hurricane-track model over geolocated fields, with live GOES ingest"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,12 +20,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Atmospheric Science",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = ["torch>=2.5", "ihelix>=0.1.0", "numpy>=1.24"]
+dependencies = ["torch>=2.5", "ihelix>=0.2.0", "numpy>=1.24"]
 
 [project.optional-dependencies]
 satellite = ["xarray>=2023.1", "netCDF4>=1.6"]
+corpora = ["xarray>=2023.1", "zarr>=2.16", "gcsfs>=2023.1"]
 hub = ["huggingface_hub>=0.20"]
-all = ["xarray>=2023.1", "netCDF4>=1.6", "huggingface_hub>=0.20"]
+all = ["xarray>=2023.1", "netCDF4>=1.6", "huggingface_hub>=0.20", "zarr>=2.16", "gcsfs>=2023.1"]
 
 [project.urls]
 Source = "https://github.com/Wisk-inc/transformers/tree/main/natureweather"
