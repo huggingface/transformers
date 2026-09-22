@@ -182,20 +182,20 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention" if (i + 1) % interval_pattern else "qwen_sparse_attention"
+                "linear_attention" if (i + 1) % interval_pattern else "indexed_attention"
                 for i in range(self.num_hidden_layers)
             ]
         # The real checkpoint contains "full_attention" entries for layers that are actually using an indexer
         elif "full_attention" in self.layer_types:
             self.layer_types = [
-                "qwen_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
+                "indexed_attention" if layer == "full_attention" else layer for layer in self.layer_types
             ]
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "qwen_sparse_attention"})
+        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "indexed_attention"})
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -998,7 +998,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "allow_is_causal_skip": False,
             }
             causal_mask_mapping = {
-                "qwen_sparse_attention": create_causal_mask(**mask_kwargs),
+                "indexed_attention": create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
@@ -1017,7 +1017,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping["qwen_sparse_attention"],
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 conv_mask=conv_mask,
                 past_key_values=past_key_values,
                 ple_input_ids=ple_input_ids,
