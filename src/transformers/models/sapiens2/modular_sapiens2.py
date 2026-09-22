@@ -38,7 +38,6 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...models.dinov3_vit.modeling_dinov3_vit import DINOv3ViTBackboneOutput
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
