@@ -1,0 +1,183 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""The NVFP4 arm of the fine-grained quantizer: everything modelopt's two-level scales need
+that the other formats do not. Everything else is inherited.
+"""
+
+from ..utils import logging
+from .quantizer_finegrained import FineGrainedHfQuantizer
+
+
+logger = logging.get_logger(__name__)
+
+
+class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
+    """NVFP4, in both key layouts modelopt ships: per expert per projection, or stacked per layer.
+
+    What is NVFP4's alone, and why the base does not carry it:
+
+    * the two-level globals. `weight_scale_2` has no slot in a one-level fold, so `dequantize=True`
+      is refused here rather than tested for in the shared path.
+    * the packed E2M1 weights, which need a uint8 -> int8 BITCAST (`copy_` would convert and
+      corrupt anything >= 128) and an anchored `.weight` source so it cannot swallow
+      `weight_scale` / `weight_scale_2`.
+    """
+
+    def _assert_dequantize_supported(self) -> None:
+        raise NotImplementedError(
+            "`dequantize=True` is not supported for nvfp4 checkpoints: their two-level scales "
+            "cannot be folded into a full-precision weight by this path. Load them quantized on a "
+            "GPU that serves NVFP4, or start from a bf16 checkpoint."
+        )
+
+    def get_weight_conversions(self):
+        return self._nvfp4_conversions() if self.pre_quantized else []
+
+    def update_weight_conversions(self, weight_conversions):
+        """The base chain, with every `.weight` source anchored and bitcast to the int8 view."""
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained_conversions import FineGrainedViewPackedInt8
+
+        if self.pre_quantized:
+            updated = []
+            for conv in weight_conversions:
+                if isinstance(conv, WeightConverter) and any(p.endswith(".weight") for p in conv.source_patterns):
+                    conv = WeightConverter(
+                        source_patterns=[p + "$" if p.endswith(".weight") else p for p in conv.source_patterns],
+                        target_patterns=conv.target_patterns,
+                        operations=[*conv.operations, FineGrainedViewPackedInt8(self)],
+                    )
+                updated.append(conv)
+            weight_conversions = updated
+        return super().update_weight_conversions(weight_conversions)
+
+    def _nvfp4_conversions(self):
+        """modelopt NVFP4 scales (`weight_scale`, `weight_scale_2`, `input_scale`), in both layouts
+        a modelopt checkpoint ships them in: per expert per projection (GLM-5.2-NVFP4) or already
+        stacked per layer (the fused vLLM layout, Muse-Spark). A checkpoint matches one set and
+        the other never fires. Routed experts only — a generic `weight_scale*` rename would run
+        before converter collection and mangle these keys."""
+        # weight-only keeps activations bf16, so there is no activation global for a calibrated
+        # `input_scale` to land on — leave those keys to the unexpected-key filter
+        calibrated = self.quantization_config.activation_format != "bf16"
+        return self._nvfp4_per_expert_conversions(calibrated) + self._nvfp4_fused_conversions(calibrated)
+
+    def _nvfp4_per_expert_conversions(self, calibrated: bool):
+        """One key per expert per projection, as GLM-5.2-NVFP4 ships them.
+
+        `MergeModulelist` stamps each source with its expert index, which is what lets expert
+        parallelism keep only this rank's experts (`tensor_idx` in `core_model_loading`); without
+        it every rank collects all E values and the forward asserts on the per-expert count.
+        """
+        from ..core_model_loading import Concatenate, MergeModulelist, WeightConverter
+        from ..integrations.finegrained_conversions import FineGrainedInputScales, FineGrainedWeightGlobals
+
+        merge = [MergeModulelist(dim=0)]
+        expert = r"mlp\.experts\..*\."
+        converters = [
+            WeightConverter(
+                source_patterns=[rf"{expert}gate_proj\.weight_scale$", rf"{expert}up_proj\.weight_scale$"],
+                target_patterns="mlp.experts.gate_up_proj_scale_inv",
+                operations=[*merge, Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=rf"{expert}down_proj\.weight_scale$",
+                target_patterns="mlp.experts.down_proj_scale_inv",
+                operations=merge,
+            ),
+            # every second-level global of a layer in ONE converter: the gate|up stack's two
+            # calibrated halves merge into one global per expert by folding the up half's onto
+            # the down projection, so the weight globals and the down's input scale have to be
+            # decided together (`FineGrainedWeightGlobals`)
+            WeightConverter(
+                source_patterns=[
+                    rf"{expert}gate_proj\.weight_scale_2",
+                    rf"{expert}up_proj\.weight_scale_2",
+                    rf"{expert}down_proj\.weight_scale_2",
+                    *([rf"{expert}down_proj\.input_scale"] if calibrated else []),
+                ],
+                target_patterns=[
+                    "mlp.experts.gate_up_proj_weight_global_scale",
+                    "mlp.experts.down_proj_weight_global_scale",
+                    *(["mlp.experts.down_proj_input_global_scale"] if calibrated else []),
+                ],
+                operations=[*merge, FineGrainedWeightGlobals(self)],
+            ),
+        ]
+        if calibrated:
+            converters.append(
+                WeightConverter(
+                    source_patterns=[rf"{expert}gate_proj\.input_scale", rf"{expert}up_proj\.input_scale"],
+                    target_patterns="mlp.experts.gate_up_proj_input_global_scale",
+                    operations=[*merge, FineGrainedInputScales(self)],
+                )
+            )
+        return converters
+
+    def _nvfp4_fused_conversions(self, calibrated: bool):
+        """Already stacked per layer, as the vLLM fused layout and Muse-Spark ship them — so no
+        `MergeModulelist`, and the expert weights need the packed uint8 -> int8 view the
+        `.weight`-anchored rule gives the per-expert layout."""
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained_conversions import (
+            FineGrainedInputScales,
+            FineGrainedScaleContainer,
+            FineGrainedViewPackedInt8,
+            FineGrainedWeightGlobals,
+        )
+
+        converters = [
+            # the container cast the module's scale dtype needs; `_with_expert_layout_ops`
+            # adds the interleave and the swizzle on top (it re-adds the cast, which is
+            # idempotent)
+            WeightConverter(
+                source_patterns=rf"experts\.{proj}_weight_scale$",
+                target_patterns=f"experts.{proj}_scale_inv",
+                operations=[FineGrainedScaleContainer(self)],
+            )
+            for proj in ("gate_up_proj", "down_proj")
+        ]
+        converters.append(
+            # the same one-converter rule as the per-expert layout, over the fused keys
+            WeightConverter(
+                source_patterns=[
+                    r"experts\.gate_up_proj_weight_scale_2$",
+                    r"experts\.down_proj_weight_scale_2$",
+                    *([r"experts\.down_proj_input_scale$"] if calibrated else []),
+                ],
+                target_patterns=[
+                    "experts.gate_up_proj_weight_global_scale",
+                    "experts.down_proj_weight_global_scale",
+                    *(["experts.down_proj_input_global_scale"] if calibrated else []),
+                ],
+                operations=[FineGrainedWeightGlobals(self)],
+            )
+        )
+        if calibrated:
+            converters.append(
+                WeightConverter(
+                    source_patterns=r"experts\.gate_up_proj_input_scale$",
+                    target_patterns="experts.gate_up_proj_input_global_scale",
+                    operations=[FineGrainedInputScales(self)],
+                )
+            )
+        converters += [
+            WeightConverter(
+                source_patterns=rf"experts\.{proj}$",
+                target_patterns=f"experts.{proj}",
+                operations=[FineGrainedViewPackedInt8(self)],
+            )
+            for proj in ("gate_up_proj", "down_proj")
+        ]
+        return converters

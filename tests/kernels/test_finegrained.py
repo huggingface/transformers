@@ -113,6 +113,15 @@ def _loaded(kernel):
     )
 
 
+def _quantizer_for(config):
+    """The quantizer a `from_pretrained` would pick for this config. Since the arms were split
+    per scheme, constructing the base directly only exercises what every scheme shares."""
+    from transformers.quantizers.auto import AUTO_QUANTIZER_MAPPING
+
+    method = getattr(config.quant_method, "value", config.quant_method)
+    return AUTO_QUANTIZER_MAPPING[method](config)
+
+
 @require_torch
 class FineGrainedLoaderTest(unittest.TestCase):
     def test_loader_requires_every_symbol(self):
@@ -583,10 +592,13 @@ class FineGrainedValidateEnvironmentTest(unittest.TestCase):
             yield
 
     def _quantizer(self, pre_quantized, **cfg_kwargs):
-        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        # through the registry, so the test sees the class a `from_pretrained` would pick
+        from transformers.quantizers.auto import AUTO_QUANTIZER_MAPPING
         from transformers.utils.quantization_config import FineGrainedConfig
 
-        quantizer = FineGrainedHfQuantizer(FineGrainedConfig(**cfg_kwargs))
+        config = FineGrainedConfig(**cfg_kwargs)
+        method = getattr(config.quant_method, "value", config.quant_method)
+        quantizer = AUTO_QUANTIZER_MAPPING[method](config)
         quantizer.pre_quantized = pre_quantized
         return quantizer
 
@@ -759,14 +771,13 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         write into."""
         import re
 
-        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
         from transformers.utils.quantization_config import FineGrainedConfig
 
         for method, sources in (
             ("mxfp4", ("experts.gate_up_proj_blocks", "experts.gate_up_proj_scales")),
             ("fp8", ("mlp.down_proj.weight", "mlp.down_proj.weight_scale_inv")),
         ):
-            quantizer = FineGrainedHfQuantizer(FineGrainedConfig(quant_method=method, dequantize=True))
+            quantizer = _quantizer_for(FineGrainedConfig(quant_method=method, dequantize=True))
             quantizer.pre_quantized = True
             converters = quantizer.get_weight_conversions()
             with self.subTest(quant_method=method):
@@ -1134,10 +1145,9 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
             self.assertIs(out["experts.gate_up_proj_scale_inv"], affine)
 
     def _quantizer(self, quant_method):
-        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
         from transformers.utils.quantization_config import FineGrainedConfig
 
-        return FineGrainedHfQuantizer(FineGrainedConfig(quant_method=quant_method)).update_weight_conversions
+        return _quantizer_for(FineGrainedConfig(quant_method=quant_method)).update_weight_conversions
 
     def _arch_converters(self):
         from transformers.core_model_loading import Concatenate, MergeModulelist, WeightConverter
@@ -1352,12 +1362,11 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
     rank collects all E globals and the forward asserts on the per-expert count."""
 
     def _modelopt_conversions(self, **cfg_kwargs):
-        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.quantizers.quantizer_finegrained_nvfp4 import FineGrainedNvfp4HfQuantizer
         from transformers.utils.quantization_config import FineGrainedConfig
 
         cfg = FineGrainedConfig(quant_method="modelopt", quant_algo="NVFP4", **cfg_kwargs)
-        quantizer = FineGrainedHfQuantizer(cfg)
-        return quantizer.get_weight_conversions()
+        return FineGrainedNvfp4HfQuantizer(cfg).get_weight_conversions()
 
     def test_every_declared_target_is_a_slot_the_module_holds(self):
         """A converter target that no module holds is a load failure, and the activation global is
@@ -1469,10 +1478,9 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         per expert rather than flattened to 2E."""
         import re
 
-        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
         from transformers.utils.quantization_config import FineGrainedConfig
 
-        quantizer = FineGrainedHfQuantizer(FineGrainedConfig(quant_method="fp8", activation_scheme="static"))
+        quantizer = _quantizer_for(FineGrainedConfig(quant_method="fp8", activation_scheme="static"))
         quantizer.pre_quantized = True
         converters = quantizer.update_weight_conversions([])
 
@@ -1502,7 +1510,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
                 ]
                 self.assertTrue(any(expected in t for t in targets), f"{key} -> {targets}")
         # a dynamic checkpoint has no such key to route, and a weight-only one ignores it
-        dynamic = FineGrainedHfQuantizer(FineGrainedConfig(quant_method="fp8"))
+        dynamic = _quantizer_for(FineGrainedConfig(quant_method="fp8"))
         dynamic.pre_quantized = True
         self.assertEqual(dynamic.get_weight_conversions(), [])
 

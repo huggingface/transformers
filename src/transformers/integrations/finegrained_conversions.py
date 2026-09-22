@@ -322,7 +322,6 @@ class FineGrainedQuantize(_FineGrainedOp):
     Tensors that are not a finegrained module's weight (1-D norms, biases, shapes that don't tile)
     pass through. Without a model (direct invocation) it quantizes block-FP8 from the config."""
 
-
     def convert(self, input_dict: dict[str, torch.Tensor], model=None, **kwargs) -> dict[str, torch.Tensor]:
         result: dict[str, torch.Tensor] = {}
         for key, value in input_dict.items():
@@ -473,7 +472,6 @@ class FineGrainedDequantize(_FineGrainedOp):
     needs. It pairs each weight pattern with its sibling scale pattern by index and emits the
     result under the weight key, dropping the scales so the rest of the chain sees weights only.
     """
-
 
     def _scale_pattern_for(self, weight_pattern: str) -> str:
         anchored = weight_pattern.endswith("$")
