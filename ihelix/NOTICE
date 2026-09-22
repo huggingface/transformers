@@ -1,0 +1,24 @@
+ihelix
+Copyright 2026 Nathan
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+these files except in compliance with the License. A copy of the License is in
+the LICENSE file.
+
+--------------------------------------------------------------------------------
+
+This product includes software developed at Hugging Face, Inc.
+
+`ihelix/kernels.py` carries over the RMS normalization layers, the depthwise
+causal convolution, the chunkwise-parallel and single-step gated delta-rule
+routines, the landmark pooler and `repeat_kv` from the `helix-lm` package, which
+in turn follows the reference implementations in HuggingFace Transformers
+(https://github.com/huggingface/transformers), licensed under the Apache
+License, Version 2.0.
+
+Original to this project: the geometry layer (metric-space embedding of
+spherical, periodic, linear and logarithmic axes, and the local frames built on
+them), the grid layer (neighbour graphs and principal-axis spatial hierarchies),
+geodesic neighbourhood attention with compactly supported physical receptive
+fields and quadrature weighting, the content-addressed regional index, the
+cross-grid reader, and the encode-process-decode model built from them.
