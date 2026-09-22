@@ -30,7 +30,7 @@ from transformers.testing_utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -120,7 +120,10 @@ class Nemotron3DiarizationModelTester:
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.seq_length, self.num_mel_bins])
-        attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+        # TODO: @eustlb, really important! we need to standardize models silently expecting right padding
+        # right padding, as the processor produces: the model reads the mask as per-sample lengths
+        lengths = torch.randint(self.seq_length // 2, self.seq_length + 1, (self.batch_size,), device=torch_device)
+        attention_mask = (torch.arange(self.seq_length, device=torch_device)[None, :] < lengths[:, None]).long()
         config = self.get_config()
         return config, input_features, attention_mask
 
@@ -164,7 +167,6 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
         config.chunk_length, config.chunk_right_context = 4, 1
         config.streaming_config.fifo_length, config.streaming_config.speaker_cache_update_period = 6, 3
-        attention_mask = self._prefix_mask(attention_mask)
         model = Nemotron3DiarizationForAudioFrameClassification(config).to(torch_device).eval()
         with torch.no_grad():
             offline = model(input_features, attention_mask=attention_mask)
@@ -190,17 +192,11 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def _prefix_mask(self, attention_mask):
-        # Streaming operates on per-sample lengths, so the mask must be a prefix mask.
-        lengths = attention_mask.sum(-1)
-        return torch.arange(attention_mask.shape[1], device=lengths.device)[None, :] < lengths[:, None]
-
     def test_streaming_steps_match_offline(self):
         """With equal FIFO sizes, feeding the offline chunks one forward at a time reproduces the offline forward."""
         config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
         config.chunk_length = 4
         config.chunk_right_context = 1
-        attention_mask = self._prefix_mask(attention_mask)
         model = Nemotron3DiarizationForAudioFrameClassification(config).to(torch_device).eval()
 
         with torch.no_grad():
