@@ -19,7 +19,7 @@ import importlib.metadata
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
 from typing import Any, Optional, Union
 
@@ -1693,6 +1693,75 @@ class SpQRConfig(QuantizationConfigMixin):
 _MODELOPT_ALGOS = {"NVFP4": (QuantizationMethod.NVFP4, "nvfp4")}
 
 
+_CATCH_ALL = [".*"]  # the targets of a group that takes whatever no other group claimed
+
+
+@dataclass
+class FineGrainedGroup:
+    """One set of modules and the format they are quantized in.
+
+    A single-format checkpoint is one group covering everything, which is what the flat
+    `FineGrainedConfig` fields spell. A checkpoint that is more than one format needs more than
+    one: DeepSeek-V4 is W4A4 mxfp4 EXPERTS over block-FP8 linears.
+    """
+
+    quant_method: str
+    targets: list[str] = field(default_factory=lambda: list(_CATCH_ALL))
+    activation_format: str | None = None
+    activation_scheme: str = "dynamic"
+    weight_block_size: tuple[int, int] | None = None
+    scale_fmt: str = "float"
+
+    def __post_init__(self):
+        if self.weight_block_size is not None:
+            self.weight_block_size = tuple(self.weight_block_size)
+
+    def matches(self, module_name: str) -> bool:
+        return any(re.search(target, module_name) for target in self.targets)
+
+
+# (num_bits, type, group_size) as compressed-tensors / modelopt spell a format, to the name our
+# kernels dispatch on. `group_size` is what separates the two 4-bit formats: nvfp4's block scale
+# is E4M3 over 16 values, mxfp4's is E8M0 over 32.
+_CT_FORMATS = {
+    (4, "float", 16): "nvfp4",
+    (4, "float", 32): "mxfp4",
+    (8, "float", 32): "mxfp8",
+    (8, "float", None): "fp8",
+}
+
+
+def _group_from_config_groups(spec: dict) -> FineGrainedGroup | None:
+    """One `config_groups` entry as a `FineGrainedGroup`, or `None` if it names a format we do not
+    serve — in which case the caller falls back to the flat fields rather than guessing.
+
+    compressed-tensors describes a format by its parameters; we name it. `targets` is theirs too:
+    a bare entry is a CLASS name (GLM-5.2 ships `["Linear"]`, i.e. every linear), and an `re:`
+    prefix introduces a pattern.
+    """
+    weights = spec.get("weights") or {}
+    key = (weights.get("num_bits"), weights.get("type"), weights.get("group_size"))
+    quant_method = _CT_FORMATS.get(key)
+    if quant_method is None:
+        return None
+    targets = []
+    for target in spec.get("targets") or []:
+        if target.startswith("re:"):
+            targets.append(target[3:])
+        elif target == "Linear":  # every linear — the catch-all, in their spelling
+            targets.extend(_CATCH_ALL)
+        else:  # a class name we cannot resolve to module paths here
+            return None
+    activations = spec.get("input_activations") or {}
+    act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
+    return FineGrainedGroup(
+        quant_method=quant_method,
+        targets=targets or list(_CATCH_ALL),
+        activation_format=_CT_FORMATS.get(act_key) if activations else None,
+        activation_scheme="dynamic" if activations.get("dynamic", True) else "static",
+    )
+
+
 @dataclass
 class FineGrainedConfig(QuantizationConfigMixin):
     """
@@ -1742,6 +1811,7 @@ class FineGrainedConfig(QuantizationConfigMixin):
         modules_to_convert: list | None = None,
         scale_fmt: str = "float",
         activation_format: str | None = None,
+        groups: dict[str, FineGrainedGroup] | None = None,
         **kwargs,
     ):
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
@@ -1768,6 +1838,13 @@ class FineGrainedConfig(QuantizationConfigMixin):
                 f"{str(self.quant_method)!r}."
             )
             self.activation_format = activation_format or algo_activation_format
+            # modelopt also describes the format parametrically under `config_groups`; take it
+            # when every entry maps, so a multi-group export is not silently flattened to one
+            ct_groups = kwargs.pop("config_groups", None)
+            if groups is None and ct_groups:
+                mapped = {name: _group_from_config_groups(spec) for name, spec in ct_groups.items()}
+                if all(group is not None for group in mapped.values()):
+                    groups = mapped
             ignore = kwargs.pop("ignore", None) or kwargs.pop("exclude_modules", None)
             if modules_to_not_convert is None and ignore is not None:
                 # modelopt names skipped subtrees with GLOBS — "model.layers.0*", "model.layers.1.*",
@@ -1784,7 +1861,66 @@ class FineGrainedConfig(QuantizationConfigMixin):
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
         self.scale_fmt = scale_fmt
+        # Every config is GROUPED internally. The flat fields above are the one-group spelling a
+        # single-format checkpoint ships, normalised here the way `quant_algo` is, so that
+        # downstream asks `group_for(name)` and never learns which spelling it came from.
+        if groups:
+            # from `config.json` a group is a plain dict
+            self.groups = {
+                name: group if isinstance(group, FineGrainedGroup) else FineGrainedGroup(**group)
+                for name, group in groups.items()
+            }
+        else:
+            self.groups = {
+                "default": FineGrainedGroup(
+                    quant_method=str(getattr(self.quant_method, "value", self.quant_method)),
+                    activation_format=self.activation_format,
+                    activation_scheme=self.activation_scheme,
+                    weight_block_size=self.weight_block_size,
+                    scale_fmt=self.scale_fmt,
+                )
+            }
         self.post_init()
+
+    def to_dict(self):
+        """`config.json`-ready: the groups go out as plain dicts so the config round-trips."""
+        out = super().to_dict()
+        out["groups"] = {name: asdict(group) for name, group in self.groups.items()}
+        return out
+
+    def group_for(self, module_name: str) -> FineGrainedGroup:
+        """The group a module is quantized by.
+
+        A targeted group wins over the catch-all whatever order they were declared in, because
+        `to_json_string` sorts keys and a config that round-tripped through `config.json` has lost
+        that order. Two targeted groups claiming the same module is ambiguous, and says so.
+        """
+        claimed = [
+            name for name, group in self.groups.items() if group.targets != _CATCH_ALL and group.matches(module_name)
+        ]
+        if len(claimed) > 1:
+            raise ValueError(f"{module_name!r} is claimed by more than one group: {claimed}")
+        if claimed:
+            return self.groups[claimed[0]]
+        for group in self.groups.values():
+            if group.targets == _CATCH_ALL:
+                return group
+        raise KeyError(f"no group covers {module_name!r}; groups: {list(self.groups)}")
+
+    def split_out_experts(self, expert_dtype: str | None) -> None:
+        """Fold a legacy `config.expert_dtype` into the group it means.
+
+        DeepSeek-V4 ships `quant_method="fp8"` and declares its mxfp4 experts on the MODEL config,
+        because a flat quant config carries one format and cannot say "the experts differ". Split
+        that into the two groups it describes, so nothing downstream reads the side-channel.
+        """
+        if expert_dtype != "fp4" or len(self.groups) > 1:
+            return
+        flat = self.groups["default"]
+        self.groups = {
+            "experts": replace(flat, quant_method="mxfp4", activation_format="mxfp4", targets=[r"\.experts($|\.)"]),
+            "dense": flat,
+        }
 
     def post_init(self):
         r"""

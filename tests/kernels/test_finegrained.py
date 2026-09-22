@@ -495,6 +495,54 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
 
 
 @require_torch
+class FineGrainedScaleDtypeTest(unittest.TestCase):
+    """A scale's dtype is the format's, never the ambient default.
+
+    `from_pretrained` sets the default dtype to the checkpoint's for the duration of model
+    construction, so a scale allocated as `torch.ones(n)` comes out bf16 and the kernels read it
+    as fp32 — NaN logits, no error. Building under both defaults and comparing is what catches
+    that, whatever the format decides each scale should be.
+    """
+
+    def _dtypes(self, build, default):
+        previous = torch.get_default_dtype()
+        torch.set_default_dtype(default)
+        try:
+            with torch.device("meta"):
+                module = build()
+            return {name: p.dtype for name, p in module.named_parameters() if p is not None}
+        finally:
+            torch.set_default_dtype(previous)
+
+    def _assert_default_dtype_invariant(self, build):
+        under_fp32 = self._dtypes(build, torch.float32)
+        under_bf16 = self._dtypes(build, torch.bfloat16)
+        self.assertTrue(under_fp32)
+        # the weight and bias DO follow the model dtype; every scale beside them must not
+        scales = {name for name in under_fp32 if "scale" in name}
+        self.assertTrue(scales)
+        for name in sorted(scales):
+            self.assertEqual(under_bf16[name], under_fp32[name], f"{name} followed the default dtype")
+
+    def test_linear_scales_ignore_the_default_dtype(self):
+        for weight_format, scheme in (("fp8", "static"), ("fp8", "dynamic"), ("nvfp4", "dynamic")):
+            with self.subTest(weight_format=weight_format, activation_scheme=scheme):
+                self._assert_default_dtype_invariant(
+                    lambda f=weight_format, s=scheme: FineGrainedLinear(
+                        in_features=64, out_features=32, block_size=(4, 4), weight_format=f, activation_scheme=s
+                    )
+                )
+
+    def test_experts_scales_ignore_the_default_dtype(self):
+        for weight_format, scheme in (("fp8", "static"), ("fp8", "dynamic"), ("nvfp4", "dynamic")):
+            with self.subTest(weight_format=weight_format, activation_scheme=scheme):
+                self._assert_default_dtype_invariant(
+                    lambda f=weight_format, s=scheme: FineGrainedExperts(
+                        _Cfg(), block_size=(4, 4), weight_format=f, activation_scheme=s
+                    )
+                )
+
+
 class FineGrainedFusedNormGateTest(unittest.TestCase):
     """A norm the kernels can fuse must NOT be fused when a forward collective sits on it.
 
@@ -831,6 +879,94 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         self.assertEqual(plan["layers.*.mlp.experts"], "moe_tp_experts")
         for companion in ("gate_up_proj_scale_inv", "down_proj_scale_inv", "gate_up_proj_bias"):
             self.assertIn(f"layers.*.mlp.experts.{companion}", plan, companion)
+
+
+class FineGrainedGroupsTest(unittest.TestCase):
+    """A quant config names a format per module SUBSET, because a checkpoint can be more than one."""
+
+    def _config(self, **kwargs):
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        return FineGrainedConfig(**kwargs)
+
+    def test_a_flat_config_is_one_group_over_everything(self):
+        groups = self._config(quant_method="mxfp8").groups
+        self.assertEqual({name: group.quant_method for name, group in groups.items()}, {"default": "mxfp8"})
+
+    def test_a_legacy_expert_dtype_becomes_the_two_groups_it_meant(self):
+        """DeepSeek-V4 ships `quant_method="fp8"` and declares its mxfp4 experts on the MODEL
+        config, because a flat config cannot say "the experts differ". `shared_experts` is DENSE
+        despite the name, which is why the pattern matches a path segment and not a substring."""
+        config = self._config(quant_method="fp8", weight_block_size=(128, 128), scale_fmt="ue8m0")
+        config.split_out_experts("fp4")
+        for module, expected in (
+            ("model.layers.3.mlp.experts", "mxfp4"),
+            ("model.layers.3.mlp.experts.gate_up_proj", "mxfp4"),
+            ("model.layers.3.self_attn.q_proj", "fp8"),
+            ("model.layers.3.mlp.shared_experts.up_proj", "fp8"),
+        ):
+            self.assertEqual(config.group_for(module).quant_method, expected, module)
+
+    def test_resolution_survives_a_round_trip_through_config_json(self):
+        """`to_json_string` SORTS keys, so a config read back has lost the order it was written
+        in. Resolution must not depend on it: the catch-all sorts first here and would swallow
+        every module if targeted groups were not preferred outright."""
+        import json
+
+        from transformers.utils.quantization_config import FineGrainedConfig, FineGrainedGroup
+
+        config = FineGrainedConfig(
+            groups={
+                "experts": FineGrainedGroup(quant_method="nvfp4", targets=[r"\.experts($|\.)"]),
+                "dense": FineGrainedGroup(quant_method="fp8", weight_block_size=(128, 128)),
+            }
+        )
+        back = FineGrainedConfig.from_dict(json.loads(config.to_json_string()))
+        self.assertEqual(back.group_for("model.layers.0.mlp.experts").quant_method, "nvfp4")
+        self.assertEqual(back.group_for("model.layers.0.self_attn.q_proj").quant_method, "fp8")
+        # a list survives JSON where a tuple does not, and the block size is compared as a tuple
+        self.assertEqual(back.groups["dense"].weight_block_size, (128, 128))
+
+    def test_two_targeted_groups_claiming_one_module_is_an_error(self):
+        from transformers.utils.quantization_config import FineGrainedGroup
+
+        config = self._config(
+            groups={
+                "a": FineGrainedGroup(quant_method="fp8", targets=[r"\.experts"]),
+                "b": FineGrainedGroup(quant_method="nvfp4", targets=[r"mlp\."]),
+            }
+        )
+        with self.assertRaises(ValueError):
+            config.group_for("model.layers.0.mlp.experts")
+
+    def test_a_producers_config_groups_are_normalized(self):
+        """modelopt describes a format by its parameters; we name it. GLM-5.2-NVFP4 ships exactly
+        this, and `targets: ["Linear"]` is its spelling of the catch-all."""
+        config = self._config(
+            quant_method="modelopt",
+            quant_algo="NVFP4",
+            config_groups={
+                "group_0": {
+                    "weights": {"num_bits": 4, "type": "float", "group_size": 16},
+                    "input_activations": {"num_bits": 4, "type": "float", "group_size": 16, "dynamic": False},
+                    "targets": ["Linear"],
+                }
+            },
+        )
+        group = config.group_for("model.layers.0.self_attn.q_proj")
+        self.assertEqual((group.quant_method, group.activation_format), ("nvfp4", "nvfp4"))
+        self.assertEqual(group.activation_scheme, "static")  # `dynamic: False`
+
+    def test_a_format_we_do_not_serve_falls_back_rather_than_guessing(self):
+        """Half a translation would quantize modules by a rule the producer did not write."""
+        config = self._config(
+            quant_method="modelopt",
+            quant_algo="NVFP4",
+            config_groups={
+                "group_0": {"weights": {"num_bits": 3, "type": "int", "group_size": 64}, "targets": ["Linear"]}
+            },
+        )
+        self.assertEqual(list(config.groups), ["default"])
 
 
 class SubtreePatternTest(unittest.TestCase):
@@ -1317,6 +1453,74 @@ class FineGrainedOnTheFlyQuantizeTest(unittest.TestCase):
             tensors = op.convert(tensors, source_patterns=sources, target_patterns=["gate_up_proj"])
         self.assertEqual(len(tensors), 1)  # the scale is consumed, not passed down the chain
         torch.testing.assert_close(next(iter(tensors.values())).float(), reference.float(), rtol=0, atol=0)
+
+    def test_a_static_scheme_gets_its_activation_scales_written(self):
+        """A calibration-fed slot the checkpoint does not supply is still WRITTEN, as the identity.
+
+        The loader materializes a missing key with `torch.empty_like` and `_init_weights` has no
+        branch for a scale, so a slot this op leaves out reaches the kernels as uninitialized
+        memory: a zero divides the activations by zero and a negative flips their sign, which
+        showed up as NaN logits from one fixture and not another, run to run.
+        """
+        from transformers.integrations.finegrained_conversions import FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        model = torch.nn.Module()
+        model.experts = fg.FineGrainedExperts(
+            cfg, block_size=(128, 128), weight_format="fp8", activation_scheme="static"
+        )
+        model.proj = fg.FineGrainedLinear(
+            in_features=256,
+            out_features=256,
+            block_size=(128, 128),
+            weight_format="fp8",
+            activation_scheme="static",
+        )
+        op = FineGrainedQuantize(hf_quantizer=None)
+        for key, tensor, slot in (
+            ("experts.gate_up_proj", torch.randn(4, 256, 256), "experts.gate_up_proj_activation_scale"),
+            ("proj.weight", torch.randn(256, 256), "proj.activation_scale"),
+        ):
+            with self.subTest(key=key):
+                out = op.convert({key: tensor}, model=model)
+                self.assertIn(slot, out, f"{key}: the static activation scale was not written")
+                held = model.get_parameter(slot)
+                self.assertEqual((out[slot].shape, out[slot].dtype), (held.shape, held.dtype))
+                torch.testing.assert_close(out[slot], torch.ones_like(out[slot]), rtol=0, atol=0)
+
+    def test_an_expert_bias_is_passed_through_not_quantized(self):
+        """A GPT-OSS expert bias is `(E, rows)` — 2-D, like a dense weight — so the rank guard
+        alone lets it through. It has no scale slot, and emitting one gives the loader a
+        `<proj>_bias_scale_inv` no module holds."""
+        from transformers.integrations.finegrained_conversions import FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        model = torch.nn.Module()
+        model.experts = fg.FineGrainedExperts(cfg, block_size=(128, 128), weight_format="fp8", has_bias=True)
+        bias = torch.randn(4, 256)
+        out = FineGrainedQuantize(hf_quantizer=None).convert({"experts.down_proj_bias": bias}, model=model)
+        self.assertEqual(list(out), ["experts.down_proj_bias"])
+        self.assertIs(out["experts.down_proj_bias"], bias)
+
+    def test_a_partial_trailing_block_is_padded_not_refused(self):
+        """DeepSeek-V3 ships `kv_a_proj_with_mqa` as `(576, 7168)` against a 128x128 block with a
+        `(5, 56)` scale grid, so the format rounds the grid UP and quantizes the short block on
+        its own values. Refusing the shape instead left the weight full precision."""
+        from transformers.integrations.finegrained_conversions import FineGrainedQuantize
+
+        torch.manual_seed(0)
+        for rows, cols in ((576, 256), (192, 256), (256, 256)):
+            with self.subTest(shape=(rows, cols)):
+                weight, scale = FineGrainedQuantize._quantize_block_fp8(
+                    torch.randn(rows, cols), (128, 128), ue8m0=False
+                )
+                self.assertEqual(weight.shape, (rows, cols))
+                self.assertEqual(weight.dtype, torch.float8_e4m3fn)
+                self.assertEqual(scale.shape, (-(-rows // 128), -(-cols // 128)))
 
     def test_block_fp8_round_trips_within_its_floor(self):
         from transformers.integrations.finegrained_conversions import FineGrainedDequantize, FineGrainedQuantize
@@ -2117,7 +2321,7 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
         )
         from transformers.utils.quantization_config import FineGrainedConfig
 
-        return {
+        table = {
             "deepseek_v3-fp8": (
                 DeepseekV3Config,
                 DeepseekV3ForCausalLM,
@@ -2315,6 +2519,9 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
                 FineGrainedConfig(quant_method="mxfp8"),
             ),
         }
+        # one label, or a comma-separated few, to re-run a single model while debugging
+        only = os.environ.get("FINEGRAINED_LP_MODELS")
+        return {k: v for k, v in table.items() if k in only.split(",")} if only else table
 
     @classmethod
     def setUpClass(cls):

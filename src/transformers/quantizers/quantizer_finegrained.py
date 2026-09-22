@@ -165,6 +165,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
         from ..integrations.finegrained import replace_with_finegrained_embedding, replace_with_finegrained_layer
 
         self._normalize_modules_to_not_convert(model)
+        # the one place both configs are in hand: a legacy checkpoint declares a second format
+        # for its experts on the MODEL config, and it becomes a group here
+        self.quantization_config.split_out_experts(getattr(model.config.get_text_config(), "expert_dtype", None))
         if self._quant_method() == "mxfp4" and self.quantization_config.activation_format is None:
             # GPT-OSS MXFP4 runs weight-only (W4A16): raw bf16 activations against packed
             # weights. The kernels' weight-native default would quantize activations to mxfp4.
@@ -189,11 +192,12 @@ class FineGrainedHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        from ..integrations.finegrained import disable_deepgemm_on_multi_device
+        from ..integrations.finegrained import disable_deepgemm_on_multi_device, raise_if_unquantized
         from ..integrations.finegrained_conversions import keep_swizzle_reverse_for_save
 
         keep_swizzle_reverse_for_save(model, self)
         disable_deepgemm_on_multi_device(model)
+        raise_if_unquantized(model)
         return model
 
     def update_tp_plan(self, config):

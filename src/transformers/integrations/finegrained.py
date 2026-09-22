@@ -27,7 +27,6 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
 
 from ..activations import ACT2FN
 from ..quantizers.quantizers_utils import should_convert_module
@@ -450,9 +449,6 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
         _set_optional_parameter(self, "bias", torch.empty(self.out_features) if self.has_bias else None)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        if self.weight.element_size() > 1:
-            return F.linear(input, self.weight, self.bias)
-
         return finegrained_linear(
             input,
             self.weight,
@@ -516,15 +512,6 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         input_shape = x.shape[:-2]
         hidden_dim = x.shape[-1]
-
-        if self.weight.element_size() > 1:
-            w = self.weight.view(self.n_groups, -1, hidden_dim).transpose(1, 2)
-            x = x.reshape(-1, self.n_groups, hidden_dim).transpose(0, 1)
-            y = torch.bmm(x, w).transpose(0, 1)
-            y = y.reshape(*input_shape, self.n_groups, -1)
-            if self.has_bias:
-                y.add_(self.bias.view(self.n_groups, -1))
-            return y
 
         w = self.weight.view(self.n_groups, -1, hidden_dim)
         scale_inv = self.weight_scale_inv
@@ -643,7 +630,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         scale_fmt: str = "float",
         has_bias: bool = False,
         has_gate: bool = True,
-        weight_format: str | None = None,
+        weight_format: str = "fp8",
         activation_format: str | None = None,
         is_concatenated: bool = True,
     ):
@@ -667,13 +654,10 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[self.act_fn_name]
 
-        # `weight_format` is the checkpoint's quant_method, as `replace_with_finegrained_layer`
-        # passes it. DeepSeek-V4 is MIXED though — mxfp4 experts under an "fp8" quant config —
-        # and declares that on the MODEL config (`expert_dtype`), because a quant config carries
-        # one `quant_method` and has no way to say "the experts are a different format". That
-        # side-channel is the fallback here when no format is passed.
-        if weight_format is None:
-            weight_format = "mxfp4" if getattr(config, "expert_dtype", "fp8") == "fp4" else "fp8"
+        # This module's format, as its group settled it. Kept because `FineGrainedQuantize` reads
+        # it back: on-the-fly quantization asks the MODULE what to quantize to, never the config,
+        # which is what lets a mixed checkpoint (DeepSeek-V4: mxfp4 experts over block-FP8
+        # linears) quantize each group to its own format from one `from_pretrained`.
         self.weight_format = weight_format
         format_spec, scale_dtype, scale_group = resolve_weight_format(weight_format, scale_fmt, block_size)
         # the format decides the second level: None means there is none, else the dtype it is in
@@ -742,7 +726,10 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
                 torch.ones(self.num_experts, dtype=self.global_scale_dtype) if two_level else None,
             ),
             ("input_global_scale", torch.ones(input_globals, dtype=torch.float32) if calibrated else None),
-            ("activation_scale", torch.ones(self.num_experts) if self.activation_scheme == "static" else None),
+            (
+                "activation_scale",
+                torch.ones(self.num_experts, dtype=torch.float32) if self.activation_scheme == "static" else None,
+            ),
         ):
             _set_optional_parameter(self, f"{proj}_{name}", tensor)
 
@@ -813,8 +800,6 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         weight = getattr(self, proj)[expert_idx]
         bias = getattr(self, f"{proj}_bias")
         bias = bias[expert_idx] if bias is not None else None
-        if weight.element_size() > 1:
-            return F.linear(input, weight, bias)
         scale = getattr(self, f"{proj}_scale_inv")
         weight_globals = getattr(self, f"{proj}_weight_global_scale")
         input_globals = getattr(self, f"{proj}_input_global_scale")
@@ -849,6 +834,31 @@ class FineGrainedExpertsInterface(ExpertsInterface):
 
 
 ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
+
+
+def raise_if_unquantized(model: nn.Module) -> None:
+    """Fail the load if a finegrained module came out of it holding a full-precision weight.
+
+    The only way to get one is a checkpoint that targets a module and then ships no scales for
+    it, which the swap cannot see in advance. There is no forward for that module — the kernels
+    take a byte-wide weight — so the run is already over; raising here names the module instead
+    of leaving an unreadable error to come out of a kernel launch later.
+    """
+    unquantized = [
+        f"{name}.{attr}"
+        for name, module in model.named_modules()
+        if isinstance(module, _FineGrainedModule)
+        for attr in ("weight", "gate_up_proj", "up_proj", "down_proj")
+        if getattr(module, attr, None) is not None and getattr(module, attr).element_size() > 1
+    ]
+    if unquantized:
+        shown = ", ".join(unquantized[:3]) + (f" (+{len(unquantized) - 3} more)" if len(unquantized) > 3 else "")
+        raise ValueError(
+            f"{len(unquantized)} module(s) were converted for quantized compute but hold "
+            f"full-precision weights: {shown}. This checkpoint targets them without shipping "
+            "their scales; add them to the quantization config's `ignore` list to keep them "
+            "in full precision."
+        )
 
 
 def disable_deepgemm_on_multi_device(model: nn.Module) -> None:
@@ -903,17 +913,18 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
     if quantization_config.dequantize:
         return model
 
-    # The checkpoint's quant_method IS the weight format ("fp8", "mxfp8", "mxfp4", "nvfp4").
-    # Under the "fp8" key pass None: dsv4-style checkpoints declare fp4 EXPERTS through the
-    # legacy `config.expert_dtype` model-config side-channel, which the ctor falls back to.
-    weight_format = next((f for f in ("mxfp8", "mxfp4", "nvfp4") if quantization_config.quant_method == f), None)
-
-    # every swap reads the same three off the quant config; the branches differ only in shape
-    storage = {
-        "block_size": quantization_config.weight_block_size,
-        "activation_scheme": quantization_config.activation_scheme,
-        "scale_fmt": quantization_config.scale_fmt,
-    }
+    def storage_for(module_name: str) -> dict:
+        """The format THIS module is quantized in. A single-format checkpoint has one group
+        covering everything; DeepSeek-V4 is mxfp4 experts over block-FP8 linears, so its experts
+        and its attention projections resolve differently."""
+        group = quantization_config.group_for(module_name)
+        return {
+            "weight_format": group.quant_method,
+            "activation_format": group.activation_format,
+            "block_size": group.weight_block_size,
+            "activation_scheme": group.activation_scheme,
+            "scale_fmt": group.scale_fmt,
+        }
 
     has_been_replaced = False
     for module_name, module in model.named_modules():
@@ -937,9 +948,7 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
                 )
                 new_module = new_class(
                     config=getattr(module, "config", model.config.get_text_config()),
-                    weight_format=weight_format,
-                    activation_format=quantization_config.activation_format,
-                    **storage,
+                    **storage_for(module_name),
                     **flags,
                 )
                 # A per-expert output norm belongs to the model, not the quantization, so the
@@ -956,21 +965,20 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
                     in_features=module.in_features,
                     out_features=module.out_features,
                     has_bias=module.bias is not None,
-                    weight_format=weight_format or "fp8",
-                    activation_format=quantization_config.activation_format,
-                    **storage,
+                    **storage_for(module_name),
                 )
             elif isinstance(module, nn.Linear) and hasattr(module, "n_groups"):
                 # Block-diagonal grouped linear (DSv4's `DeepseekV4GroupedLinear`), recognised by
                 # the attribute the swap needs rather than by its class NAME: a plain
                 # `FineGrainedLinear` would collapse the groups into one giant linear and yield
                 # the wrong output dim.
+                storage = storage_for(module_name)
                 new_module = FineGrainedGroupedLinear(
                     in_features_per_group=module.in_features,
                     out_features=module.out_features,
                     n_groups=module.n_groups,
                     has_bias=module.bias is not None,
-                    **storage,
+                    **{k: storage[k] for k in ("block_size", "activation_scheme", "scale_fmt")},
                 )
             if new_module is not None:
                 # The kernels take raw pointers, so every operand must be a plain tensor. This is
