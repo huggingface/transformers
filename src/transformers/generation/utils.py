@@ -3941,6 +3941,7 @@ class GenerationMixin(ContinuousMixin):
 
             # Whenever we are drafting several tokens at once with the candidate without capping its draft (e.g. MTP), we need to
             # make sure that we did not just validate tokens outside the max length, or outside an eos token
+            # Note that we should technically crop based on other stopping criteria as well in all generality, not only EOS and Length
             tokens_budget = generation_config.max_length - input_ids.shape[1]
             # This is for the max length
             if valid_tokens.shape[1] > tokens_budget:

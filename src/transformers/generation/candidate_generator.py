@@ -1284,7 +1284,6 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
         self.generation_config = copy.deepcopy(generation_config)
         self.num_assistant_tokens = self.assistant_generation_config.num_assistant_tokens
         self.main_model_max_length = self.generation_config.max_length
-        self.eos_token_id = self.generation_config._eos_token_tensor
 
         self.is_main_model_prefill = True
 
@@ -1336,7 +1335,6 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
             last_hidden_state = last_hidden_state[:, n_last_matches : n_last_matches + 1]
         last_token_id = input_ids[:, -1:]
         position_ids = torch.tensor([[input_ids.shape[1] - 1]], dtype=torch.long, device=self.assistant_model.device)
-        sequence_stopped = torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
 
         # Drafter autoregressive loop
         drafted_logits = []
@@ -1358,26 +1356,8 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
             last_token_id = outputs.logits.argmax(dim=-1)
             last_hidden_state = outputs.last_hidden_state
 
-            # For stopped sequences, replace drafted tokens with pad and logits with zeros.
-            if sequence_stopped.any():
-                stopped = sequence_stopped.unsqueeze(1)  # (batch, 1) for broadcasting
-                last_token_id = torch.where(stopped, self.generation_config.pad_token_id, last_token_id)
-                drafted_logits.append(
-                    torch.where(stopped.unsqueeze(-1), torch.zeros_like(outputs.logits), outputs.logits)
-                )
-            else:
-                drafted_logits.append(outputs.logits)
-
+            drafted_logits.append(outputs.logits)
             drafted_tokens.append(last_token_id)
-
-            # Update stop status: mark sequences whose latest token is an EOS token.
-            if self.eos_token_id is not None:
-                sequence_stopped = torch.logical_or(
-                    sequence_stopped,
-                    torch.isin(last_token_id.squeeze(1), self.eos_token_id.to(last_token_id.device)),
-                )
-                if sequence_stopped.all():
-                    break
 
         self.is_main_model_prefill = False
 
