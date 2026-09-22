@@ -43,7 +43,6 @@ if is_torch_available():
         Nemotron3DiarizationConfig,
         Nemotron3DiarizationForAudioFrameClassification,
         Nemotron3DiarizationHeadConfig,
-        Nemotron3DiarizationSpeakerCache,
         Nemotron3DiarizationStreamingConfig,
     )
 
@@ -180,14 +179,9 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(first.logits.shape[1], input_features.shape[1] - subsampling_factor)
         self.assertEqual(first.speaker_cache.fifo_length, 6)
         self.assertEqual(first.speaker_cache.speaker_cache_update_period, 3)
-        self.assertTrue(first.speaker_cache.streaming)
         self.assertIs(last.speaker_cache, first.speaker_cache)
         self.assertEqual(last.logits.shape[1], input_features.shape[1])
         self.assertFalse(torch.allclose(first.logits, offline.logits[:, : first.logits.shape[1]]))
-
-        # a cache built by the offline loop cannot be continued
-        with self.assertRaises(ValueError):
-            model(input_features, speaker_cache=Nemotron3DiarizationSpeakerCache(config, streaming=False))
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
