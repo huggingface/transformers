@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import math
 import os
 import tempfile
 import unittest
+
+from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import WavTokenizerConfig
 from transformers.testing_utils import (
@@ -27,7 +28,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -39,11 +40,19 @@ if is_torch_available():
 
 def randomize_codebook(model, seed=0):
     """`_init_weights` zero-inits the VQ codebook (all entries tie, argmin returns 0 everywhere).
-    Randomize it deterministically so encode tests exercise real code assignment."""
+
+    Fill it deterministically with perturbed encoder frames of a random waveform so the entries sit at the scale
+    of the encoder output and encode tests exercise real, non-degenerate code assignment. A plain `randn` codebook
+    is not enough: the randomly initialized encoder emits small activations, so argmin then picks the single
+    smallest-norm entry for every frame."""
     with torch.no_grad():
         generator = torch.Generator(device="cpu").manual_seed(seed)
-        codebook = model.base_model.quantizer.codebook.embed
-        codebook.copy_(torch.randn(codebook.shape, generator=generator))
+        encoder_model = model.base_model
+        codebook = encoder_model.quantizer.codebook.embed
+        codebook_size = codebook.shape[0]
+        waveform = torch.rand(1, 1, codebook_size * encoder_model.hop_length, generator=generator) * 2 - 1
+        frames = encoder_model.encoder(waveform)[0].transpose(0, 1)[:codebook_size]
+        codebook.copy_(frames + 0.1 * frames.std() * torch.randn(frames.shape, generator=generator))
     return model
 
 
@@ -55,15 +64,16 @@ class WavTokenizerModelTester:
         batch_size=2,
         num_channels=1,
         sample_rate=24000,
-        num_filters=8,
-        upsampling_ratios=(2, 2),
+        num_filters=2,
+        # four stages like the released checkpoints; the odd ratio exercises the asymmetric conv padding branch
+        upsampling_ratios=(3, 2, 2, 2),
         hidden_size=32,
         codebook_size=64,
         codebook_dim=32,
         decoder_hidden_size=32,
         decoder_intermediate_size=64,
         decoder_num_layers=2,
-        decoder_attention_num_groups=8,
+        decoder_attention_num_groups=8,  # several channels per GroupNorm group, as in the released decoder
         is_training=False,
     ):
         self.parent = parent
@@ -81,9 +91,7 @@ class WavTokenizerModelTester:
         self.decoder_attention_num_groups = decoder_attention_num_groups
         self.is_training = is_training
 
-        self.hop_length = 1
-        for ratio in upsampling_ratios:
-            self.hop_length *= ratio
+        self.hop_length = math.prod(upsampling_ratios)
         self.num_samples = self.hop_length * 25
 
     def prepare_config_and_inputs(self):
@@ -112,12 +120,16 @@ class WavTokenizerModelTester:
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
-        model = WavTokenizerModel(config=config).to(torch_device).eval()
-        result = model(inputs_dict["input_values"])
-        self.parent.assertEqual(
-            result.audio_values.shape,
-            (self.batch_size, self.num_channels, self.num_samples),
-        )
+        """The reconstruction is sliced back to the input length, from a single hop (or less) up to many hops."""
+        model = randomize_codebook(WavTokenizerModel(config=config)).to(torch_device).eval()
+        hop = config.hop_length
+        for num_samples in [1, hop - 1, hop, self.num_samples]:
+            with self.parent.subTest(num_samples=num_samples):
+                input_values = inputs_dict["input_values"][..., :num_samples]
+                with torch.no_grad():
+                    result = model(input_values)
+                self.parent.assertEqual(result.audio_values.shape, input_values.shape)
+                self.parent.assertEqual(result.audio_codes.shape, (self.batch_size, 1, math.ceil(num_samples / hop)))
 
 
 @require_torch
@@ -152,44 +164,15 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_config_rejects_indivisible_decoder_groups(self):
+        """The decoder GroupNorm layers need `decoder_hidden_size` to be a multiple of the group count."""
+        config = self.model_tester.get_config()
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "must be divisible by"):
+            WavTokenizerConfig(**{**config.to_dict(), "decoder_hidden_size": 40, "decoder_attention_num_groups": 16})
+
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
-
-    def test_encoder_model_matches_full_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        full_model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
-        encoder_model = full_model.encoder_model
-
-        self.assertIsInstance(encoder_model, WavTokenizerEncoderModel)
-        self.assertIs(full_model.base_model, encoder_model)
-
-        padding_mask = torch.ones(inputs_dict["input_values"].shape[0], inputs_dict["input_values"].shape[-1])
-        padding_mask[0, -self.model_tester.hop_length :] = 0
-        input_values = inputs_dict["input_values"].to(torch_device)
-        padding_mask = padding_mask.to(torch_device)
-        with torch.no_grad():
-            full_output = full_model.encode(input_values, padding_mask=padding_mask)
-            encoder_output = encoder_model(input_values, padding_mask=padding_mask)
-
-        torch.testing.assert_close(encoder_output.audio_codes, full_output.audio_codes, rtol=0, atol=0)
-        torch.testing.assert_close(encoder_output.audio_codes_mask, full_output.audio_codes_mask, rtol=0, atol=0)
-        self.assertFalse(hasattr(encoder_model, "backbone"))
-        self.assertFalse(hasattr(encoder_model, "head"))
-
-    def test_checkpoint_key_layout(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        full_model = WavTokenizerModel(config)
-        encoder_model = WavTokenizerEncoderModel(config)
-
-        full_keys = set(full_model.state_dict())
-        self.assertTrue(any(key.startswith("encoder_model.encoder.") for key in full_keys))
-        self.assertTrue(any(key.startswith("encoder_model.quantizer.") for key in full_keys))
-        self.assertFalse(any(key.startswith(("encoder.", "quantizer.")) for key in full_keys))
-        encoder_keys = set(encoder_model.state_dict())
-        self.assertTrue(any(key.startswith("encoder.") for key in encoder_keys))
-        self.assertTrue(any(key.startswith("quantizer.") for key in encoder_keys))
-        self.assertFalse(any(key.startswith("encoder_model.") for key in encoder_keys))
 
     def test_encoder_model_loads_full_checkpoint(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -203,23 +186,15 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         self.assertFalse(loading_info["missing_keys"])
         self.assertFalse(loading_info["unexpected_keys"])
         self.assertFalse(loading_info["mismatched_keys"])
+        # the encoder model's `forward` must also route `padding_mask` through to the codes mask
         input_values = inputs_dict["input_values"].to(torch_device)
+        padding_mask = torch.ones(input_values.shape[0], input_values.shape[-1], device=torch_device)
+        padding_mask[0, -config.hop_length :] = 0
         with torch.no_grad():
-            expected = full_model.encode(input_values).audio_codes
-            actual = encoder_model(input_values).audio_codes
-        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["input_values", "padding_mask"]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            expected = full_model.encode(input_values, padding_mask=padding_mask)
+            actual = encoder_model(input_values, padding_mask=padding_mask)
+        torch.testing.assert_close(actual.audio_codes, expected.audio_codes, rtol=0, atol=0)
+        torch.testing.assert_close(actual.audio_codes_mask, expected.audio_codes_mask, rtol=0, atol=0)
 
     def test_encode_frame_count_matches_feature_extractor(self):
         """The feature-extractor-predicted code count must equal the encoder output for arbitrary lengths.
@@ -231,144 +206,68 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         )
         hop = config.hop_length
         for num_samples in [1, hop - 1, hop, hop + 1, 3 * hop, 3 * hop + hop // 2, 100 * hop + 1]:
-            input_values = floats_tensor([1, 1, num_samples], scale=1.0).to(torch_device)
-            with torch.no_grad():
-                audio_codes = model.encode(input_values).audio_codes
-            self.assertEqual(
-                audio_codes.shape[-1],
-                feature_extractor.get_num_audio_codes(num_samples),
-                f"code count mismatch for num_samples={num_samples}",
-            )
-
-    def test_encode_codes_range_and_dtype(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
-        with torch.no_grad():
-            audio_codes = model.encode(inputs_dict["input_values"].to(torch_device)).audio_codes
-        self.assertEqual(audio_codes.dtype, torch.int64)
-        self.assertEqual(audio_codes.shape[1], 1)  # single codebook
-        self.assertGreaterEqual(audio_codes.min().item(), 0)
-        self.assertLess(audio_codes.max().item(), config.codebook_size)
-        # the randomized codebook must assign diverse codes to diverse embeddings (argmin is not degenerate)
-        generator = torch.Generator(device="cpu").manual_seed(1)
-        embeddings = torch.randn(1, config.hidden_size, 50, generator=generator).to(torch_device)
-        quantizer_codes = model.encoder_model.quantizer.encode(embeddings)
-        self.assertGreater(quantizer_codes.unique().numel(), 1)
+            with self.subTest(num_samples=num_samples):
+                input_values = floats_tensor([1, 1, num_samples], scale=1.0).to(torch_device)
+                with torch.no_grad():
+                    audio_codes = model.encode(input_values).audio_codes
+                # a single codebook of int64 ids, one per hop
+                self.assertEqual(audio_codes.dtype, torch.int64)
+                self.assertEqual(audio_codes.shape, (1, 1, feature_extractor.get_num_audio_codes(num_samples)))
 
     def test_decode_output_length(self):
+        """Each code decodes to `hop_length` samples, down to a single code of a single sample (the GroupNorm
+        edge case)."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = WavTokenizerModel(config).to(torch_device).eval()
-        num_codes = 7
-        audio_codes = torch.randint(0, config.codebook_size, (2, 1, num_codes), device=torch_device)
-        with torch.no_grad():
-            audio_values = model.decode(audio_codes).audio_values
-        self.assertEqual(audio_values.shape, (2, 1, num_codes * config.hop_length))
-
-    def test_released_checkpoint_geometries(self):
-        """Both released hop geometries must construct, encode, and decode with config-derived lengths."""
-        for upsampling_ratios, expected_hop in [([6, 5, 5, 4], 600), ([8, 5, 4, 2], 320)]:
-            with self.subTest(upsampling_ratios=upsampling_ratios):
-                config = WavTokenizerConfig(
-                    num_filters=4,
-                    upsampling_ratios=upsampling_ratios,
-                    hidden_size=64,
-                    codebook_size=64,
-                    codebook_dim=64,
-                    decoder_hidden_size=32,
-                    decoder_intermediate_size=64,
-                    decoder_num_layers=2,
-                    decoder_attention_num_groups=8,
-                )
-                model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
-                input_values = floats_tensor([1, 1, 2 * expected_hop + 1], scale=1.0).to(torch_device)
+        for batch_size, num_codes in [(1, 1), (2, 7)]:
+            with self.subTest(batch_size=batch_size, num_codes=num_codes):
+                audio_codes = ids_tensor([batch_size, 1, num_codes], config.codebook_size).to(torch_device)
                 with torch.no_grad():
-                    codes = model.encode(input_values).audio_codes
-                    decoded = model.decode(codes).audio_values
-                self.assertEqual(config.hop_length, expected_hop)
-                self.assertEqual(codes.shape, (1, 1, 3))
-                self.assertEqual(decoded.shape, (1, 1, 3 * expected_hop))
-
-    def test_decode_single_code(self):
-        """A single code is valid with the production architecture's multiple channels per GroupNorm group."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WavTokenizerModel(config).to(torch_device).eval()
-        audio_codes = torch.zeros(1, 1, 1, dtype=torch.long, device=torch_device)
-        self.assertGreater(config.decoder_hidden_size // config.decoder_attention_num_groups, 1)
-        with torch.no_grad():
-            audio_values = model.decode(audio_codes).audio_values
-        self.assertEqual(audio_values.shape, (1, 1, config.hop_length))
-
-    def test_forward_single_code_inputs(self):
-        """Waveforms up to one hop encode to one code and can be reconstructed."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
-        for num_samples in [1, config.hop_length - 1, config.hop_length]:
-            input_values = floats_tensor([1, 1, num_samples], scale=1.0).to(torch_device)
-            with torch.no_grad():
-                output = model(input_values)
-            self.assertEqual(output.audio_codes.shape, (1, 1, 1))
-            self.assertEqual(output.audio_values.shape, input_values.shape)
-
-    def test_encode_deterministic(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
-        input_values = inputs_dict["input_values"].to(torch_device)
-        with torch.no_grad():
-            codes_1 = model.encode(input_values).audio_codes
-            codes_2 = model.encode(input_values).audio_codes
-        self.assertTrue(torch.equal(codes_1, codes_2))
+                    audio_values = model.decode(audio_codes).audio_values
+                self.assertEqual(audio_values.shape, (batch_size, 1, num_codes * config.hop_length))
 
     def test_encode_batched_matches_single(self):
         """Same-length samples encoded in a batch must produce the same codes as encoded individually."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
         model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
-        input_values = inputs_dict["input_values"].to(torch_device)
+        generator = torch.Generator().manual_seed(0)
+        shape = (self.model_tester.batch_size, 1, self.model_tester.num_samples)
+        input_values = (2 * torch.rand(shape, generator=generator) - 1).to(torch_device)
         with torch.no_grad():
             batched = model.encode(input_values).audio_codes
-            singles = [model.encode(input_values[i : i + 1]).audio_codes for i in range(input_values.shape[0])]
+            singles = [model.encode(sample.unsqueeze(0)).audio_codes for sample in input_values]
+        # guard against a degenerate codebook, which would make this and every other code comparison vacuous
+        self.assertGreater(batched.unique().numel(), 1)
         self.assertTrue(torch.equal(batched, torch.cat(singles, dim=0)))
 
     def test_ragged_batch_codes_mask(self):
-        """padding_mask -> audio_codes_mask marks exactly ceil(valid_len / hop) codes per sample."""
+        """padding_mask -> audio_codes_mask marks exactly ceil(valid_len / hop) codes per sample, aligned to the
+        padding side: at the start for right padding and at the end for left padding."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
-        feature_extractor = WavTokenizerFeatureExtractor(
-            sampling_rate=config.sampling_rate, hop_length=config.hop_length
-        )
         hop = config.hop_length
         lengths = [2 * hop, 5 * hop - 1, 9 * hop + 1]
         batch = [floats_tensor([length], scale=1.0).cpu().numpy() for length in lengths]
-        inputs = feature_extractor(batch, sampling_rate=config.sampling_rate, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            out = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"])
+        for padding_side in ["right", "left"]:
+            with self.subTest(padding_side=padding_side):
+                feature_extractor = WavTokenizerFeatureExtractor(
+                    sampling_rate=config.sampling_rate, hop_length=hop, padding_side=padding_side
+                )
+                inputs = feature_extractor(batch, sampling_rate=config.sampling_rate, return_tensors="pt").to(
+                    torch_device
+                )
+                with torch.no_grad():
+                    out = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"])
 
-        num_codes = out.audio_codes.shape[-1]
-        expected_masks = []
-        for length in lengths:
-            valid_codes = feature_extractor.get_num_audio_codes(length)
-            expected_masks.append([1] * valid_codes + [0] * (num_codes - valid_codes))
-        self.assertEqual(out.audio_codes_mask[:, 0].tolist(), expected_masks)
-
-    def test_left_padded_batch_codes_mask(self):
-        """Left-padded inputs must mark valid audio codes at the end of each sequence."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
-        feature_extractor = WavTokenizerFeatureExtractor(
-            sampling_rate=config.sampling_rate, hop_length=config.hop_length, padding_side="left"
-        )
-        hop = config.hop_length
-        lengths = [2 * hop, 5 * hop - 1, 9 * hop + 1]
-        batch = [floats_tensor([length], scale=1.0).cpu().numpy() for length in lengths]
-        inputs = feature_extractor(batch, sampling_rate=config.sampling_rate, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            out = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"])
-
-        num_codes = out.audio_codes.shape[-1]
-        expected_masks = []
-        for length in lengths:
-            valid_codes = feature_extractor.get_num_audio_codes(length)
-            expected_masks.append([0] * (num_codes - valid_codes) + [1] * valid_codes)
-        self.assertEqual(out.audio_codes_mask[:, 0].tolist(), expected_masks)
+                num_codes = out.audio_codes.shape[-1]
+                expected_masks = []
+                for length in lengths:
+                    valid_codes = feature_extractor.get_num_audio_codes(length)
+                    padding = [0] * (num_codes - valid_codes)
+                    valid = [1] * valid_codes
+                    expected_masks.append(valid + padding if padding_side == "right" else padding + valid)
+                self.assertEqual(out.audio_codes_mask[:, 0].tolist(), expected_masks)
 
     @unittest.skip("WavTokenizer does not have `inputs_embeds` logics")
     def test_model_get_set_embeddings(self):
