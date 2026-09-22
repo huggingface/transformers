@@ -805,9 +805,7 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
 
 
 class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
-    # `Gemma4ImageProcessor` is reused via the auto mapping, so its kwargs are reused too.
     images_kwargs: Gemma4ImageProcessorKwargs
-    videos_kwargs: EmbeddingGemma2VideoProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,

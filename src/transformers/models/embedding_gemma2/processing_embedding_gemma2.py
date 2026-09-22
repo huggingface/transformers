@@ -22,7 +22,7 @@ import numpy as np
 
 from ...audio_utils import AudioInput
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
@@ -40,37 +40,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
-    """
-    patch_size (`int`, *optional*):
-        Size of each image patch in pixels.
-    max_soft_tokens (`int`, *optional*):
-        Maximum number of soft (vision) tokens per video frame.
-        Must be one of {70, 140, 280, 560, 1120}.
-    pooling_kernel_size (`int`, *optional*):
-        Spatial pooling kernel size applied after patchification.
-    exclude_timestamps (`bool`, *optional*):
-        Whether to exclude frame timestamps from the video placeholder expansion.
-    max_frames (`int`, *optional*):
-        The maximum number of frames to sample. If set, the sampled indices will
-        be uniformly re-sampled to fit the budget.
-    overflow_strategy (`str`, *optional*):
-        The strategy to cut down total number of sampled frames to for into budget.
-        Can be set only to "uniform" or "truncate", and is used only together with
-        FPS-based sampling
-    """
-
-    patch_size: int
-    max_soft_tokens: int
-    pooling_kernel_size: int
-
-    exclude_timestamps: bool
-    max_frames: int | None
-    overflow_strategy: str | None
-
-
 class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
-    # `Gemma4ImageProcessor` is reused via the auto mapping, so its kwargs are reused too.
     images_kwargs: Gemma4ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
@@ -82,7 +52,6 @@ class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {},
         "videos_kwargs": {"return_metadata": True},
     }
-    videos_kwargs: EmbeddingGemma2VideoProcessorKwargs
 
 
 @auto_docstring
