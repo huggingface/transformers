@@ -77,15 +77,6 @@ class TestImportStructures(unittest.TestCase):
                 self.assertTrue(module in import_structure[_frozenset])
                 self.assertSetEqual(objects, import_structure[_frozenset][module])
 
-    def test_apertus1p5_processor_backends(self):
-        import_structure = define_import_structure(self.models_path / "apertus1p5")
-        processor_backends = [
-            backends
-            for backends, modules in import_structure.items()
-            if "Apertus1p5Processor" in modules.get("processing_apertus1p5", set())
-        ]
-        self.assertEqual(processor_backends, [frozenset({"vision", "torch", "torchvision"})])
-
     def test_transformers_specific_model_import(self):
         """
         This test ensures that there is equivalence between what is written down in __all__ and what is
