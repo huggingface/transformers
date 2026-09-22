@@ -148,14 +148,28 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.assertEqual(obj[key], value)
 
     def test_class_size_mutation(self):
+        """
+        Passing a deprecated min/max pixels should NOT mutate cls.size. Pssing
+        only one of the min or max pixels, should not raise any errors and keep
+        the default `cls.size` for missing entries.
+        """
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+
         for image_processing_class in self.image_processing_classes.values():
             original_size = dict(image_processing_class().size)
+
             # Instantiate with min_pixels to ensure it doesn't mutate class defaults
             processor = image_processing_class(min_pixels=123)
             self.assertEqual(processor.size.get("shortest_edge"), 123)
+
+            # The default is already `123`, so we get identical pixels
+            encoded_images_1 = processor(image_inputs, min_pixels=123, return_tensors="pt")
+            encoded_images_2 = processor(image_inputs, return_tensors="pt")
+            torch.allclose(encoded_images_1.pixel_values, encoded_images_2.pixel_values)
+
             # Check if class default was mutated
-            processor_2 = image_processing_class()
-            self.assertEqual(dict(processor_2.size), original_size)
+            processor_reloaded = image_processing_class()
+            self.assertEqual(dict(processor_reloaded.size), original_size)
 
     def test_select_best_resolution(self):
         # Test with a final resize resolution

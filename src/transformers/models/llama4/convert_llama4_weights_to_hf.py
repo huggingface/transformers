@@ -200,7 +200,7 @@ def max_context_length(model_path, instruct=False):
     if not instruct:
         return 256 * 1024
 
-    with open(os.path.join(model_path, "params.json"), "r") as f:
+    with open(os.path.join(model_path, "params.json"), "r", encoding="utf-8") as f:
         params = json.load(f)
     params = params.get("model", params)
     if params.get("moe_args") is None:
@@ -218,7 +218,7 @@ def write_model(
 ):
     os.makedirs(model_path, exist_ok=True)
 
-    with open(os.path.join(input_base_path, "params.json"), "r") as f:
+    with open(os.path.join(input_base_path, "params.json"), "r", encoding="utf-8") as f:
         params = json.load(f)
 
     params = params.get("model", params)
