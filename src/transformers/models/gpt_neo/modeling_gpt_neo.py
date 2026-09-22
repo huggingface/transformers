@@ -237,7 +237,6 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
             key,
             value,
             attention_mask,
-            query_length,
             dropout=attn_dropout,
             softmax_scale=1.0,
             is_causal=self.is_causal,

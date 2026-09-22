@@ -331,15 +331,12 @@ class GPTJFlashAttention2(GPTJAttention):
 
         attention_dropout = self.config.attn_pdrop if self.training else 0.0  # attn_pdrop in gptj
 
-        query_length = query.shape[1]
-
         # Compute attention
         attn_weights = _flash_attention_forward(
             query,
             key,
             value,
             attention_mask,
-            query_length,
             dropout=attention_dropout,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,

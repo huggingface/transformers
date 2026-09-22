@@ -37,6 +37,7 @@ def eager_paged_attention_forward(
             "bidirectionally. Use `eager` for a standard forward."
         )
     # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
+    key, value = [x.transpose(1, 2).contiguous() for x in (key, value)]
     key, value = cache.update(
         key_states=key,
         value_states=value,
@@ -44,8 +45,8 @@ def eager_paged_attention_forward(
         read_index=kwargs["read_index"],
         write_index=kwargs["write_index"],
     )
-    key = key.transpose(0, 1).unsqueeze(0)
-    value = value.transpose(0, 1).unsqueeze(0)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
 
     # Repeat the key and value tensors for each group of key-value heads
     if hasattr(module, "num_key_value_groups"):

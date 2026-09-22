@@ -216,8 +216,6 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         output_attentions=False,
         **kwargs,
     ):
-        batch_size, query_len, _ = hidden_states.size()
-
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         query, key, value = self.att_proj(hidden_states).split(self.embed_dim, dim=2)
 
@@ -236,7 +234,6 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             key,
             value,
             attention_mask,
-            query_len,
             dropout=self.dropout if self.training else 0.0,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,

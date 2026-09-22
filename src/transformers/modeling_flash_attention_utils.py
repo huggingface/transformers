@@ -270,13 +270,13 @@ def lazy_import_flash_attention(
         is_paged = _flash_paged_fn is not None
         _process_paged_kwargs_fn = _lazy_define_process_function(_flash_paged_fn) if is_paged else dict
 
-    return (_flash_fn, _flash_varlen_fn, _flash_paged_fn), (_process_varlen_kwargs_fn, _process_paged_kwargs_fn),
+    return (_flash_fn, _flash_varlen_fn, _flash_paged_fn), (_process_varlen_kwargs_fn, _process_paged_kwargs_fn)
 
 
 def _prepare_unpad_state(
-    num_tokens: torch.Tensor,
+    num_tokens: int,
     attention_mask: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, int]:
     """
     Given a state, with can be queries or keys, computes the variables needed to unpad it and run it through flash
     attention.
@@ -512,7 +512,6 @@ def _flash_attention_forward(
     key_states: torch.Tensor,
     value_states: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    query_length: int,
     position_ids: torch.Tensor | None = None,
     cu_seq_lens_q: torch.LongTensor | None = None,
     cu_seq_lens_k: torch.LongTensor | None = None,
@@ -573,7 +572,7 @@ def _flash_attention_forward(
 
     # Flattens the batch dimension, which does not exist in varlen or with block table
     query_states, key_states, value_states = [
-        x.view(-1, *x.shape[2:]) for x in (query_states, key_states, value_states)
+        x.reshape(-1, *x.shape[2:]) for x in (query_states, key_states, value_states)
     ]
     # Block table has a singleton dimension to align with the cache though
     if is_fa_with_block_table:
@@ -592,7 +591,7 @@ def _flash_attention_forward(
     # Compute the right seq_lens objects and call flash
     if is_fa_with_block_table:
         flash_kwargs = process_paged_kwargs_fn(
-            max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
+            query_length, key_length, max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
         )
         flash_kwargs["cache_seqlens"] = cache_seqlens
         out = flash_paged_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
@@ -617,4 +616,10 @@ def _flash_attention_forward(
         padded_out[indices_q] = out
         return padded_out.view(batch_size, query_length, *out.shape[1:])
 
-    return out.view(batch_size, -1, *out.shape[1:])
+    return out.view(batch_size, -1, *out.shape[-2:])
+
+
+#   - paged|sdpa passes the mask dict straight to SDPA. Continuous batching always builds a per-layer-type mask dict for paged|sdpa, since attn_mask_is_needed returns true for it.
+#     sdpa_attention_forward has no dict handling, so both use_gqa_in_sdpa and scaled_dot_product_attention receive a dict. It needs the same per-layer selection eager does.
+#     Eager still derives the key from module.sliding_window at eager_paged.py:58, which can disagree with the cache's grouping, so I would have both read
+#     cache.layer_to_allocator[module.layer_idx].layer_type instead.

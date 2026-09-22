@@ -135,8 +135,8 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
     def update(
         self,
-        key_states: torch.Tensor,  # shape [num_kv_heads, seqlen_q, head_dim]
-        value_states: torch.Tensor,  # shape [num_kv_heads, seqlen_q, head_dim]
+        key_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
+        value_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
         layer_idx: int,
         read_index: torch.Tensor,  # shape [seqlen_q + past_length]
         write_index: torch.Tensor,  # shape [seqlen_q]

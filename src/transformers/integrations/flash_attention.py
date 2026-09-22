@@ -29,7 +29,7 @@ def flash_attention_forward(
     cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    _, _, seq_len, q_head_dim = query.shape
+    q_head_dim = query.shape[-1]
     v_head_dim = value.shape[-1]
 
     # Check for incompatible kwargs
@@ -74,7 +74,6 @@ def flash_attention_forward(
         key_states=key,
         value_states=value,
         attention_mask=attention_mask,
-        query_length=seq_len,
         is_causal=is_causal,
         dropout=dropout,
         softmax_scale=scaling,
