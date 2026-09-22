@@ -19,6 +19,7 @@ The model uses the Arrival-Order Speaker Cache (AOSC) [1](https://huggingface.co
 ### Offline
 
 ```python
+import torch
 from transformers import AutoModelForAudioFrameClassification, AutoProcessor
 from transformers.audio_utils import load_audio
 
@@ -34,7 +35,8 @@ audio = load_audio(
 )
 inputs = processor(audio, sampling_rate=sampling_rate).to(model.device, dtype=model.dtype)
 
-logits = model(**inputs).logits  # (1, num_frames, 8), one frame every 10 ms
+with torch.inference_mode():
+    logits = model(**inputs).logits  # (1, num_frames, 8), one frame every 10 ms
 
 segments = processor.extract_speaker_dict(logits, inputs.attention_mask)[0]
 for segment in segments:
@@ -111,12 +113,13 @@ def inputs_generator():
 
 
 speaker_cache, logits = None, []
-for inputs in inputs_generator():
-    inputs = inputs.to(model.device, dtype=model.dtype)
-    # `inputs` carries `num_lookahead_frames` for every chunk but the last, `speaker_cache` links the chunks
-    outputs = model(**inputs, speaker_cache=speaker_cache)
-    logits.append(outputs.logits)  # the chunk's frames, without its look-ahead
-    speaker_cache = outputs.speaker_cache
+with torch.inference_mode():
+    for inputs in inputs_generator():
+        inputs = inputs.to(model.device, dtype=model.dtype)
+        # `inputs` carries `num_lookahead_frames` for every chunk but the last, `speaker_cache` links the chunks
+        outputs = model(**inputs, speaker_cache=speaker_cache)
+        logits.append(outputs.logits)  # the chunk's frames, without its look-ahead
+        speaker_cache = outputs.speaker_cache
 
 logits = torch.cat(logits, dim=1)  # (1, num_frames, 8), one frame every 10 ms
 segments = processor.extract_speaker_dict(logits)[0]  # [{"Start": 0.0, "End": 15.43, "Speaker": 0}, ...]
@@ -162,7 +165,7 @@ def padded_forward(inputs_embeds, attention_mask=None, position_ids=None, **kwar
 encoder.forward = padded_forward
 
 # warm up before the session: compiles, then records the CUDA graph, so the first real chunk runs at full speed
-with torch.no_grad():
+with torch.inference_mode():
     for _ in range(3):
         hidden_size = model.config.audio_config.hidden_size
         padded_forward(torch.zeros(1, max_window, hidden_size, device=model.device, dtype=model.dtype))
