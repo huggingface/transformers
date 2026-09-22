@@ -132,7 +132,7 @@ class GlmImageImageProcessorPil(PilBackend):
         if min_pixels is not None or max_pixels is not None:
             warnings.warn(
                 "Passing `min_pixels` and `max_pixels` to a processor call is deprecated and will be removed in v5.23. "
-                "Pass in `size={{'longest_edge': xxx, 'shortest_edge': xxx}} to override the target size.`",
+                "Pass in `size={'longest_edge': xxx, 'shortest_edge': xxx} to override the target size.`",
                 FutureWarning,
             )
 
