@@ -71,9 +71,6 @@ class GgufTokenizerTesterMixin:
     Needs no model, so it also covers architectures the loading path does not support yet.
     """
 
-    # One text per thing a conversion gets wrong on its own: the pre-tokenizer regex shows up on the
-    # digits and contractions, the prefix scheme on the whitespace runs, byte fallback on the scripts
-    # and emoji, and a stray post-processor on the special-token text.
     tokenizer_texts = (
         "The capital of France is Paris.",
         "def f(x):\n    return x ** 2\n",
@@ -100,9 +97,6 @@ class GgufTokenizerTesterMixin:
     def test_tokenizer_matches_transformers(self):
         from_gguf, reference = self.tokenizer, self.reference_tokenizer
 
-        # What agrees is the encoding, not the vocabulary size: a GGUF states one flat token list
-        # where the reference adds its special tokens on top of a smaller base. Without them, too --
-        # a bos is prepended per `tokenizer.ggml.add_bos_token`, which many published files omit.
         for text in self.tokenizer_texts:
             with self.subTest(text=text):
                 self.assertEqual(
@@ -136,9 +130,6 @@ class GgufTokenizerTesterMixin:
         """Stated by id in the file, so only the vocabulary turns them back into strings."""
         from_gguf, reference = self.tokenizer, self.reference_tokenizer
 
-        # Not equality with the reference's `eos_token`: llama.cpp writes the turn terminator as the
-        # eos of an instruct model, so a Gemma file names id 106 where the repo names `<eos>`. Both
-        # stop generation, so what must hold is that the file named one the model accepts.
         accepted = {reference.eos_token}
         try:
             eos_ids = GenerationConfig.from_pretrained(self.reference_repo).eos_token_id
@@ -166,16 +157,11 @@ class GgufTokenizerTesterMixin:
 class GgufModelIntegrationTesterMixin(GgufTokenizerTesterMixin):
     """Tests every integrated architecture must pass."""
 
-    # Per-parameter relative tolerances, for an architecture whose conversion cannot be exact. Empty
-    # is the expectation: the transforms run in the float type the file stores and `Cast` rounds once,
-    # at the end, so a converted weight is bit-for-bit what a safetensors checkpoint holds.
+    # Per-parameter relative tolerances, for an architecture whose conversion cannot be exact.
     inexact_params: dict[str, float] = {}
 
     @classmethod
     def setUpClass(cls):
-        # One load for the whole class: these checkpoints are several GB. No dtype is passed, so this
-        # covers `auto` resolving to the one the file was written in. The loading report comes back
-        # with it, for `test_load_accounts_for_every_key`.
         super().setUpClass()
         cls.model, cls.loading_info = cls.load_gguf_model(cls.gguf_file, output_loading_info=True)
 
