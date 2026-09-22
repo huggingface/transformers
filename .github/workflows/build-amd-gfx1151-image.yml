@@ -50,6 +50,8 @@ jobs:
           context: ./docker/transformers-pytorch-amd-gpu-gfx1151
           build-args: |
             REF=main
+          secrets: |
+            hf_token=${{ secrets.HF_HUB_READ_TOKEN }}
           push: true
           tags: |
             ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest

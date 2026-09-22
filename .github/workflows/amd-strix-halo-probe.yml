@@ -73,9 +73,11 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       options: --device=/dev/kfd --device=/dev/dri --group-add 992
+      volumes:
+        - /mnt/scratch/cache/hf:/mnt/cache
     env:
-      HF_HOME: /tmp/hf_home
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HOME: /mnt/cache
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       RUN_SLOW: "1"
     steps:
       - name: Test ${{ matrix.model }}
@@ -106,9 +108,11 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       options: --device=/dev/kfd --device=/dev/dri --group-add 992
+      volumes:
+        - /mnt/scratch/cache/hf:/mnt/cache
     env:
-      HF_HOME: /tmp/hf_home
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HOME: /mnt/cache
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       RUN_SLOW: "1"
     steps:
       - name: Test ${{ matrix.model }}
@@ -135,9 +139,11 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       options: --device=/dev/kfd --device=/dev/dri --group-add 992
+      volumes:
+        - /mnt/scratch/cache/hf:/mnt/cache
     env:
-      HF_HOME: /tmp/hf_home
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HOME: /mnt/cache
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       RUN_SLOW: "1"
     steps:
       - name: Test ${{ matrix.model }}
