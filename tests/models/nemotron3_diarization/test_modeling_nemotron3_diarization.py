@@ -23,7 +23,6 @@ from safetensors.torch import load_file
 from transformers import is_torch_available
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     require_torch_gpu,
     slow,
@@ -31,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
 
 
@@ -348,7 +348,7 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.TestCase):
+class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """
     Validate the speaker probabilities against NeMo, offline and streaming.
 
@@ -365,16 +365,13 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
     # pads two samples of different lengths.
     SECONDS = {"long": None, "short": 30}
 
-    @classmethod
-    def setUp(cls):
-        cls.checkpoint_name = "nvidia/Nemotron-3-Diarization-preview"
-        cls.revision = "refs/pr/6"
-        cls.bucket = "hf-internal-testing/nemotron3-diarization-integration-test"
-        cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+    def setUp(self):
+        super().setUp()
+        self.checkpoint_name = "nvidia/Nemotron-3-Diarization-preview"
+        self.revision = "refs/pr/6"
+        self.bucket = "hf-internal-testing/nemotron3-diarization-integration-test"
+        self.dtype = torch.float32
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, revision=self.revision)
 
     def _load_sample(self, name):
         sampling_rate = self.processor.feature_extractor.sampling_rate
