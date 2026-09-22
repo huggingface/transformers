@@ -53,6 +53,36 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
         super().__init__(parent, **kwargs)
         self.block_types = ("recurrent", "attention")
 
+    def create_and_check_generate_compile_static_cache(self, config, input_ids, model_class):
+        model = model_class(config).to(torch_device).eval()
+        input_ids = input_ids[:1].to(torch_device)
+
+        with torch.no_grad():
+            static_output = model.generate(
+                input_ids=input_ids,
+                max_new_tokens=2,
+                do_sample=False,
+                use_cache=True,
+                cache_implementation="static",
+            )
+
+        torch.compiler.reset()
+
+        compile_config = CompileConfig(mode="default", fullgraph=False, dynamic=True)
+        compile_config._compile_all_devices = True
+
+        with torch.no_grad():
+            compiled_static_output = model.generate(
+                input_ids=input_ids,
+                max_new_tokens=2,
+                do_sample=False,
+                use_cache=True,
+                cache_implementation="static",
+                compile_config=compile_config,
+            )
+
+        self.parent.assertTrue(torch.equal(compiled_static_output, static_output))
+
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
@@ -124,26 +154,9 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     @pytest.mark.torch_compile_test
     def test_generate_compile_static_cache(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = self.all_generative_model_classes[0](config).to(torch_device).eval()
-
-        torch.compiler.reset()
-
-        compile_config = CompileConfig(mode="default", fullgraph=False, dynamic=True)
-        compile_config._compile_all_devices = True
-
-        input_ids = inputs_dict["input_ids"][:1].to(torch_device)
-
-        with torch.no_grad():
-            output = model.generate(
-                input_ids=input_ids,
-                max_new_tokens=2,
-                do_sample=False,
-                use_cache=True,
-                cache_implementation="static",
-                compile_config=compile_config,
-            )
-
-        self.assertEqual(output.shape[-1], input_ids.shape[-1] + 2)
+        self.model_tester.create_and_check_generate_compile_static_cache(
+            config, inputs_dict["input_ids"], self.all_generative_model_classes[0]
+        )
 
     @unittest.skip(reason="Past key values are not returned")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
