@@ -1361,6 +1361,8 @@
         title: Grounding DINO
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/hyperclovax_vision_v2
+        title: HyperCLOVAX Vision V2
       - local: model_doc/idefics
         title: IDEFICS
       - local: model_doc/idefics2
@@ -1417,6 +1419,8 @@
         title: MGP-STR
       - local: model_doc/minicpmv4_6
         title: MiniCPM-V
+      - local: model_doc/minicpmv4_7
+        title: MiniCPM-V 4.7
       - local: model_doc/mistral3
         title: Mistral3
       - local: model_doc/mistral4
