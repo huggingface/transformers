@@ -417,7 +417,7 @@ class PagedAttentionCache:
         # Whether we use the block table or not, we need to select the right cu_seqlen and max_seqlen
         layer_type = self.layer_to_allocator[layer_idx].layer_type
         kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][layer_type].to(torch.int32)
-        kwargs["max_seqlen_k"] = kwargs["max_seqlen_k"][layer_type]
+        kwargs["max_length_k"] = kwargs["max_length_k"][layer_type]
 
         # If there is no block table, we can exit early and update the cache
         block_table = kwargs.get("block_table")

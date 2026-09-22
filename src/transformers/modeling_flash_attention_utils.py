@@ -127,12 +127,13 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
 _loaded_implementation = None
 _flash_fn = None
 _flash_varlen_fn = None
-_flash_with_kvcache_fn = None
+_flash_paged_fn = None
 _pad_fn = None
 _unpad_fn = None
 
 # function that processes kwargs, generalized to handle any supported kwarg within the function
-_process_flash_kwargs_fn = None
+_process_varlen_kwargs_fn = None
+_process_paged_kwargs_fn = None
 # exceptions where hf API doesn't match the original flash attention API
 _hf_api_to_flash_mapping = {
     "dropout": "dropout_p",
@@ -241,7 +242,7 @@ def _lazy_define_process_function(flash_function):
 
 def lazy_import_flash_attention(
     implementation: str | None, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
-) -> tuple[tuple[Callable, Callable, Callable], Callable]:
+) -> tuple[tuple[Callable, Callable, Callable], tuple[Callable, Callable]]:
     """
     Lazily import flash attention and return the respective functions + flags.
 
@@ -252,27 +253,28 @@ def lazy_import_flash_attention(
     if implementation is None and _loaded_implementation is None:
         raise ValueError("Could not find any flash attn implementation based on your environment.")
 
-    global _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _process_flash_kwargs_fn
+    global _flash_fn, _flash_varlen_fn, _flash_paged_fn, _process_varlen_kwargs_fn, _process_paged_kwargs_fn
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
         # This is the point where we actually import the flash attention function
-        _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn = _lazy_imports(
+        _flash_fn, _flash_varlen_fn, _flash_paged_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
 
         # Some kernels, like minimax_m3_vl's block spare kernel, have no varlen function. In this case, the varlen path
         # can never be used, so no need to build a processing function for it, just return a dict builder.
-        if _flash_varlen_fn is not None:
-            _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
-        else:
-            _process_flash_kwargs_fn = dict
+        is_varlen = _flash_varlen_fn is not None
+        _process_varlen_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn) if is_varlen else dict
+        # Similarly, some kernels don't have a kvcache function
+        is_paged = _flash_paged_fn is not None
+        _process_paged_kwargs_fn = _lazy_define_process_function(_flash_paged_fn) if is_paged else dict
 
-    return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn), _process_flash_kwargs_fn
+    return (_flash_fn, _flash_varlen_fn, _flash_paged_fn), (_process_varlen_kwargs_fn, _process_paged_kwargs_fn),
 
 
 def _prepare_unpad_state(
-    state: torch.Tensor,
+    num_tokens: torch.Tensor,
     attention_mask: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, torch.Tensor]:
     """
@@ -280,7 +282,7 @@ def _prepare_unpad_state(
     attention.
     """
     unpadded_indices = attention_mask.nonzero()  # returns a tensor with shape (num_nonzero, 2) of [row, col] indices
-    unpadded_indices[:, 0] *= state.shape[1]  # converts the row index to a flattned global index
+    unpadded_indices[:, 0] *= num_tokens  # converts the row index to a flattned global index
     unpadded_indices = unpadded_indices.sum(dim=-1)
 
     seqlens = attention_mask.sum(dim=-1, dtype=torch.int32)
@@ -290,8 +292,9 @@ def _prepare_unpad_state(
 
 
 def prepare_fa_kwargs_from_attn_mask(
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
+    batch_size: int,
+    query_length: int,
+    key_length: int,
     attention_mask: torch.Tensor,
 ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], tuple[int, int]]:
     """
@@ -300,17 +303,16 @@ def prepare_fa_kwargs_from_attn_mask(
     The query_states and key_states are expected to already be flattened to shape [num__tokens, num_heads, head_dim] and
     the attention mask is a boolean tensor of shape [batch_size, num_kv_tokens].
     """
-    batch_size, query_length = query_states.shape[:2]
-    indices_k, cu_seqlens_k, max_seqlen_k = _prepare_unpad_state(key_states, attention_mask)
+    indices_k, cu_seqlens_k, max_length_k = _prepare_unpad_state(key_length, attention_mask)
     # For the queries, the kwargs are trivial if there is only one query token (decoding)
     if query_length == 1:
-        max_seqlen_q = 1
-        cu_seqlens_q = torch.arange(batch_size + 1, dtype=torch.int32, device=query_states.device)
+        max_length_q = 1
+        cu_seqlens_q = torch.arange(batch_size + 1, dtype=torch.int32, device=attention_mask.device)
         indices_q = cu_seqlens_q[:-1]
     # Otherwise, we perform the same operation as for the keys
     else:
-        indices_q, cu_seqlens_q, max_seqlen_q = _prepare_unpad_state(query_states, attention_mask[:, -query_length:])
-    return (indices_q, indices_k), (cu_seqlens_q, cu_seqlens_k), (max_seqlen_q, max_seqlen_k)
+        indices_q, cu_seqlens_q, max_length_q = _prepare_unpad_state(query_length, attention_mask[:, -query_length:])
+    return (indices_q, indices_k), (cu_seqlens_q, cu_seqlens_k), (max_length_q, max_length_k)
 
 
 def prepare_fa_kwargs_from_position_ids(
@@ -331,8 +333,8 @@ def prepare_fa_kwargs_from_position_ids(
     # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
     # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always
     # increasing for some models (e.g. qwen2-vl).
-    max_seqlen_q = cu_seq_lens_q.diff().max()
-    return (cu_seq_lens_q, cu_seq_lens_q), (max_seqlen_q, max_seqlen_q)
+    max_length_q = cu_seq_lens_q.diff().max()
+    return (cu_seq_lens_q, cu_seq_lens_q), (max_length_q, max_length_q)
 
 
 def _is_packed_sequence(position_ids: torch.Tensor | None, batch_size: int) -> bool:
@@ -382,16 +384,16 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Gets cumulative sequence length for query state.
         cu_seq_lens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
-        max_seqlen_q (`int`, *optional*):
+        max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
-        max_seqlen_k (`int`, *optional*):
+        max_length_k (`int`, *optional*):
             Maximum sequence length for key state.
     """
 
     cu_seq_lens_q: torch.LongTensor | None
     cu_seq_lens_k: torch.LongTensor | None
-    max_seqlen_q: int | None
-    max_seqlen_k: int | None
+    max_length_q: int | None
+    max_length_k: int | None
 
 
 def _process_flash_attention_kwargs(
@@ -483,7 +485,7 @@ def _process_flash_attention_kwargs(
             flash_kwargs["page_table"] = block_table
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
-    # may require `max_seqlen_q`, `max_seqlen_k` to be passed as `int` and not `torch.Tensor`.
+    # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
     #
     # You can either set
     #   - Env: `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`
@@ -511,12 +513,11 @@ def _flash_attention_forward(
     value_states: torch.Tensor,
     attention_mask: torch.Tensor | None,
     query_length: int,
-    is_causal: bool,
     position_ids: torch.Tensor | None = None,
     cu_seq_lens_q: torch.LongTensor | None = None,
     cu_seq_lens_k: torch.LongTensor | None = None,
-    max_seqlen_q: int | None = None,
-    max_seqlen_k: int | None = None,
+    max_length_q: int | None = None,
+    max_length_k: int | None = None,
     k_cache: torch.Tensor | None = None,
     v_cache: torch.Tensor | None = None,
     cache_seqlens: torch.LongTensor | None = None,
@@ -545,12 +546,12 @@ def _flash_attention_forward(
         block_table (`torch.Tensor`, *optional*):
             The block table to use if this is a call to flash_kv_fn, which updates the cache in-place.
     """
-    (flash_fn, flash_varlen_fn, flash_kv_fn), process_flash_kwargs_fn = lazy_import_flash_attention(attn_implementation)
-    batch_size, key_length = key_states.shape[:2]
+    batch_size, query_length = query_states.shape[:2]
+    key_length = key_states.shape[1]
 
-    # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
-    extract_flash_kwargs = partial(
-        process_flash_kwargs_fn, query_length=query_length, key_length=key_length, is_causal=is_causal, **kwargs
+    # Import and unpack flash and processing functions
+    (flash_fn, flash_varlen_fn, flash_paged_fn), (process_varlen_kwargs_fn, process_paged_kwargs_fn) = (
+        lazy_import_flash_attention(attn_implementation)
     )
 
     # We use `flash_varlen_fn` to prevent cross-sequence attention and allow padding free approaches under two cases:
@@ -558,7 +559,7 @@ def _flash_attention_forward(
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids.
     #         It is safe to use `flash_varlen_fn` knowing we already have all necessary the kwargs.
 
-    is_fa_with_varlen_kwargs = None not in (cu_seq_lens_q, cu_seq_lens_k, max_seqlen_q, max_seqlen_k)
+    is_fa_with_varlen_kwargs = None not in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     is_fa_with_block_table = None not in (k_cache, v_cache, cache_seqlens, block_table)
 
     # If there is no padding and the sequence are not packed, we can just run flash and return
@@ -566,7 +567,8 @@ def _flash_attention_forward(
         # This check is more compute heavy, so it is separate from the rest. Also, it's a user's responsibility to take
         # care of flattening `position_ids` if that's needed by the model. See #39121 for more information.
         if not _is_packed_sequence(position_ids, batch_size):
-            out = flash_fn(query_states, key_states, value_states, **extract_flash_kwargs())
+            flash_kwargs = process_varlen_kwargs_fn(query_length=query_length, key_length=key_length, **kwargs)
+            out = flash_fn(query_states, key_states, value_states, **flash_kwargs)
             return out[0] if isinstance(out, tuple) else out
 
     # Flattens the batch dimension, which does not exist in varlen or with block table
@@ -579,22 +581,30 @@ def _flash_attention_forward(
 
     # If they have not been provided, compute the sequence-defining attributes
     if attention_mask is not None:
-        (indices_q, indices_k), (cu_seq_lens_q, cu_seq_lens_k), (max_seqlen_q, max_seqlen_k) = (
-            prepare_fa_kwargs_from_attn_mask(attention_mask, query_length, key_length)
+        (indices_q, indices_k), (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = (
+            prepare_fa_kwargs_from_attn_mask(batch_size, query_length, key_length, attention_mask)
         )
         query_states = query_states[indices_q]  # unpadding
         key_states, value_states = key_states[indices_k], value_states[indices_k]
     elif not (is_fa_with_varlen_kwargs or is_fa_with_block_table):
-        (cu_seq_lens_q, cu_seq_lens_k), (max_seqlen_q, max_seqlen_k) = prepare_fa_kwargs_from_position_ids(position_ids)
-
-    flash_kwargs = extract_flash_kwargs(max_seqlen_q=max_seqlen_q, max_seqlen_k=max_seqlen_k, block_table=block_table)
+        (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
 
     # Compute the right seq_lens objects and call flash
     if is_fa_with_block_table:
+        flash_kwargs = process_paged_kwargs_fn(
+            max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
+        )
         flash_kwargs["cache_seqlens"] = cache_seqlens
-        out = flash_kv_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
+        out = flash_paged_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
 
     else:
+        flash_kwargs = process_varlen_kwargs_fn(
+            query_length=query_length,
+            key_length=key_length,
+            max_seqlen_q=max_length_q,
+            max_seqlen_k=max_length_k,
+            **kwargs
+        )
         flash_kwargs["cu_seqlens_q"] = cu_seq_lens_q
         flash_kwargs["cu_seqlens_k"] = cu_seq_lens_k.clone()  # type: ignore | not cloning crashes on MPS and on CUDA
         out = flash_varlen_fn(query_states, key_states, value_states, **flash_kwargs)
@@ -603,7 +613,7 @@ def _flash_attention_forward(
 
     # If there was an attention mask, restore the padding
     if attention_mask is not None:
-        padded_out = torch.zeros((batch_size * query_length, out.shape[1:]), device=out.device, dtype=out.dtype)
+        padded_out = torch.zeros((batch_size * query_length, *out.shape[1:]), device=out.device, dtype=out.dtype)
         padded_out[indices_q] = out
         return padded_out.view(batch_size, query_length, *out.shape[1:])
 
