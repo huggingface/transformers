@@ -40,6 +40,7 @@ Every exporter returns an [`~exporters.ExportArtifacts`]; `artifact` is the back
 | [`TensorrtExporter`]   | `ExportedProgram`          | NVIDIA GPUs, through TensorRT engines      |
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)       |
+| [`OpenVINOExporter`]   | `openvino.Model`           | OpenVINO runtime (Intel CPU/GPU/NPU)       |
 
 [`AutoHfExporter`] picks the right exporter from a config, and [`AutoExportConfig`] picks the
 right config class from a dict. Both follow the same auto-class pattern in Transformers, which
@@ -97,6 +98,13 @@ pip install transformers "torch==2.12.0" "onnx==1.21.0" "onnxscript==0.7.0" onnx
 
 ```bash
 pip install transformers "torch==2.12.0" "executorch==1.3.1"
+```
+
+</hfoption>
+<hfoption id="OpenVINO">
+
+```bash
+pip install transformers "torch==2.12.0" "openvino==2026.3.1"
 ```
 
 </hfoption>
@@ -354,6 +362,33 @@ exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
+<hfoption id="OpenVINO">
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters import OpenVINOExporter, OpenVINOConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
+
+batch = torch.export.Dim("batch", min=1, max=32)
+seq = torch.export.Dim("seq", min=1, max=2048)
+
+exporter = OpenVINOExporter()
+config = OpenVINOConfig(
+    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
+    # guard wouldn't hold across the explicit symbolic range — most LLMs need this under fine-grained
+    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
+    # infers shape relations instead of verifying them against user-stated bounds.
+    prefer_deferred_runtime_asserts_over_guards=True,
+)
+ov_model = exporter.export(model, inputs, config=config)
+```
+
+</hfoption>
 </hfoptions>
 
 ## Generative models
@@ -426,6 +461,25 @@ config = ExecutorchConfig(backend="xnnpack", dynamic=True)
 exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
 # exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
 # program through `exported_artifacts["decode"].artifact`
+```
+
+</hfoption>
+<hfoption id="OpenVINO">
+
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.exporters import OpenVINOExporter, OpenVINOConfig
+
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
+text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
+
+exporter = OpenVINOExporter()
+config = OpenVINOConfig(dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config)
+# components = {"image_encoder": openvino.Model, "language_model": openvino.Model, "lm_head": openvino.Model, "decode": openvino.Model}
 ```
 
 </hfoption>

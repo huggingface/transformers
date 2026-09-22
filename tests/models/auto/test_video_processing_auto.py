@@ -56,9 +56,9 @@ class AutoVideoProcessorTest(unittest.TestCase):
                     "video_processor_type": "LlavaOnevisionVideoProcessor",
                     "processor_class": "LlavaOnevisionProcessor",
                 },
-                open(processor_tmpfile, "w"),
+                open(processor_tmpfile, "w", encoding="utf-8"),
             )
-            json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w"))
+            json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w", encoding="utf-8"))
 
             config = AutoVideoProcessor.from_pretrained(tmpdirname)
             self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
@@ -73,9 +73,9 @@ class AutoVideoProcessorTest(unittest.TestCase):
                     "video_processor_type": "LlavaOnevisionVideoProcessor",
                     "processor_class": "LlavaOnevisionProcessor",
                 },
-                open(processor_tmpfile, "w"),
+                open(processor_tmpfile, "w", encoding="utf-8"),
             )
-            json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w"))
+            json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w", encoding="utf-8"))
 
             config = AutoVideoProcessor.from_pretrained(tmpdirname)
             self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
@@ -92,9 +92,9 @@ class AutoVideoProcessorTest(unittest.TestCase):
                     "video_processor_type": "LlavaOnevisionVideoProcessor",
                     "processor_class": "LlavaOnevisionProcessor",
                 },
-                open(processor_tmpfile, "w"),
+                open(processor_tmpfile, "w", encoding="utf-8"),
             )
-            json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w"))
+            json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w", encoding="utf-8"))
 
             # remove video_processor_type to make sure config.json alone is enough to load image processor locally
             config_dict = AutoVideoProcessor.from_pretrained(tmpdirname).to_dict()
@@ -122,7 +122,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
                     "video_processor_type": "LlavaOnevisionVideoProcessor",
                     "processor_class": "LlavaOnevisionProcessor",
                 },
-                open(processor_tmpfile, "w"),
+                open(processor_tmpfile, "w", encoding="utf-8"),
             )
 
             config = AutoVideoProcessor.from_pretrained(processor_tmpfile)
@@ -155,9 +155,9 @@ class AutoVideoProcessorTest(unittest.TestCase):
         # `GotOCRImageProcessor`, no `GotOCRVideoProcessor` exists to infer from, and the class
         # stays `None`.
         with tempfile.TemporaryDirectory() as tmpdirname:
-            with open(Path(tmpdirname) / "preprocessor_config.json", "w") as fp:
+            with open(Path(tmpdirname) / "preprocessor_config.json", "w", encoding="utf-8") as fp:
                 json.dump({"image_processor_type": "GotOCRImageProcessor"}, fp)
-            with open(Path(tmpdirname) / "config.json", "w") as fp:
+            with open(Path(tmpdirname) / "config.json", "w", encoding="utf-8") as fp:
                 json.dump({"model_type": "internvl"}, fp)
 
             with (
@@ -213,9 +213,9 @@ class AutoVideoProcessorTest(unittest.TestCase):
                         "video_processor_type": "LlavaOnevisionVideoProcessor",
                         "processor_class": "LlavaOnevisionProcessor",
                     },
-                    open(processor_tmpfile, "w"),
+                    open(processor_tmpfile, "w", encoding="utf-8"),
                 )
-                json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w"))
+                json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w", encoding="utf-8"))
 
                 video_processor = CustomVideoProcessor.from_pretrained(tmpdirname)
 

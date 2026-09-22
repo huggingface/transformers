@@ -104,7 +104,7 @@ def read_export_manifest(pretrained_model_name_or_path, **download_kwargs) -> di
             "from what `ExportArtifacts.save_pretrained` wrote; to assemble runners yourself, build each one "
             "with `ModelRunner.from_pretrained` and pass them to `ExportedGenerator.from_runners`."
         )
-    manifest = json.loads(Path(path).read_text())
+    manifest = json.loads(Path(path).read_text(encoding="utf-8"))
     components = manifest.get("components") or {}
     if not components:
         raise OSError(f"{path} lists no components.")

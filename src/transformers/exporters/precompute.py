@@ -209,6 +209,23 @@ def register_export_input_preparer(*markers: str):
     return decorator
 
 
+@register_export_input_preparer("image_sizes")
+def _prepare_image_sizes_as_ints(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Replace a tensor `image_sizes` with a python list of `(h, w)` int-tuples (the `.tolist()` runs here,
+    outside the traced graph).
+
+    `image_sizes` is per-image geometry, and encoders crop/split each image by it — e.g.
+    `image_sizes[i] // patch_size` (Pixtral) or `int(image_sizes[i] / factor)` (Emu3 VQVAE). As a tensor
+    those bounds become unbacked symints under `torch.export`; as python ints they stay static (matching
+    each encoder's own `image_sizes is None` fallback, which already builds int-tuples). Models that route
+    `image_sizes` around the traced graph (e.g. LLaVA-NeXT resolves anyres before tracing) never hit this.
+    """
+    image_sizes = inputs["image_sizes"]
+    if not torch.is_tensor(image_sizes):
+        return
+    inputs["image_sizes"] = [tuple(int(v) for v in row) for row in image_sizes.tolist()]
+
+
 @register_export_input_preparer("grid_thw")
 def _prepare_grid_thw_vision_inputs(config: Any, inputs: dict[str, Any]) -> None:
     """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `max_seqlen`, `position_ids`, plus optional

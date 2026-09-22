@@ -27,11 +27,13 @@ from .exporter_aoti import AotiExporter
 from .exporter_dynamo import DynamoConfig, DynamoExporter
 from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from .exporter_onnx import OnnxConfig, OnnxExporter
+from .exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from .exporter_tensorrt import TensorrtExporter
 from .runner_aoti import AotiModelRunner
 from .runner_dynamo import DynamoModelRunner
 from .runner_executorch import ExecutorchModelRunner
 from .runner_onnx import OnnxModelRunner
+from .runner_openvino import OpenVINOModelRunner
 from .runner_tensorrt import TensorrtModelRunner
 
 
@@ -56,6 +58,7 @@ EXPORT_BACKENDS: dict[str, ExportBackend] = {
     "onnx": ExportBackend(OnnxConfig, OnnxExporter, OnnxModelRunner),
     "aoti": ExportBackend(AotiConfig, AotiExporter, AotiModelRunner),
     "tensorrt": ExportBackend(TensorrtConfig, TensorrtExporter, TensorrtModelRunner),
+    "openvino": ExportBackend(OpenVINOConfig, OpenVINOExporter, OpenVINOModelRunner),
 }
 
 
@@ -100,7 +103,7 @@ class AutoExportConfig:
 
 class AutoHfExporter:
     """
-    The Auto-HF expoerter class that takes care of automatically instantiating to the correct
+    The Auto-HF exporter class that takes care of automatically instantiating to the correct
     `HfExporter` given the `ExportConfig`.
     """
 

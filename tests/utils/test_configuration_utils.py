@@ -200,7 +200,7 @@ class ConfigTestUtils(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             configuration.save_pretrained(tmp_dir)
             configuration.hidden_size = 2
-            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w"))
+            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w", encoding="utf-8"))
 
             # This should pick the new configuration file as the version of Transformers is > 4.0.0
             new_configuration = AutoConfig.from_pretrained(tmp_dir)

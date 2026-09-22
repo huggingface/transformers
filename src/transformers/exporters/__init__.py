@@ -33,16 +33,19 @@ from .configs import (
     ExportConfigMixin,
     ExportFormat,
     OnnxConfig,
+    OpenVINOConfig,
     TensorrtConfig,
 )
 from .exporter_aoti import AotiExporter
 from .exporter_dynamo import DynamoExporter
 from .exporter_executorch import ExecutorchExporter
 from .exporter_onnx import OnnxExporter
+from .exporter_openvino import OpenVINOExporter
 from .exporter_tensorrt import TensorrtExporter
 from .generator import ExportedGenerator, Modality
 from .runner_aoti import AotiModelRunner
 from .runner_dynamo import DynamoModelRunner
 from .runner_executorch import ExecutorchModelRunner
 from .runner_onnx import OnnxModelRunner
+from .runner_openvino import OpenVINOModelRunner
 from .runner_tensorrt import TensorrtModelRunner

@@ -117,6 +117,8 @@ One exported graph, bound to the runtime that runs it.
 
 [[autodoc]] exporters.runner_onnx.OnnxModelRunner
 
+[[autodoc]] exporters.runner_openvino.OpenVINOModelRunner
+
 [[autodoc]] exporters.runner_executorch.ExecutorchModelRunner
 
 ## DynamoConfig
@@ -125,15 +127,23 @@ One exported graph, bound to the runtime that runs it.
 
 ## OnnxConfig
 
+[[autodoc]] exporters.configs.OnnxConfig
+
+## AotiConfig
+
 [[autodoc]] exporters.configs.AotiConfig
 
-[[autodoc]] exporters.configs.TensorrtConfig
+## TensorrtConfig
 
-[[autodoc]] exporters.configs.OnnxConfig
+[[autodoc]] exporters.configs.TensorrtConfig
 
 ## ExecutorchConfig
 
 [[autodoc]] exporters.configs.ExecutorchConfig
+
+## OpenVINOConfig
+
+[[autodoc]] exporters.configs.OpenVINOConfig
 
 ## Utilities
 

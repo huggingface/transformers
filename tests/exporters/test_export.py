@@ -38,6 +38,7 @@ from transformers.exporters.exporter_aoti import AotiExporter
 from transformers.exporters.exporter_dynamo import _VARLEN_ATTENTION_PATHS, DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
+from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.exporter_tensorrt import TensorrtExporter
 from transformers.exporters.utils import (
     cast_leaf_tensors,
@@ -50,6 +51,7 @@ from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
     require_onnxscript,
+    require_openvino,
     require_torch_greater_or_equal,
     require_torch_tensorrt,
     set_config_for_less_flaky_test,
@@ -1097,7 +1099,7 @@ class ExportTesterMixin:
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not Dynamo exportable/traceable")
 
-        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
+        with open(inspect.getfile(self.all_model_classes[0]), encoding="utf-8") as f:
             source_code = f.read()
             # TODO: add use_experts_implementation support to remaining MoE models
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
@@ -1913,6 +1915,74 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     self._assert_generate_matches_eager(
                         components, exported, "onnx", generation_config, dynamic, multi_token_decode
                     )
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_openvino_export(self, dynamic):
+        """ExportArtifacts each model class to OpenVINO IR and verify output names match eager."""
+        self._skip_if_not_exportable()
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
+                continue
+
+            exporter = OpenVINOExporter()
+            config = OpenVINOConfig(dynamic=dynamic)
+
+            components = self._prepare_export_model_and_inputs(model_class, "openvino")
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    output = exporter.export(model, inputs, config=config)
+                    ov_outputs = output.runtime()(**inputs)
+                    self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
+                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
+
+    @GENERATE_EXPORT_PARAMS
+    @slow
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_openvino_export_generate(self, dynamic, multi_token_decode, generation_config):
+        """ExportArtifacts prefill and decode stages to OpenVINO IR and verify output names match eager."""
+        self._skip_if_not_exportable()
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class,
+                generate=True,
+                dynamic=dynamic,
+                backend="openvino",
+                multi_token=multi_token_decode,
+                generation_config=generation_config,
+            ):
+                continue
+
+            exporter = OpenVINOExporter()
+            config = OpenVINOConfig(dynamic=dynamic)
+
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, "openvino", generation_config=generation_config, multi_token_decode=multi_token_decode
+            )
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, component in components.items():
+                model, inputs = component.module, component.inputs
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    output = exporter.export(model, inputs, config=config)
+                    ov_outputs = output.runtime()(**inputs)
+                    self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
+                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
+
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 

@@ -277,7 +277,7 @@ def main():
             api = HfApi()
             repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+", encoding="utf-8") as gitignore:
                 if "step_*" not in gitignore:
                     gitignore.write("step_*\n")
                 if "epoch_*" not in gitignore:
@@ -647,7 +647,7 @@ def main():
                     token=args.hub_token,
                 )
             all_results = {f"eval_{k}": v for k, v in eval_metric.items()}
-            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            with open(os.path.join(args.output_dir, "all_results.json"), "w", encoding="utf-8") as f:
                 json.dump(all_results, f)
 
     accelerator.wait_for_everyone()

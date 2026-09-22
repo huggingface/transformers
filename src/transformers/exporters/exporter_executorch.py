@@ -1408,13 +1408,13 @@ def _patch_flatc_compile_nonfinite(original):
     """
 
     def patch(output_dir, schema_path, json_path):
-        with open(json_path) as f:
+        with open(json_path, encoding="utf-8") as f:
             data = f.read()
         fixed = data
         for pattern, repl in _JSON_NONFINITE_SUBS:
             fixed = pattern.sub(repl, fixed)
         if fixed != data:
-            with open(json_path, "w") as f:
+            with open(json_path, "w", encoding="utf-8") as f:
                 f.write(fixed)
         return original(output_dir, schema_path, json_path)
 
