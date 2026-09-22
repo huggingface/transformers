@@ -1446,8 +1446,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     @staticmethod
     def _reorder_cache(mems: list[torch.Tensor], beam_idx: torch.Tensor) -> list[torch.Tensor]:
         """
-        This function is used to re-order the `mems` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `mems` with the correct beam_idx at every
+        This function is used to re-order the `mems` cache if beam search is used. This is required to match `mems` with the correct beam_idx at every
         generation step.
         """
         return [layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in mems]

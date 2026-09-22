@@ -107,7 +107,7 @@ def convert_state_dict(original_state_dict: dict[str, Any], mapping: dict[str, s
 def detect_model_type(src_root: Path) -> str:
     """Auto-detect model type from the source checkpoint's config.json."""
     config_path = src_root / "config.json"
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
 
     thinker = config.get("thinker_config", {})
@@ -122,7 +122,7 @@ def detect_model_type(src_root: Path) -> str:
 def clean_config(src_root: Path, model_type: str) -> dict:
     """Load and clean up the source config for transformers compatibility."""
     config_path = src_root / "config.json"
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         model_config = json.load(f)
 
     config_dict = model_config.copy()

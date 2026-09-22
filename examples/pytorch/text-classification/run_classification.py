@@ -713,7 +713,7 @@ def main():
             predictions = np.argmax(predictions, axis=1)
         output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
         if trainer.is_world_process_zero():
-            with open(output_predict_file, "w") as writer:
+            with open(output_predict_file, "w", encoding="utf-8") as writer:
                 logger.info("***** Predict results *****")
                 writer.write("index\tprediction\n")
                 for index, item in enumerate(predictions):

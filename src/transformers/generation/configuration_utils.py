@@ -28,10 +28,10 @@ from ..utils import (
     ExplicitEnum,
     PushToHubMixin,
     cached_file,
-    extract_commit_hash,
     hf_api,
     is_torch_available,
     logging,
+    resolve_revision,
 )
 
 
@@ -496,7 +496,8 @@ class GenerationConfig(PushToHubMixin):
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Common attributes
-        self._commit_hash = kwargs.pop("_commit_hash", None)
+        # BC: generation configs saved by older versions may still carry `_commit_hash`, it is not used anymore.
+        kwargs.pop("_commit_hash", None)
         self._from_model_config = kwargs.pop("_from_model_config", None)
         self.transformers_version = kwargs.pop("transformers_version", None)
 
@@ -1048,7 +1049,15 @@ class GenerationConfig(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        commit_hash = kwargs.pop("_commit_hash", None)
+
+        # Resolve the revision once, so that all the files of this load come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1077,9 +1086,7 @@ class GenerationConfig(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
-                    _commit_hash=commit_hash,
                 )
-                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -1096,7 +1103,6 @@ class GenerationConfig(PushToHubMixin):
         try:
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)
-            config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
 
@@ -1141,9 +1147,6 @@ class GenerationConfig(PushToHubMixin):
         # We remove them so they don't appear in `return_unused_kwargs`.
         kwargs.pop("_from_auto", None)
         kwargs.pop("_from_pipeline", None)
-        # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
-        if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
-            kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         # The line below allows model-specific config to be loaded as well through kwargs, with safety checks.
         # See https://github.com/huggingface/transformers/pull/21269
@@ -1683,8 +1686,9 @@ class ContinuousBatchingConfig:
     `generate_batch` method or the `continuous_batching_context_manager` context manager.
 
     Args:
-        block_size (`int`, *optional*, defaults to 256):
-            Size of each KV cache block in tokens.
+        page_size (`int`, *optional*, defaults to 256):
+            The number of tokens stored for each layer inside a (full-attention) page. A block storing the cache of N
+            layers has N pages (one per layer), each holding cache for `page_size` tokens for one layer. Default is 256.
         num_blocks (`int`, *optional*):
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
@@ -1753,14 +1757,19 @@ class ContinuousBatchingConfig:
             Deprecated in 5.11: please use default_compile_level instead.
         max_cached_graphs (`int`, *optional*):
             Deprecated in 5.13: maximum number of graph is no longer an issue.
+        block_size (`int | None`, *optional*):
+            Deprecated in 5.17: now page_size is used instead.
     """
 
-    # Size of each KV cache block. Must be at least 4 (and for an efficient cache, it should be well above that).
-    block_size: int = 256
+    # The number of tokens stored inside a (full attention) page. A block storing the cache of N layers has N pages, one
+    # per layer. Since different page types can hold different number of tokens, this is for a full attention page.
+    # Default is 256. Must be at least 4 (for an efficient cache, it should be well above that)
+    page_size: int = 256
 
-    # The number of blocks used in the KV cache and the maximum number of tokens in a batch. Once the block size is set,
-    # these can be auto inferred using GPU size.
+    # Number of blocks the cache contains. Usually better to leave it as None and be auto inferred.
     num_blocks: int | None = None
+
+    # The maximum number of tokens in a batch. Once the page size is set, this can be auto inferred using GPU size.
     max_batch_tokens: int | None = None
 
     # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache. If None, auto resolved
@@ -1849,6 +1858,7 @@ class ContinuousBatchingConfig:
     # Deprecated arguments
     use_default_compile_configs: bool | None = None
     max_cached_graphs: int | None = None
+    block_size: int | None = None
 
     def __post_init__(self):
         # Convert dicts to CompileConfig objects
@@ -1882,6 +1892,12 @@ class ContinuousBatchingConfig:
             logger.warning(
                 "max_cached_graphs is deprecated: maximum number of graph is no longer an issue. Deprecated in 5.13."
             )
+        if self.block_size is not None:  # Deprecated in 5.17
+            logger.warning(
+                "block_size is deprecated: please use page_size instead. For backwards compatibility, block_size will "
+                "be used as the full attention page size."
+            )
+            self.page_size = self.block_size
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:

@@ -23,7 +23,7 @@ import numpy as np
 
 from ...audio_utils import AudioInput
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
@@ -39,22 +39,6 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-class Gemma4UnifiedVideoProcessorKwargs(VideosKwargs, total=False):
-    """
-    patch_size (`int`, *optional*):
-        Size of each image patch in pixels.
-    max_soft_tokens (`int`, *optional*):
-        Maximum number of soft (vision) tokens per video frame.
-        Must be one of {70, 140, 280, 560, 1120}.
-    pooling_kernel_size (`int`, *optional*):
-        Spatial pooling kernel size applied after patchification.
-    """
-
-    patch_size: int
-    max_soft_tokens: int
-    pooling_kernel_size: int
 
 
 class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):

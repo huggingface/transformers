@@ -147,6 +147,16 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 if key not in ["min_pixels", "max_pixels"]:
                     self.assertEqual(obj[key], value)
 
+    def test_class_size_mutation(self):
+        for image_processing_class in self.image_processing_classes.values():
+            original_size = dict(image_processing_class().size)
+            # Instantiate with min_pixels to ensure it doesn't mutate class defaults
+            processor = image_processing_class(min_pixels=123)
+            self.assertEqual(processor.size.get("shortest_edge"), 123)
+            # Check if class default was mutated
+            processor_2 = image_processing_class()
+            self.assertEqual(dict(processor_2.size), original_size)
+
     def test_select_best_resolution(self):
         # Test with a final resize resolution
         best_resolution = smart_resize(561, 278, factor=28)

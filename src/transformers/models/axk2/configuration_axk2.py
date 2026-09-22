@@ -148,7 +148,7 @@ class AXK2Config(PreTrainedConfig):
 
         # Indexer cache needed so DSA to indicate correct cache
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
 
         super().__post_init__(**kwargs)
 

@@ -132,7 +132,7 @@ def convert_weights(input_dir: str, output_dir: str, hub_repo_id: str | None = N
     os.makedirs(output_dir, exist_ok=True)
 
     # Config
-    with open(os.path.join(input_dir, "config.json")) as f:
+    with open(os.path.join(input_dir, "config.json"), encoding="utf-8") as f:
         raw_config = json.load(f)
 
     config = DeepseekOcr2Config.from_dict(convert_config(raw_config))
