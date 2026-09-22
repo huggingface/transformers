@@ -1488,7 +1488,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             attention_mask = attention_mask.bool()
 
             causal_mask_mapping = {
-                "deepseek_sparse_attention": attention_mask,
+                "indexed_attention": attention_mask,
                 "linear_attention": attention_mask,
             }
 
@@ -2432,7 +2432,7 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             )
         attention_mask = attention_mask.bool()
 
-        return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
+        return {"indexed_attention": attention_mask, "linear_attention": attention_mask}
 
 
 __all__ = [
