@@ -197,10 +197,7 @@ def add_gguf_special_tokens(tokenizer, tokenizer_dict):
     if control:
         tokenizer.add_special_tokens({"additional_special_tokens": control}, replace_extra_special_tokens=False)
     # 4 is USER_DEFINED: an added token that is not special, like `<think>`. llama.cpp always matches
-    # these whole in the text, so they must be added here too or they get cut into pieces. Only a
-    # spelling the vocabulary already has qualifies: a sentencepiece file lists whitespace runs in
-    # their raw form while the vocabulary holds them with the metaspace, and adding those would grow
-    # the vocabulary and shadow the pieces the model was trained on.
+    # these whole in the text, so they must be added here too or they get cut into pieces.
     vocab = tokenizer.get_vocab()
     user_defined = [
         AddedToken(token, normalized=False, special=False)
