@@ -92,7 +92,7 @@ ALLOWED_LAYER_TYPES = ALLOWED_ATTN_LAYER_TYPES + ALLOWED_MLP_LAYER_TYPES
 _LEGACY_LAYER_TYPE_REMAP = {
     "mamba": "linear_attention",
     "attention": "full_attention",
-    "deepseek_sparse_attention": "indexed_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
+    "deepseek_sparse_attention": "indexed_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32, ...)
     "qwen_sparse_attention": "indexed_attention",  # QSA with block-compressed indexer keys (Qwen4-Exp)
 }
 
