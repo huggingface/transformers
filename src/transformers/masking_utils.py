@@ -235,15 +235,14 @@ def fast_all(tensor: torch.BoolTensor) -> torch.BoolTensor:
 
 
 def _cannot_decide_skip_while_tracing(padding_mask: torch.Tensor | None) -> bool:
-    """Whether skipping the mask must be declined because we are tracing.
+    """Whether the skip conditions cannot be evaluated because we are tracing.
 
-    `torch.export` hard-codes the decision into the exported forward, which is in general wrong
-    (see https://github.com/pytorch/pytorch/issues/108108). Reading the values of a `padding_mask` is a
-    data-dependent control flow, which cannot be traced either. Without a `padding_mask`, the remaining
-    conditions are static, so `torch.compile` can guard on them and no mask needs to be materialized.
+    Export hard-codes the decision into the exported forward, which is in general wrong (see
+    https://github.com/pytorch/pytorch/issues/108108). Reading the values of a `padding_mask` is
+    data-dependent. Without one, the remaining conditions are static and dynamo simply guards on them.
 
-    NOTE: before torch 2.14 (pytorch#176499), dynamo also reported exporting under `torch.compile`, so on
-    older versions this keeps the previous, conservative behavior of never skipping while compiling.
+    NOTE: until torch 2.14 (pytorch#176499), dynamo also reported exporting under `torch.compile`, so
+    older versions keep the previous behavior of never skipping while compiling.
     """
     return is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask))
 
