@@ -155,6 +155,7 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
     # unlike Gemma4 - by default sample 1 fps uniformly
     fps = 1
     max_frames = 64  # What should be the capping max frame count ?
+    overflow_strategy = "uniform"
     exclude_timestamps = True
 
     def __init__(self, **kwargs: Unpack[EmbeddingGemma2VideoProcessorKwargs]):
@@ -288,6 +289,7 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
     ) -> np.ndarray:
         max_frames = max_frames if max_frames is not None else self.max_frames
         num_frames = num_frames if num_frames is not None else self.num_frames
+        overflow_strategy = overflow_strategy if overflow_strategy is not None else self.overflow_strategy
         fps = fps if fps is not None else self.fps
         total_num_frames = metadata.total_num_frames
 

@@ -734,8 +734,9 @@ class EmbeddingGemma2VideoProcessorKwargs(Gemma4VideoProcessorKwargs):
         The maximum number of frames to sample. If set, the sampled indices will
         be uniformly re-sampled to fit the budget.
     overflow_strategy (`str`, *optional*):
-        The strategy to cut down total number of sampled frames to fir into budget.
-        Can be set only to "uniform" or "truncate".
+        The strategy to cut down total number of sampled frames to for into budget.
+        Can be set only to "uniform" or "truncate", and is used only together with
+        FPS-based sampling
     """
 
     exclude_timestamps: bool
@@ -748,6 +749,7 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
     # unlike Gemma4 - by default sample 1 fps uniformly
     fps = 1
     max_frames = 64  # What should be the capping max frame count ?
+    overflow_strategy = "uniform"
     num_frames = AttributeError()
     exclude_timestamps = True
     valid_kwargs = EmbeddingGemma2VideoProcessorKwargs
@@ -763,6 +765,7 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
     ) -> np.ndarray:
         max_frames = max_frames if max_frames is not None else self.max_frames
         num_frames = num_frames if num_frames is not None else self.num_frames
+        overflow_strategy = overflow_strategy if overflow_strategy is not None else self.overflow_strategy
         fps = fps if fps is not None else self.fps
         total_num_frames = metadata.total_num_frames
 

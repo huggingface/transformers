@@ -57,8 +57,9 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
         The maximum number of frames to sample. If set, the sampled indices will
         be uniformly re-sampled to fit the budget.
     overflow_strategy (`str`, *optional*):
-        The strategy to cut down total number of sampled frames to fir into budget.
-        Can be set only to "uniform" or "truncate".
+        The strategy to cut down total number of sampled frames to for into budget.
+        Can be set only to "uniform" or "truncate", and is used only together with
+        FPS-based sampling
     """
 
     patch_size: int
