@@ -449,6 +449,55 @@ freezes it at the captured length, giving a fixed multi-token graph. It composes
 cache below — the merged decode writes each step's tokens into the fixed-size cache in place, and the
 cache handles where they land internally.
 
+### ExecuTorch native KV cache
+
+Set `ExecutorchConfig(cache_implementation="executorch_native")` to keep historical K/V in a native runtime cache,
+not in graph inputs, outputs, or mutable buffers. This uses ExecuTorch's backend-neutral
+`kvcache::update_and_attend` operator. Initially, export is enabled only for `backend="mlx"`.
+It requires an ExecuTorch build providing `extension.llm.cache.update_and_attend` and
+`extension.llm.export.model_metadata.write_cache_geometry`; the pinned installation above may not
+provide these experimental APIs.
+
+```python
+from transformers import GenerationConfig
+from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+components = ExecutorchExporter().export_for_generation(
+    model.eval(),
+    inputs,
+    config=ExecutorchConfig(backend="mlx", dynamic=True, cache_implementation="executorch_native"),
+    generation_config=GenerationConfig(cache_implementation="dynamic", do_sample=False),
+    multi_token_decode=True,
+)
+```
+
+`GenerationConfig.cache_implementation` controls the ordinary HF cache used during generation
+capture. `ExecutorchConfig.cache_implementation` controls the exported program: `None` (the default)
+preserves the existing HF cache export behavior, while `"executorch_native"` installs native attention
+and removes the captured HF cache before `torch.export`. Generation itself is unchanged, and no native
+reference-cache session is needed for capture or tracing. Token positions remain explicit inputs. With
+`multi_token_decode=True` and dynamic shapes, the decode graph can process both an empty-cache
+prompt and subsequent token chunks, within its exported query-length bounds.
+
+Both artifacts publish cache geometry with `write_cache_geometry`: the `get_n_caches`,
+`get_kv_heads`, `get_head_dims`, and `get_windows` constant methods. Entries correspond to the
+native operator's cache layer IDs. `GenerationConfig.max_cache_len` only sizes an HF static cache
+used during capture; it does not set native runtime capacity. There is no `max_cache_len` setting on
+`ExecutorchConfig`: the native caller supplies its logical capacity limit and growth policy when constructing the
+cache. Lazy allocation does not mean the runtime has no capacity limit.
+
+The native caller must create and install a cache, bind its `llm_cache_registry_key` through
+load-time backend options for **both** artifacts, and reuse that cache for prefill and decode.
+Clear the runtime cache before starting an independent sequence. The returned component dictionary
+does not create a generation runtime, and ordinary Python `Runtime.load_program()` alone does not
+install or bind a native cache.
+
+Initial support is single-sequence, unpadded, decoder-only text models using the standard attention
+interface with full causal attention and uniform K/V head geometry. Padding/custom masks, shared-KV
+layers, sliding-window/SSM/encoder-decoder caches, beam expansion, speculative generation, and
+attention-weight outputs are rejected. Select this on the export config, not on `GenerationConfig`;
+`"executorch_native"` is not a cache implementation for standalone `model.generate()`.
+
 ### Static KV cache
 
 `generate()` grows a `DynamicCache` by default, reallocating as the sequence extends — a moving target

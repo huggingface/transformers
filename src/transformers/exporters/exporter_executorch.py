@@ -38,6 +38,8 @@ edge deployment. The export pipeline runs:
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import math
 import operator
 import re
@@ -69,6 +71,7 @@ if is_torch_available():
 
     from .. import masking_utils
     from ..cache_utils import EncoderDecoderCache, StaticCache
+    from ..generation.configuration_utils import GenerationConfig
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -124,6 +127,43 @@ class ExecutorchExporter(DynamoExporter):
     required_packages = ["torch", "executorch"]
     tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
 
+    def export_for_generation(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: MutableMapping[str, Any],
+        config: ExecutorchConfig | dict[str, ExecutorchConfig],
+        generation_config: GenerationConfig | None = None,
+        multi_token_decode: bool = False,
+    ) -> dict[str, ExecutorchProgramManager]:
+        """Export generation components, optionally using ExecuTorch's native off-graph cache."""
+        configs = list(config.values()) if isinstance(config, dict) else [config]
+        if any(
+            getattr(component_config, "cache_implementation", None) == "executorch_native"
+            for component_config in configs
+        ):
+            if any(
+                not isinstance(component_config, ExecutorchConfig)
+                or component_config.cache_implementation != "executorch_native"
+                for component_config in configs
+            ):
+                raise ValueError("executorch_native requires the same cache implementation for prefill and decode.")
+            if any(component_config.backend != "mlx" for component_config in configs):
+                raise ValueError("executorch_native currently requires ExecutorchConfig(backend='mlx').")
+
+            from ..integrations.executorch_native import validate_native_generation
+
+            capture_config = copy.deepcopy(
+                generation_config if generation_config is not None else model.generation_config
+            )
+            capture_config.update(**model.generation_config.to_dict(), defaults_only=True)
+            capture_config.update(**GenerationConfig._get_default_generation_params(), defaults_only=True)
+            capture_config.update(**sample_inputs)
+            validate_native_generation(model, sample_inputs, capture_config)
+
+        return super().export_for_generation(
+            model, sample_inputs, config, generation_config=generation_config, multi_token_decode=multi_token_decode
+        )
+
     def export(
         self,
         model: PreTrainedModel,
@@ -140,21 +180,36 @@ class ExecutorchExporter(DynamoExporter):
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        native_cache = config.cache_implementation == "executorch_native"
+        native_context = contextlib.nullcontext(sample_inputs)
+        if native_cache:
+            if config.backend != "mlx":
+                raise ValueError("executorch_native currently requires the mlx backend.")
+            from ..integrations.executorch_native import native_cache_export
 
-        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
-            apply_fx_program_fixes("executorch", exported_program)
-            apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=partitioner,
-                compile_config=_get_edge_compile_config(config.backend),
-                transform_passes=_get_transform_passes(config.backend),
-            )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_backend_config(config)
-            )
+            native_context = native_cache_export(model, sample_inputs)
+
+        with native_context as sample_inputs:
+            model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+            with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
+                exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+                apply_fx_program_fixes("executorch", exported_program)
+                apply_fx_node_fixes("executorch", exported_program.graph_module)
+                lowering_kwargs = {}
+                if native_cache:
+                    from ..integrations.executorch_native import native_cache_geometry
+
+                    lowering_kwargs["constant_methods"] = native_cache_geometry(exported_program)
+                edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+                    exported_program,
+                    partitioner=partitioner,
+                    compile_config=_get_edge_compile_config(config.backend),
+                    transform_passes=_get_transform_passes(config.backend),
+                    **lowering_kwargs,
+                )
+                executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
+                    config=_get_backend_config(config)
+                )
 
         return executorch_programs_manager
 

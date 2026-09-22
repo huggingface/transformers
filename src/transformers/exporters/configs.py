@@ -164,6 +164,12 @@ class ExecutorchConfig(DynamoConfig):
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
             - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
+        cache_implementation (`str`, *optional*):
+            Cache implementation in the exported program. `None` preserves the HF cache export
+            behavior. `"executorch_native"` replaces it before tracing with ExecuTorch's native
+            off-graph cache (initially supported only with `backend="mlx"`). This does not change
+            `GenerationConfig.cache_implementation`, which controls the HF cache used during generation
+            capture. Native cache capacity and allocation are configured by the runtime caller.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
@@ -184,3 +190,8 @@ class ExecutorchConfig(DynamoConfig):
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True
+    cache_implementation: str | None = None
+
+    def __post_init__(self):
+        if self.cache_implementation not in (None, "executorch_native"):
+            raise ValueError("ExecutorchConfig.cache_implementation must be None or 'executorch_native'.")
