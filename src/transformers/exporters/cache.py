@@ -23,7 +23,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..cache_utils import DynamicCache, StaticLayer
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
 from .precompute import _resolve_modeling_module
@@ -35,6 +34,8 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
+
+    from ..cache_utils import DynamicCache, StaticLayer
 
 
 def _cache_tensors(past_key_values) -> list[torch.Tensor]:

@@ -42,10 +42,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
 from ..generation import GenerationConfig, GenerationMixin
-from ..masking_utils import create_masks_for_generate
-from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ..models.auto import AutoConfig
 from ..utils import GENERATION_CONFIG_NAME, logging
 from ..utils.import_utils import is_torch_available
@@ -84,6 +81,9 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
+    from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
+    from ..masking_utils import create_masks_for_generate
+    from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 
 # The text-path kwargs `generate` always carries. A modality graph that declares one of these names means
 # its own (an audio encoder's `attention_mask` covers mel frames, not prompt tokens), so it is never
