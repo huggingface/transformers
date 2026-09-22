@@ -1545,26 +1545,11 @@ def _patch_unfold(original):
 
 
 @register_patch("openvino", "torch.bernoulli")
-def _patch_bernoulli(original):
-    """Strip randomness from ``torch.bernoulli`` — return ``zeros_like(p)`` during export.
-
-    Stochastic ops have no place in an exported graph; the training-time sampling is
-    deterministic-zero at inference (eval mode), so the export-time substitution is correct
-    for the only modes that actually export.
-    """
-
-    def patch(input, *args, **kwargs):
-        return torch.zeros_like(input)
-
-    return patch
-
-
 @register_patch("openvino", "torch.randn", "torch.randn_like")
 def _patch_randn(original):
-    """Strip randomness from ``torch.randn`` / ``torch.randn_like`` — return zeros.
+    """Strip randomness — zeros, shaped like the argument or the requested size.
 
-    Same rationale as ``torch.bernoulli``: stochastic noise has no place in an exported graph;
-    the inference-time path doesn't sample, so zero is what the model would see.
+    Stochastic ops have no place in an exported graph, and inference never samples.
     """
 
     def patch(*args, **kwargs):
@@ -1577,10 +1562,7 @@ def _patch_randn(original):
 
 @register_patch("openvino", "torch.randperm")
 def _patch_randperm(original):
-    """Strip randomness from ``torch.randperm`` — return the identity permutation.
-
-    Same rationale as ``torch.bernoulli`` / ``torch.randn``.
-    """
+    """Strip randomness from ``torch.randperm`` — return the identity permutation."""
 
     def patch(n, *, dtype=None, device=None, **kwargs):
         return torch.arange(n, dtype=dtype if dtype is not None else torch.int64, device=device)
@@ -1590,10 +1572,7 @@ def _patch_randperm(original):
 
 @register_patch("openvino", "torch.randint")
 def _patch_randint(original):
-    """Strip randomness from ``torch.randint`` — return zeros.
-
-    Same rationale as ``torch.bernoulli`` / ``torch.randn``.
-    """
+    """Strip randomness from ``torch.randint`` — return zeros."""
 
     def patch(*args, **kwargs):
         # Signatures: ``randint(high, size, ...)`` or ``randint(low, high, size, ...)``.
@@ -1776,45 +1755,35 @@ def _patch_rfft(original):
     return patch
 
 
+def _dft(input, n, dim, *, inverse):
+    """1-D DFT as a twiddle matmul — OV's frontend translates no ``aten._fft_c2c``. Quadratic, but
+    adequate for the audio-encoder-sized transforms that reach this path."""
+    if n is None:
+        n = input.shape[dim]
+    k = torch.arange(n, device=input.device, dtype=torch.float32)
+    angles = (2.0 if inverse else -2.0) * torch.pi * k.view(-1, 1) * k / n
+    twiddle = torch.complex(angles.cos(), angles.sin())
+    x = input if torch.is_complex(input) else input.to(torch.complex64)
+    out = x.movedim(dim, -1) @ twiddle.T
+    return (out / n if inverse else out).movedim(-1, dim)
+
+
 @register_patch("openvino", "torch.fft.fft")
 def _patch_fft(original):
-    """``torch.fft.fft`` lowers to ``aten._fft_c2c.default`` which OV's frontend doesn't
-    translate. Build the DFT manually from the twiddle matrix — quadratic but adequate for
-    audio-encoder-sized FFTs that hit this path.
-    """
+    """``torch.fft.fft`` lowers to an ``aten._fft_c2c`` OV's frontend can't translate."""
 
     def patch(input, n=None, dim=-1, norm=None):
-        if n is None:
-            n = input.shape[dim]
-        # Twiddle matrix W[k, j] = exp(-2j pi k j / n) — emit via complex(cos, -sin).
-        k = torch.arange(n, device=input.device, dtype=torch.float32)
-        j = k.view(-1, 1)
-        angles = -2.0 * torch.pi * k * j / n
-        twiddle = torch.complex(angles.cos(), angles.sin())
-        # Move target dim to last, matmul against twiddle, move back.
-        x = input.to(torch.complex64) if not torch.is_complex(input) else input
-        x = x.movedim(dim, -1)
-        out = x @ twiddle.T
-        return out.movedim(-1, dim)
+        return _dft(input, n, dim, inverse=False)
 
     return patch
 
 
 @register_patch("openvino", "torch.fft.ifft")
 def _patch_ifft(original):
-    """Inverse of ``_patch_fft`` — uses conjugate twiddle and divides by ``n``."""
+    """Inverse of ``_patch_fft`` — conjugate twiddle, divided by ``n``."""
 
     def patch(input, n=None, dim=-1, norm=None):
-        if n is None:
-            n = input.shape[dim]
-        k = torch.arange(n, device=input.device, dtype=torch.float32)
-        j = k.view(-1, 1)
-        angles = 2.0 * torch.pi * k * j / n
-        twiddle = torch.complex(angles.cos(), angles.sin())
-        x = input.to(torch.complex64) if not torch.is_complex(input) else input
-        x = x.movedim(dim, -1)
-        out = (x @ twiddle.T) / n
-        return out.movedim(-1, dim)
+        return _dft(input, n, dim, inverse=True)
 
     return patch
 
@@ -2213,39 +2182,31 @@ def _convert_sym_unop(op, *, cast_to_i64=False):
     return _convert
 
 
+def _float_operands(context):
+    """Both operands as floats — OV's ``Divide`` truncates on two integers, so a following
+    ``floor`` is a no-op and negative operands round the wrong way (``-200 // 64`` → ``-3``)."""
+    operands = [context.get_input(0), context.get_input(1)]
+    return [ov_ops.convert(x, "f32") if x.get_element_type().is_integral() else x for x in operands]
+
+
 def _convert_sym_floordiv(context):
     """``a // b`` over SymInts → ``floor(a / b)``, cast to i64. Used by patch/window-size
     computations (focalnet, donut_swin). The i64 cast keeps the result shape-op-friendly —
     downstream ``SequenceMark → Concat`` requires a uniform int dtype.
 
-    Integer operands must be promoted to ``f32`` first: OV's ``Divide`` on two integers truncates
-    toward zero, so a subsequent ``floor`` is a no-op and the result is wrong for negative operands
-    (``-200 // 64`` gives ``-3`` instead of ``-4``). This breaks the ceil-div idiom ``-(-x // n)``
-    on a symbolic ``x`` — e.g. minimax_m3_vl's ``num_key_blocks``, which then comes out one too small
-    and sends a downstream ``scatter`` out of bounds. Dividing in float restores true floor division."""
-    a, b = context.get_input(0), context.get_input(1)
-    if a.get_element_type().is_integral():
-        a = ov_ops.convert(a, "f32")
-    if b.get_element_type().is_integral():
-        b = ov_ops.convert(b, "f32")
+    Truncating division breaks the ceil-div idiom ``-(-x // n)`` on a symbolic ``x`` — minimax_m3_vl's
+    ``num_key_blocks`` comes out one too small and sends a ``scatter`` out of bounds."""
+    a, b = _float_operands(context)
     return [ov_ops.convert(ov_ops.floor(ov_ops.divide(a, b)), "i64").output(0)]
 
 
 def _convert_sym_truediv(context):
     """``a / b`` over SymInts → **float** division, matching Python's ``truediv``.
 
-    OV's ``Divide`` on two integer operands does integer (truncating) division, but Python's
-    ``/`` always returns a float. granite_speech's chunked-attention reshape computes the merged
-    batch dim as ``batch * ceil(seq / chunk)`` — traced as ``ceil(truediv(sym_size, 200))``.
-    With integer operands ``200 / 200`` … ``128 / 200`` truncated to ``0``, so ``ceil(0) == 0``
-    and the reshape got a ``0`` batch dim (pattern ``(0, 200, 2, 16)`` vs input ``(2, 200, 32)``).
-    Promoting integer operands to ``f32`` restores true division so the ``ceil`` rounds up."""
-    a, b = context.get_input(0), context.get_input(1)
-    if a.get_element_type().is_integral():
-        a = ov_ops.convert(a, "f32")
-    if b.get_element_type().is_integral():
-        b = ov_ops.convert(b, "f32")
-    return [ov_ops.divide(a, b).output(0)]
+    Python's ``/`` always returns a float. granite_speech computes its merged batch dim as
+    ``batch * ceil(seq / chunk)``; truncated, the ``ceil`` sees ``0`` and the reshape gets a zero
+    batch dim."""
+    return [ov_ops.divide(*_float_operands(context)).output(0)]
 
 
 _OV_CONVERSION_EXTENSIONS: list[Any] = []
