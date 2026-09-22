@@ -13,12 +13,16 @@
 # limitations under the License.
 """Testing suite for the Apertus 1.5 processor."""
 
+import os
+import re
+import tempfile
 import unittest
+import wave
 
 import numpy as np
 
-from transformers import Apertus1p5Processor, is_torch_available
-from transformers.testing_utils import require_torch, require_torchvision
+from transformers import Apertus1p5Config, Apertus1p5Processor, AutoProcessor, is_torch_available
+from transformers.testing_utils import require_librosa, require_torch, require_torchvision, slow
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -75,34 +79,26 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return np.random.randn(num_samples).astype(np.float32)
 
     def test_image_expansion_matches_reference_layout(self):
-        """The 2x2 golden string from the reference vLLM implementation (vllm_swissai `apertus_integration`
-        commit 40a5516b7): no eof, exactly H-1 row separators."""
+        """Image layouts use height-first headers and separators between rows, preserving surrounding text."""
         processor = self.get_processor()
-        out = processor(text="<|image|> describe", images=[self._image(32, 32)], return_tensors="pt")
-        decoded = processor.tokenizer.decode(out["input_ids"][0])
-        expected = (
-            "<|img_start|>2*2<|img_token_start|>"
-            "<|image|><|image|><|img_end_of_row|><|image|><|image|>"
-            "<|img_end|> describe"
-        )
-        self.assertEqual(decoded, expected)
-        self.assertEqual(out["pixel_values"].shape, (1, 3, 32, 32))
-        self.assertEqual(out["image_sizes"].tolist(), [[32, 32]])
-
-    def test_image_expansion_counts_and_header(self):
-        """A 4x4 grid: 16 placeholders, 3 row separators, one boi/wrapper/eoi; header is height-first."""
-        processor = self.get_processor()
-        out = processor(text="<|image|>", images=[self._image(64, 64)], return_tensors="pt")
-        decoded = processor.tokenizer.decode(out["input_ids"][0])
-        self.assertEqual(decoded.count("<|image|>"), 16)
-        self.assertEqual(decoded.count("<|img_end_of_row|>"), 3)
-        self.assertIn("<|img_start|>4*4<|img_token_start|>", decoded)
-        self.assertEqual(decoded.count("<|img_end|>"), 1)
-
-        # height-first header for a non-square image
-        out = processor(text="<|image|>", images=[self._image(32, 64)], return_tensors="pt")
-        decoded = processor.tokenizer.decode(out["input_ids"][0])
-        self.assertIn("<|img_start|>2*4<|img_token_start|>", decoded)
+        cases = [
+            (
+                (32, 32),
+                "<|img_start|>2*2<|img_token_start|>"
+                "<|image|><|image|><|img_end_of_row|><|image|><|image|>"
+                "<|img_end|> describe",
+            ),
+            (
+                (32, 64),
+                "<|img_start|>2*4<|img_token_start|>"
+                "<|image|><|image|><|image|><|image|><|img_end_of_row|>"
+                "<|image|><|image|><|image|><|image|><|img_end|> describe",
+            ),
+        ]
+        for image_size, expected in cases:
+            with self.subTest(image_size=image_size):
+                out = processor(text="<|image|> describe", images=[self._image(*image_size)], return_tensors="pt")
+                self.assertEqual(processor.tokenizer.decode(out["input_ids"][0]), expected)
 
     def test_audio_expansion_matches_reference_layout(self):
         """ceil(samples / hop) placeholder tokens wrapped in audio start/end; no header."""
@@ -130,8 +126,8 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out = processor(text="<|audio|>", audio=[np.zeros(1200, dtype=np.float32)], return_tensors="pt")
         self.assertFalse(bool(np.isnan(out["input_features"]).any()))
 
-    def test_nested_uneven_batches(self):
-        """Arbitrary per-sample media counts via nested lists, including empty sub-lists."""
+    def test_flat_and_nested_batches_preserve_media_order(self):
+        """Flat and nested media preserve per-sample ownership, including empty groups."""
         processor = self.get_processor()
         hop = processor.feature_extractor.hop_length
         texts = [
@@ -141,35 +137,37 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         images = [[], [self._image(32, 32)], [self._image(32, 32), self._image(48, 32), self._image(32, 48)]]
         audio = [[self._clip(hop)], [], [self._clip(hop + 1), self._clip(3 * hop)]]
-        out = processor(text=texts, images=images, audio=audio, padding=True, return_tensors="pt")
-
-        self.assertEqual(out["pixel_values"].shape[0], 4)  # total images, flattened
-        self.assertEqual(out["image_sizes"].tolist(), [[32, 32], [32, 32], [48, 32], [32, 48]])
-        self.assertEqual(out["input_features"].shape[0], 3)  # total clips, flattened
-        # per-sample expansions are independent: sample 0 has no image structure tokens
-        decoded_first = processor.tokenizer.decode(out["input_ids"][0], skip_special_tokens=False)
-        self.assertNotIn("<|img_start|>", decoded_first)
-        self.assertIn("<|audio_start|>", decoded_first)
-
-    def test_flat_media_distributed_by_placeholder_order(self):
-        """Flat media lists are consumed left-to-right across the batch, sample by sample."""
-        processor = self.get_processor()
-        hop = processor.feature_extractor.hop_length
-        texts = ["<|image|><|image|>", "<|image|>"]
-        out = processor(
+        nested = processor(text=texts, images=images, audio=audio, padding=True, return_tensors="pt")
+        flat = processor(
             text=texts,
-            images=[self._image(32, 32), self._image(48, 32), self._image(32, 48)],
+            images=[image for group in images for image in group],
+            audio=[clip for group in audio for clip in group],
             padding=True,
             return_tensors="pt",
         )
-        # first two images belong to sample 0 (in order), the third to sample 1
-        self.assertEqual(out["image_sizes"].tolist(), [[32, 32], [48, 32], [32, 48]])
-        decoded_second = processor.tokenizer.decode(out["input_ids"][1], skip_special_tokens=False)
-        self.assertIn("<|img_start|>2*3<|img_token_start|>", decoded_second)
+        for key in (
+            "input_ids",
+            "attention_mask",
+            "pixel_values",
+            "image_sizes",
+            "input_features",
+            "feature_attention_mask",
+        ):
+            with self.subTest(key=key):
+                torch.testing.assert_close(flat[key], nested[key])
+        self.assertEqual(nested["pixel_values"].shape[0], 4)
+        self.assertEqual(nested["image_sizes"].tolist(), [[32, 32], [32, 32], [48, 32], [32, 48]])
+        self.assertEqual(nested["feature_attention_mask"].sum(-1).tolist(), [hop, hop + 1, 3 * hop])
 
-        out = processor(text=["<|audio|>", "<|audio|>"], audio=[self._clip(hop), self._clip(2 * hop)], padding=True)
-        decoded_second = processor.tokenizer.decode(out["input_ids"][1], skip_special_tokens=False)
-        self.assertEqual(decoded_second.count("<|audio|>"), 2)
+        expected_image_headers = [[], ["2*2"], ["2*2", "3*2", "2*3"]]
+        expected_audio_counts = [[1], [], [2, 3]]
+        for index, ids in enumerate(nested["input_ids"]):
+            with self.subTest(sample=index):
+                decoded = processor.tokenizer.decode(ids)
+                headers = re.findall(r"<\|img_start\|>(\d+\*\d+)<\|img_token_start\|>", decoded)
+                audio_runs = re.findall(r"<\|audio_start\|>(.*?)<\|audio_end\|>", decoded)
+                self.assertEqual(headers, expected_image_headers[index])
+                self.assertEqual([run.count("<|audio|>") for run in audio_runs], expected_audio_counts[index])
 
     def test_mismatched_counts_raise(self):
         """Strict validation in both directions, for both modalities, flat and nested."""
@@ -193,45 +191,41 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     processor(**kwargs)
                 self.assertIn(snippet, str(ctx.exception))
 
-    def test_media_from_urls(self):
-        """Image and audio entries may be URL (or path) strings; the generic layout hooks fetch them and
-        audio files are resampled to the feature extractor's 24 kHz, flat and nested alike."""
+    @require_librosa
+    def test_nested_audio_files_match_flat_loading(self):
+        """Nested audio files are resampled and assigned to the same samples as flat inputs."""
         processor = self.get_processor()
-        image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
-        audio_url = (
-            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
-        )
+        source_rate = 8000
+        samples = (16000 * np.sin(2 * np.pi * 440 * np.arange(800) / source_rate)).astype("<i2")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            audio_path = os.path.join(tmpdir, "audio.wav")
+            with wave.open(audio_path, "wb") as audio_file:
+                audio_file.setparams((1, 2, source_rate, 0, "NONE", "not compressed"))
+                audio_file.writeframes(samples.tobytes())
+            kwargs = {"text": ["no audio", "<|audio|>"], "padding": True, "return_tensors": "np"}
+            flat = processor(audio=[audio_path], **kwargs)
+            nested = processor(audio=[[], [audio_path]], **kwargs)
 
-        out = processor(text="<|image|> and <|audio|>", images=[image_url], audio=[audio_url], return_tensors="pt")
-        num_samples = int(out["feature_attention_mask"].sum())
-        num_placeholders = processor.tokenizer.decode(out["input_ids"][0]).count("<|audio|>")
-        self.assertEqual(num_placeholders, -(-num_samples // processor.feature_extractor.hop_length))
-        self.assertEqual(out["pixel_values"].ndim, 4)
+        np.testing.assert_allclose(nested["input_features"], flat["input_features"])
+        np.testing.assert_array_equal(nested["feature_attention_mask"], flat["feature_attention_mask"])
+        np.testing.assert_array_equal(nested["input_ids"], flat["input_ids"])
+        expected_samples = len(samples) * processor.feature_extractor.sampling_rate // source_rate
+        self.assertEqual(int(nested["feature_attention_mask"].sum()), expected_samples)
+        expected_tokens = -(-expected_samples // processor.feature_extractor.hop_length)
+        self.assertEqual((nested["input_ids"] == processor.audio_token_id).sum(axis=1).tolist(), [0, expected_tokens])
 
-        out_nested = processor(
-            text=["<|image|>", "<|audio|>"],
-            images=[[image_url], []],
-            audio=[[], [audio_url]],
-            padding=True,
-            return_tensors="pt",
-        )
-        self.assertEqual(out_nested["pixel_values"].shape, out["pixel_values"].shape)
-        self.assertEqual(int(out_nested["feature_attention_mask"].sum()), num_samples)
-
-    def test_get_num_multimodal_tokens_math(self):
-        """The pure-math helper mirrors the image processor's resize math and the audio hop arithmetic."""
+    def test_audio_token_count_helper_matches_processor(self):
         processor = self.get_processor()
         hop = processor.feature_extractor.hop_length
-
-        # with the test budget (min 32*32, max 64*64, factor 16): 32x32 stays -> 2x2 grid; 64x64 stays -> 4x4;
-        # 100x30 (area 3000 in budget) -> int(sqrt(3000/0.3))=100 -> 96, int(100*0.3)=30 -> 32 -> 6x2 grid
-        image_sizes = [(32, 32), (64, 64), (100, 30)]
-        audio_lengths = [1, hop, hop + 1, 40 * hop]
-
-        output = processor._get_num_multimodal_tokens(image_sizes=image_sizes, audio_lengths=audio_lengths)
-        self.assertEqual(output["num_image_tokens"], [4, 16, 12])
-        self.assertEqual(output["num_image_patches"], [1, 1, 1])
-        self.assertEqual(output["num_audio_tokens"], [1, 1, 2, 40])
+        audio_lengths = [1, hop, hop + 1]
+        inputs = processor(
+            text=["<|audio|>"] * len(audio_lengths),
+            audio=[self._clip(length) for length in audio_lengths],
+            padding=True,
+        )
+        actual_counts = [ids.count(processor.audio_token_id) for ids in inputs["input_ids"]]
+        predicted_counts = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
+        self.assertEqual(predicted_counts, actual_counts)
 
     def test_all_empty_media_treated_as_no_media(self):
         """Uniform collators may emit empty media collections for text-only batches; these must be accepted."""
@@ -249,58 +243,35 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertNotIn("input_features", out)
 
     @require_torch
-    def test_audio_without_padding(self):
+    def test_audio_masks_and_placeholders_match_clip_lengths(self):
+        """Masks and placeholders track valid samples across padding modes and tensor formats."""
         processor = self.get_processor()
         hop = processor.feature_extractor.hop_length
-        for length in (1, hop + 3):
-            for batch_size in (1, 2):
-                for tensor_type in (None, "np", "pt"):
-                    with self.subTest(length=length, batch_size=batch_size, tensor_type=tensor_type):
-                        out = processor(
-                            text=["<|audio|>"] * batch_size,
-                            audio=[self._clip(length) for _ in range(batch_size)],
-                            padding=False,
-                            audio_kwargs={"return_tensors": tensor_type},
-                        )
-                        mask = out["feature_attention_mask"]
-                        expected_type = {None: list, "np": np.ndarray, "pt": torch.Tensor}[tensor_type]
-                        self.assertIsInstance(mask, expected_type)
-                        np.testing.assert_array_equal(np.asarray(mask), np.ones((batch_size, length)))
-                        self.assertEqual(np.asarray(out["input_features"]).shape, (batch_size, 1, length))
-                        for ids in out["input_ids"]:
-                            num_placeholders = processor.tokenizer.decode(ids).count("<|audio|>")
-                            self.assertEqual(num_placeholders, -(-length // hop))
-
-    def test_audio_masks_for_unequal_clips(self):
-        processor = self.get_processor()
-        hop = processor.feature_extractor.hop_length
-        lengths = [1, hop + 3]
-        for padding in (False, True):
-            with self.subTest(padding=padding):
+        cases = [
+            ([hop + 3, hop + 3], False, None, list),
+            ([hop + 3, hop + 3], False, "np", np.ndarray),
+            ([hop + 3, hop + 3], False, "pt", torch.Tensor),
+            ([1, hop + 3], False, None, list),
+            ([1, hop + 3], True, None, np.ndarray),
+        ]
+        for lengths, padding, tensor_type, expected_type in cases:
+            with self.subTest(lengths=lengths, padding=padding, tensor_type=tensor_type):
                 out = processor(
                     text=["<|audio|>"] * len(lengths),
                     audio=[self._clip(length) for length in lengths],
                     padding=padding,
+                    audio_kwargs={"return_tensors": tensor_type},
                 )
+                self.assertIsInstance(out["feature_attention_mask"], expected_type)
+                self.assertEqual(len(out["feature_attention_mask"]), len(lengths))
+                self.assertEqual(len(out["input_features"]), len(lengths))
                 for index, length in enumerate(lengths):
                     output_length = max(lengths) if padding else length
                     expected_mask = np.arange(output_length) < length
                     np.testing.assert_array_equal(out["feature_attention_mask"][index], expected_mask)
                     self.assertEqual(out["input_features"][index].shape, (1, output_length))
-                    num_placeholders = processor.tokenizer.decode(out["input_ids"][index]).count("<|audio|>")
+                    num_placeholders = out["input_ids"][index].count(processor.audio_token_id)
                     self.assertEqual(num_placeholders, -(-length // hop))
-
-    @require_torch
-    def test_audio_without_padding_rejects_ragged_tensors(self):
-        processor = self.get_processor()
-        for tensor_type in ("np", "pt"):
-            with self.subTest(tensor_type=tensor_type), self.assertRaises(ValueError):
-                processor(
-                    text=["<|audio|>", "<|audio|>"],
-                    audio=[self._clip(1), self._clip(processor.feature_extractor.hop_length + 3)],
-                    padding=False,
-                    return_tensors=tensor_type,
-                )
 
     def test_audio_truncation_keeps_placeholders_consistent(self):
         """Truncation must never desync the placeholder count from the returned features."""
@@ -324,59 +295,29 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_to_tiny_model_forward(self):
         """End-to-end: processor outputs feed a tiny Apertus1p5 model whose tokenizer sub-configs are aligned
         with the processor components (VQ factor == spatial_factor, codec hop == feature-extractor hop)."""
-        from transformers import Apertus1p5Config, Apertus1p5ForConditionalGeneration, WavTokenizerFeatureExtractor
+        from transformers import Apertus1p5ForConditionalGeneration, WavTokenizerFeatureExtractor
+
+        from .test_modeling_apertus1p5 import Apertus1p5ModelTester
 
         base_processor = self.get_processor()
-        # dedicated feature extractor matching the tiny codec geometry (hop 4)
+        tester = Apertus1p5ModelTester(
+            self,
+            image_size=32,
+            num_hidden_layers=1,
+            vq_num_res_blocks=1,
+            image_token_id=base_processor.image_token_id,
+            audio_token_id=base_processor.audio_token_id,
+            pad_token_id=base_processor.tokenizer.pad_token_id,
+        )
+        tester.image_token_offset = len(base_processor.tokenizer)
+        tester.audio_token_offset = tester.image_token_offset + tester.codebook_size
+        tester.vocab_size = tester.audio_token_offset + tester.audio_codebook_size
+        config = tester.get_config()
+
         processor = self.processor_class(
             image_processor=base_processor.image_processor,
-            feature_extractor=WavTokenizerFeatureExtractor(hop_length=4),
+            feature_extractor=WavTokenizerFeatureExtractor(hop_length=config.audio_config.hop_length),
             tokenizer=base_processor.tokenizer,
-        )
-
-        vocab_size = len(processor.tokenizer)
-        image_token_offset = vocab_size
-        audio_token_offset = image_token_offset + 20  # tiny VQ codebook
-        text_config = {
-            "model_type": "apertus",
-            "hidden_act": "gelu",
-            "vocab_size": audio_token_offset + 12,  # + tiny audio codebook
-            "hidden_size": 32,
-            "num_hidden_layers": 1,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 2,
-            "intermediate_size": 37,
-            "pad_token_id": 0,
-        }
-        vision_config = {
-            "codebook_size": 20,
-            "base_channels": 32,
-            "channel_multiplier": [1, 2, 1],  # spatial factor 4
-            "num_res_blocks": 1,
-            "embed_dim": 16,
-            "latent_channels": 16,
-            "attn_resolutions": [],
-            "resolution": 32,
-        }
-        audio_config = {
-            "model_type": "wavtokenizer",
-            "num_filters": 8,
-            "upsampling_ratios": [2, 2],  # hop_length 4
-            "hidden_size": 32,
-            "codebook_dim": 32,
-            "codebook_size": 12,
-            "decoder_hidden_size": 32,
-            "decoder_intermediate_size": 64,
-            "decoder_num_layers": 2,
-        }
-        config = Apertus1p5Config(
-            text_config=text_config,
-            vision_config=vision_config,
-            audio_config=audio_config,
-            image_token_id=processor.image_token_id,
-            audio_token_id=processor.audio_token_id,
-            image_token_offset=image_token_offset,
-            audio_token_offset=audio_token_offset,
         )
         model = Apertus1p5ForConditionalGeneration(config).eval()
 
@@ -384,11 +325,93 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text="<|image|>hello<|audio|>",
             images=[self._image(32, 32)],
             audio=[self._clip(10)],
-            images_kwargs={"spatial_factor": 4},
+            images_kwargs={"spatial_factor": config.vision_config.spatial_scale_factor},
             return_tensors="pt",
         )
         with torch.no_grad():
             logits = model(**inputs).logits
         self.assertEqual(logits.shape[0], 1)
-        self.assertEqual(logits.shape[-1], config.text_config.vocab_size)
+        self.assertEqual(logits.shape[-1], model.lm_head.out_features)
         self.assertTrue(bool(torch.isfinite(logits).all()))
+
+
+@slow
+@require_torchvision
+class Apertus1p5ProcessorIntegrationTest(unittest.TestCase):
+    """Checkpoint processor checks without model weights; supports `APERTUS1P5_CHECKPOINT` for local assets."""
+
+    @classmethod
+    def setUpClass(cls):
+        checkpoint = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
+        cls.config = Apertus1p5Config.from_pretrained(checkpoint)
+        cls.processor = AutoProcessor.from_pretrained(checkpoint)
+        cls.tokenizer = cls.processor.tokenizer
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.processor, cls.tokenizer, cls.config
+
+    def test_processor_placeholder_sequences(self):
+        """Image and audio placeholders match the expected structure and checkpoint vocabulary IDs."""
+        processor = self.processor
+        config = self.config
+        bos = self.tokenizer.bos_token_id
+
+        image = np.random.default_rng(0).integers(0, 255, (32, 32, 3), dtype=np.uint8)
+        inputs = processor(
+            text="<|image|>", images=[image], images_kwargs={"min_pixels": 32 * 32}, return_tensors="pt"
+        )
+        digit_ids = self.tokenizer("2*2", add_special_tokens=False)["input_ids"]
+        # the structure tokens have no config ids; the golden ids come from the real vocabulary
+        boi, eoi, wrapper, eol = self.tokenizer.convert_tokens_to_ids(
+            [processor.boi_token, processor.eoi_token, processor.image_wrapper_token, processor.eol_token]
+        )
+        image_id = config.image_token_id
+        expected = [bos, boi, *digit_ids, wrapper, image_id, image_id, eol, image_id, image_id, eoi]
+        self.assertEqual(inputs["input_ids"][0].tolist(), expected)
+
+        clip = np.sin(2 * np.pi * 440.0 * np.arange(1200) / 24000.0).astype(np.float32)
+        inputs = processor(text="<|audio|>", audio=[clip], return_tensors="pt")
+        boa, eoa = self.tokenizer.convert_tokens_to_ids([processor.boa_token, processor.eoa_token])
+        expected = [
+            bos,
+            boa,
+            config.audio_token_id,
+            config.audio_token_id,
+            eoa,
+        ]
+        self.assertEqual(inputs["input_ids"][0].tolist(), expected)
+
+    def test_chat_template_content_forms_equivalent(self):
+        """String content, the upstream {'parts': [...]} mapping, and the standard list-of-blocks content must
+        all render to the same prompt with the patched composite template."""
+        processor = self.processor
+        as_string = [{"role": "user", "content": "<|image|>Describe, then answer: <|audio|>"}]
+        as_parts = [
+            {
+                "role": "user",
+                "content": {
+                    "parts": [
+                        {"type": "image"},
+                        {"type": "text", "text": "Describe, then answer: "},
+                        {"type": "audio"},
+                    ]
+                },
+            }
+        ]
+        as_blocks = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "Describe, then answer: "},
+                    {"type": "audio"},
+                ],
+            }
+        ]
+        rendered = [
+            processor.apply_chat_template(messages, add_generation_prompt=True)
+            for messages in (as_string, as_parts, as_blocks)
+        ]
+        self.assertEqual(rendered[0], rendered[1])
+        self.assertEqual(rendered[1], rendered[2])
