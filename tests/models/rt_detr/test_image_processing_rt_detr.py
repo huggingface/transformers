@@ -116,7 +116,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_valid_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         params = {"image_id": 39769, "annotations": target}
@@ -153,7 +153,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -212,14 +212,14 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_multiple_images_processor_outputs(self):
         images_urls = [
-            "http://images.cocodataset.org/val2017/000000000139.jpg",
-            "http://images.cocodataset.org/val2017/000000000285.jpg",
-            "http://images.cocodataset.org/val2017/000000000632.jpg",
-            "http://images.cocodataset.org/val2017/000000000724.jpg",
-            "http://images.cocodataset.org/val2017/000000000776.jpg",
-            "http://images.cocodataset.org/val2017/000000000785.jpg",
-            "http://images.cocodataset.org/val2017/000000000802.jpg",
-            "http://images.cocodataset.org/val2017/000000000872.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000285.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000632.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000724.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000776.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000785.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000802.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000872.jpg",
         ]
 
         images = []
@@ -259,7 +259,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         annotations_0 = {"image_id": 39769, "annotations": target}
@@ -376,7 +376,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_torchvision_processor_equivalence_cpu_accelerator_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}

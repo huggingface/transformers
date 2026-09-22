@@ -28,13 +28,12 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
-    extract_commit_hash,
     is_g2p_en_available,
     is_sentencepiece_available,
     is_tokenizers_available,
     logging,
 )
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, resolve_revision
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -130,6 +129,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("florence2", "BartTokenizer" if is_tokenizers_available() else None),
         ("fnet", "FNetTokenizer" if is_tokenizers_available() else None),
         ("fsmt", "FSMTTokenizer"),
+        ("fun_asr_nano", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("funnel", "FunnelTokenizer" if is_tokenizers_available() else None),
         ("gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("gemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
@@ -164,6 +164,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("hyperclovax_vision_v2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
@@ -173,6 +174,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("kimi_k25", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("kimi_linear", "TokenizersBackend" if is_tokenizers_available() else None),
         ("kosmos-2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
         ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),
@@ -199,6 +201,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("mgp-str", "MgpstrTokenizer"),
         ("mimo_v2_flash", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("minicpmv4_7", "TokenizersBackend" if is_tokenizers_available() else None),
         (
             "ministral",
             "MistralCommonBackend"
@@ -290,6 +293,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_text", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_asr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -388,6 +392,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "h2ovl_chat",
     "hyperclovax",
     "hyperclovax_vlm",
+    "hyperclovax_vision_v2",
     "internlm2",
     "jamba",
     "janus",
@@ -397,6 +402,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "minicpmv",
     "minimax_m2",
     "modernbert",
+    "modernbert-decoder",
     "molmo",
     "molmo2",
     "nemotron",
@@ -414,7 +420,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "cohere_asr",
     "camembertv2-base",
     "smolvlm",
-    "vision-encoder-decoder",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
@@ -430,6 +435,7 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
+    "naver-clova-ix/donut-*",
     "salesforce/blip2-opt-*",
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",
@@ -611,7 +617,14 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    commit_hash = kwargs.get("_commit_hash")
+    kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
+    revision = resolve_revision(
+        pretrained_model_name_or_path,
+        revision,
+        token=token,
+        local_files_only=local_files_only,
+        cache_dir=cache_dir,
+    )
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         TOKENIZER_CONFIG_FILE,
@@ -625,17 +638,13 @@ def get_tokenizer_config(
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
-        _commit_hash=commit_hash,
     )
     if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
-    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
 
     with open(resolved_config_file, encoding="utf-8") as reader:
-        result = json.load(reader)
-    result["_commit_hash"] = commit_hash
-    return result
+        return json.load(reader)
 
 
 class AutoTokenizer:
@@ -749,6 +758,16 @@ class AutoTokenizer:
             tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
+        # Resolve the revision once, so the model config, the tokenizer config and every tokenizer file below come
+        # from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
+
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
             tokenizer_class_name = TOKENIZER_MAPPING_NAMES.get(tokenizer_type, None)
@@ -767,8 +786,15 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         if gguf_file:
+            # Same split as `PreTrainedConfig.from_pretrained`: fast reader where covered, else legacy.
+            from ...integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
+
             gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-            config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+            metadata, tensor_names = read_gguf_metadata(gguf_path)
+            if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
+                config_dict = get_gguf_config(metadata, tensor_names)
+            else:
+                config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
             config = AutoConfig.for_model(**config_dict)
         elif config is None:
             try:
@@ -858,9 +884,6 @@ class AutoTokenizer:
                 f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
                 f"The tokenizer may need to be converted or re-saved."
             )
-
-        if "_commit_hash" in tokenizer_config:
-            kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
         if tokenizer_config_class and tokenizer_config_class.endswith("Fast"):
             tokenizer_config_class = tokenizer_config_class[:-4]

@@ -19,13 +19,8 @@ from parameterized import parameterized
 
 from transformers import VibeVoiceProcessor
 from transformers.testing_utils import require_librosa, require_torch
-from transformers.utils import is_torch_available
 
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
-
-
-if is_torch_available():
-    pass
 
 
 @require_torch
@@ -39,6 +34,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = VibeVoiceProcessor.from_pretrained(cls.checkpoint)
         cls.tmpdirname = tempfile.mkdtemp()
         processor.save_pretrained(cls.tmpdirname)
+        cls.full_tmpdirname = cls.tmpdirname
 
     def prepare_processor_dict(self):
         return {

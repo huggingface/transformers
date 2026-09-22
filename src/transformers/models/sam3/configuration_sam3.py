@@ -24,8 +24,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class Sam3ViTConfig(PreTrainedConfig):
     r"""
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        Base frequency for RoPE.
     window_size (`int`, *optional*, defaults to 24):
         Window size for windowed attention.
     global_attn_indexes (`list[int]`, *optional*, defaults to `[7, 15, 23, 31]`):
@@ -38,6 +36,7 @@ class Sam3ViTConfig(PreTrainedConfig):
 
     base_config_key = "backbone_config"
     model_type = "sam3_vit_model"
+    default_rope_type = "axial"
 
     hidden_size: int = 1024
     intermediate_size: int = 4736
@@ -49,18 +48,19 @@ class Sam3ViTConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
-    rope_theta: float = 10000.0
     window_size: int = 24
     global_attn_indexes: list[int] | None = None
     layer_scale_init_value: float | None = None
     pretrain_image_size: int | list[int] | tuple[int, int] = 336
     hidden_dropout: float | int = 0.0
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
         if self.global_attn_indexes is None:
             self.global_attn_indexes = [7, 15, 23, 31]
+
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="facebook/sam3")

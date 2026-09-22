@@ -684,7 +684,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -770,7 +770,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -816,7 +816,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -902,7 +902,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -949,7 +949,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -1024,7 +1024,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
@@ -1070,7 +1070,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
@@ -1135,12 +1135,6 @@ class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
             **kwargs,

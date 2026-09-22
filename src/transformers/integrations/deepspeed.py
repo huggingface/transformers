@@ -244,9 +244,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             num_training_steps,
             "num_training_steps (calculated)",
         )
+        # `deepspeed>=0.19.6` rejects a non-positive `warmup_num_steps`, while older versions silently
+        # clamped it to 2. Keep the auto-filled value positive so that no-warmup runs still work.
         self.fill_match(
             "scheduler.params.warmup_num_steps",
-            args.get_warmup_steps(num_training_steps),
+            max(1, args.get_warmup_steps(num_training_steps)),
             "warmup_steps",
         )
 

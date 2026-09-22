@@ -78,6 +78,8 @@ if is_torch_available():
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
+        LlamaConfig,
+        LlamaForCausalLM,
         SpeechEncoderDecoderModel,
     )
     from transformers.cache_utils import (
@@ -114,7 +116,7 @@ if is_torch_available():
         AssistedCandidateGeneratorDifferentTokenizers,
         DFlashTokenCandidateGenerator,
     )
-    from transformers.generation.utils import ALL_CACHE_NAMES, _speculative_sampling
+    from transformers.generation.utils import ALL_CACHE_NAMES, DeferredStopCheck, _speculative_sampling
     from transformers.modeling_layers import MtpModel
 
 from unittest.mock import patch
@@ -409,6 +411,41 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 )
 
             self._check_generate_outputs(output_generate, model.config, use_cache=True)
+
+    @pytest.mark.generate
+    def test_cached_decode_matches_cacheless(self):
+        """Greedy decoding with a cache must produce what recomputing the whole sequence produces.
+
+        The two tests above run both configurations but only check their own shapes, so a cache that feeds
+        its layers the wrong positions or a mask of the wrong width passes both. Models whose state *is*
+        their cache (`_is_stateful`) have no cacheless form to compare against and are skipped.
+        """
+        for model_class in self.all_generative_model_classes:
+            if model_class._is_stateful:
+                self.skipTest(reason=f"{model_class.__name__} keeps recurrent state, so decode has no cacheless form")
+            # Only the weights are pinned; the testers draw inputs from a `global_rng` this does not touch,
+            # so the input varies per process — the invariant has to hold for any input.
+            set_seed(42)
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+
+            cached, cacheless = (
+                self._greedy_generate(
+                    model=model,
+                    inputs_dict=inputs_dict,
+                    output_logits=True,
+                    output_scores=True,
+                    return_dict_in_generate=True,
+                    use_cache=use_cache,
+                )
+                for use_cache in (True, False)
+            )
+
+            assert_similar_generate_outputs(cached, cacheless, atol=1e-3, rtol=1e-3)
+            # That check is id-first, so it cannot see a cache bug that moves the logits without flipping
+            # the argmax. This tolerance is loose enough for kernel noise, tight enough for a real one.
+            for step, (with_cache, without_cache) in enumerate(zip(cached.logits, cacheless.logits)):
+                torch.testing.assert_close(with_cache, without_cache, rtol=1e-2, atol=1e-2, msg=f"step {step}")
 
     @pytest.mark.generate
     def test_sample_generate(self):
@@ -1560,8 +1597,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # MoE routing accumulates FP noise across experts (different routing decisions
                     # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
-                else:
+                elif dtype == torch.float32:
                     atol = rtol = 1e-5
+                else:
+                    atol = rtol = 5e-5
                 assert_similar_generate_outputs(
                     dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
                 )
@@ -2855,17 +2894,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
         head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
-        # Check for MLA and DSA attributes: MLA models cache compressed latents, DSA does not yet
+        # Check for MLA and DSA attributes: Those models cache compressed latents
         kv_lora_rank = getattr(config, "kv_lora_rank", None)
         qk_rope_head_dim = getattr(config, "qk_rope_head_dim", None)
         uses_mla = kv_lora_rank is not None and qk_rope_head_dim is not None
-        uses_dsa = uses_mla and getattr(config, "index_topk", None) is not None
-
-        # DSA models expand the latents before caching, so their keys and values have distinct head dims.
-        if uses_dsa:
-            key_shape = (batch_size, num_attention_heads, seq_length, config.qk_nope_head_dim + qk_rope_head_dim)
-            value_shape = (batch_size, num_attention_heads, seq_length, config.v_head_dim)
-            return key_shape, value_shape
 
         # For MLA models, return the shape of "kv_nope" as key and "k_rot" as value
         if uses_mla:
@@ -2974,13 +3006,11 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ]
             ]
         )
-        last_assistant_token_is_eos = False
         validated_tokens, n_matches = _speculative_sampling(
             candidate_input_ids,
             candidate_logits,
             candidate_length,
             new_logits,
-            last_assistant_token_is_eos,
         )
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
@@ -3017,7 +3047,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ]
             ]
         )
-        last_assistant_token_is_eos = False
         last_validated_token = []
         for _ in range(10_000):
             validated_tokens, n_matches = _speculative_sampling(
@@ -3025,7 +3054,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                last_assistant_token_is_eos,
             )
             self.assertTrue(n_matches.item() == 2)
             self.assertTrue(validated_tokens.tolist()[0][0] == 1)
@@ -3066,7 +3094,6 @@ class UtilsFunctionsTest(unittest.TestCase):
             candidate_logits,
             candidate_length,
             new_logits,
-            False,
             assistant_ensemble_weight=None,
         )
         # Matches the parent test exactly (i.e. backward compatible with w=None)
@@ -3098,7 +3125,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                False,
                 assistant_ensemble_weight=None,
             )
         with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
@@ -3107,7 +3133,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                False,
                 assistant_ensemble_weight=0.7,
             )
 
@@ -3140,7 +3165,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    False,
                     assistant_ensemble_weight=0.7,
                 )
 
@@ -3177,7 +3201,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    False,
                     assistant_ensemble_weight=0.5,
                 )
 
@@ -3953,6 +3976,61 @@ class GenerationIntegrationTests(unittest.TestCase):
             max_new_tokens=7,
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
+
+    def test_assisted_decoding_sliding_window_multi_token_draft(self):
+        """
+        Test that assisted decoding works correctly when the assistant model has sliding window and will draft several
+        tokens at once. Indeed, the assistant always activates past recording on its Cache, and it calls `generate` which
+        performs several calls to `forward` in a row without calling `crop` in-between, so the DynamicSlidingWindowLayer cache
+        must correctly handle returning the necessary tokens, even with past recording activated.
+        """
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=4,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            max_position_embeddings=512,
+            sliding_window=6,
+        )
+        set_seed(1)
+        model = LlamaForCausalLM(config).eval()
+        # Make sure we call several forwards in a row without crop in-between with the assistant
+        model.generation_config.num_assistant_tokens = 3
+
+        # Do it once with a prefill shorter than the sliding window
+        input_ids = torch.randint(1, 60, (1, 2))
+        attention_mask = torch.ones_like(input_ids)
+        reference = model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, do_sample=False, max_new_tokens=8
+        )
+        assisted = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            max_new_tokens=8,
+            assistant_model=model,
+        )
+        # It must not crash above, and be the same here
+        self.assertTrue(torch.equal(reference, assisted))
+
+        # And again with a prefill longer than sliding window
+        input_ids = torch.randint(1, 60, (1, 12))
+        attention_mask = torch.ones_like(input_ids)
+        reference = model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, do_sample=False, max_new_tokens=8
+        )
+        assisted = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            max_new_tokens=8,
+            assistant_model=model,
+        )
+        # It must not crash above, and be the same here
+        self.assertTrue(torch.equal(reference, assisted))
 
     def test_mtp_mask_creation_uses_per_layer_config(self):
         config = AutoConfig.for_model(
@@ -5237,9 +5315,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             custom_generate_dir = Path(tmp_dir) / "custom_generate"
             custom_generate_dir.mkdir()
-            with open(custom_generate_dir / "generate.py", "w") as f:
+            with open(custom_generate_dir / "generate.py", "w", encoding="utf-8") as f:
                 f.write("from .helper import ret_success\ndef generate(*args, **kwargs):\n    return ret_success()\n")
-            with open(custom_generate_dir / "helper.py", "w") as f:
+            with open(custom_generate_dir / "helper.py", "w", encoding="utf-8") as f:
                 f.write('def ret_success():\n    return "success"\n')
             model = AutoModelForCausalLM.from_pretrained(
                 "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
@@ -5265,7 +5343,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             custom_generate_dir = Path(tmp_dir) / "custom_generate"
             custom_generate_dir.mkdir()
-            with open(custom_generate_dir / "generate.py", "w") as f:
+            with open(custom_generate_dir / "generate.py", "w", encoding="utf-8") as f:
                 f.write("def generate(*args, **kwargs):\n    return 'should_not_run'\n")
             with self.assertRaises(ValueError):
                 model.generate(
@@ -5700,3 +5778,105 @@ def assert_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5):
     mismatch_message = _get_generate_outputs_mismatch_message(output_1, output_2, atol=atol, rtol=rtol)
     if mismatch_message:
         raise AssertionError(mismatch_message)
+
+
+class _CollectingStreamer:
+    """Keeps every tensor it is handed, so a stream can be compared against the sequences that were returned."""
+
+    def __init__(self):
+        self.tokens = []
+
+    def put(self, value):
+        self.tokens.append(value.reshape(-1).cpu())
+
+    def end(self):
+        pass
+
+
+@require_torch_accelerator
+class DeferredStopCheckIntegrationTest(unittest.TestCase):
+    """Deferring the stop decision must not change a single token of what `generate` returns."""
+
+    model_id = "hf-internal-testing/tiny-random-gpt2"
+
+    def setUp(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        self.model = AutoModelForCausalLM.from_pretrained(self.model_id).to(torch_device).eval()
+
+    def _generate(self, inputs, model=None, **kwargs):
+        """Generate twice over the same inputs, once collecting the stream, and return both."""
+        model = self.model if model is None else model
+        kwargs = {"max_new_tokens": 12, "do_sample": False, **kwargs}
+        outputs = model.generate(**inputs, return_dict_in_generate=True, output_scores=True, **kwargs)
+        streamer = _CollectingStreamer()
+        model.generate(**inputs, streamer=streamer, **kwargs)
+        return outputs, torch.cat(streamer.tokens)
+
+    def _generate_deferred_and_immediate(self, inputs, model=None, **kwargs):
+        # Both halves are forced rather than left to `is_supported`, so this holds on any accelerator:
+        # `is_supported` limits where the deferral is *enabled*, but the logic under test is not
+        # device-specific and is worth checking wherever the suite runs.
+        with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args, **kwargs: True)):
+            deferred = self._generate(inputs, model=model, **kwargs)
+        with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args, **kwargs: False)):
+            immediate = self._generate(inputs, model=model, **kwargs)
+        return deferred, immediate
+
+    def _assert_matches(self, inputs, model=None, **kwargs):
+        prompt_length = inputs["input_ids"].shape[1]
+        (deferred, stream), (immediate, _) = self._generate_deferred_and_immediate(inputs, model=model, **kwargs)
+
+        # The extra step leaves no trace: same tokens, and one score per token actually returned
+        self.assertTrue(torch.equal(deferred.sequences, immediate.sequences))
+        self.assertEqual(len(deferred.scores), len(immediate.scores))
+        self.assertEqual(len(deferred.scores), deferred.sequences.shape[1] - prompt_length)
+        # A streamer is one step behind, but still sees every token and never the one past the stop
+        self.assertEqual(stream.tolist(), deferred.sequences[0].cpu().tolist())
+
+    def test_matches_immediate_check_at_max_length(self):
+        inputs = self.tokenizer(["Hello world, this is"], return_tensors="pt").to(torch_device)
+        self._assert_matches(inputs)
+
+    def test_matches_immediate_check_when_stopping_early(self):
+        """The step taken past an eos is the one that has to be undone, so this is the interesting case."""
+        inputs = self.tokenizer(["Hello world, this is"], return_tensors="pt").to(torch_device)
+        prompt_length = inputs["input_ids"].shape[1]
+        # Make a token the model does generate into an eos, so generation really stops before `max_new_tokens`
+        generated = self.model.generate(**inputs, max_new_tokens=12, do_sample=False)
+        eos_token_id = int(generated[0, prompt_length + 4])
+
+        self._assert_matches(inputs, eos_token_id=eos_token_id)
+        stopped = self.model.generate(**inputs, max_new_tokens=12, do_sample=False, eos_token_id=eos_token_id)
+        self.assertLess(stopped.shape[1], generated.shape[1])
+
+    def test_matches_immediate_check_with_a_sliding_window(self):
+        """A sliding window layer has to hold an extra state for the rollback without widening its window.
+
+        `update` hands attention whatever the layer is holding, so a cache recording past for `crop` must
+        still return the working window - otherwise the model silently attends over `sliding_window + 1`
+        positions and generates different tokens.
+        """
+        model_id = "hf-internal-testing/tiny-random-Gemma3ForCausalLM"
+        config = AutoConfig.from_pretrained(model_id)
+        # Narrow the window so that a short generation still runs past it, which is the only regime where the
+        # states are trimmed, and so the only one where holding an extra one could widen what attention sees
+        config.sliding_window = 4
+        model = AutoModelForCausalLM.from_pretrained(model_id, config=config).to(torch_device).eval()
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(["Hello world, this is"], return_tensors="pt").to(torch_device)
+
+        self._assert_matches(inputs, model=model)
+
+    def test_matches_immediate_check_without_a_cache(self):
+        inputs = self.tokenizer(["Hello world, this is"], return_tensors="pt").to(torch_device)
+        self._assert_matches(inputs, use_cache=False)
+
+    def test_matches_immediate_check_on_a_batch(self):
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        inputs = self.tokenizer(
+            ["Hello world, this is", "The capital of France is"], return_tensors="pt", padding=True
+        ).to(torch_device)
+        prompt_length = inputs["input_ids"].shape[1]
+        (deferred, _), (immediate, _) = self._generate_deferred_and_immediate(inputs)
+        self.assertTrue(torch.equal(deferred.sequences, immediate.sequences))
+        self.assertEqual(len(deferred.scores), deferred.sequences.shape[1] - prompt_length)
