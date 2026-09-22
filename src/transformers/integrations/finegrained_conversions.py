@@ -328,11 +328,9 @@ class FineGrainedQuantize(_FineGrainedOp):
             tensor = value[0] if isinstance(value, list) else value
             holder = self._weight_holder(model, key)
             if holder is None and model is not None:
-                # `_weight_holder` already said this is not a finegrained module's weight. An
-                # expert BIAS is the one that has to be turned away here: it is 2-D, so the
-                # rank guard below lets it through, and quantizing it would invent a
-                # `<proj>_bias_scale_inv` no module holds. Only a direct invocation, which has
-                # no model to ask, quantizes without a holder.
+                # not a weight, whatever its rank: an expert bias is 2-D and would otherwise be
+                # quantized into a `<proj>_bias_scale_inv` no module holds. Only a direct
+                # invocation, with no model to ask, quantizes without a holder.
                 result[key] = tensor
                 continue
             result.update(self._quantize_one(key, tensor, holder))
@@ -423,21 +421,18 @@ class FineGrainedQuantize(_FineGrainedOp):
 
     @staticmethod
     def _identity_activation_scales(module, prefix: str, scale_name: str | None, device) -> dict:
-        """The activation-side scale slots this module holds, written as the identity.
-
-        A static activation scale and an NVFP4 activation global come out of a CALIBRATION pass,
-        which quantizing on the fly is not. They still have to be written: the loader materializes
-        a key no checkpoint supplies with `torch.empty_like`, and `_init_weights` has no branch for
-        a scale, so a slot left out here reaches the kernels as uninitialized memory — a zero
-        divides the activations by zero, a negative flips their sign.
-        """
-        if module is None or scale_name is None:
+        """This module's activation-side scales, as the identity, because quantizing on the fly
+        is not a calibration pass. They have to be WRITTEN: the loader materializes a key no
+        checkpoint supplies with `torch.empty_like` and `_init_weights` has no branch for a
+        scale, so a slot left out here reaches the kernels as uninitialized memory."""
+        if module is None:
             return {}
         stem = scale_name.removesuffix("_scale_inv")
+        # the experts prefix each slot with the projection; a dense linear, whose stem IS
+        # `weight`, names them bare
+        proj = "" if stem == "weight" else f"{stem}_"
         out = {}
-        for suffix in ("activation_scale", "input_global_scale"):
-            # the experts prefix each slot with the projection, a dense linear names it bare
-            slot = f"{stem}_{suffix}" if hasattr(module, f"{stem}_{suffix}") else suffix
+        for slot in (f"{proj}activation_scale", f"{proj}input_global_scale"):
             held = getattr(module, slot, None)
             if held is not None:
                 # on the weight's device, not the slot's: the module is still on meta here, and
@@ -449,17 +444,15 @@ class FineGrainedQuantize(_FineGrainedOp):
     def _quantize_block_fp8(value: torch.Tensor, block: tuple[int, int], ue8m0: bool):
         """``(E4M3 weight, inverse scale grid)`` for a ``(..., rows, cols)`` tensor at ``block``.
 
-        A trailing PARTIAL block is padded, not refused: DeepSeek-V3 ships `kv_a_proj_with_mqa` as
-        `(576, 7168)` against a 128x128 block with a `(5, 56)` scale grid, so the format's own
-        producers round the grid up and the module allocates it the same way. The padding is
-        zeros, which cannot move a block's amax, so the short block is scaled by its real values.
-        UE8M0 rounds the inverse scale up to a power of two before quantizing, so dequant
-        multiplies by exactly the scale the weight was divided by.
+        A trailing PARTIAL block is padded, not refused — DeepSeek-V3 ships `kv_a_proj_with_mqa`
+        as `(576, 7168)` against a 128x128 block with a `(5, 56)` grid, so the format's own
+        producers round up and the module allocates to match. The zeros cannot move a block's
+        amax, so the short block is scaled by its real values. UE8M0 rounds the inverse scale up
+        to a power of two before quantizing, so dequant multiplies by exactly what it divided by.
         """
         block_m, block_n = block
         rows, cols = value.shape[-2], value.shape[-1]
-        pad_m, pad_n = -rows % block_m, -cols % block_n
-        padded = torch.nn.functional.pad(value.float(), (0, pad_n, 0, pad_m)) if pad_m or pad_n else value.float()
+        padded = torch.nn.functional.pad(value.float(), (0, -cols % block_n, 0, -rows % block_m))
         grid_m, grid_n = padded.shape[-2] // block_m, padded.shape[-1] // block_n
         tiles = padded.reshape(*padded.shape[:-2], grid_m, block_m, grid_n, block_n)
         max_abs = tiles.abs().amax(dim=(-3, -1))
@@ -468,9 +461,8 @@ class FineGrainedQuantize(_FineGrainedOp):
             inv_scale = torch.pow(2.0, torch.ceil(torch.log2(inv_scale.clamp(min=torch.finfo(torch.float32).tiny))))
         scaled = tiles / inv_scale.unsqueeze(-1).unsqueeze(-3)
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE).reshape(padded.shape)
-        if pad_m or pad_n:
-            quantized = quantized[..., :rows, :cols].contiguous()
-        return quantized, inv_scale.to(_get_ue8m0_dtype() if ue8m0 else torch.float32)
+        # a no-op slice on a shape that tiled, and `contiguous` then returns the tensor itself
+        return quantized[..., :rows, :cols].contiguous(), inv_scale.to(_get_ue8m0_dtype() if ue8m0 else torch.float32)
 
     @staticmethod
     def _quantize_group(value: torch.Tensor, format_spec: WeightFormat):
