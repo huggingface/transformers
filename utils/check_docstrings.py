@@ -395,7 +395,7 @@ def _get_auto_docstring_names(file_path: str, cache: dict[str, set[str]] | None 
 
     names = set()
     try:
-        with open(file_path) as f:
+        with open(file_path, encoding="utf-8") as f:
             source = f.read()
         tree = ast.parse(source, filename=file_path)
         for node in tree.body:

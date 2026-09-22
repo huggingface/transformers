@@ -42,8 +42,12 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    # We need it for DSA (but it's not really used as it's implicitly assumed)
+    "HYV4Config": ["layer_types"],
     # For consistency we keep head dim but it's not used as NoPE is applied
     "Glm5NextTextConfig": ["head_dim"],
+    # Kept as a config field, the ViT-style attention has no output dropout
+    "RadioConfig": ["hidden_dropout_prob"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],
@@ -51,6 +55,10 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm4vMoeTextConfig": ["n_routed_experts"],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
+    "FunAsrNanoEncoderConfig": [
+        "num_mel_bins",
+        "num_stacked_frames",
+    ],  # Used via the `input_size` property
     "NemotronAsrStreamingEncoderConfig": ["num_mel_bins"],  # Used via the `subsampling_out_hidden_size` property
     "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
     "Gemma4UnifiedVisionConfig": [
@@ -202,6 +210,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_diffusion_samples",
         "max_atomic_number",
     ],
+    "AXK2Config": ["layer_types"],  # needed for correct cache
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.
     "EsmFold2AtomEncoderConfig": True,

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import time
 from collections.abc import Callable
 
@@ -25,7 +26,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -250,9 +251,9 @@ class Kimi_K25VisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        # interleave within the head dim for HW
-        freq_hw = freq.permute(1, 2, 0).flatten(1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        # interleave within the head dim for WH
+        freq_wh = freq.transpose(1, 2).flip(-1).flatten(1)
+        return torch.cat([freq_wh, freq_wh], dim=-1)
 
 
 class Kimi_K25VisionMLP(VisionMlp):
@@ -423,7 +424,6 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw, **kwargs)
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
-        position_ids = position_ids.transpose(0, 1).flip(0)  # (2, positions)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
@@ -775,6 +775,51 @@ class Kimi_K25Processor(Qwen2VLProcessor):
             video_tokens = num_frame_tokens * self.video_token
             video_structure += f"{timestamp_str}<|media_begin|>video<|media_content|>{video_tokens}<|media_end|>"
         return video_structure
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Kimi_K25ProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Kimi_K25ProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            temporal_patch_size = (
+                videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
+            )
+            num_video_patches = [
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
+            ]
+            # Each of the `num_chunks_per_video` chunks costs one frame's worth of merged patches
+            num_video_tokens = [
+                math.ceil(num_frames / temporal_patch_size) * (num_patches // num_frames) // merge_size**2
+                for (num_frames, _, _), num_patches in zip(video_sizes, num_video_patches)
+            ]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
 
     @property
     def model_input_names(self) -> list[str]:

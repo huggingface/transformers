@@ -28,6 +28,7 @@ from .utils import (
     is_rocm_platform,
     is_torch_cuda_available,
     is_torch_mlu_available,
+    is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -94,6 +95,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
             (is_torch_mlu_available, "mlu"),
+            (is_torch_musa_available, "musa"),
             (is_torch_npu_available, "npu"),
             (is_torch_xpu_available, "xpu"),
         ),

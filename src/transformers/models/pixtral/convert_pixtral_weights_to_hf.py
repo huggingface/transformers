@@ -144,7 +144,7 @@ MISTRAL_CONFIG_MAPPING = {
 def convert_mistral_model(input_dir, output_dir):
     vision_config = {}
     if os.path.isfile(f"{input_dir}/params.json"):
-        with open(f"{input_dir}/params.json") as f:
+        with open(f"{input_dir}/params.json", encoding="utf-8") as f:
             param_json = json.load(f)
         vision_config = param_json.pop("vision_encoder")
         for k, v in MISTRAL_CONFIG_MAPPING.items():
@@ -236,7 +236,7 @@ def main():
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
     if args.chat_template_file:
-        processor.chat_template = open(args.chat_template_file).read()
+        processor.chat_template = open(args.chat_template_file, encoding="utf-8").read()
     processor.save_pretrained(args.output_dir)
 
 

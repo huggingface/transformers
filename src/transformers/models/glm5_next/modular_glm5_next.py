@@ -103,7 +103,7 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
         Number of DSA indexer heads.
     layer_types (`list[str]`, *optional*):
         Per-layer attention cache schedule. Values are `"linear_attention"` for
-        KDA layers and `"deepseek_sparse_attention"` for MLA (DSA) layers.
+        KDA layers and `"indexed_attention"` for MLA (DSA) layers.
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer mode. Values are `"full"` (run the indexer) or `"shared"`
         (reuse the previous full layer's top-k selection).
@@ -180,12 +180,11 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
         if self.layer_types is None:
             kda_layers = [idx for idx in range(self.num_hidden_layers) if idx % 4 != 3]
             self.layer_types = [
-                "linear_attention" if layer_idx in kda_layers else "deepseek_sparse_attention"
+                "linear_attention" if layer_idx in kda_layers else "indexed_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
         self.layer_types = [
-            "deepseek_sparse_attention" if layer_type == "full_attention" else layer_type
-            for layer_type in self.layer_types
+            "indexed_attention" if layer_type == "full_attention" else layer_type for layer_type in self.layer_types
         ]
 
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
@@ -542,7 +541,8 @@ def chunk_kimi_delta_attention(
     # Main difference to GDN is the per head application of `g` which was broadcasted across heads instead
     g = g.cumsum(dim=-2)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
-    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).exp().float()
+    strict_mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
+    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).masked_fill(strict_mask[..., None], float("-inf")).exp().float()
     attn = -(k_beta.unsqueeze(-2) * key.unsqueeze(-3) * decay_mask).sum(dim=-1).masked_fill(mask, 0)
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()
@@ -1026,9 +1026,7 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.scaling = self.qk_head_dim ** (-0.5)
-        self.q_a_layernorm = (
-            Glm5NextTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
-        )
+        self.q_a_layernorm = Glm5NextTextRMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
         self.kv_a_layernorm = Glm5NextTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
         self.indexer = None if self.skip_topk else Glm5NextTextIndexer(config, layer_idx)
         self.next_skip_topk = (
@@ -1055,11 +1053,11 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
         k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        # Cache update
+        # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         if self.indexer is not None:
             topk_indices = self.indexer(
@@ -1343,7 +1341,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             attention_mask = attention_mask.bool()
 
             causal_mask_mapping = {
-                "deepseek_sparse_attention": attention_mask,
+                "indexed_attention": attention_mask,
                 "linear_attention": attention_mask,
             }
 
@@ -1695,7 +1693,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             )
         attention_mask = attention_mask.bool()
 
-        return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
+        return {"indexed_attention": attention_mask, "linear_attention": attention_mask}
 
 
 class Glm5NextProcessor(Glm46VProcessor):
@@ -2300,6 +2298,43 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
             )
 
         return tvF.pad(videos, [0, 0, target_width - content_width, target_height - content_height], fill=0)
+
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        patch_expand_factor = videos_kwargs.get("patch_expand_factor", None) or self.patch_expand_factor
+        min_image_tokens = videos_kwargs.get("min_image_tokens", None) or self.min_image_tokens
+        max_image_tokens = videos_kwargs.get("max_image_tokens", None) or self.max_image_tokens
+
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            factor=patch_size * merge_size * patch_expand_factor,
+            temporal_factor=temporal_patch_size,
+            min_pixels=min_image_tokens,
+            max_pixels=max_image_tokens,
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t * grid_h * grid_w
 
 
 __all__ = [
