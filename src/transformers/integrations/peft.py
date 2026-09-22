@@ -291,9 +291,10 @@ class PeftAdapterMixin:
             if tp_info is not None:
                 has_tp_adapters = True
                 break
-        # DTensor TP integration: the base model itself carries the TP plan, so any adapter injected into it will be
-        # TP-sharded too; no per-module PEFT marker is needed to detect this.
-        has_tp_adapters = has_tp_adapters or bool(getattr(self, "_tp_plan", None))
+        # DTensor TP integration: `_tp_size > 1` records that TP was actually applied to the model, so any adapter
+        # injected into it will be TP-sharded too; no per-module PEFT marker is needed to detect this.
+        tp_size = getattr(self, "_tp_size", 1)
+        has_tp_adapters = has_tp_adapters or (tp_size is not None and tp_size > 1)
 
         if has_tp_adapters and not is_peft_greater_or_equal("0.21.0"):
             raise ValueError(
