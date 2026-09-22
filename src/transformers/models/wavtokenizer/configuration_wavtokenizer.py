@@ -135,6 +135,11 @@ class WavTokenizerConfig(PreTrainedConfig):
                 "WavTokenizer uses no projections around the quantizer, so `codebook_dim` "
                 f"({self.codebook_dim}) must equal `hidden_size` ({self.hidden_size})."
             )
+        if self.decoder_hidden_size % self.decoder_attention_num_groups != 0:
+            raise ValueError(
+                f"`decoder_hidden_size` ({self.decoder_hidden_size}) must be divisible by "
+                f"`decoder_attention_num_groups` ({self.decoder_attention_num_groups}) for the decoder GroupNorm layers."
+            )
 
     @property
     def hop_length(self) -> int:

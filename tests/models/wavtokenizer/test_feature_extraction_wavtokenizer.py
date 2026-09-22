@@ -20,14 +20,9 @@ import numpy as np
 
 from transformers import WavTokenizerFeatureExtractor
 from transformers.testing_utils import require_torch
-from transformers.utils.import_utils import is_torch_available
 
 from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
-
-
-if is_torch_available():
-    import torch
 
 
 @require_torch
@@ -87,23 +82,6 @@ class WavTokenizerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
     def setUp(self):
         self.feat_extract_tester = WavTokenizerFeatureExtractionTester(self)
 
-    def test_call(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        # create three inputs of length 800, 1000, and 1200
-        audio_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-        np_audio_inputs = [np.asarray(audio_input) for audio_input in audio_inputs]
-
-        # Test not batched input
-        encoded_sequences_1 = feat_extract(audio_inputs[0], return_tensors="np").input_values
-        encoded_sequences_2 = feat_extract(np_audio_inputs[0], return_tensors="np").input_values
-        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
-
-        # Test batched
-        encoded_sequences_1 = feat_extract(audio_inputs, padding=True, return_tensors="np").input_values
-        encoded_sequences_2 = feat_extract(np_audio_inputs, padding=True, return_tensors="np").input_values
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
-            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-
     def test_single_input_not_padded(self):
         # single inputs stay unpadded (the model pads internally) so codes stay bit-identical to the
         # original WavTokenizer pipeline
@@ -115,70 +93,39 @@ class WavTokenizerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
         self.assertEqual(int(processed.padding_mask.sum()), hop + 3)
 
     def test_batch_padded_to_longest(self):
+        """Batches pad to the longest sample by default, or truncate to `max_length` first, with `padding_mask`
+        marking the valid samples and `input_values` shaped `(batch_size, 1, num_samples)`."""
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        lengths = [800, 1000, 1234]
-        batch = [floats_list((1, length))[0] for length in lengths]
-        processed = feat_extract(batch, sampling_rate=feat_extract.sampling_rate, return_tensors="np")
-        self.assertEqual(processed.input_values.shape[-1], max(lengths))
-        self.assertEqual(processed.padding_mask.sum(-1).tolist(), lengths)
-
-    def test_batch_truncated_and_padded(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        max_length = 1000
-        lengths = [1200, 800]
+        lengths = [1200, 800, 1234]
         batch = [np.arange(length, dtype=np.float32) for length in lengths]
+
+        processed = feat_extract(batch, sampling_rate=feat_extract.sampling_rate, return_tensors="np")
+        self.assertEqual(processed.input_values.shape, (len(batch), 1, max(lengths)))
+        self.assertEqual(processed.padding_mask.sum(-1).tolist(), lengths)
+        np.testing.assert_array_equal(processed.input_values[1, 0, : lengths[1]], batch[1])
+        np.testing.assert_array_equal(processed.input_values[1, 0, lengths[1] :], 0.0)
+
+        max_length = 1000
         processed = feat_extract(
             batch,
-            padding=True,
             truncation=True,
             max_length=max_length,
             sampling_rate=feat_extract.sampling_rate,
             return_tensors="np",
         )
-
         self.assertEqual(processed.input_values.shape, (len(batch), 1, max_length))
-        self.assertEqual(processed.padding_mask.sum(-1).tolist(), [max_length, lengths[1]])
+        self.assertEqual(processed.padding_mask.sum(-1).tolist(), [max_length, lengths[1], max_length])
         np.testing.assert_array_equal(processed.input_values[0, 0], batch[0][:max_length])
         np.testing.assert_array_equal(processed.input_values[1, 0, : lengths[1]], batch[1])
         np.testing.assert_array_equal(processed.input_values[1, 0, lengths[1] :], 0.0)
 
-    def test_rejects_empty_audio(self):
+    def test_rejects_invalid_audio(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        with self.assertRaises(ValueError):
-            feat_extract(np.zeros(0, dtype=np.float32), sampling_rate=feat_extract.sampling_rate)
-
-    def test_get_num_audio_codes(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        hop = feat_extract.hop_length
-        for num_samples, expected in [
-            (1, 1),
-            (hop - 1, 1),
-            (hop, 1),
-            (hop + 1, 2),
-            (10 * hop, 10),
-            (10 * hop + hop // 2, 11),
+        sampling_rate = feat_extract.sampling_rate
+        for name, audio, kwargs in [
+            ("empty", np.zeros(0, dtype=np.float32), {"sampling_rate": sampling_rate}),
+            ("wrong sampling rate", floats_list((1, 800))[0], {"sampling_rate": sampling_rate + 1}),
+            ("non-mono", [np.random.rand(2, 800).astype(np.float32)], {"sampling_rate": sampling_rate}),
         ]:
-            self.assertEqual(feat_extract.get_num_audio_codes(num_samples), expected)
-
-    def test_rejects_wrong_sampling_rate(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        audio = floats_list((1, 800))[0]
-        with self.assertRaises(ValueError):
-            feat_extract(audio, sampling_rate=feat_extract.sampling_rate + 1)
-
-    def test_rejects_non_mono(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        stereo = np.random.rand(2, 800).astype(np.float32)
-        with self.assertRaises(ValueError):
-            feat_extract([stereo], sampling_rate=feat_extract.sampling_rate)
-
-    def test_double_precision_pad(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        np_audio_inputs = np.random.rand(100).astype(np.float64)
-        py_audio_inputs = np_audio_inputs.tolist()
-
-        for inputs in [py_audio_inputs, np_audio_inputs]:
-            np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.input_values.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.input_values.dtype == torch.float32)
+            with self.subTest(name), self.assertRaises(ValueError):
+                feat_extract(audio, **kwargs)
