@@ -396,17 +396,13 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             `int`: Number of video patches per video.
         """
         size = videos_kwargs.get("size", None) or self.size
-        min_pixels = videos_kwargs.get("min_pixels", None)
-        max_pixels = videos_kwargs.get("max_pixels", None)
-        if min_pixels is None or max_pixels is None:
-            min_pixels, max_pixels = size["shortest_edge"], size["longest_edge"]
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
         merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
