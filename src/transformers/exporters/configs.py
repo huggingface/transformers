@@ -166,10 +166,10 @@ class ExecutorchConfig(DynamoConfig):
             - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
         cache_implementation (`str`, *optional*):
             Cache implementation in the exported program. `None` preserves the HF cache export
-            behavior. `"executorch_off_graph_cache"` replaces it before tracing with ExecuTorch's native
+            behavior. `"executorch_off_graph_cache"` replaces it before tracing with ExecuTorch's
             off-graph cache (initially supported only with `backend="mlx"`). This does not change
             `GenerationConfig.cache_implementation`, which controls the HF cache used during generation
-            capture. Native cache capacity and allocation are configured by the runtime caller.
+            capture. Off-graph cache capacity and allocation are configured by the runtime caller.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
