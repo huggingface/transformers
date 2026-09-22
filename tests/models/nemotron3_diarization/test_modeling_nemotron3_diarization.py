@@ -37,8 +37,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        AutoProcessor,
         AutoModelForAudioFrameClassification,
+        AutoProcessor,
         Nemotron3DiarizationAudioConfig,
         Nemotron3DiarizationConfig,
         Nemotron3DiarizationForAudioFrameClassification,
@@ -259,6 +259,9 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
     # Seconds kept from the conversation: the whole 97.6 s recording, and a 30 s excerpt, so that the batched test
     # pads two samples of different lengths.
     SECONDS = {"long": None, "short": 30}
+    # Probabilities are bounded in [0, 1], so a relative tolerance would only widen the bound where they are close to
+    # 1 and vanish where they are close to 0. They are compared with a flat absolute tolerance instead.
+    TOLERANCE = {"atol": 1e-3, "rtol": 0.0}
 
     def setUp(self):
         super().setUp()
@@ -307,7 +310,7 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         """
         boundary = self.processor.subsampling_factor
         self.assertEqual(probabilities.shape, expected.shape)
-        torch.testing.assert_close(probabilities[:-boundary], expected[:-boundary], atol=1e-3, rtol=0.0)
+        torch.testing.assert_close(probabilities[:-boundary], expected[:-boundary], **self.TOLERANCE)
 
     def _speaker_probabilities(self, model, names):
         """Per-sample speaker probabilities on the valid frames, as in the reproducer."""
@@ -451,5 +454,5 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         self.assertIn(EXPECTED_PROBABILITIES.shape[0] - num_emitted, (0, 1))
         num_flushed = step_logits[-1].shape[1]
         torch.testing.assert_close(
-            probabilities[:-num_flushed], EXPECTED_PROBABILITIES[: num_emitted - num_flushed], atol=1e-3, rtol=0.0
+            probabilities[:-num_flushed], EXPECTED_PROBABILITIES[: num_emitted - num_flushed], **self.TOLERANCE
         )
