@@ -14,6 +14,8 @@
 # limitations under the License.
 """Configuration base class and utilities."""
 
+from __future__ import annotations
+
 import copy
 import json
 import math
@@ -21,7 +23,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
 
 from huggingface_hub.dataclasses import strict
 from packaging import version
@@ -95,18 +97,41 @@ _LEGACY_LAYER_TYPE_REMAP = {
 }
 
 
-def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
-    """Apply legacy → current layer-type name mapping.
-
-    Converts names in `_LEGACY_LAYER_TYPE_REMAP` to their current equivalents like `attention` → `full_attention`. Names not in that dict are returned unchanged.
+def remap_legacy_layer_types(
+    layer_types: list[str] | None = None, config: PreTrainedConfig | None = None
+) -> list[str] | None:
+    """
+    Remap legacy layer types to newer convention names. Any name that does not fit one of the `_LEGACY_LAYER_TYPE_REMAP`
+    patterns is returned unchanged.
+    This function can either take a list of `layer_types`, in which case a remapped list is returned, or a `config`,
+    in which case the config's `layer_types` and `mtp_layer_types` will be modified in-place, and nothing will be returned.
 
     Args:
-        layer_types (list[str]): Layer type names that may include legacy values.
+        layer_types (`list[str]`, optional):
+            Layer type names that may include legacy values.
+        config (`PreTrainedConfig`, optional):
+            Config on which `layer_types` and `mtp_layer_types` will be remapped in-plce if they exist.
+
 
     Returns:
-        list[str]: Remapped names in the same order.
+        `list[str]` if `layer_types` is passed, or `None` if `config` is passed.
     """
-    return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
+    if (layer_types is None) ^ (config is not None):
+        raise ValueError("This function must take exactly one of `layer_types` or `config`")
+
+    if layer_types is not None:
+        return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
+    else:
+        if getattr(config, "layer_types", None) is not None:
+            # This check should not be needed, but sometimes `layer_types` is a read-only @property (already following
+            # correct conventions), so this avoids error when trying to `setattr` it
+            if (remapped := remap_legacy_layer_types(config.layer_types)) != config.layer_types:
+                config.layer_types = remapped
+        if getattr(config, "mtp_layer_types", None) is not None:
+            # This check should not be needed, but sometimes `mtp_layer_types` is a read-only @property (already following
+            # correct conventions), so this avoids error when trying to `setattr` it
+            if (remapped := remap_legacy_layer_types(config.mtp_layer_types)) != config.mtp_layer_types:
+                config.mtp_layer_types = remapped
 
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
@@ -254,7 +279,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     # They are not supposed to be set/changed by users. Each field is set when
     # creating a model class
     base_config_key: ClassVar[str] = ""
-    sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
+    sub_configs: ClassVar[dict[str, type[PreTrainedConfig]]] = {}
     has_no_defaults_at_init: ClassVar[bool] = False
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
@@ -277,7 +302,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     # Common attributes for all models
     output_hidden_states: bool | None = False
     return_dict: bool | None = True
-    dtype: Union[str, "torch.dtype"] | None = None
+    dtype: str | torch.dtype | None = None
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
 
@@ -370,16 +395,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             }
 
         # Remap layer types if needed
-        if getattr(self, "layer_types", None) is not None:
-            # This check should not be needed, but sometimes `layer_types` is a read-only @attribute (already following
-            # correct conventions), so it avoids trying to reset it
-            if (remapped := remap_legacy_layer_types(self.layer_types)) != self.layer_types:
-                self.layer_types = remapped
-        if getattr(self, "mtp_layer_types", None) is not None:
-            # This check should not be needed, but sometimes `mtp_layer_types` is a read-only @attribute (already following
-            # correct conventions), so it avoids trying to reset it
-            if (remapped := remap_legacy_layer_types(self.mtp_layer_types)) != self.mtp_layer_types:
-                self.mtp_layer_types = remapped
+        remap_legacy_layer_types(config=self)
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -558,10 +574,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 return
             if self.is_custom_code():
                 # Custom code may have legacy layer types that need to be remapped
-                if (remapped := remap_legacy_layer_types(layers)) != layers:
-                    # Only try setattr if layers changed in case layer_types is a read-only property
-                    setattr(self, layer_types, remapped)
-                layers = remapped
+                remap_legacy_layer_types(config=self)
+                layers = getattr(self, layer_types, None)
             if not all(layer_type in allowed_types for layer_type in layers):
                 raise ValueError(f"The `{layer_types}` entries must be in {allowed_types} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
@@ -1332,7 +1346,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         return generation_params
 
-    def get_text_config(self, decoder=None, encoder=None) -> "PreTrainedConfig":
+    def get_text_config(self, decoder=None, encoder=None) -> PreTrainedConfig:
         """
         Returns the text config related to the text input (encoder) or text output (decoder) of the model. The
         `decoder` and `encoder` input arguments can be used to specify which end of the model we are interested in,
@@ -1409,7 +1423,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         return config_to_return
 
-    def get_mtp_config(self) -> "PreTrainedConfig":
+    def get_mtp_config(self) -> PreTrainedConfig:
         """
         Returns the mtp text config to be used to create the MTP model. Since the MTP layers are created by instantiating
         the same classes as the main model, we need to overwrite index-specific properties of the config such as `layer_types`
