@@ -34,7 +34,6 @@ from .utils import (
 )
 
 
-
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
     """Returns the largest total length a single request can have on an empty cache, i.e. the largest length for
     which all allocators can be served enough sectors at the same time."""

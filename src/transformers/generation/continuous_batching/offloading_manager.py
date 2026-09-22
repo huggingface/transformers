@@ -24,7 +24,6 @@ sectors.
 """
 
 import logging
-from itertools import chain
 from math import ceil
 
 import torch
