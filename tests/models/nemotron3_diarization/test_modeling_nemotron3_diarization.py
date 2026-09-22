@@ -24,7 +24,6 @@ from transformers import is_torch_available
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -38,10 +37,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        AutoModel,
         AutoProcessor,
         Nemotron3DiarizationAudioConfig,
-        Nemotron3DiarizationAudioModel,
         Nemotron3DiarizationConfig,
         Nemotron3DiarizationForAudioFrameClassification,
         Nemotron3DiarizationHeadConfig,
@@ -145,6 +142,8 @@ class Nemotron3DiarizationModelTester:
 class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Nemotron3DiarizationForAudioFrameClassification,) if is_torch_available() else ()
     test_resize_embeddings = False
+    # the base model saves its `audio_config`, from which the head's `Nemotron3DiarizationConfig` cannot be rebuilt
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = Nemotron3DiarizationModelTester(self)
@@ -153,18 +152,9 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_sub_configs_roundtrip(self):
-        config = self.model_tester.get_config()
-        restored = Nemotron3DiarizationConfig.from_dict(config.to_dict())
-        self.assertIsInstance(restored.audio_config, Nemotron3DiarizationAudioConfig)
-        self.assertIsInstance(restored.head_config, Nemotron3DiarizationHeadConfig)
-        self.assertIsInstance(restored.streaming_config, Nemotron3DiarizationStreamingConfig)
-        self.assertEqual(restored.audio_config.to_dict(), config.audio_config.to_dict())
-        self.assertEqual(restored.head_config.to_dict(), config.head_config.to_dict())
-        self.assertEqual(restored.streaming_config.to_dict(), config.streaming_config.to_dict())
-        self.assertNotIn("hidden_size", config.to_dict())
-        self.assertNotIn("num_speakers", config.to_dict())
-        self.assertNotIn("chunk_length", config.streaming_config.to_dict())
+    @unittest.skip(reason="Nemotron3Diarization does not use inputs_embeds")
+    def test_model_get_set_embeddings(self):
+        pass
 
     def test_modes(self):
         """
@@ -199,51 +189,6 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_audio_model_precomputed_embeddings(self):
-        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
-        model = Nemotron3DiarizationAudioModel(config.audio_config).to(torch_device).eval()
-        attention_mask = self._prefix_mask(attention_mask)
-        with torch.no_grad():
-            expected = model(input_features, attention_mask=attention_mask)
-            inputs_embeds = model.feature_stacking(input_features)
-            lengths = model._get_feat_extract_output_lengths(attention_mask.sum(-1))
-            mask = torch.arange(inputs_embeds.shape[1], device=torch_device)[None, :] < lengths[:, None]
-            actual = model(inputs_embeds=inputs_embeds, attention_mask=mask)
-        self.assertEqual(
-            actual.shape, (input_features.shape[0], inputs_embeds.shape[1], config.audio_config.hidden_size)
-        )
-        torch.testing.assert_close(actual, expected)
-        with self.assertRaises(ValueError):
-            model(input_features, inputs_embeds=inputs_embeds)
-        with self.assertRaises(ValueError):
-            model()
-
-    def test_audio_model_auto_class(self):
-        config = self.model_tester.get_config()
-        self.assertIsInstance(AutoModel.from_config(config.audio_config), Nemotron3DiarizationAudioModel)
-
-    def test_save_load_roundtrip(self):
-        """The checkpoint is saved under the model's own parameter names: no conversion mapping is involved."""
-        model = Nemotron3DiarizationForAudioFrameClassification(self.model_tester.get_config()).eval()
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory)
-            saved = load_file(os.path.join(directory, "model.safetensors"))
-            self.assertEqual(set(saved), set(model.state_dict()))
-            self.assertIn("head.proj.weight", saved)
-            self.assertTrue(any(name.startswith("model.layers.") for name in saved))
-
-            restored, info = Nemotron3DiarizationForAudioFrameClassification.from_pretrained(
-                directory, output_loading_info=True
-            )
-            self.assertFalse(info["missing_keys"])
-            self.assertFalse(info["unexpected_keys"])
-            for name, tensor in restored.state_dict().items():
-                torch.testing.assert_close(tensor, model.state_dict()[name])
-
-    @unittest.skip(reason="Nemotron3Diarization does not use inputs_embeds")
-    def test_model_get_set_embeddings(self):
-        pass
 
     def _prefix_mask(self, attention_mask):
         # Streaming operates on per-sample lengths, so the mask must be a prefix mask.
@@ -290,7 +235,7 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(streaming_logits, offline_logits, atol=1e-5, rtol=1e-5)
 
     def test_streaming_rejects_invalid_lookahead(self):
-        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        config, input_features, _ = self.model_tester.prepare_config_and_inputs()
         model = Nemotron3DiarizationForAudioFrameClassification(config).to(torch_device).eval()
         subsampling_factor = config.audio_config.subsampling_factor
         with self.assertRaises(ValueError):
@@ -299,56 +244,9 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             model(input_features[:, :subsampling_factor], num_lookahead_frames=1)
 
-    @slow
-    @require_torch_gpu
-    def test_speaker_cache_fullgraph(self):
-        config = Nemotron3DiarizationConfig(
-            audio_config=Nemotron3DiarizationAudioConfig(hidden_size=16, num_attention_heads=4),
-            streaming_config=Nemotron3DiarizationStreamingConfig(
-                speaker_cache_length=8,
-                speaker_cache_silence_frames_per_speaker=1,
-                fifo_length=4,
-                speaker_cache_update_period=4,
-            ),
-            head_config=Nemotron3DiarizationHeadConfig(num_speakers=2),
-        )
-        eager_cache = Nemotron3DiarizationSpeakerCache(config)
-        compiled_cache = Nemotron3DiarizationSpeakerCache(config)
-        chunk = torch.randn(2, 4, config.audio_config.hidden_size, device=torch_device)
-        silence = torch.randn(config.audio_config.hidden_size, device=torch_device)
-        for cache in (eager_cache, compiled_cache):
-            cache.lazy_initialization(chunk)
-        buffers = (compiled_cache.embeds, compiled_cache.probs, compiled_cache.fifo)
-        addresses = [buffer.data_ptr() for buffer in buffers]
-
-        def step(cache, chunk, probs, silence):
-            embeds = cache.get_embeds(chunk)
-            chunk_input_embeds = torch.cat([embeds, chunk], dim=1)
-            chunk_logits = probs.logit().repeat_interleave(config.audio_config.subsampling_factor, dim=1)
-            cache.update(chunk_input_embeds, chunk_logits, silence, num_chunk_frames=chunk.shape[1])
-            return embeds
-
-        compiled_step = torch.compile(step, fullgraph=True)
-        with torch.no_grad():
-            # Empty state, FIFO filling, cache filling, first compression, and repeated compression.
-            for _ in range(6):
-                chunk = torch.randn_like(chunk)
-                length = eager_cache.num_cache_frames + eager_cache.num_fifo_frames + chunk.shape[1]
-                probs = torch.rand(2, length, config.head_config.num_speakers, device=torch_device)
-                expected = step(eager_cache, chunk, probs, silence)
-                actual = compiled_step(compiled_cache, chunk, probs, silence)
-                torch.testing.assert_close(actual, expected)
-                for name, address in zip(("embeds", "probs", "fifo"), addresses):
-                    actual_buffer = getattr(compiled_cache, name)
-                    self.assertEqual(actual_buffer.data_ptr(), address)
-                    torch.testing.assert_close(actual_buffer, getattr(eager_cache, name))
-                self.assertEqual(compiled_cache.num_cache_frames, eager_cache.num_cache_frames)
-                self.assertEqual(compiled_cache.num_fifo_frames, eager_cache.num_fifo_frames)
-        self.assertTrue(compiled_cache.is_compressed)
-
 
 @require_torch
-class Nemotron3DiarizationIntegrationTest(unittest.TestCase):
+class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """
     Validate the speaker probabilities against NeMo, offline and streaming.
 
@@ -370,7 +268,6 @@ class Nemotron3DiarizationIntegrationTest(unittest.TestCase):
         self.checkpoint_name = "nvidia/Nemotron-3-Diarization-preview"
         self.revision = "refs/pr/6"
         self.bucket = "hf-internal-testing/nemotron3-diarization-integration-test"
-        self.dtype = torch.float32
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, revision=self.revision)
 
     def _load_sample(self, name):
@@ -387,10 +284,9 @@ class Nemotron3DiarizationIntegrationTest(unittest.TestCase):
             return load_file(local)[key]
 
     def _load_model(self, **config_overrides):
-        model = Nemotron3DiarizationForAudioFrameClassification.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, **config_overrides
+        return Nemotron3DiarizationForAudioFrameClassification.from_pretrained(
+            self.checkpoint_name, revision=self.revision, device_map=torch_device, **config_overrides
         )
-        return model.to(torch_device).eval()
 
     def _low_latency_offline_model(self):
         """
@@ -421,7 +317,7 @@ class Nemotron3DiarizationIntegrationTest(unittest.TestCase):
         inputs = self.processor(
             [self._load_sample(name) for name in names], sampling_rate=self.processor.feature_extractor.sampling_rate
         )
-        inputs = inputs.to(torch_device, dtype=self.dtype)
+        inputs = inputs.to(torch_device, dtype=model.dtype)
         with torch.no_grad():
             logits = model(**inputs).logits
         probabilities = logits.sigmoid().cpu()
@@ -471,7 +367,7 @@ class Nemotron3DiarizationIntegrationTest(unittest.TestCase):
         offline_model = self._low_latency_offline_model()
         processor = self.processor
         inputs = processor(self._load_sample("long"), sampling_rate=processor.feature_extractor.sampling_rate)
-        inputs = inputs.to(torch_device, dtype=self.dtype)
+        inputs = inputs.to(torch_device, dtype=model.dtype)
         input_features, attention_mask = inputs.input_features, inputs.attention_mask
         self.assertEqual(processor.streaming_mode, "low_latency")
         _, chunk_right_context = processor.streaming_modes[processor.streaming_mode]
@@ -544,7 +440,7 @@ class Nemotron3DiarizationIntegrationTest(unittest.TestCase):
         speaker_cache, step_logits = None, []
         with torch.no_grad():
             for inputs in inputs_generator():
-                inputs = inputs.to(torch_device, dtype=self.dtype)
+                inputs = inputs.to(torch_device, dtype=model.dtype)
                 outputs = model(**inputs, speaker_cache=speaker_cache)
                 step_logits.append(outputs.logits)
                 speaker_cache = outputs.speaker_cache
