@@ -60,11 +60,26 @@ class Nemotron3DiarizationSpeakerCache:
     """
 
     def __init__(self, config: Nemotron3DiarizationConfig, streaming: bool = True):
-        self.config = config
+        streaming_config = config.streaming_config
+        sizes = streaming_config if streaming else config
+
         self.streaming = streaming
-        sizes = config.streaming_config if streaming else config
         self.fifo_length = sizes.fifo_length
         self.speaker_cache_update_period = sizes.speaker_cache_update_period
+        self.speaker_cache_length = streaming_config.speaker_cache_length
+        self.num_silence_frames = streaming_config.speaker_cache_silence_frames_per_speaker
+        self.prediction_score_threshold = streaming_config.prediction_score_threshold
+        self.latest_frames_score_boost = streaming_config.latest_frames_score_boost
+        self.num_speakers = config.head_config.num_speakers
+        self.subsampling_factor = config.audio_config.subsampling_factor
+
+        # share of the speaker cache every speaker is budgeted, excluding its reserved silence slots, and the frame
+        # counts the score policy spends it on when the cache is compressed
+        budget = self.speaker_cache_length // self.num_speakers - self.num_silence_frames
+        self.min_positive_scores = math.floor(budget * streaming_config.min_positive_scores_rate)
+        self.num_strong_boosted_frames = math.floor(budget * streaming_config.strong_boost_rate)
+        self.num_weak_boosted_frames = math.floor(budget * streaming_config.weak_boost_rate)
+
         self.embeds: torch.Tensor | None = None
         self.probs: torch.Tensor | None = None
         self.fifo: torch.Tensor | None = None
@@ -76,15 +91,8 @@ class Nemotron3DiarizationSpeakerCache:
     def lazy_initialization(self, chunk_embeds: torch.Tensor):
         batch_size, _, hidden_size = chunk_embeds.shape
         tensor_kwargs = {"device": chunk_embeds.device, "dtype": chunk_embeds.dtype}
-        self.embeds = torch.zeros(
-            batch_size, self.config.streaming_config.speaker_cache_length, hidden_size, **tensor_kwargs
-        )
-        self.probs = torch.zeros(
-            batch_size,
-            self.config.streaming_config.speaker_cache_length,
-            self.config.head_config.num_speakers,
-            **tensor_kwargs,
-        )
+        self.embeds = torch.zeros(batch_size, self.speaker_cache_length, hidden_size, **tensor_kwargs)
+        self.probs = torch.zeros(batch_size, self.speaker_cache_length, self.num_speakers, **tensor_kwargs)
         self.fifo = torch.zeros(batch_size, self.fifo_length, hidden_size, **tensor_kwargs)
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.embeds)
@@ -97,15 +105,9 @@ class Nemotron3DiarizationSpeakerCache:
             self.lazy_initialization(chunk_embeds)
         return torch.cat([self.embeds[:, : self.num_cache_frames], self.fifo[:, : self.num_fifo_frames]], dim=1)
 
-    @property
-    def num_frames_per_speaker(self) -> int:
-        """Share of the speaker cache every speaker is budgeted, excluding its reserved silence slots."""
-        capacity = self.config.streaming_config.speaker_cache_length // self.config.head_config.num_speakers
-        return capacity - self.config.streaming_config.speaker_cache_silence_frames_per_speaker
-
     def _pool_probs(self, logits: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
         """Speaker probabilities at the encoder frame rate, zeroed on the padding frames."""
-        factor = self.config.audio_config.subsampling_factor
+        factor = self.subsampling_factor
         probs = nn.functional.avg_pool1d(logits.sigmoid().transpose(1, 2), factor, factor).transpose(1, 2)
         if mask is not None:
             probs = probs * mask.to(device=probs.device, dtype=probs.dtype)[..., None]
@@ -166,7 +168,7 @@ class Nemotron3DiarizationSpeakerCache:
             cache_probs = torch.cat([stored_probs, fifo_probs[:, :num_popped]], dim=1)
             fifo_embeds = fifo_embeds[:, num_popped:]
 
-            if cache_embeds.shape[1] > self.config.streaming_config.speaker_cache_length:
+            if cache_embeds.shape[1] > self.speaker_cache_length:
                 cache_embeds, cache_probs = self._compress(cache_embeds, cache_probs, silence_embeds)
                 self.is_compressed = True
             self.num_cache_frames = cache_embeds.shape[1]
@@ -179,7 +181,7 @@ class Nemotron3DiarizationSpeakerCache:
         self.fifo.index_copy_(1, torch.arange(self.num_fifo_frames, device=self.fifo.device), fifo_embeds)
 
     def _get_frame_scores(self, probs: torch.Tensor) -> torch.Tensor:
-        threshold = self.config.streaming_config.prediction_score_threshold
+        threshold = self.prediction_score_threshold
         log_probs = torch.log(probs.clamp(min=threshold))
         log_complements = torch.log((1.0 - probs).clamp(min=threshold))
 
@@ -187,17 +189,13 @@ class Nemotron3DiarizationSpeakerCache:
 
         is_speech = probs > 0.5
         scores = scores.masked_fill(~is_speech, float("-inf"))
-        min_positive_scores = math.floor(
-            self.num_frames_per_speaker * self.config.streaming_config.min_positive_scores_rate
-        )
         is_positive = scores > 0
-        has_enough_positive = is_positive.sum(dim=1, keepdim=True) >= min_positive_scores
+        has_enough_positive = is_positive.sum(dim=1, keepdim=True) >= self.min_positive_scores
 
         scores = scores.masked_fill(~is_positive & is_speech & has_enough_positive, float("-inf"))
         return scores
 
-    def _boost_scores(self, scores: torch.Tensor, rate: float, boost: float) -> torch.Tensor:
-        num_boosted = math.floor(self.num_frames_per_speaker * rate)
+    def _boost_scores(self, scores: torch.Tensor, num_boosted: int, boost: float) -> torch.Tensor:
         _, topk_indices = torch.topk(scores, num_boosted, dim=1, sorted=False)
         scores = scores.scatter_add(1, topk_indices, scores.new_full(topk_indices.shape, boost))
         return scores
@@ -208,27 +206,22 @@ class Nemotron3DiarizationSpeakerCache:
         a speaker. `speaker_cache_silence_frames_per_speaker` slots per speaker are filled with `silence_embeds`.
         """
         batch_size, num_frames, num_speakers = probs.shape
-        num_silence_frames = self.config.streaming_config.speaker_cache_silence_frames_per_speaker
 
         scores = self._get_frame_scores(probs)
         # frames beyond the cache capacity are the ones popped from fifo
-        scores[:, self.config.streaming_config.speaker_cache_length :] += (
-            self.config.streaming_config.latest_frames_score_boost
-        )
+        scores[:, self.speaker_cache_length :] += self.latest_frames_score_boost
 
-        scores = self._boost_scores(scores, self.config.streaming_config.strong_boost_rate, boost=-2.0 * math.log(0.5))
-        scores = self._boost_scores(scores, self.config.streaming_config.weak_boost_rate, boost=-math.log(0.5))
-        scores = nn.functional.pad(scores, (0, 0, 0, num_silence_frames), value=float("inf"))
+        scores = self._boost_scores(scores, self.num_strong_boosted_frames, boost=-2.0 * math.log(0.5))
+        scores = self._boost_scores(scores, self.num_weak_boosted_frames, boost=-math.log(0.5))
+        scores = nn.functional.pad(scores, (0, 0, 0, self.num_silence_frames), value=float("inf"))
         embeds = torch.cat([embeds, silence_embeds.to(embeds).view(1, 1, -1).expand(batch_size, 1, -1)], dim=1)
         probs = nn.functional.pad(probs, (0, 0, 0, 1))
 
-        num_scored_frames = num_frames + num_silence_frames
+        num_scored_frames = num_frames + self.num_silence_frames
         sentinel = num_scored_frames * num_speakers
         flat_scores = scores.transpose(1, 2).reshape(batch_size, -1)
 
-        topk_scores, topk_indices = torch.topk(
-            flat_scores, self.config.streaming_config.speaker_cache_length, dim=1, sorted=False
-        )
+        topk_scores, topk_indices = torch.topk(flat_scores, self.speaker_cache_length, dim=1, sorted=False)
         topk_indices = topk_indices.masked_fill(topk_scores == float("-inf"), sentinel)
         topk_indices, _ = torch.sort(topk_indices, dim=1)
         frame_indices = torch.where(
