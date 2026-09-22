@@ -775,16 +775,11 @@ class ExportTesterMixin:
         exporter = ExecutorchExporter()
         config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
-        model_classes = [
-            model_class
-            for model_class in self.all_model_classes
-            if not any(
+        for model_class in self.all_model_classes:
+            if any(
                 self._should_skip(model_class, dynamic=dynamic, backend=scope) for scope in ("executorch", backend)
-            )
-        ]
-        if not model_classes:
-            self.skipTest("No model classes support this export configuration")
-        for model_class in model_classes:
+            ):
+                continue
             # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
             # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
@@ -946,19 +941,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         exporter = ExecutorchExporter()
         config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
-        model_classes = [
-            model_class
-            for model_class in self.all_generative_model_classes
-            if not any(
+        for model_class in self.all_generative_model_classes:
+            if any(
                 self._should_skip(
                     model_class, generate=True, dynamic=dynamic, backend=scope, generation_config=generation_config
                 )
                 for scope in ("executorch", backend)
-            )
-        ]
-        if not model_classes:
-            self.skipTest("No model classes support this export configuration")
-        for model_class in model_classes:
+            ):
+                continue
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 device="cpu",

@@ -47,7 +47,7 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig
-from .exporter_dynamo import DynamoExporter, register_cache_pytrees_for_model
+from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -146,16 +146,11 @@ class ExecutorchExporter(DynamoExporter):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
-            transform_passes = None
-            if config.backend == "mlx":
-                from executorch.backends.mlx.passes import get_default_passes
-
-                transform_passes = get_default_passes()
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program,
                 partitioner=partitioner,
                 compile_config=_get_edge_compile_config(config.backend),
-                transform_passes=transform_passes,
+                transform_passes=_get_transform_passes(config.backend),
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
@@ -164,7 +159,16 @@ class ExecutorchExporter(DynamoExporter):
         return executorch_programs_manager
 
 
-def _get_edge_compile_config(backend: str = "xnnpack") -> EdgeCompileConfig:
+def _get_transform_passes(backend: str):
+    """Return backend-specific graph transforms, or ``None`` for defaults."""
+    if backend == "mlx":
+        from executorch.backends.mlx.passes import get_default_passes
+
+        return get_default_passes()
+    return None
+
+
+def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
     """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
 
     Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
@@ -284,8 +288,6 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
     from executorch.backends.mlx import MLXPartitioner
 
-    # Traverse cache tensors on the first export, before Dynamo registers their pytrees.
-    register_cache_pytrees_for_model(model)
     model.requires_grad_(False)
     model = model.to(device="cpu")
     partitioner = [MLXPartitioner()]
@@ -670,31 +672,7 @@ def _patch_expand(original):
     return patch
 
 
-def _normalize_tensor_shape_args(args, kwargs, keyword):
-    """Normalize Tensor varargs or a single shape sequence without concretizing SymInts."""
-    if kwargs:
-        if args or set(kwargs) != {keyword}:
-            raise TypeError(f"Expected positional dimensions or a single {keyword}= argument")
-        args = (kwargs[keyword],)
-    if not args:
-        raise TypeError(f"Missing required {keyword} argument")
-    return args[0] if len(args) == 1 and isinstance(args[0], tuple | list) else args
-
-
-@register_patch("executorch", "torch.Tensor.reshape")
-def _patch_tensor_reshape(_original):
-    """Use traceable ATen instead of calling a saved TensorBase reshape descriptor."""
-
-    def patch(self, *shape, **kwargs):
-        shape = _normalize_tensor_shape_args(shape, kwargs, "shape")
-        if not self.is_contiguous():
-            self = self.clone(memory_format=torch.contiguous_format)
-        return torch.ops.aten.reshape.default(self, shape)
-
-    return patch
-
-
-@register_patch("executorch", "torch.reshape", "torch.Tensor.view")
+@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
 def _patch_reshape(original):
     """Materialise a non-contiguous input before ``reshape``.
 
