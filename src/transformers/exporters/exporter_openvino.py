@@ -67,8 +67,6 @@ if is_torch_available():
     from torch.export import ExportedProgram
     from torch.export.decomp_utils import CustomDecompTable
 
-    from .. import masking_utils
-
 
 if is_openvino_available():
     import numpy as np
@@ -124,7 +122,7 @@ class OpenVINOExporter(DynamoExporter):
         exported_program, graph_module = _fix_exported_program(exported_program)
         ov_model = _convert_to_openvino(graph_module)
 
-        inputs_names = [n for n in inputs_names if n in get_leaf_tensors(sample_inputs)]
+        inputs_names = [name for name in inputs_names if name in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
         _rename_model_ports(ov_model, graph_module, inputs_names, outputs_names)
 
@@ -606,9 +604,6 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
 # than letting `convert_model` decompose internally) is what makes the repairs stick.
 
 
-_OV_NAME_OK = re.compile(r"_\d+$")
-
-
 def _drop_runtime_asserts(graph_module) -> None:
     """Drop ``_assert_tensor_metadata`` / ``_assert_scalar`` runtime asserts before the replay.
 
@@ -643,10 +638,7 @@ def _run_openvino_decompositions(exported_program: ExportedProgram) -> ExportedP
     """
     decomp_table = CustomDecompTable()
     for op in ops_to_not_decompose():
-        try:
-            decomp_table.pop(op)
-        except KeyError:
-            pass
+        decomp_table.pop(op, None)
     return exported_program.run_decompositions(decomp_table)
 
 
@@ -701,6 +693,7 @@ def _rename_bare_node_names(graph_module) -> None:
     ``GraphModule``\\ s with their own name counters, and their placeholders are internal closure
     args (not user inputs) — everything except the top-level placeholders gets the suffix.
     """
+    name_has_suffix = re.compile(r"_\d+$")
     for module in graph_module.modules():
         if not isinstance(module, torch.fx.GraphModule):
             continue
@@ -709,7 +702,7 @@ def _rename_bare_node_names(graph_module) -> None:
         for n in module.graph.nodes:
             if n.op == "output" or (n.op == "placeholder" and is_top_level):
                 continue
-            if _OV_NAME_OK.search(n.name):
+            if name_has_suffix.search(n.name):
                 continue
             candidate = f"{n.name}_0"
             i = 0
@@ -1276,11 +1269,8 @@ def _patch_sdpa(original):
             if scale != default_scale:
                 query = query * (scale / default_scale)
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
-        # A row that masks every key has no defined value: the mask asks for a softmax over nothing.
-        # OV returns the uniform average the mask literally describes, while torch's fused kernels
-        # write zeros (its CPU and `SDPBackend.MATH` paths return the uniform average instead). Zero
-        # them so an exported model answers like the model it was exported from -- rows like these are
-        # routine, since left padding under a causal mask leaves the first query with no visible key.
+        # A row that masks every key has no defined value: OV returns the uniform average the mask
+        # describes, torch's fused kernels write zeros. Zero them so the export answers like eager.
         if unattended is not None:
             attn_output = torch.where(
                 unattended, torch.zeros((), dtype=attn_output.dtype, device=attn_output.device), attn_output
@@ -1360,53 +1350,6 @@ def _patch_feature_vector_attention_mask(original):
     return patch
 
 
-@register_patch("openvino", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion.
-
-    OV's PyTorch frontend can't trace through ``torch.vmap`` — the input tensors look like
-    they "escaped" the vmap context. Same shape of fix as the ONNX exporter's.
-    """
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            return mask_function(*broadcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-
-        return _expanded
-
-    return patch
-
-
-@register_patch("openvino", "torch.histc")
-def _patch_histc(original):
-    """Replace ``torch.histc`` with a deterministic ``zeros + scatter_add_`` equivalent.
-
-    OV's PyTorch frontend has no lowering for ``aten.histc``. The MoE token-counting path uses
-    integer inputs (expert ids), which ``torch.histc`` doesn't support natively anyway. The
-    decomposition pre-allocates a ``zeros(bins)`` (static shape) and accumulates via
-    ``scatter_add_``, both OV-friendly primitives.
-    """
-
-    def patch(input, bins=100, min=0, max=0, *, out=None):
-        flat = input.reshape(-1)
-        if max == min == 0:
-            min_val = flat.min().float()
-            max_val = flat.max().float()
-        else:
-            min_val = torch.tensor(float(min), device=flat.device)
-            max_val = torch.tensor(float(max), device=flat.device)
-        bin_width = (max_val - min_val) / bins
-        idx = ((flat.float() - min_val) / bin_width).long().clamp_(0, bins - 1)
-        out_dtype = input.dtype if input.is_floating_point() else torch.float
-        counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
-        return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
-
-    return patch
-
-
 @register_patch("openvino", "torch.empty_permuted")
 def _patch_empty_permuted(original):
     """Replace ``torch.empty_permuted(size, physical_layout, ...)`` with plain ``torch.empty(size, ...)``.
@@ -1442,7 +1385,7 @@ def _rotate_half_pairs(pairs: torch.Tensor) -> torch.Tensor:
     return torch.stack((-imag, real), dim=-1)
 
 
-def _rotate_pairs(x: torch.Tensor, freqs_pairs: torch.Tensor) -> torch.Tensor:
+def _apply_rotary_pos_emb_pairs(x: torch.Tensor, freqs_pairs: torch.Tensor) -> torch.Tensor:
     """Rotate ``x`` by ``freqs_pairs``, both viewed as ``[..., d/2, 2]`` re/im pairs.
 
     The complex multiply ``(a+bi)(c+di)`` these models write is the same ``x * cos + rotate(x) * sin``
@@ -1467,7 +1410,7 @@ def _patch_deepseek_rotary_emb(original):
 
     def patch(xq, xk, freqs_cis):
         freqs_pairs = torch.view_as_real(freqs_cis).unsqueeze(1).to(xq.device)
-        return _rotate_pairs(xq, freqs_pairs), _rotate_pairs(xk, freqs_pairs)
+        return _apply_rotary_pos_emb_pairs(xq, freqs_pairs), _apply_rotary_pos_emb_pairs(xk, freqs_pairs)
 
     return patch
 
@@ -1478,7 +1421,7 @@ def _patch_llama4_rotary_emb(original):
 
     def patch(xq, xk, freqs_cis):
         freqs_pairs = torch.view_as_real(freqs_cis)[:, :, None, :, :]
-        return _rotate_pairs(xq, freqs_pairs), _rotate_pairs(xk, freqs_pairs)
+        return _apply_rotary_pos_emb_pairs(xq, freqs_pairs), _apply_rotary_pos_emb_pairs(xk, freqs_pairs)
 
     return patch
 
@@ -1492,7 +1435,7 @@ def _patch_llama4_vision_rotary_emb(original):
         # Mirror ``reshape_for_broadcast``: keep dims 1 (seq) and -1 (d/2), plus the re/im pair.
         shape = [d if i == 1 else 1 for i, d in enumerate(query.shape[:-1])] + [freqs_pairs.shape[-2], 2]
         freqs_pairs = freqs_pairs.view(*shape).to(query.device)
-        return _rotate_pairs(query, freqs_pairs), _rotate_pairs(key, freqs_pairs)
+        return _apply_rotary_pos_emb_pairs(query, freqs_pairs), _apply_rotary_pos_emb_pairs(key, freqs_pairs)
 
     return patch
 
@@ -1744,29 +1687,6 @@ def _patch_cummin(original):
     from .exporter_onnx import _patch_cummax_or_cummin
 
     return _patch_cummax_or_cummin(original, mode="min")
-
-
-@register_patch("openvino", "torch.searchsorted")
-def _patch_searchsorted(original):
-    """Decompose ``torch.searchsorted`` via broadcast comparison + sum.
-
-    OV's frontend rejects the ``aten.searchsorted.Tensor`` node when its optional inputs
-    (``sorter``, ``out``) trace as ``None``. Same shape of fix as the ONNX patch — for
-    sorted inputs the insertion index equals the count of elements satisfying the
-    comparison (``<`` for left, ``<=`` for right).
-    """
-
-    def patch(sorted_sequence, values, *, out_int32=False, right=False, side=None, out=None, sorter=None):
-        if side is not None:
-            right = side == "right"
-        if right:
-            mask = sorted_sequence.unsqueeze(-1) <= values.unsqueeze(-2)
-        else:
-            mask = sorted_sequence.unsqueeze(-1) < values.unsqueeze(-2)
-        result = mask.sum(-2)
-        return result.to(torch.int32) if out_int32 else result
-
-    return patch
 
 
 @register_patch("openvino", "torch.bincount", "torch.Tensor.bincount")

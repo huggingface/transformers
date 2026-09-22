@@ -205,7 +205,8 @@ class OpenVINOConfig(DynamoConfig):
             variables (``ReadValue``/``Assign``). The runtime then carries state across
             ``infer()`` calls instead of marshalling cache tensors through inputs/outputs on
             every step, and a fused ``beam_idx`` input reorders state in-graph for beam search.
-            No-op for models without round-tripped state (encoders, prefill-only exports).
+            No-op for models without round-tripped state (encoders, prefill-only exports). Set it
+            to `False` for targets that take no stateful model, such as the NPU plugin.
     """
 
     export_format: ExportFormat = ExportFormat.OPENVINO

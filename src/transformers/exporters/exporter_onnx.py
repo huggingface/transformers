@@ -63,11 +63,8 @@ from .utils import (
 
 if is_torch_available():
     import torch
-    from torch._prims_common import is_contiguous_or_false
     from torch.export import ExportedProgram
     from torch.onnx import ONNXProgram
-
-    from .. import masking_utils
 
 
 if is_onnxscript_available():
@@ -265,23 +262,6 @@ def _patch_sdpa(original):
     return patch
 
 
-@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion."""
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            brodcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            result = mask_function(*brodcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-            return result
-
-        return _expanded
-
-    return patch
-
-
 @register_patch("onnx", "torch.nn.RMSNorm.forward")
 def _patch_rms_norm_forward(original):
     """Use non-fused RMS normalization when elementwise_affine is False."""
@@ -317,55 +297,12 @@ def _patch_split(original):
     return patch
 
 
-@register_patch("onnx", "torch.chunk", "torch.Tensor.chunk")
-def _patch_chunk(original):
-    """Route a symbolic chunk size through the `torch.split` patch (see `_patch_split`)."""
-
-    def patch(input, chunks, dim=0):
-        size = input.size(dim)
-        if not isinstance(size, torch.SymInt):
-            return original(input, chunks, dim)
-        return torch.split(input, (size + chunks - 1) // chunks, dim)
-
-    return patch
-
-
 @register_patch("onnx", "torch.randperm")
 def _patch_randperm(original):
     """Implement randperm via argsort(rand(n)) — no ONNX decomposition for aten.randperm."""
 
     def patch(n, *, dtype=torch.int64, layout=torch.strided, device=None, pin_memory=False, generator=None):
         return torch.argsort(torch.rand(n, device=device)).to(dtype)
-
-    return patch
-
-
-@register_patch("onnx", "torch.histc")
-def _patch_histc(original):
-    """Replace `torch.histc` with a statically-shaped, deterministic equivalent.
-
-    The default torchlib `aten_histc` translation rejects integer input (`torch.histc only
-    works on float`), and the obvious workaround — casting to float — calls `_histc_cuda`
-    which has no deterministic implementation on CUDA. `bincount`'s output is an unbacked
-    SymInt under torch.export and trips downstream meta-shape guards (e.g. grouped_mm's
-    `offs` size check). Pre-allocating `torch.zeros(bins)` + `scatter_add_` keeps the output
-    shape pinned to `bins` (a Python int), and `scatter_add_` is deterministic on integer
-    indices.
-    """
-
-    def patch(input, bins=100, min=0, max=0, *, out=None):
-        flat = input.reshape(-1)
-        if max == min == 0:
-            min_val = flat.min().float()
-            max_val = flat.max().float()
-        else:
-            min_val = torch.tensor(float(min), device=flat.device)
-            max_val = torch.tensor(float(max), device=flat.device)
-        bin_width = (max_val - min_val) / bins
-        idx = ((flat.float() - min_val) / bin_width).long().clamp_(0, bins - 1)
-        out_dtype = input.dtype if input.is_floating_point() else torch.float
-        counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
-        return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
 
     return patch
 
@@ -473,28 +410,6 @@ def _patch_chunk(original):
     return patch
 
 
-@register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
-def _patch_reshape(original):
-    """Materialise a non-contiguous input before `reshape`/`view`.
-
-    `reshape`/`view` on a permuted/non-contiguous tensor lowers to `aten.view`, which torch.export
-    rejects (`Cannot view a tensor with shape ... and strides ... as ...`) because the ONNX optimizer
-    folds away a plain `aten.contiguous`. Cloning to contiguous first is semantically a no-op — a
-    contiguous view holds the same data reshaped — and only copies when the view would otherwise fail
-    (e.g. WavLM's gated relative-position attention does `permute(...).view(...)`).
-    """
-
-    def patch(input, *shape, **kwargs):
-        # `is_contiguous()` itself guards on data-dependent strides (hunyuan_vl's vision stack reshapes
-        # on an unbacked token count), so ask the question in a form that answers "don't know" with
-        # `False` and clone — copying an already-contiguous tensor is wasteful but never wrong.
-        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
-            input = input.clone(memory_format=torch.contiguous_format)
-        return original(input, *shape, **kwargs)
-
-    return patch
-
-
 @register_patch("onnx", "torch.exp", "torch.Tensor.exp")
 def _patch_exp(original):
     """Lower `exp` on complex tensors via Euler — onnxscript has no dispatch for `aten.exp` on
@@ -523,46 +438,6 @@ def _patch_irfft(original):
         slc[dim] = slice(1, -1)
         full = torch.cat([input, input[tuple(slc)].flip(dims=[dim]).conj()], dim=dim)
         return torch.fft.ifft(full, n=n, dim=dim, norm=norm).real
-
-    return patch
-
-
-@register_patch("onnx", "torch.bucketize")
-def _patch_bucketize(original):
-    """Vectorized bucketize avoiding scalar-constant tensors that cause alias/detach issues."""
-
-    def patch(input, boundaries, *, out_int32=False, right=False):
-        if boundaries.numel() == 0:
-            result = torch.zeros_like(input, dtype=torch.int64)
-            return result.to(torch.int32) if out_int32 else result
-        if right:
-            mask = boundaries <= input.unsqueeze(-1)
-        else:
-            mask = boundaries < input.unsqueeze(-1)
-        result = mask.sum(-1)
-        return result.to(torch.int32) if out_int32 else result
-
-    return patch
-
-
-@register_patch("onnx", "torch.searchsorted")
-def _patch_searchsorted(original):
-    """Decompose searchsorted via broadcast comparison + sum — no ONNX op for searchsorted.
-
-    For sorted inputs the insertion index equals the count of elements satisfying
-    the comparison (< for left, <= for right). This is O(N*M) instead of the
-    real binary-search O(M log N) but only uses ops with ONNX translations.
-    """
-
-    def patch(sorted_sequence, values, *, out_int32=False, right=False, side=None, out=None, sorter=None):
-        if side is not None:
-            right = side == "right"
-        if right:
-            mask = sorted_sequence.unsqueeze(-1) <= values.unsqueeze(-2)
-        else:
-            mask = sorted_sequence.unsqueeze(-1) < values.unsqueeze(-2)
-        result = mask.sum(-2)
-        return result.to(torch.int32) if out_int32 else result
 
     return patch
 

@@ -643,6 +643,7 @@ class StaticIndexedLayer(StaticLayer):
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__(max_cache_len=max_cache_len)
         self.indexer_keys: torch.Tensor | None = None
+        self.indexer_cumulative_length: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
@@ -653,8 +654,6 @@ class StaticIndexedLayer(StaticLayer):
             dtype=self.indexer_dtype,
             device=self.indexer_device,
         )
-        # The indexer update runs independently of the main K/V `update` — it can even run first — so it
-        # tracks its own cumulative length here, alongside the buffer it belongs to.
         self.indexer_cumulative_length = torch.zeros((), dtype=torch.long, device=self.indexer_device)
         # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
         if not is_torchdynamo_compiling():
@@ -1040,8 +1039,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.is_conv_states_initialized[state_idx] = True
 
         if recurrent_states is not None:
-            # `zeros_like` keeps the recurrent tensor's own dtype, which is not always `self.dtype` (that
-            # follows the conv state): recurrent_gemma accumulates in float32 with a compute-dtype conv state.
+            # The shape is always static, so we init as such
             self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states)
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():

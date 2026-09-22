@@ -809,7 +809,6 @@ if it's using something else.
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`.
 For `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
 `batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.
-- Not every architecture exports cleanly yet — a few hit data-dependent control flow that can't be vectorised, or exceed practical export time under dynamic shapes. When that happens the failure surfaces at `export` time with a concrete error, not silently.
 
 ## Next steps
 
