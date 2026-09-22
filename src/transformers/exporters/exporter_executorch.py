@@ -50,6 +50,7 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig, ExportFormat
+from .decompose import _MODALITY_SPECS
 from .exporter_dynamo import DynamoExporter, varlen_attn_masked_sdpa
 from .metadata import (
     EXPORT_METADATA_KEY,
@@ -96,7 +97,7 @@ if is_executorch_available():
     from executorch.exir.passes.spec_prop_pass import _is_mutable_buffer
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
     from executorch.exir.sym_util import eval_expr
-    from executorch.exir.tensor import determine_tensor_dynanism
+    from executorch.exir.tensor import determine_tensor_dynanism, get_scalar_type, num_bytes_from_shape_and_dtype
 
     # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Guard the
     # import on CUDA availability so the module still imports (and the xnnpack CPU path still works) on
@@ -192,6 +193,7 @@ def _patch_serialize_for_executorch(original):
 
     def serialize_for_executorch(emitter_output, *args, **kwargs):
         canonicalize_size_one_dim_orders(getattr(emitter_output, "program", None))
+        widen_underplanned_arenas(getattr(emitter_output, "program", None))
         return original(emitter_output, *args, **kwargs)
 
     return serialize_for_executorch
@@ -334,6 +336,46 @@ def _get_edge_compile_config(exported_program: ExportedProgram) -> EdgeCompileCo
             torch.ops.aten.unique_consecutive.default,
         ],
     )
+
+
+def widen_underplanned_arenas(executorch_program) -> None:
+    """Grow a planned memory arena that its own offsets overflow.
+
+    ExecuTorch's greedy memory planner assigns each tensor an offset into an arena and then states that
+    arena's size — and the two disagree: for SmolVLM's vision tower the plan places an
+    `[13, 1024, 3072]` bf16 buffer (reused across 11 layers, so the reuse itself is right) at an offset
+    whose end is 6.5 MB past the size it declares. The loader checks the tensor against the arena it was
+    given and refuses the method with `MemoryAllocationFailed` (`0x21`), naming a tensor index that means
+    nothing to the reader.
+
+    Run from `_patch_serialize_for_executorch`, the one moment the program is still editable: the manager
+    serializes in its constructor, so a plan repaired after `to_executorch` returns is repaired in an
+    object the bytes no longer come from.
+
+    Only the declared size is wrong, so only the declared size is raised — the offsets are left exactly
+    where the planner put them, which is what keeps the reuse. Planning with `naive` instead avoids the
+    inconsistency and costs 35x the arena (25.7 GB against 729 MB here), so this is the cheaper repair
+    until the planner is fixed upstream.
+    """
+    if executorch_program is None:
+        return
+    for plan in executorch_program.execution_plan:
+        needed = dict.fromkeys(range(len(plan.non_const_buffer_sizes)), 0)
+        for item in plan.values:
+            value = item.val
+            info = getattr(value, "allocation_info", None)
+            sizes = getattr(value, "sizes", None)
+            if info is None or not sizes or info.memory_id >= len(plan.non_const_buffer_sizes):
+                continue
+            end = info.memory_offset + num_bytes_from_shape_and_dtype(sizes, get_scalar_type(value.scalar_type))
+            needed[info.memory_id] = max(needed[info.memory_id], end)
+        for memory_id, end in needed.items():
+            if end > plan.non_const_buffer_sizes[memory_id]:
+                logger.warning_once(
+                    f"The memory plan plots {end - plan.non_const_buffer_sizes[memory_id]} bytes past the "
+                    f"arena it asks for, which the runtime refuses; asking for {end} instead."
+                )
+                plan.non_const_buffer_sizes[memory_id] = end
 
 
 def _get_backend_config(config):
@@ -1410,7 +1452,8 @@ def _patch_squeeze_node_visitors(original):
 # Caps for `int_oo` dynamic-dim upper bounds. ExecuTorch's XNNPACK memory planner pre-allocates
 # buffers from the upper bound, so an unbounded dim must get a finite cap; capping too tight rejects
 # legitimate trace-time shapes (e.g. VLM image-token counts). Each dim's cap is `max(lower, trace) *
-# multiplier`, floored so a dim traced small still gets a usable range.
+# multiplier`, floored so a dim traced small still gets a usable range. A modality's own axes are the
+# exception and take no multiplier at all (see `_modality_axis_symbols`).
 _MAX_DIM_MULTIPLIER = 4
 # 1024 covers the largest single unbounded dim we see in practice (VLM image-token counts, seq lens)
 # without over-allocating; 64 keeps a dim usable even when several are unbounded (see `_dim_floor`).
@@ -1485,6 +1528,34 @@ def _query_axis_symbols(exported_program: ExportedProgram, var_to_val: dict) -> 
     return symbols, sequence_hint
 
 
+def _modality_axis_symbols(exported_program: ExportedProgram) -> set:
+    """The symbols on a modality input's own axes — a patch count, a number of frames, an audio window.
+
+    They are bounded by what the trace saw and nothing else, where a text axis gets the generous floor. The
+    two want opposite things: a sequence traced at 1024 has to grow, so its bound cannot be its own length;
+    a vision tower traced at 13 patches will never see 1024 of them, and the floor that keeps the sequence
+    usable is what made SmolVLM's arena 13.5 GB instead of 0.9 GB — the planner sizes each buffer from the
+    product of these axes, so one over-generous count is multiplied through every intermediate.
+
+    Read off the input's name, since that is what says which kind of tensor an axis belongs to.
+    """
+    modality_inputs = tuple(
+        {key for _name, _getter, input_keys, *_rest in _MODALITY_SPECS for key in input_keys}
+        | {grid for *_head, grid, _token in _MODALITY_SPECS if grid}
+    )
+    symbols = set()
+    for node in exported_program.graph_module.graph.nodes:
+        if node.op != "placeholder" or not node.name.startswith(modality_inputs):
+            continue
+        value = node.meta.get("val")
+        if not isinstance(value, torch.Tensor):
+            continue
+        for dim in value.shape:
+            if not isinstance(dim, int):
+                symbols.add(dim.node.expr)
+    return symbols
+
+
 @register_fx_program_fix("executorch")
 def _fix_range_constraints(exported_program: ExportedProgram) -> None:
     """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
@@ -1517,6 +1588,10 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
     # symbols take `max(query hint, cache-length hint)`. Traced at two, a 64-token bound refused a 71-token
     # prompt ("Attempted to resize a bounded tensor with a maximum capacity of 512 elements to 568").
     query_symbols, sequence_hint = _query_axis_symbols(exported_program, var_to_val)
+    # A modality's own axes are bounded by the trace alone — see `_modality_axis_symbols` for why they
+    # cannot share the text floor. A symbol carrying both (a vision graph whose patches are also its
+    # sequence) keeps the text treatment, which is the safe direction.
+    modality_symbols = _modality_axis_symbols(exported_program) - query_symbols
 
     unbounded = []
     for rd in range_dicts:
@@ -1526,7 +1601,10 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
                 trace_val = _as_int(var_to_val.get(sym), 0)
                 if sym in query_symbols:
                     trace_val = max(trace_val, sequence_hint)
-                upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, floor)
+                if sym in modality_symbols:
+                    upper = max(trace_val, lower, _MIN_DIM_FLOOR)
+                else:
+                    upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, floor)
                 rd[sym] = ValueRanges(vr.lower, upper)
                 unbounded.append((str(sym), lower, upper))
 
