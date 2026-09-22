@@ -301,16 +301,16 @@ def prepare_fa_kwargs_from_attn_mask(
     the attention mask is a boolean tensor of shape [batch_size, num_kv_tokens].
     """
     batch_size, query_length = query_states.shape[:2]
-    indices_k, cu_seqlens_k, max_length_k = _prepare_unpad_state(key_states, attention_mask)
+    indices_k, cu_seqlens_k, max_seqlen_k = _prepare_unpad_state(key_states, attention_mask)
     # For the queries, the kwargs are trivial if there is only one query token (decoding)
     if query_length == 1:
-        max_length_q = 1
+        max_seqlen_q = 1
         cu_seqlens_q = torch.arange(batch_size + 1, dtype=torch.int32, device=query_states.device)
         indices_q = cu_seqlens_q[:-1]
     # Otherwise, we perform the same operation as for the keys
     else:
-        indices_q, cu_seqlens_q, max_length_q = _prepare_unpad_state(query_states, attention_mask[:, -query_length:])
-    return (indices_q, indices_k), (cu_seqlens_q, cu_seqlens_k), (max_length_q, max_length_k)
+        indices_q, cu_seqlens_q, max_seqlen_q = _prepare_unpad_state(query_states, attention_mask[:, -query_length:])
+    return (indices_q, indices_k), (cu_seqlens_q, cu_seqlens_k), (max_seqlen_q, max_seqlen_k)
 
 
 def prepare_fa_kwargs_from_position_ids(
@@ -331,8 +331,8 @@ def prepare_fa_kwargs_from_position_ids(
     # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
     # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always
     # increasing for some models (e.g. qwen2-vl).
-    max_length_q = cu_seq_lens_q.diff().max()
-    return (cu_seq_lens_q, cu_seq_lens_q), (max_length_q, max_length_q)
+    max_seqlen_q = cu_seq_lens_q.diff().max()
+    return (cu_seq_lens_q, cu_seq_lens_q), (max_seqlen_q, max_seqlen_q)
 
 
 def _is_packed_sequence(position_ids: torch.Tensor | None, batch_size: int) -> bool:
@@ -382,16 +382,16 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Gets cumulative sequence length for query state.
         cu_seq_lens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
-        max_length_q (`int`, *optional*):
+        max_seqlen_q (`int`, *optional*):
             Maximum sequence length for query state.
-        max_length_k (`int`, *optional*):
+        max_seqlen_k (`int`, *optional*):
             Maximum sequence length for key state.
     """
 
     cu_seq_lens_q: torch.LongTensor | None
     cu_seq_lens_k: torch.LongTensor | None
-    max_length_q: int | None
-    max_length_k: int | None
+    max_seqlen_q: int | None
+    max_seqlen_k: int | None
 
 
 def _process_flash_attention_kwargs(
@@ -483,7 +483,7 @@ def _process_flash_attention_kwargs(
             flash_kwargs["page_table"] = block_table
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
-    # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
+    # may require `max_seqlen_q`, `max_seqlen_k` to be passed as `int` and not `torch.Tensor`.
     #
     # You can either set
     #   - Env: `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`
@@ -515,8 +515,8 @@ def _flash_attention_forward(
     position_ids: torch.Tensor | None = None,
     cu_seq_lens_q: torch.LongTensor | None = None,
     cu_seq_lens_k: torch.LongTensor | None = None,
-    max_length_q: int | None = None,
-    max_length_k: int | None = None,
+    max_seqlen_q: int | None = None,
+    max_seqlen_k: int | None = None,
     k_cache: torch.Tensor | None = None,
     v_cache: torch.Tensor | None = None,
     cache_seqlens: torch.LongTensor | None = None,
@@ -558,7 +558,7 @@ def _flash_attention_forward(
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids.
     #         It is safe to use `flash_varlen_fn` knowing we already have all necessary the kwargs.
 
-    is_fa_with_varlen_kwargs = None not in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
+    is_fa_with_varlen_kwargs = None not in (cu_seq_lens_q, cu_seq_lens_k, max_seqlen_q, max_seqlen_k)
     is_fa_with_block_table = None not in (k_cache, v_cache, cache_seqlens, block_table)
 
     # If there is no padding and the sequence are not packed, we can just run flash and return
@@ -579,15 +579,15 @@ def _flash_attention_forward(
 
     # If they have not been provided, compute the sequence-defining attributes
     if attention_mask is not None:
-        (indices_q, indices_k), (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = (
+        (indices_q, indices_k), (cu_seq_lens_q, cu_seq_lens_k), (max_seqlen_q, max_seqlen_k) = (
             prepare_fa_kwargs_from_attn_mask(attention_mask, query_length, key_length)
         )
         query_states = query_states[indices_q]  # unpadding
         key_states, value_states = key_states[indices_k], value_states[indices_k]
     elif not (is_fa_with_varlen_kwargs or is_fa_with_block_table):
-        (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
+        (cu_seq_lens_q, cu_seq_lens_k), (max_seqlen_q, max_seqlen_k) = prepare_fa_kwargs_from_position_ids(position_ids)
 
-    flash_kwargs = extract_flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table)
+    flash_kwargs = extract_flash_kwargs(max_seqlen_q=max_seqlen_q, max_seqlen_k=max_seqlen_k, block_table=block_table)
 
     # Compute the right seq_lens objects and call flash
     if is_fa_with_block_table:
