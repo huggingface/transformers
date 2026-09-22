@@ -342,7 +342,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertIsNotNone(result.pixel_values)
 
     def test_backends_equivalence_batched(self):
-        """Override to also compare pixel_attention_mask across backends."""
+        """Override to use batches where samples have different numbers of images."""
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
@@ -361,9 +361,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_pixel_values = encodings[reference_backend].pixel_values
-        reference_mask = encodings[reference_backend].pixel_attention_mask.float()
-
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
-            self._assert_tensors_equivalence(reference_mask, encodings[backend_name].pixel_attention_mask.float())
+            self._assert_encodings_equivalence(
+                encodings[reference_backend], encodings[backend_name], reference_backend, backend_name
+            )

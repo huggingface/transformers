@@ -123,7 +123,7 @@ def load_original_checkpoint(checkpoint_path: str | Path) -> dict[str, Any]:
         )
 
     logger.info(f"Loading sharded checkpoint from {checkpoint_path}")
-    with open(index_path, "r") as f:
+    with open(index_path, "r", encoding="utf-8") as f:
         index = json.load(f)
 
     state_dict = {}
@@ -146,7 +146,7 @@ def create_config_from_checkpoint(checkpoint_path: str | Path) -> VibeVoiceAsrCo
     )
 
     if config_path.exists():
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             original_config = json.load(f)
 
         config_keys_to_remove = [

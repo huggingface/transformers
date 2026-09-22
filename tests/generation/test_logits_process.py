@@ -876,6 +876,20 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == filtered_scores))
 
+        # if all allowed tokens are already -inf, they must still be selected (#22890)
+        scores[0, [0, 1]] = -float("inf")
+        filtered_scores = PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, 1)(input_ids, scores)
+        self.assertListEqual(filtered_scores[0].tolist(), [0.0, 0.0, -float("inf"), -float("inf"), -float("inf")])
+
+        # with beams, only do so when every beam of a batch member is unsatisfiable, otherwise let it be pruned
+        input_ids = input_ids.repeat_interleave(2, dim=0)
+        scores = self._get_uniform_logits(batch_size * 2, vocab_size)
+        scores[1, [0, 1]] = -float("inf")  # batch 1, beam 2: unsatisfiable, but beam 1 is fine -> stays -inf
+        scores[2:, [2, 3]] = -float("inf")  # batch 2: both beams unsatisfiable -> allowed tokens are forced
+        filtered_scores = PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, 2)(input_ids, scores)
+        self.assertTrue(torch.isinf(filtered_scores[1]).all())
+        self.assertListEqual(filtered_scores[2:, [2, 3]].tolist(), [[0.0, 0.0], [0.0, 0.0]])
+
     def test_forced_bos_token_logits_processor(self):
         vocab_size = 20
         batch_size = 4

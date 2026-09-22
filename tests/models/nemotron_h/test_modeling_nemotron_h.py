@@ -835,7 +835,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = f"{tmpdir}/config.json"
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(legacy_config, f)
 
             # Load the config

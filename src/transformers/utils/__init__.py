@@ -94,6 +94,7 @@ from .hub import (
     hf_api,
     http_user_agent,
     list_repo_templates,
+    resolve_revision,
     try_to_load_from_cache,
 )
 from .import_utils import (

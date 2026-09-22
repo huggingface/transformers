@@ -521,6 +521,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
+                past_key_values=past_key_values,
             )
 
         if encoder_attention_mask is not None:

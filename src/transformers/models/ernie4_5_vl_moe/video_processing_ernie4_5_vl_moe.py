@@ -44,7 +44,7 @@ from ...utils import (
     logging,
     safe_load_json_file,
 )
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, resolve_revision
 from ...utils.import_utils import is_torchvision_available, is_tracing, requires
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
@@ -120,7 +120,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             raise ValueError("`Ernie 4.5 VL` only supports a temporal patch size of 2")
 
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        size = dict(self.size) if size is None else size
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
@@ -138,6 +138,15 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)

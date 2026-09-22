@@ -306,7 +306,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if self.type == "seq2seq_whisper":
                     type_warning += (
                         " To use Whisper for long-form transcription, use rather the model's `generate` method directly "
-                        "as the model relies on it's own chunking mechanism (cf. Whisper original paper, section 3.8. "
+                        "as the model relies on its own chunking mechanism (cf. Whisper original paper, section 3.8. "
                         "Long-form Transcription)."
                     )
                 logger.warning(type_warning)
