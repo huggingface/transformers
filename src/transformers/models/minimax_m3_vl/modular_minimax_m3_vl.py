@@ -1165,7 +1165,7 @@ class MiniMaxM3VLImageProcessor(Qwen2VLImageProcessor):
     def __init__(self, **kwargs: Unpack[MiniMaxM3VLImageProcessorKwargs]):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        size = dict(self.size) if size is None else size
         # The default size saved in offcial ckpt isn't correct and wasn't used prev!
         # Override with the correct, new default value in that case
         if size == [672, 672]:
