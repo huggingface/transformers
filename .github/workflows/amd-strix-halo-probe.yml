@@ -79,6 +79,7 @@ jobs:
       HF_HOME: /mnt/cache
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       RUN_SLOW: "1"
+      OMP_NUM_THREADS: "4"
     steps:
       - name: Test ${{ matrix.model }}
         run: |
@@ -88,9 +89,9 @@ jobs:
           # GPU call). xdist --max-worker-restart survives a segfault; pytest's
           # --timeout is the per-test cap. (xdist + pytest-timeout are in the image.)
           timeout -s INT --kill-after=120 360m \
-            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
+            python3 -m pytest -v -rsfE -n 8 --max-worker-restart=3 --dist=loadscope \
               --timeout=1200 --timeout-method=signal \
-              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence and not test_sdpa_can_compile_dynamic" \
+              -k "not test_flex_attention_with_grads" \
               tests/models/${{ matrix.model }}
 
   models-ci-1:
@@ -114,14 +115,15 @@ jobs:
       HF_HOME: /mnt/cache
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       RUN_SLOW: "1"
+      OMP_NUM_THREADS: "4"
     steps:
       - name: Test ${{ matrix.model }}
         run: |
           cd /transformers
           timeout -s INT --kill-after=120 360m \
-            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
+            python3 -m pytest -v -rsfE -n 8 --max-worker-restart=3 --dist=loadscope \
               --timeout=1200 --timeout-method=signal \
-              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence and not test_sdpa_can_compile_dynamic" \
+              -k "not test_flex_attention_with_grads" \
               tests/models/${{ matrix.model }}
 
   models-ci-2:
@@ -145,14 +147,15 @@ jobs:
       HF_HOME: /mnt/cache
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       RUN_SLOW: "1"
+      OMP_NUM_THREADS: "4"
     steps:
       - name: Test ${{ matrix.model }}
         run: |
           cd /transformers
           timeout -s INT --kill-after=120 360m \
-            python3 -m pytest -v -rsfE -n 1 --max-worker-restart=3 --dist=loadscope \
+            python3 -m pytest -v -rsfE -n 8 --max-worker-restart=3 --dist=loadscope \
               --timeout=1200 --timeout-method=signal \
-              -k "not test_flex_attention_with_grads and not test_flash_attn_kernels_mps_inference_equivalence and not test_sdpa_can_compile_dynamic" \
+              -k "not test_flex_attention_with_grads" \
               tests/models/${{ matrix.model }}
 
   test:
