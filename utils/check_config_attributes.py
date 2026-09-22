@@ -46,6 +46,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "HYV4Config": ["layer_types"],
     # For consistency we keep head dim but it's not used as NoPE is applied
     "Glm5NextTextConfig": ["head_dim"],
+    # Kept as a config field, the ViT-style attention has no output dropout
+    "RadioConfig": ["hidden_dropout_prob"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],
@@ -208,6 +210,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_diffusion_samples",
         "max_atomic_number",
     ],
+    "AXK2Config": ["layer_types"],  # needed for correct cache
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.
     "EsmFold2AtomEncoderConfig": True,

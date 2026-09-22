@@ -226,6 +226,7 @@ if TYPE_CHECKING:
     from .hy_v3 import *
     from .hy_v4 import *
     from .hyperclovax import *
+    from .hyperclovax_vision_v2 import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -290,6 +291,7 @@ if TYPE_CHECKING:
     from .mimo_v2_flash import *
     from .minicpm3 import *
     from .minicpmv4_6 import *
+    from .minicpmv4_7 import *
     from .minimax import *
     from .minimax_m2 import *
     from .minimax_m3_vl import *

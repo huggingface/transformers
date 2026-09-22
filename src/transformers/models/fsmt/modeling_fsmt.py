@@ -177,14 +177,11 @@ def invert_mask(attention_mask):
 
 
 def triu_onnx(x, diagonal=0):
-    l = x.shape[0]
-    arange = torch.arange(l, device=x.device)
-    mask = arange.expand(l, l)
-    arange = arange.unsqueeze(-1)
-    if diagonal:
-        arange = arange + diagonal
-    mask = mask >= arange
-    return x.masked_fill(mask == 0, 0)
+    logger.warning_once(
+        "`triu_onnx` is deprecated and will be removed in v5.22. It emulated `torch.triu`, which now "
+        "exports cleanly — use `torch.triu` instead."
+    )
+    return torch.triu(x, diagonal)
 
 
 def _prepare_fsmt_decoder_inputs(
@@ -207,8 +204,9 @@ def _prepare_fsmt_decoder_inputs(
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
     else:
         decoder_padding_mask = invert_mask(decoder_padding_mask)
-    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype)), 1).to(
-        device=decoder_input_ids.device
+    causal_mask = torch.triu(
+        fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype, device=decoder_input_ids.device)),
+        diagonal=1,
     )
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
@@ -975,10 +973,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example Translation:
 

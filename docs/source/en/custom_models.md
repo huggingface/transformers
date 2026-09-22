@@ -21,7 +21,7 @@ Transformers models are designed to be customizable. A models code is fully cont
 > [!TIP]
 > It may be easier to start from scratch if you're creating an entirely new model. But for models that are very similar to an existing one in Transformers, it is faster to reuse or subclass the same configuration and model class.
 
-This guide will show you how to customize a ResNet model, enable [AutoClass](./models#autoclass) support, and share it on the Hub.
+This guide will show you how to customize a ResNet model, enable [AutoClass](#autoclass) support, and share it on the Hub.
 
 ## Configuration
 
@@ -35,7 +35,7 @@ The main rules for customizing a configuration are:
 > [!TIP]
 > It is useful to check the validity of some of the parameters. In the example below, a check is implemented to ensure `block_type` and `stem_type` belong to one of the predefined values.
 >
-> Add `model_type` to the configuration class to enable [AutoClass](./models#autoclass) support.
+> Add `model_type` to the configuration class to enable [AutoClass](#autoclass) support.
 
 ```py
 from transformers import PreTrainedConfig
@@ -97,7 +97,7 @@ You'll create two ResNet models, a barebones ResNet model that outputs the hidde
 Define a mapping between the block types and classes. Everything else is created by passing the configuration class to the ResNet model class.
 
 > [!TIP]
-> Add `config_class` to the model class to enable [AutoClass](#autoclass-support) support.
+> Add `config_class` to the model class to enable [AutoClass](#autoclass) support.
 
 ```py
 from transformers import PreTrainedModel
@@ -134,7 +134,7 @@ class ResnetModel(PreTrainedModel):
 The `forward` method needs to be rewritten to calculate the loss for each logit if labels are available. Otherwise, the ResNet model class is the same.
 
 > [!TIP]
-> Add `config_class` to the model class to enable [AutoClass](#autoclass-support) support.
+> Add `config_class` to the model class to enable [AutoClass](#autoclass) support.
 
 ```py
 import torch
@@ -204,7 +204,7 @@ AutoModel.register(ResnetConfig, ResnetModel)
 AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassification)
 ```
 
-Your custom model code is now compatible with the [AutoClass](./models#autoclass) API. Users can load the model with the [AutoModel](./model_doc/auto#automodel) or [`AutoModelForImageClassification`] classes.
+Your custom model code is now compatible with the [AutoClass](#autoclass) API. Users can load the model with the [AutoModel](./model_doc/auto) or [`AutoModelForImageClassification`] classes.
 
 ## Upload
 

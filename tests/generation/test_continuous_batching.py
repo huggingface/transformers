@@ -15,7 +15,10 @@
 import functools
 import gc
 import itertools
+import math
 import os
+import threading
+import time
 import unittest
 from types import SimpleNamespace
 from typing import Any
@@ -37,11 +40,19 @@ from transformers import (
 from transformers.generation.continuous_batching.cache import (
     PagedAttentionCache,
     PagedAttentionMemoryHandler,
-    SlidingAttentionCacheAllocator,
     group_layers_by_attn_type,
 )
-from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
-from transformers.generation.continuous_batching.continuous_api import OutputRouter
+from transformers.generation.continuous_batching.cache_allocators import (
+    CacheAllocator,
+    CachePool,
+    FullAttentionCacheAllocator,
+    SlidingAttentionCacheAllocator,
+)
+from transformers.generation.continuous_batching.continuous_api import (
+    BackgroundThreadStatus,
+    ContinuousBatchingManager,
+    OutputRouter,
+)
 from transformers.generation.continuous_batching.distributed import DistributedHelper
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
@@ -216,6 +227,42 @@ def regular_generate(
     return all_generated_tokens, per_prompt_logprobs
 
 
+def _setup_cache_pool(allocators: list[CacheAllocator], num_sectors: int) -> CachePool:
+    """Computes the sector geometry the same way as PagedAttentionCache, then builds the cache tensor and the pool
+    and registers both on the given allocators."""
+    bytes_per_sector = math.lcm(*(allocator.bytes_per_block for allocator in allocators), 128)
+    non_trash_bytes = num_sectors * bytes_per_sector
+    cache_tensor = torch.zeros(non_trash_bytes + 2 * bytes_per_sector, dtype=torch.uint8)
+    pool = CachePool(num_sectors=num_sectors, num_allocators=len(allocators))
+    for allocator in allocators:
+        allocator.register_cache_tensor(bytes_per_sector, non_trash_bytes, cache_tensor, pool)
+    return pool
+
+
+def _make_allocator(
+    cls: type[FullAttentionCacheAllocator | SlidingAttentionCacheAllocator],
+    head_dim: int,
+    num_kv_heads: int,
+    page_size: int,
+    layer_indices: list[int] | None = None,
+    index: int = 0,
+    sliding_window: int | None = None,
+    allow_block_sharing: bool = True,
+) -> FullAttentionCacheAllocator | SlidingAttentionCacheAllocator:
+    """Builds an allocator on a minimal namespace config: allocators only read head_dim, num_key_value_heads and
+    sliding_window from the model config, so tests do not need a full PreTrainedConfig."""
+    config = SimpleNamespace(head_dim=head_dim, num_key_value_heads=num_kv_heads, sliding_window=sliding_window)
+    return cls(
+        index=index,
+        config=config,  # type: ignore
+        num_key_value_heads=num_kv_heads,
+        cache_dtype=torch.float16,
+        page_size=page_size,
+        layer_indices=layer_indices if layer_indices is not None else [0],
+        allow_block_sharing=allow_block_sharing,
+    )
+
+
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
@@ -282,65 +329,45 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            (None, None, "0"),
-            (None, 4096, "0"),
-            ("f", None, "0"),
-            ("ffff", None, "0000"),
-            ("sssss", 4096, "00000"),
-            ("fs", 4096, "01"),
-            ("ssfssf", 4096, "001221"),
-            ("ssssf", 4096, "01234"),
-            ("fffsffs", 4096, "0123456"),
+            ("f", None, {"f": [0]}),
+            ("ffff", None, {"f": [0, 1, 2, 3]}),
+            ("sssss", 4096, {"s": [0, 1, 2, 3, 4]}),
+            ("fs", 4096, {"f": [0], "s": [1]}),
+            ("ssfssf", 4096, {"f": [2, 5], "s": [0, 1, 3, 4]}),
+            ("ssssf", 4096, {"f": [4], "s": [0, 1, 2, 3]}),
+            ("fffsffs", 4096, {"f": [0, 1, 2, 4, 5], "s": [3, 6]}),
+            # No layer_types attribute: falls back on the presence of a sliding window
+            (None, None, {"f": [0, 1, 2, 3]}),
+            (None, 4096, {"s": [0, 1, 2, 3]}),
         ]
     )
     def test_group_layers(
         self,
         layer_types_str: str | None,
         sliding_window: int | None,
-        expected_groups: str,
+        expected_groups: dict[str, list[int]],
     ) -> None:
-        """Test the layer grouping algorithm of the hybrid allocator."""
+        """Test the layer grouping: one group per attention type, holding the indices of its layers in order."""
+        letter_to_type = {"f": "full_attention", "s": "sliding_attention"}
+
         # Take a config and change the layer_types attribute to the mix we want
         config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-
-        if layer_types_str is not None:
-            layer_types = [{"f": "full_attention", "s": "sliding_window"}[char] for char in layer_types_str]
-        else:
-            layer_types = None
-            config.num_hidden_layers = len(expected_groups)
-
-        config.layer_types = layer_types
         config.sliding_window = sliding_window
 
-        expected_lg = {}
-        for i, group in enumerate(expected_groups):
-            group = int(group)
-            expected_lg[group] = expected_lg.get(group, []) + [i]
-        expected_layer_groups = [expected_lg[i] for i in sorted(expected_lg.keys())]
-
-        # Test layer groups formation
-        layer_groups, group_types = group_layers_by_attn_type(config)
-        self.assertEqual(
-            sorted(expected_layer_groups),
-            sorted(layer_groups),
-            f"Test failed for: {layer_types_str = }, {sliding_window = }, {expected_layer_groups = }, {layer_groups = }",
-        )
-
-        # If layer_types is provided, check that group_types matches the type of the all layers in each group
-        if layer_types is not None:
-            for layer_group, group_type in zip(layer_groups, group_types):
-                layer_types = [config.layer_types[i] for i in layer_group]
-                self.assertEqual(layer_types, [group_type] * len(layer_types))
-        # If layer_types is None, all groups should be of the same type
+        if layer_types_str is not None:
+            config.layer_types = [letter_to_type[char] for char in layer_types_str]
         else:
-            for group_type in group_types:
-                sliding_window = getattr(config, "sliding_window", None)
-                expected_group_type = "sliding_attention" if sliding_window is not None else "full_attention"
-                self.assertEqual(
-                    group_type,
-                    expected_group_type,
-                    f"Test failed for: {layer_types_str = }, {sliding_window = }, {group_types = }",
-                )
+            config.num_hidden_layers = 4
+
+        # Expand the expected groups
+        expected_groups = {letter_to_type[key]: value for key, value in expected_groups.items()}
+
+        layer_groups = group_layers_by_attn_type(config)
+        self.assertEqual(
+            layer_groups,
+            expected_groups,
+            f"Test failed for: {layer_types_str = }, {sliding_window = }, {expected_groups = }, {layer_groups = }",
+        )
 
     @parameterized.expand(
         [
@@ -383,83 +410,48 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 f"Actual mask:\n{str_mask}"
             )
 
-    @parameterized.expand(
-        [
-            # Case 1: Only full attention groups, allocation succeeds
-            # needed_blocks = 2 * 1 = 2, free_blocks = 10 -> 2 <= 10 = True
-            (2, 0, 1, 0, 0, 10, True),
-            # Case 2: Only full attention groups, allocation fails
-            # needed_blocks = 5 * 2 = 10, free_blocks = 5 -> 10 <= 5 = False
-            (5, 0, 2, 0, 0, 5, False),
-            # Case 3: Mixed attention, sliding window not yet full
-            # needed_blocks = 2 * 1 + min(4 - 0, 2) * 1 = 2 + 2 = 4, free_blocks = 10 -> 4 <= 10 = True
-            (2, 0, 1, 1, 4, 10, True),
-            # Case 4: Mixed attention, sliding window partially filled
-            # needed_blocks = 3 * 1 + min(4 - 2, 3) * 1 = 3 + 2 = 5, free_blocks = 5 -> 5 <= 5 = True
-            (3, 2, 1, 1, 4, 5, True),
-            # Case 5: Mixed attention, sliding window already full (allocated_blocks >= max_sliding)
-            # blocks_left = max(4 - 5, 0) = 0, needed_blocks = 3 * 1 + 0 = 3, free_blocks = 5 -> 3 <= 5 = True
-            (3, 5, 1, 1, 4, 5, True),
-            # Case 6: Mixed attention, sliding window full, allocation fails due to full attention
-            # blocks_left = max(4 - 4, 0) = 0, needed_blocks = 6 * 1 + 0 = 6, free_blocks = 5 -> 6 <= 5 = False
-            (6, 4, 1, 1, 4, 5, False),
-            # Case 7: Multiple full attention groups
-            # needed_blocks = 3 * 2 = 6, free_blocks = 6 -> 6 <= 6 = True
-            (3, 0, 2, 0, 0, 6, True),
-            # Case 8: Multiple sliding attention groups, not full
-            # needed_blocks = 2 * 1 + min(4 - 1, 2) * 2 = 2 + 4 = 6, free_blocks = 6 -> 6 <= 6 = True
-            (2, 1, 1, 2, 4, 6, True),
-            # Case 9: Edge case - requesting 0 blocks always succeeds
-            # needed_blocks = 0, free_blocks = 0 -> 0 <= 0 = True
-            (0, 0, 1, 1, 4, 0, True),
-            # Case 10: Edge case - exactly enough blocks
-            # needed_blocks = 2 * 1 + min(3 - 0, 2) * 1 = 2 + 2 = 4, free_blocks = 4 -> 4 <= 4 = True
-            (2, 0, 1, 1, 3, 4, True),
-        ]
-    )
-    def test_continuous_batching_will_allocation_be_successful(
-        self,
-        num_requested_blocks: int,
-        allocated_blocks: int,
-        num_full_attention_groups: int,
-        num_sliding_attention_groups: int,
-        max_sliding_window_blocks_per_request: int,
-        num_free_blocks: int,
-        expected_result: bool,
-    ) -> None:
-        """Test the will_allocation_be_successful method of PagedAttentionCache, overloading the relevant attributes of
-        a dummy cache."""
+    def test_continuous_batching_can_store_request_tokens(self) -> None:
+        """Tests the allocation check on a hybrid full + sliding cache: the sliding allocator caps its need at the
+        window, zero new tokens always fit, and a dry run leaves the pool untouched while a real allocation
+        consumes it."""
 
-        if torch_device is None:  # this check which should always pass and helps with type checking
-            raise ValueError(f"This requires a torch accelerator, yet {torch_device = } and the test was not skipped.")
+        def make_cache(num_sectors: int) -> PagedAttentionCache:
+            common: dict[str, Any] = {"head_dim": 2, "num_kv_heads": 1, "page_size": 4, "allow_block_sharing": False}
+            full = _make_allocator(FullAttentionCacheAllocator, **common)
+            sliding = _make_allocator(
+                SlidingAttentionCacheAllocator, layer_indices=[1], index=1, sliding_window=8, **common
+            )
+            # bytes_per_block = 32 for both allocators, so each sector of lcm(32, 128) = 128 bytes holds 4 blocks
+            pool = _setup_cache_pool([full, sliding], num_sectors)
+            cache = PagedAttentionCache.__new__(PagedAttentionCache)
+            cache.pool = pool
+            cache.cache_allocators = {"full_attention": full, "sliding_attention": sliding}
+            return cache
 
-        # Create the cache
-        cache = PagedAttentionCache(
-            config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
-            continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=8),
-            device=torch_device,
-            tp_plan={},
-            distributed_helper=DistributedHelper(device_mesh=None, cpu_group_timeout=300),
-        )
+        state = RequestState(request_id="req_0", initial_tokens=[0])
 
-        # Overload cache parameters to match test scenario
-        cache.num_full_attention_groups = num_full_attention_groups
-        cache.num_sliding_attention_groups = num_sliding_attention_groups
-        cache.max_sliding_window_blocks_per_request = max_sliding_window_blocks_per_request
+        # Each sector holds 4 pages of 4 tokens. 32 new tokens need 2 full-attention sectors but only 1 sliding
+        # sector, since the sliding need is capped at the window (8 tokens = 2 pages): 3 sectors in total
+        cache = make_cache(num_sectors=3)
+        self.assertTrue(cache.can_store_request_tokens(state, 32, dry_run=True))
+        self.assertEqual(cache.pool.num_free_sectors, 3)  # a dry run does not allocate
+        self.assertFalse(make_cache(num_sectors=2).can_store_request_tokens(state, 32, dry_run=True))
 
-        # Overload the cache get_num_free_blocks method
-        cache.get_num_free_blocks = lambda: num_free_blocks
+        # Zero new tokens always fit, even with no free sectors
+        empty_cache = make_cache(num_sectors=3)
+        for _ in range(3):
+            empty_cache.pool.allocate_sector(0)
+        self.assertEqual(empty_cache.pool.num_free_sectors, 0)
+        self.assertTrue(empty_cache.can_store_request_tokens(state, 0, dry_run=True))
 
-        # Test the method
-        result = cache.will_allocation_be_successful(num_requested_blocks, allocated_blocks)
+        # A real allocation consumes the sectors
+        cache = make_cache(num_sectors=3)
+        self.assertTrue(cache.can_store_request_tokens(state, 32))
+        self.assertEqual(cache.pool.num_free_sectors, 0)
 
-        self.assertEqual(
-            result,
-            expected_result,
-            f"Failed for: {num_requested_blocks=}, {allocated_blocks=}, {num_full_attention_groups=}, "
-            f"{num_sliding_attention_groups=}, {max_sliding_window_blocks_per_request=}, {num_free_blocks=}. "
-            f"Expected {expected_result}, got {result}",
-        )
+        # Growing the now window-full request only costs full-attention blocks (1 fresh sector the pool cannot serve)
+        state.position_offset = 32
+        self.assertFalse(cache.can_store_request_tokens(state, 16, dry_run=True))
 
     @parameterized.expand(
         [
@@ -485,13 +477,16 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         query_length: int,
     ) -> None:
         """Test FullAttentionCacheAllocator.get_read_indices and get_write_indices return correct physical indices."""
+        allocator = _make_allocator(FullAttentionCacheAllocator, head_dim=8, num_kv_heads=2, page_size=block_size)
+        allocator.block_table["req"] = block_table
 
         def reference_indices(start: int, end: int) -> list[int]:
-            """Reference implementation: converts logical indices to physical indices."""
-            return [block_table[i // block_size] * block_size + i % block_size for i in range(start, end)]
-
-        allocator = FullAttentionCacheAllocator(index=0, block_size=block_size, allow_block_sharing=False)
-        allocator.block_table["req"] = block_table
+            """Reference implementation: converts logical indices to physical row indices. The token slot t of block b
+            lives at row b * block_physical_stride + t."""
+            return [
+                block_table[i // block_size] * allocator.block_physical_stride + i % block_size
+                for i in range(start, end)
+            ]
 
         # Test read indices (from 0 to past_length + query_length)
         expected_read = reference_indices(0, past_length + query_length)
@@ -533,32 +528,32 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     ) -> None:
         """Test SlidingAttentionCacheAllocator.get_read_indices and get_write_indices place the cache, sentinel and
         write trash indices correctly, including for small block sizes and rolling-buffer wrap-around."""
-        # The special indices live in the padding zone above the allocatable blocks (see PagedAttentionCache). We pick a
-        # num_blocks larger than any block id used here so they never collide with real cache positions.
-        num_blocks = 64
-        self.assertTrue(all(b < num_blocks for b in block_table))
-        sentinel_index = num_blocks * block_size + 1
-        write_trash_index = (num_blocks + 1) * block_size
-
-        def to_physical(i: int) -> int:
-            """Reference logical-to-physical mapping inside the rolling buffer."""
-            i %= sliding_window
-            return block_table[i // block_size] * block_size + i % block_size
-
-        allocator = SlidingAttentionCacheAllocator(
-            index=0,
-            block_size=block_size,
+        allocator = _make_allocator(
+            SlidingAttentionCacheAllocator,
+            head_dim=8,
+            num_kv_heads=2,
+            page_size=block_size,
             sliding_window=sliding_window,
-            sentinel_index=sentinel_index,
-            write_trash_index=write_trash_index,
         )
         allocator.block_table["req"] = block_table
 
-        # Read indices: the (at most) `sliding_window - 1` most recent cached tokens, in chronological order,
-        # followed by one sentinel per query token. The most recent cached token is the one at logical position
-        # `past_length - 1`, and will be read as long as sliding_window > 1 (should always be the case)
+        # The special indices live in the trash zone above the allocatable blocks (see PagedAttentionCache). We pick a
+        # num_blocks larger than any block id used here so they never collide with real cache positions.
+        num_blocks = 64
+        self.assertTrue(all(b < num_blocks for b in block_table))
+        allocator.read_trash_index = num_blocks * allocator.block_physical_stride
+        allocator.sentinel_index = sentinel_index = num_blocks * allocator.block_physical_stride + 1
+        allocator.write_trash_index = write_trash_index = (num_blocks + 1) * allocator.block_physical_stride
+
+        def to_physical(position: int) -> int:
+            """Reference position-to-physical-row mapping inside the rolling buffer."""
+            slot = position % sliding_window
+            return block_table[slot // block_size] * allocator.block_physical_stride + slot % block_size
+
+        # Read indices: the last min(past_length, sliding_window - 1) positions, then one sentinel per query token
         read_cache_length = min(past_length, sliding_window - 1)
-        expected_read = [to_physical(i) for i in range(past_length - read_cache_length, past_length)]
+        read_start = past_length - read_cache_length
+        expected_read = [to_physical(p) for p in range(read_start, read_start + read_cache_length)]
         expected_read += [sentinel_index] * query_length
         read = allocator.get_read_indices("req", past_length, query_length)
 
@@ -568,14 +563,15 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertNotIn(sentinel_index, read[:read_cache_length])
         # Cache reads land in allocated blocks
         for idx in read[:read_cache_length]:
-            self.assertIn(idx // block_size, block_table)
+            self.assertIn(idx // allocator.block_physical_stride, block_table)
 
-        # Write indices: one slot per query token, left-padded with the write trash index when the query overflows the
-        # window
+        # Write indices: the last min(query_length, sliding_window) positions are stored in their slots, left-padded
+        # with the write trash index when the query overflows the window
         write_cache_length = min(query_length, sliding_window)
         padding_length = query_length - write_cache_length
+        read_start = past_length + padding_length
         expected_write = [write_trash_index] * padding_length
-        expected_write += [to_physical(i) for i in range(past_length + padding_length, past_length + query_length)]
+        expected_write += [to_physical(p) for p in range(read_start, read_start + write_cache_length)]
         write = allocator.get_write_indices("req", past_length, query_length)
 
         # Main check
@@ -584,7 +580,172 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertNotIn(write_trash_index, write[padding_length:])
         # Cache writes land in allocated blocks
         for idx in write[padding_length:]:
-            self.assertIn(idx // block_size, block_table)
+            self.assertIn(idx // allocator.block_physical_stride, block_table)
+
+    def test_fork_blocks_sharing_and_copy(self) -> None:
+        """Tests forking at the allocator level: fully-written blocks are shared through a reference count, the others
+        are backed by fresh blocks and copied, and a shared block returns to the pool only when its last owner frees."""
+        ca_kwargs: dict[str, Any] = {"head_dim": 8, "num_kv_heads": 2, "page_size": 4}
+        full = _make_allocator(FullAttentionCacheAllocator, layer_indices=[0, 1], **ca_kwargs)
+        sliding = _make_allocator(
+            SlidingAttentionCacheAllocator, layer_indices=[2], index=1, sliding_window=8, **ca_kwargs
+        )
+
+        num_sectors = 6
+        pool = _setup_cache_pool([full, sliding], num_sectors)
+
+        # Allocate a source request with 10 cached tokens: 3 full-attention blocks, 2 sliding ones (window of 8)
+        past_length = 10
+        for allocator in (full, sliding):
+            for _ in range(allocator.needs_new_sectors("src", 0, past_length)):
+                pool.allocate_sector(allocator.index)
+            allocator.allocate_cache_to_request("src", 0, past_length)
+        self.assertEqual(len(full.block_table["src"]), 3)
+        self.assertEqual(len(sliding.block_table["src"]), 2)
+
+        # Only the 2 fully-written full-attention blocks are shareable, and only when sharing is in use: the sliding
+        # allocator never shares (use_block_sharing resolves to False despite allow_block_sharing=True)
+        self.assertEqual(full.count_non_shareable_blocks("src", past_length), 1)
+        self.assertEqual(sliding.count_non_shareable_blocks("src", past_length), 2)
+        full.use_block_sharing = False
+        self.assertEqual(full.count_non_shareable_blocks("src", past_length), 3)
+        full.use_block_sharing = True
+
+        # Stamp each source block with a distinct byte pattern, then fork a child request
+        for allocator in (full, sliding):
+            for block_id in allocator.block_table["src"]:
+                allocator._copy_view[block_id] = (allocator.index * 100 + block_id) % 256
+        for allocator, num_copied in ((full, 1), (sliding, 2)):
+            missing_blocks = num_copied - pool.count_free_blocks(allocator.index)
+            for _ in range((missing_blocks + allocator.blocks_per_sector - 1) // allocator.blocks_per_sector):
+                pool.allocate_sector(allocator.index)
+            src_blocks, dst_blocks = allocator.fork_blocks("src", "child", past_length)
+            self.assertEqual(len(src_blocks), num_copied)
+            allocator.copy_blocks(src_blocks, dst_blocks)
+            # The child's table starts with the shared blocks, and the copied content matches the source
+            num_shared = len(allocator.block_table["src"]) - num_copied
+            self.assertEqual(allocator.block_table["child"][:num_shared], allocator.block_table["src"][:num_shared])
+            for src_block, dst_block in zip(src_blocks, dst_blocks):
+                self.assertTrue(torch.equal(allocator._copy_view[dst_block], allocator._copy_view[src_block]))
+
+        # Shared blocks are ref-counted: freeing the source keeps them alive for the child
+        shared_blocks = full.block_table["src"][:2]
+        self.assertEqual(full.ledger.shared_ref_counts, dict.fromkeys(shared_blocks, 2))
+        self.assertEqual(sliding.ledger.shared_ref_counts, {})
+        # Sliding never shares: the child's table is fully disjoint from the source's
+        self.assertTrue(set(sliding.block_table["child"]).isdisjoint(sliding.block_table["src"]))
+        full.free_blocks("src")
+        sliding.free_blocks("src")
+        self.assertEqual(full.ledger.shared_ref_counts, {})  # counts of 1 are implicit
+        self.assertEqual(full.block_table["child"][:2], shared_blocks)
+        self.assertEqual(pool.count_free_blocks(full.index), 1)  # only the copied-from block was freed
+        self.assertEqual(pool.count_free_blocks(sliding.index), 2)
+        # Freeing the child releases everything: after reclaim, the pool is whole again
+        full.free_blocks("child")
+        sliding.free_blocks("child")
+        pool.try_to_free_sectors()
+        self.assertEqual(pool.num_free_sectors, num_sectors)
+
+    def test_prefix_match_and_dedup(self) -> None:
+        """Tests block de-duplication at the allocator level: completed blocks are hashed, later requests match them
+        as a prefix, unreferenced hashed blocks are kept cached instead of freed, and eviction returns them to the
+        pool."""
+        allocator = _make_allocator(FullAttentionCacheAllocator, head_dim=8, num_kv_heads=2, page_size=4)
+        num_sectors = 8
+        pool = _setup_cache_pool([allocator], num_sectors)
+        ledger = allocator.ledger
+
+        def allocate(request_id: str, num_tokens: int) -> None:
+            for _ in range(allocator.needs_new_sectors(request_id, 0, num_tokens)):
+                pool.allocate_sector(0)
+            allocator.allocate_cache_to_request(request_id, 0, num_tokens)
+
+        # "src" caches 10 tokens over 3 blocks, of which the first 2 are complete (page_size = 4)
+        tokens = list(range(100, 110))
+        allocate("src", 10)
+        src_table = allocator.block_table["src"][:]
+        allocator.mark_complete_blocks("src", tokens, new_new_blocks=2)
+        self.assertEqual(len(ledger.hash_to_block), 2)
+        self.assertEqual(set(ledger.block_to_hash), set(src_table[:2]))
+
+        # A request computing the same content is de-duplicated on the spot: it adopts the existing blocks, its
+        # duplicates are freed immediately, and no new hash is registered
+        allocate("dup", 10)
+        allocator.mark_complete_blocks("dup", tokens, new_new_blocks=2)
+        self.assertEqual(len(ledger.hash_to_block), 2)
+        self.assertEqual(allocator.block_table["dup"][:2], src_table[:2])
+        self.assertEqual(pool.count_free_blocks(0), 2)  # the two duplicate blocks were freed by the swap
+        self.assertEqual(ledger.shared_ref_counts, dict.fromkeys(src_table[:2], 2))
+        allocator.free_blocks("dup")  # releases the adopted blocks and frees its own incomplete one
+        self.assertEqual(pool.count_free_blocks(0), 3)
+
+        def match_and_acquire(request_id: str, prompt: list[int]) -> int:
+            """Mirrors PagedAttentionCache.search_prefix_match at the single-allocator level."""
+            matched_blocks = allocator.match_prefix_blocks(prompt)
+            prefix_len = len(matched_blocks) * allocator.tokens_per_page
+            allocator.acquire_prefix_blocks(request_id, prefix_len, matched_blocks)
+            return prefix_len
+
+        # Prefix matching: same 8 first tokens match 2 blocks, 5 matching tokens only cover 1 complete block, and a
+        # prompt that is an exact multiple of the page size never matches its own last block
+        self.assertEqual(match_and_acquire("same", tokens[:8] + [1, 2, 3]), 8)
+        self.assertEqual(allocator.block_table["same"], src_table[:2])
+        self.assertEqual(match_and_acquire("partial", tokens[:5] + [9, 9, 9]), 4)
+        self.assertEqual(match_and_acquire("exact", tokens[:8]), 4)
+        self.assertEqual(ledger.shared_ref_counts, {src_table[0]: 4, src_table[1]: 2})
+
+        # Freeing every request moves the hashed blocks to the cached set, not to the pool
+        for request_id in ("src", "same", "partial", "exact"):
+            allocator.free_blocks(request_id)
+        self.assertEqual(set(ledger.cached_blocks), set(src_table[:2]))
+        self.assertEqual(pool.count_free_blocks(0), 4)  # only the incomplete block of "src" was freed
+
+        # A new match claims the cached blocks back, and freeing it caches them again
+        self.assertEqual(match_and_acquire("revive", tokens[:8] + [7]), 8)
+        self.assertEqual(ledger.cached_blocks, {})
+        self.assertEqual(ledger.shared_ref_counts, {})  # single owner stays implicit
+        allocator.free_blocks("revive")
+
+        # Eviction drops the hashes and releases the blocks: the pool ends up whole again
+        evicted_blocks = ledger.evict_cached_blocks()
+        self.assertEqual(set(evicted_blocks), set(src_table[:2]))
+        self.assertEqual(ledger.hash_to_block, {})
+        pool.free_blocks(0, evicted_blocks)
+        pool.try_to_free_sectors()
+        self.assertEqual(pool.num_free_sectors, num_sectors)
+
+    def test_count_storable_requests(self) -> None:
+        """Tests the cumulative fit simulation: when a request opens a fresh sector, the sector's unused blocks must
+        be credited to the following requests, which a per-request or global-sum check would miss."""
+        allocator = _make_allocator(
+            FullAttentionCacheAllocator, head_dim=2, num_kv_heads=1, page_size=4, allow_block_sharing=False
+        )
+        # bytes_per_block = 32 and bytes_per_sector = lcm(32, 128) = 128, so each sector holds 4 blocks
+        pool = _setup_cache_pool([allocator], num_sectors=2)
+        self.assertEqual(allocator.blocks_per_sector, 4)
+
+        # Build a bare cache exposing only what the simulation reads
+        cache = PagedAttentionCache.__new__(PagedAttentionCache)
+        cache.pool = pool
+        cache.cache_allocators = {"full_attention": allocator}
+
+        def blocks_needed(num_blocks: int) -> dict[str, int]:
+            return {"full_attention": num_blocks}
+
+        # 8 free blocks in 2 sectors: four 2-block requests fit thanks to the leftover blocks of opened sectors
+        # (a per-request ceil would claim 1 sector each and only admit 2), and a fifth request does not fit
+        requests = [blocks_needed(2) for _ in range(5)]
+        self.assertEqual(cache.count_storable_requests(requests[:4]), 4)
+        self.assertEqual(cache.count_storable_requests(requests), 4)
+
+        # 3-block requests: r1 opens a sector (1 block left), r2 takes it and opens the last sector (2 blocks left),
+        # r3 needs a third sector that does not exist
+        requests = [blocks_needed(3) for _ in range(3)]
+        self.assertEqual(cache.count_storable_requests(requests), 2)
+
+        # Blocks already free in the allocator's bucket count towards the fit
+        pool.allocate_sector(0)
+        self.assertEqual(cache.count_storable_requests([blocks_needed(4), blocks_needed(4)]), 2)
 
     @parameterized.expand(
         [
@@ -615,14 +776,18 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         chronological order. Reads and writes are only consistent with each other if both agree on where a given
         logical position lives, so this catches off-by-one errors that the two index computations would otherwise hide
         from each other."""
-        allocator = SlidingAttentionCacheAllocator(
-            index=0,
-            block_size=block_size,
+        allocator = _make_allocator(
+            SlidingAttentionCacheAllocator,
+            head_dim=8,
+            num_kv_heads=2,
+            page_size=block_size,
             sliding_window=sliding_window,
-            sentinel_index=-1,
-            write_trash_index=-2,
         )
         allocator.block_table["req"] = block_table
+        # Special indices are normally set when registering the cache tensor, which we skip here. Physical indices are
+        # always non-negative, so negative sentinels cannot collide with them.
+        allocator.sentinel_index = -1
+        allocator.write_trash_index = -2
 
         slot_to_token: dict[int, int] = {}  # physical slot -> logical position currently stored there
         past_length = 0
@@ -715,7 +880,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     def test_distributed_helper_no_dist(self) -> None:
         """Test that DistributedHelper falls back to a single-rank, TP-driver setup when distributed is not on."""
-        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300)
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan={})
         self.assertFalse(helper.dist_on)
         self.assertEqual(helper.global_rank, 0)
         self.assertEqual(helper.world_size, 1)
@@ -740,7 +905,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""
-        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300)
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan={})
 
         # Explicit seed: torch RNG state must be reproducible across calls
         helper.set_tp_seed(seed=42, model_device=torch.device("cpu"))
@@ -787,6 +952,234 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 os.environ["WORLD_SIZE"] = original_ws
 
 
+class ContinuousBatchingPauseTest(unittest.TestCase):
+    """Tests for the pause API in states a real single-rank generation loop cannot reach. The generation loop is
+    replaced by a plain thread driving `BackgroundThreadStatus` directly, so no model or accelerator is needed. Pausing
+    a real generation loop is tested in `ContinuousBatchingWithAcceleratorTest`."""
+
+    @staticmethod
+    def _get_minimal_manager(status: BackgroundThreadStatus, thread: threading.Thread | None):
+        """Builds a bare manager with just enough states for `pause` and `stop` to work."""
+        manager = ContinuousBatchingManager.__new__(ContinuousBatchingManager)
+        manager._wake_up_loop = threading.Event()
+        manager.background_thread_status = status
+        manager._generation_thread = thread
+        manager.distributed_helper = SimpleNamespace(cpu_comm_group=None, global_rank=0)
+        # Attributes torn down by `stop`
+        manager.batch_processor = None
+        manager._original_attn_impl = None
+        return manager
+
+    def test_pause_on_a_peer_initiated_pause(self) -> None:
+        """Under TP the pause request is MAX-reduced across ranks, so a loop can be paused before a local thread asked
+        for it. A thread arriving on an already paused loop must enter the pause directly."""
+        status = BackgroundThreadStatus()
+        resumed = threading.Event()
+
+        def generation_loop() -> None:
+            """Simulates a loop that was paused by a thread on another rank."""
+            try:
+                self.assertFalse(status.is_pause_requested())  # should be false because this rank did not pause
+                status.pause_and_wait()  # enters the pause on behalf of the other rank
+                resumed.set()  # signals that the pause ended
+            finally:
+                status.mark_as_stopped()
+
+        # Setup the loop thread and the manager
+        loop_thread = threading.Thread(target=generation_loop)
+        loop_thread.start()
+        manager = self._get_minimal_manager(status, loop_thread)
+
+        # Enter an already paused loop and check that the loop did not resume yet
+        entered = []
+        with manager.pause():
+            entered.append(True)
+            self.assertFalse(resumed.is_set(), "the loop resumed while the pause was held")
+        loop_thread.join(timeout=3)  # should leave enough for the loop to resume
+
+        self.assertEqual(entered, [True], "the thread did not enter the already paused loop")
+        self.assertTrue(resumed.is_set(), "the loop did not resume after the pause was released")
+
+    def test_pause_request_is_dropped_when_the_wait_is_interrupted(self) -> None:
+        """If an exception (e.g. KeyboardInterrupt) is raised while waiting for the loop to pause, the pause request
+        must be dropped. Otherwise `is_pause_requested` stays true and the loop pauses forever with nobody to release
+        it. The exception is injected through the wait predicate, so it is raised inside `wait_for` with the lock held,
+        like a real interrupt would be."""
+        status = BackgroundThreadStatus()
+        loop_resumed = threading.Event()
+
+        def generation_loop() -> None:
+            try:
+                status.pause_and_wait()
+                loop_resumed.set()
+            finally:
+                status.mark_as_stopped()
+
+        loop_thread = threading.Thread(target=generation_loop)
+        loop_thread.start()
+        manager = self._get_minimal_manager(status, loop_thread)
+        # Wait for the loop to pause, so that the interrupted request is the only one keeping it paused
+        deadline = time.monotonic() + 3
+        while not status.is_pause_requested() and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        def interrupted_predicate() -> bool:
+            raise KeyboardInterrupt("interrupted while waiting for the pause")
+
+        # Replace the pause predicate with a function that raises an exception, so that it is raised while waiting
+        status._pause_predicate = interrupted_predicate
+        with self.assertRaises(KeyboardInterrupt):
+            with manager.pause():
+                pass
+
+        self.assertFalse(status.is_pause_requested(), "the interrupted pause request was not withdrawn")
+        self.assertFalse(status.is_pause_requested(local=True), "the local pause counter was not decremented")
+        loop_thread.join(timeout=3)
+        self.assertTrue(loop_resumed.is_set(), "the loop stayed paused after the interrupted request")
+
+    def test_stop_from_inside_a_pause_raises(self) -> None:
+        """`stop` waits for the generation loop to exit, and the loop cannot exit while a pause is held. So a thread
+        calling `stop` from inside its own pause would wait forever: it must raise instead, whatever `block` and
+        `timeout` are."""
+        status = BackgroundThreadStatus()
+        loop_thread = threading.Thread(target=status.pause_and_wait)
+        loop_thread.start()
+        manager = self._get_minimal_manager(status, loop_thread)
+
+        try:
+            with manager.pause():
+                for kwargs in [{}, {"block": False}, {"block": True, "timeout": 5.0}]:
+                    with self.assertRaises(RuntimeError) as context:
+                        manager.stop(**kwargs)
+                    self.assertIn("from inside a pause", str(context.exception), f"wrong error for {kwargs}")
+        finally:
+            loop_thread.join(timeout=10)
+        self.assertFalse(loop_thread.is_alive())
+
+    def test_stop_from_another_thread_while_paused(self) -> None:
+        """A thread that does not hold a pause can call `stop` while another thread does: the stop waits for the pause
+        to be released and the loop to exit. Only a blocking stop is tested, since a non-blocking stop tears down the
+        manager while the loop is still running, which is a pre-existing issue of `stop` unrelated to pausing."""
+        status = BackgroundThreadStatus()
+        loop_thread = threading.Thread(target=status.pause_and_wait)
+        loop_thread.start()
+        manager = self._get_minimal_manager(status, loop_thread)
+
+        holding = threading.Event()
+        release = threading.Event()
+
+        def holder() -> None:
+            with manager.pause():
+                holding.set()
+                release.wait(timeout=10)
+
+        holder_thread = threading.Thread(target=holder)
+        holder_thread.start()
+        try:
+            self.assertTrue(holding.wait(timeout=10), "the holder did not get its pause")
+            # A blocking stop should wait for the holder to release the pause
+            stopped = threading.Event()
+            stopper = threading.Thread(target=lambda: (manager.stop(), stopped.set()))
+            stopper.start()
+            self.assertFalse(stopped.wait(timeout=0.5), "stop returned while the pause was still held")
+            release.set()
+            stopper.join(timeout=10)
+            self.assertTrue(stopped.is_set(), "stop did not complete after the pause was released")
+        finally:
+            release.set()
+            holder_thread.join(timeout=10)
+            loop_thread.join(timeout=10)
+        self.assertFalse(loop_thread.is_alive())
+
+    @staticmethod
+    def _pause_in_thread(manager, timeout: float = 10) -> tuple[bool, Exception | None]:
+        """Enters and exits `pause` in a separate thread, so a hang shows up as a timeout instead of blocking the test
+        suite. Returns whether the thread finished and the exception it raised, if any."""
+        raised: list[Exception] = []
+
+        def enter_and_leave() -> None:
+            try:
+                with manager.pause():
+                    pass
+            except Exception as e:
+                raised.append(e)
+
+        thread = threading.Thread(target=enter_and_leave)
+        thread.start()
+        thread.join(timeout=timeout)
+        finished = not thread.is_alive()
+        return finished, (raised[0] if raised else None)
+
+    def test_pause_raises_when_the_loop_cannot_pause(self) -> None:
+        """When the loop will never pause, `pause` must raise instead of blocking. This covers a loop that died on a
+        fatal error, a loop that hard-stopped right after seeing the request, a manager that was never started and a
+        manager that was already stopped."""
+        # 1. The loop dies with a fatal error while a pause is pending: the error is chained as `__cause__`
+        fatal_error = RuntimeError("boom in the forward pass")
+        status = BackgroundThreadStatus()
+        keep_unwinding = threading.Event()
+
+        def dying_loop() -> None:
+            try:
+                while not status.is_pause_requested():
+                    time.sleep(0.001)
+                # Same order as `_handle_critical_error`: request the hard stop, then record the error
+                status.request_stop(BackgroundThreadStatus.HARD_STOP, 0)
+                status.record_fatal_error(fatal_error)
+                keep_unwinding.wait(timeout=10)  # keep the thread alive while `pause` gives up
+            finally:
+                status.mark_as_stopped()
+
+        loop_thread = threading.Thread(target=dying_loop)
+        loop_thread.start()
+        manager = self._get_minimal_manager(status, loop_thread)
+        finished, error = self._pause_in_thread(manager)
+        self.assertTrue(finished, "pause blocked after the generation loop died")
+        self.assertIsInstance(error, RuntimeError)
+        self.assertIs(error.__cause__, fatal_error)
+        # The manager should be stopped rather than left half-dead
+        self.assertEqual(status.local_status, BackgroundThreadStatus.HARD_STOP)
+        keep_unwinding.set()
+        loop_thread.join(timeout=10)
+
+        # 2. The loop hard-stops with a pause pending. `_update_tp_group_state` returns on HARD_STOP before reaching the
+        # pause window, so the loop sees the request but never pauses. There is no fatal error, but `pause` must still
+        # return.
+        status = BackgroundThreadStatus()
+
+        def hard_stopping_loop() -> None:
+            try:
+                while not status.is_pause_requested():
+                    time.sleep(0.001)
+            finally:
+                status.mark_as_stopped()
+
+        loop_thread = threading.Thread(target=hard_stopping_loop)
+        loop_thread.start()
+        manager = self._get_minimal_manager(status, loop_thread)
+        finished, error = self._pause_in_thread(manager)
+        loop_thread.join(timeout=10)
+        self.assertTrue(finished, "pause blocked after the generation loop hard-stopped")
+        self.assertIsInstance(error, RuntimeError)
+        self.assertGreaterEqual(status.local_status, BackgroundThreadStatus.HARD_STOP)
+
+        # 3. A manager that was never started
+        manager = self._get_minimal_manager(BackgroundThreadStatus(), None)
+        finished, error = self._pause_in_thread(manager)
+        self.assertTrue(finished, "pause blocked on a manager that was never started")
+        self.assertIsInstance(error, RuntimeError)
+
+        # 4. A manager whose generation thread has already exited
+        status = BackgroundThreadStatus()
+        loop_thread = threading.Thread(target=status.mark_as_stopped)
+        loop_thread.start()
+        loop_thread.join(timeout=10)
+        manager = self._get_minimal_manager(status, loop_thread)
+        finished, error = self._pause_in_thread(manager)
+        self.assertTrue(finished, "pause blocked on an already stopped manager")
+        self.assertIsInstance(error, RuntimeError)
+
+
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
@@ -816,8 +1209,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
         if continuous_batching_config.default_compile_level > 0:
-            fullgraph = not is_flash_attention_requested(requested_attention_implementation=attn_implementation)
-            compile_config = CompileConfig(mode="default", fullgraph=fullgraph, dynamic=True)
+            # Paged attention is wrapped in @torch.compiler.disable so fullgraph is not possible
+            compile_config = CompileConfig(mode="default", fullgraph=False, dynamic=True)
             continuous_batching_config.varlen_compile_config = compile_config
 
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
@@ -1018,6 +1411,56 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
         )
 
+    @slow
+    @require_torch_accelerator
+    def test_hybrid_sliding_window_crossing_parity(self) -> None:
+        """Tests that a hybrid full+sliding model matches generate() token-for-token on prompts that cross the
+        sliding window, both during decode (prompt just under the window) and during prefill (prompt over the
+        window). This exercises the rolling-buffer read and write indices past the window boundary."""
+        model_id = "google/gemma-3-1b-it"
+        max_new_tokens = 30
+        # Use float32 so any mismatch is a real indexing bug and not a numerical tie-flip
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
+        sliding_window = model.config.sliding_window
+
+        # Build prompts around the sliding window size
+        base_text = "The mitochondria is the powerhouse of the cell. " * 200
+        long_ids = tokenizer(base_text).input_ids
+        prompts = [
+            tokenizer("The capital of France is").input_ids,
+            long_ids[: sliding_window - 10],  # crosses the window during decode
+            long_ids[: sliding_window + 100],  # crosses the window during prefill
+        ]
+
+        # Reference: plain generate, one prompt at a time to avoid any padding effect
+        references = []
+        for ids in prompts:
+            with torch.no_grad():
+                out = model.generate(
+                    torch.tensor([ids], device=torch_device),
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+            references.append(out[0, len(ids) :].tolist())
+
+        # Continuous batching, all prompts at once
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, dtype=torch.float32)
+        gen_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False, eos_token_id=None)
+        results = model.generate_batch(
+            inputs=prompts,
+            generation_config=gen_config,
+            continuous_batching_config=ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False),
+            progress_bar=False,
+        )
+        ordered_keys = sorted(results.keys(), key=lambda x: int(x.split("_")[1]))
+        for i, (key, reference) in enumerate(zip(ordered_keys, references)):
+            self.assertEqual(
+                results[key].generated_tokens,
+                reference,
+                f"CB output diverges from generate() for prompt {i} (length {len(prompts[i])}, {sliding_window = })",
+            )
+
     @parameterized.expand([(True, False), (False, True)])
     @require_flash_attn_3
     @slow
@@ -1204,8 +1647,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
         sharing."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # 4 blocks of 32 tokens: small enough to force offloading
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, block_size=32
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, page_size=32
         )
 
         # Patch offload_requests to verify it's called at least once
@@ -1313,9 +1757,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------Misc. tests----------------------------------------- #
     #                     Various tests that don't fit into the other categories                    #
     # --------------------------------------------------------------------------------------------- #
-    def _test_block_sharing(self, model_id: str, expected_layer_types: dict[str, int], input_msg: str) -> None:
-        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test). Load plain
-        # sdpa (regular_generate runs on this model) and disable flash so the CB switch stays on paged|sdpa.
+    def _test_block_sharing(self, model_id: str, expected_attn_types: set[str], input_msg: str) -> None:
+        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test)
         tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
         model._supports_flash_attn = False
 
@@ -1327,81 +1770,65 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Get expected output from regular generate for parity check
         expected_output_tokens, _ = regular_generate(model, tokenizer, [input_msg])
 
+        # Prefix sharing only activates when every allocator can share, i.e. on full-attention-only models
+        prefix_sharing_expected = expected_attn_types == {"full_attention"}
+
+        # Spy on prefix matching to observe how many prompt tokens get matched
+        matched_tokens: list[int] = []
+        original_search = PagedAttentionCache.search_prefix_match
+
+        def spy_search(cache_self, request_id, prompt_ids):
+            matched = original_search(cache_self, request_id, prompt_ids)
+            matched_tokens.append(matched)
+            return matched
+
         cb_context_manager = model.continuous_batching_context_manager(
             generation_config=model.generation_config,
-            continuous_batching_config=ContinuousBatchingConfig(block_size=32),
+            continuous_batching_config=ContinuousBatchingConfig(page_size=32),
         )
-        with cb_context_manager as manager:
-            # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
+        with (
+            patch.object(PagedAttentionCache, "search_prefix_match", autospec=True, side_effect=spy_search),
+            cb_context_manager as manager,
+        ):
+            # The prompt must span 2 blocks (>= 33 tokens so decode completes the 2nd block: the prompt plus 31
+            # written decode tokens must reach 64) and its 2nd block must not be complete at prefill (< 64 tokens)
             inputs = get_generation_inputs([input_msg], tokenizer, for_continuous_batching=True)[0]
-            self.assertGreaterEqual(len(inputs), 32, f"Input length is {len(inputs)} instead of at least 32")
+            self.assertGreaterEqual(len(inputs), 33, f"Input length is {len(inputs)} instead of at least 33")
             self.assertLess(len(inputs), 64, f"Input length is {len(inputs)} instead of less than 64")
 
-            # First request, which populates the cache w/ 2 complete blocks for each full attention layer group
+            # First request, which populates the cache with 2 complete blocks (1 by prefill, 1 during decode)
             request_id = manager.add_request(inputs, max_new_tokens=32)
             chunk_no_reuse = next(manager.request_id_iter(request_id))
 
-            num_fa = expected_layer_types["full_attention"]
-            num_sw = expected_layer_types["sliding_window"]
-
             if manager.batch_processor is None:
                 raise RuntimeError("Batch processor is None even after a request was added.")
+            cache = manager.batch_processor.cache
 
-            hash_table = manager.batch_processor.cache._block_manager._hash_to_id
-            self.assertEqual(
-                len(hash_table),
-                2 * num_fa,  # 2 = 1 for prefill + 1 for decode
-                f"There should be {2 * num_fa} blocks, 2 for each full attention layer group, but {len(hash_table) = }",
-            )
-            total_prefix_length = manager.batch_processor.cache._total_prefix_length
-            self.assertEqual(
-                total_prefix_length, 0, f"Expected total prefix length to be 0, got {total_prefix_length}"
-            )
+            # Assert there is one allocator per expected attention type, and prefix sharing is on when possible
+            self.assertEqual(set(cache.cache_allocators.keys()), expected_attn_types)
+            self.assertEqual(cache.use_prefix_sharing, prefix_sharing_expected)
 
-            # Assert the number of layer groups and their types are the expected ones
-            layer_groups = manager.batch_processor.cache.group_cache_managers
-            self.assertEqual(
-                len(layer_groups),
-                num_fa + num_sw,
-                f"There should be {num_fa + num_sw} layer groups, but {len(layer_groups) = }",
-            )
+            # On a full-attention-only model, the first request leaves 2 hashed blocks; on a hybrid model, prefix
+            # sharing is off so no block is ever hashed
+            num_hashed_blocks = sum(len(ca.ledger.hash_to_block) for ca in cache.cache_allocators.values())
+            expected_hashes = 2 if prefix_sharing_expected else 0
+            self.assertEqual(num_hashed_blocks, expected_hashes, f"{num_hashed_blocks = }, {expected_hashes = }")
+            self.assertEqual(sum(matched_tokens), 0)
 
-            layer_group_types = {"full_attention": 0, "sliding_window": 0}
-            for cm in layer_groups:
-                if isinstance(cm, FullAttentionCacheAllocator):
-                    layer_group_types["full_attention"] += 1
-                elif isinstance(cm, SlidingAttentionCacheAllocator):
-                    layer_group_types["sliding_window"] += 1
-                else:
-                    raise ValueError(f"Invalid layer group type: {type(cm)}")
-
-            self.assertEqual(
-                layer_group_types,
-                expected_layer_types,
-                f"The expected layer group types are\n{expected_layer_types}\nbut got\n{layer_group_types}",
-            )
-
-            # Second request, which should reuse the same blocks for the full attention layer groups
+            # Second request, which should match the first complete block of the first request as a prefix
             request_id = manager.add_request(inputs, max_new_tokens=32)
             chunk_with_reuse = next(manager.request_id_iter(request_id))
 
-            # There should only still be two blocks in the hash table because of block reuse
-            self.assertEqual(
-                len(hash_table),
-                2 * num_fa,
-                f"Because of block reuse, there should still be two blocks in the hash table, but {len(hash_table) = }",
-            )
+            # De-duplication: the second request computes identical content, so no new hash is registered
+            num_hashed_blocks = sum(len(ca.ledger.hash_to_block) for ca in cache.cache_allocators.values())
+            self.assertEqual(num_hashed_blocks, expected_hashes, f"{num_hashed_blocks = }, {expected_hashes = }")
 
-            # Check that the whole prefill was matched if there are only full attention layers
-            if expected_layer_types["sliding_window"] == 0:
-                expected_total_prefix_length = 32
-            else:
-                expected_total_prefix_length = 0
-            total_prefix_length = manager.batch_processor.cache._total_prefix_length
+            # The prompt has less than 64 tokens, so only its first block can be matched (32 tokens)
+            expected_total_prefix_length = 32 if prefix_sharing_expected else 0
             self.assertEqual(
-                total_prefix_length,
+                sum(matched_tokens),
                 expected_total_prefix_length,
-                f"Expected total prefix length to be {expected_total_prefix_length}, but got {total_prefix_length = }",
+                f"Expected {expected_total_prefix_length} matched prefix tokens, got {sum(matched_tokens)}",
             )
 
         # Check the outputs were the same (block sharing should produce identical results)
@@ -1410,17 +1837,143 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Verify parity with regular generate
         self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens[0])
 
+    # ------------------------------------------------- Pause tests ------------------------------------------------- #
+
+    def _started_manager_with_requests(self, max_new_tokens: int = 200):
+        """Returns a started manager with a few requests in flight, along with the model and the number of requests."""
+        tokenizer, model = get_tokenizer_and_model("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "paged|sdpa", torch_device)
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        cb_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+        manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+        manager.logit_processor.clear()
+        manager.warmup()  # so that no graph capture happens on the loop thread during the test
+        manager.start()
+        for ids in input_ids:
+            manager.add_request(ids, max_new_tokens=max_new_tokens)
+        return model, manager, len(input_ids)
+
+    def _wait_until_generating(self, manager, timeout: float = 60) -> None:
+        """Blocks until the generation loop has run at least one step. Requests are admitted to the scheduler after the
+        pause window in `_update_tp_group_state`, so a pause taken on the first iteration would pause an empty scheduler
+        and the step counter checks would be meaningless."""
+        # `current_batch` is only set once the loop thread has started
+        deadline = time.monotonic() + timeout
+        while getattr(manager, "current_batch", 0) == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertGreater(getattr(manager, "current_batch", 0), 0, "the generation loop never started generating")
+
+    @staticmethod
+    def _collect_finished(manager, expected: int, timeout: float = 120):
+        """Drains the manager's outputs until `expected` requests have finished or the timeout expires."""
+        outputs = {}
+        deadline = time.monotonic() + timeout
+        while len(outputs) < expected and time.monotonic() < deadline:
+            result = manager.get_result(timeout=1.0)
+            if result is not None and result.is_finished():
+                outputs[result.request_id] = result
+        return outputs
+
+    @with_flush_memory
+    def test_pause_during_generation(self) -> None:
+        """Pauses the manager several times while requests are in flight, like a trainer sharing the model would. The
+        generation loop must not run a step while the pause is held, and all requests must still complete."""
+        num_pauses = 5
+        model, manager, num_requests = self._started_manager_with_requests()
+        try:
+            self._wait_until_generating(manager)
+            for i in range(num_pauses):
+                with manager.pause():
+                    batches_at_pause = manager.current_batch
+                    # The step counter check below only means something if the loop still has work to do
+                    self.assertTrue(
+                        manager.batch_processor.has_pending_requests(),
+                        f"generation finished before pause {i}",
+                    )
+                    # Stands in for a trainer updating the weights in place
+                    with torch.no_grad():
+                        for parameter in model.parameters():
+                            parameter.add_(0.0)
+                    # A generation step takes a few ms, so hold the pause long enough for a loop that ignored it to
+                    # run several steps
+                    time.sleep(0.3)
+                    self.assertEqual(manager.current_batch, batches_at_pause, f"the loop ran during pause {i}")
+            outputs = self._collect_finished(manager, num_requests)
+        finally:
+            manager.stop(block=True)
+
+        self.assertEqual(len(outputs), num_requests, "some requests did not complete")
+        for request_id, output in outputs.items():
+            self.assertGreater(len(output.generated_tokens), 0, f"{request_id} generated no tokens")
+
+    @with_flush_memory
+    def test_pause_with_several_holders(self) -> None:
+        """Several threads can hold the pause at once, and the loop must stay paused until the last one releases it.
+        The holders are released one at a time and the step counter is checked after each release."""
+        num_holders = 3
+        model, manager, num_requests = self._started_manager_with_requests()
+        # The main thread is the extra party: it runs its checks once every holder is inside its pause
+        all_inside = threading.Barrier(num_holders + 1, timeout=60)
+        may_leave = [threading.Event() for _ in range(num_holders)]
+        has_left = [threading.Event() for _ in range(num_holders)]
+        holder_errors = []
+
+        def holder(index: int) -> None:
+            try:
+                with manager.pause():
+                    all_inside.wait()
+                    may_leave[index].wait(timeout=60)
+                has_left[index].set()
+            except Exception as error:  # a holder that fails to enter the pause would break the barrier
+                holder_errors.append(error)
+
+        threads = [threading.Thread(target=holder, args=(index,)) for index in range(num_holders)]
+        try:
+            self._wait_until_generating(manager)
+            for thread in threads:
+                thread.start()
+            all_inside.wait()
+            batches_at_pause = manager.current_batch
+            # The step counter checks below only mean something if the loop still has work to do
+            self.assertTrue(
+                manager.batch_processor.has_pending_requests(),
+                "generation finished before the holders entered their pause",
+            )
+
+            for index in range(num_holders):
+                may_leave[index].set()
+                self.assertTrue(has_left[index].wait(timeout=30), f"holder {index} did not exit its pause")
+                # Give a loop that resumed too early time to run a few steps
+                time.sleep(0.3)
+                if index < num_holders - 1:
+                    self.assertEqual(
+                        manager.current_batch,
+                        batches_at_pause,
+                        f"the loop resumed with {num_holders - index - 1} holders still inside",
+                    )
+
+            for thread in threads:
+                thread.join(timeout=30)
+            outputs = self._collect_finished(manager, num_requests)
+        finally:
+            for event in may_leave:
+                event.set()
+            manager.stop(block=True)
+
+        self.assertEqual(holder_errors, [], f"some holders failed to enter the pause: {holder_errors}")
+        self.assertGreater(
+            manager.current_batch, batches_at_pause, "the loop did not resume after the last holder left"
+        )
+        self.assertEqual(len(outputs), num_requests, "some requests did not complete")
+
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        num_layer_groups = {"full_attention": 1, "sliding_window": 0}
         input_msg = "What is the Transformers library known for?"
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
+        return self._test_block_sharing(model_id, {"full_attention"}, input_msg)
 
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
-        num_layer_groups = {"full_attention": 2, "sliding_window": 11}
         input_msg = "I am a software engineer looking to use open source software to build a new AI agent. What is the Transformers library known for?"
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
+        return self._test_block_sharing(model_id, {"full_attention", "sliding_attention"}, input_msg)
 
     @parameterized.expand([True, False])
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
@@ -1501,7 +2054,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @require_kernels
     def test_flash_attn_with_kvcache_parity(self, use_cuda_graph: bool, use_async: bool) -> None:
         """Test that paged flash_attn3 (flash_attn_with_kvcache path) produces same outputs as varlen."""
-
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         tokenizer, model = get_tokenizer_and_model(
             model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
@@ -1511,7 +2063,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
         continuous_batching_config = ContinuousBatchingConfig(
-            block_size=256,
+            page_size=256,
             num_blocks=64,
             max_batch_tokens=16,
             use_cuda_graph=use_cuda_graph,
@@ -1555,7 +2107,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
         # CUDA graphs enable input padding, which is where the truncation happened
-        cb_config = ContinuousBatchingConfig(block_size=256, num_blocks=64, use_cuda_graph=True)
+        cb_config = ContinuousBatchingConfig(page_size=256, num_blocks=64, use_cuda_graph=True)
 
         cb_config.max_blocks_per_request = 0  # varlen reference
         outputs_varlen = model.generate_batch(
@@ -1680,12 +2232,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Test that CPU offloading produces the same results as the legacy soft-reset path, and that it is actually
         called at least once. Uses a very small cache (few blocks) to force offloading."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # 4 blocks of 32 tokens: small enough to force offloading
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=True,
             allow_block_sharing=True,
             use_async_batching=False,
             num_blocks=4,
-            block_size=32,
+            page_size=32,
             cpu_offload_space=1.0,
         )
 
@@ -1707,12 +2260,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Same as test_cpu_offloading_parity but with async batching, where offloading can evict requests that are
         in flight in the previous batch, exercising the rollback-on-restore path."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # 4 blocks of 32 tokens: small enough to force offloading
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=True,
             allow_block_sharing=True,
             use_async_batching=True,
             num_blocks=4,
-            block_size=32,
+            page_size=32,
             cpu_offload_space=1.0,
         )
 
@@ -1720,12 +2274,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         original_offload = OffloadingManager._offload_to_cpu
         in_flight_victim_seen = False
 
-        def spy_offload(manager, victims):
+        def spy_offload(manager, victims, victim_block_tables):
             nonlocal in_flight_victim_seen
             in_flight_victim_seen |= any(
                 state.position_offset == len(state.initial_tokens) + len(state.generated_tokens) for state in victims
             )
-            return original_offload(manager, victims)
+            return original_offload(manager, victims, victim_block_tables)
 
         with patch.object(OffloadingManager, "_offload_to_cpu", autospec=True, side_effect=spy_offload) as mock:
             self._test_continuous_batching_parity(
@@ -1742,12 +2296,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_cpu_offloading_disabled_when_zero(self) -> None:
         """Test that cpu_offload_space=0 produces the same output as the legacy path."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # 4 blocks of 32 tokens: small enough to force offloading
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=True,
             allow_block_sharing=True,
             use_async_batching=False,
             num_blocks=4,
-            block_size=32,
+            page_size=32,
             cpu_offload_space=0.0,
         )
         # Should work identically to the existing test_continuous_batching_few_blocks
@@ -1765,15 +2320,15 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
     """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
-    dtypes, no alignment padding or extra blocks) and compare the accelerator memory delta to the handler's prediction. The
-    handler derives the page size and the two activation peaks (LM head and attention) from the model config, so we
-    allocate the tensors of whichever peak dominates -- that is the one ``compute_memory_footprint`` reports.
+    dtypes, no alignment padding) and compare the CUDA memory delta to the handler's prediction. The handler reserves
+    the largest of the two M-proportional activation peaks (LM head and attention) and always accounts for the cache
+    reads (N-proportional), so we allocate the dominant M peak plus the cache read tensors.
     """
 
     NUM_BLOCKS = 4
     MAX_BATCH_TOKENS = 64
 
-    # Each tuple fully specifies a synthetic model config plus the CB knobs; page_size = head_dim * num_kv_heads.
+    # Each tuple fully specifies a synthetic model config plus the CB knobs; block_size = head_dim * num_kv_heads.
     # fmt: off
     # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async)
     CONFIGS = [
@@ -1811,30 +2366,45 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             _attn_implementation=attn_impl,
         )
         cb_config = ContinuousBatchingConfig(
-            block_size=block_size,
+            page_size=block_size,
+            num_blocks=self.NUM_BLOCKS,
             max_blocks_per_request=max_bpr,
             return_logprobs=logprobs,
             use_async_batching=use_async,
             max_memory_percent=0.9,
         )
+        # Compute the sector geometry the same way PagedAttentionCache does, with the layers evenly split across the
+        # attention types
+        layers_per_group = group_size // len(group_types)
+        bytes_per_token = 2 * num_kv_heads * head_dim * dtype.itemsize
+        bytes_per_block = bytes_per_token * block_size * layers_per_group
+        bytes_per_sector = math.lcm(bytes_per_block, 128)
+        tokens_per_sector = bytes_per_sector // bytes_per_block * block_size
+        bytes_per_model_block = bytes_per_token * block_size * group_size
         handler = PagedAttentionMemoryHandler(
             config=config,
-            continuous_batching_config=cb_config,
+            cb_config=cb_config,
             dtype=dtype,
-            group_types=group_types,
-            group_size=group_size,
+            bytes_per_sector=bytes_per_sector,
+            tokens_per_sector=tokens_per_sector,
+            bytes_per_block=bytes_per_model_block,
+            attn_types=group_types,
         )
 
         num_groups = len(group_types)
         num_attn_masks = handler.num_attention_masks
         num_output_rows = 2 if logprobs else 1
-        page_size = head_dim * num_kv_heads
+        elems_per_kv_token = head_dim * num_kv_heads
         q_dim = num_attention_heads * head_dim
 
-        N = self.NUM_BLOCKS * block_size  # num_pages
+        # NUM_BLOCKS converts to a number of sectors, and reads are sized by the readable tokens those sectors hold
+        num_sectors = handler.num_sectors_from_config()
+        if num_sectors is None:
+            raise ValueError("handler could not find num_sector, which should be impossible in this test.")
+        N = num_sectors * tokens_per_sector  # max number of readable cache tokens
         M = self.MAX_BATCH_TOKENS
         k = handler.io_multiplier  # 1 sync, 2 async -- scales IO tensors only
-        predicted = handler.compute_memory_footprint(M, self.NUM_BLOCKS)
+        predicted = handler.compute_memory_footprint(M, num_sectors)
 
         # -- Allocate tensors at the exact idealized sizes the handler models --
         device = torch_device
@@ -1843,10 +2413,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
         # Tensors present regardless of which activation peak is live
         fixed = []
-        # kv_cache: 2 * group_size tensors of [N, page_size] (not scaled by k)
-        for _ in range(group_size):
-            fixed.append(torch.empty((N, page_size), dtype=dtype, device=device))
-            fixed.append(torch.empty((N, page_size), dtype=dtype, device=device))
+        # kv_cache: a single flat byte tensor holding the data sectors plus the two trash sectors (not scaled by k)
+        fixed.append(torch.empty((num_sectors + 2) * bytes_per_sector, dtype=torch.uint8, device=device))
         # IO tensors below are allocated k times (once per IO instance)
         for _ in range(k):
             fixed.append(torch.empty((7, M), dtype=torch.int32, device=device))  # bulk_input
@@ -1858,21 +2426,23 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             fixed.append(torch.empty((num_groups, M), dtype=torch.int64, device=device))  # write_index
             fixed.append(torch.empty((num_groups, N + M), dtype=torch.int64, device=device))  # read_index
 
-        # Activation peaks: only one is live at a time, so the footprint uses whichever is larger
+        # Old K/V read from the whole readable cache: always reserved along with the sectors (not scaled by k)
+        fixed.append(torch.empty((N, elems_per_kv_token), dtype=dtype, device=device))
+        fixed.append(torch.empty((N, elems_per_kv_token), dtype=dtype, device=device))
+
+        # M-proportional activation peaks: only one is live at a time, so the footprint reserves the largest
         peaks = {
             # LM head: hidden states [M, hidden] turned into logits [M, vocab] (always fp32)
             "lm_head": [
                 torch.empty((M, hidden_size), dtype=dtype, device=device),
                 torch.empty((M, vocab_size), dtype=torch.float32, device=device),
             ],
-            # Attention: hidden + Q + new K/V over M, plus old K/V read from the whole cache over N
+            # Attention: hidden + Q + new K/V over M
             "attention": [
                 torch.empty((M, hidden_size), dtype=dtype, device=device),
                 torch.empty((M, q_dim), dtype=dtype, device=device),
-                torch.empty((M, page_size), dtype=dtype, device=device),
-                torch.empty((M, page_size), dtype=dtype, device=device),
-                torch.empty((N, page_size), dtype=dtype, device=device),
-                torch.empty((N, page_size), dtype=dtype, device=device),
+                torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
+                torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
             ],
         }
         peak_nbytes = {name: sum(t.nbytes for t in ts) for name, ts in peaks.items()}
@@ -1884,11 +2454,15 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         actual_accelerator = backend_memory_allocated(device) - baseline
         expected_nbytes = sum(t.nbytes for t in fixed) + peak_nbytes[dominant]
         num_allocations = len(fixed) + len(peaks[dominant])
+        # The CUDA caching allocator rounds allocations larger than 10MB up to a multiple of 2MB
+        large_alloc_rounding = sum(
+            -t.nbytes % (2 * 1024**2) for t in fixed + peaks[dominant] if t.nbytes > 10 * 1024**2
+        )
 
         del fixed, peaks
         backend_empty_cache(device)
 
-        # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the polynomial
+        # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the handler's cost
         #    coefficients against the tensor shapes, with zero tolerance.
         self.assertEqual(
             predicted,
@@ -1896,9 +2470,10 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             f"Prediction ({predicted}) != sum of tensor nbytes ({expected_nbytes})",
         )
 
-        # 2) Accelerator memory check: caching allocators round each allocation up (typically to 512 bytes).
-        #    We allow up to 512 bytes of overhead per allocation.
-        max_accelerator_overhead = num_allocations * 512
+        # 2) GPU memory check, which accounts for the CUDA caching allocator's rounding up of allocations.
+        if baseline > 0:
+            self.skipTest(f"CUDA allocator already holds {baseline} bytes: the memory delta check would be polluted")
+        max_accelerator_overhead = num_allocations * 512 + large_alloc_rounding
         self.assertLessEqual(
             abs(actual_accelerator - predicted),
             max_accelerator_overhead,
@@ -1940,7 +2515,7 @@ def _tp_continuous_batching_worker(
     ).eval()
 
     # Direct broadcast tests: only rank 0's value should propagate to every TP rank
-    helper = DistributedHelper(device_mesh=model._device_mesh, cpu_group_timeout=300)
+    helper = DistributedHelper(device_mesh=model._device_mesh, cpu_group_timeout=300, tp_plan=model._tp_plan)
 
     received_obj = helper.tp_broadcast_object_from_rank_0({"src_rank": rank})
     assert received_obj == {"src_rank": 0}, f"tp_broadcast_object: rank {rank} got {received_obj}"
@@ -2065,6 +2640,137 @@ def _tp_cancellation_worker(
         manager.stop(block=True)
 
 
+def _tp_pause_generation_worker(
+    rank: int,
+    model_id: str,
+    attn_implementation: str,
+    max_new_tokens: int,
+    num_pauses: int,
+    skew_seconds: float,
+    use_async_batching: bool = False,
+    use_cuda_graph: bool = False,
+) -> None:
+    """Loads `model_id` with `DistributedConfig(tp_size=...)` and runs a generation loop on every rank, plus a second
+    thread that repeatedly pauses it. Each rank starts pausing at a different time, so the ranks reach the pause window
+    at different iterations. Since the pause request is MAX-reduced across ranks, a rank ends up paused before its own
+    thread asked for it, which a single-rank test cannot reproduce.
+
+    Inside the pause, every rank issues a collective on the TP group. If a rank resumed generation instead of staying
+    paused, the collectives of its forward pass would pair up with this probe on the other ranks, and the probe would
+    return a wrong value or hang. Rank 0 owns the assertions."""
+    import threading
+    import time
+
+    import torch
+    import torch.distributed as dist
+
+    from transformers.distributed import DistributedConfig
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+    if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
+        tokenizer.pad_token = tokenizer.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        attn_implementation=attn_implementation,
+        distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
+        dtype=torch.float32,
+    ).eval()
+
+    chats = [[{"role": "user", "content": message}] for message in _DEFAULT_USER_MESSAGES]
+    tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+    input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+    # A dedicated group for the test's own synchronization: the manager's groups are used by the generation loop
+    # thread, and issuing collectives on them from the main thread at the same time would interleave.
+    sync_group = dist.new_group(backend="gloo")
+
+    cb_config = ContinuousBatchingConfig(
+        use_cuda_graph=use_cuda_graph, use_async_batching=use_async_batching, cpu_group_timeout=120
+    )
+    manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+    manager.logit_processor.clear()
+    # Warm up synchronously so that no CUDA-graph capture happens on the loop thread during the test
+    manager.warmup()
+    manager.start()
+
+    tp_group = manager.distributed_helper.tp_group
+    tp_size = manager.distributed_helper.tp_size
+    expected_probe = float(sum(range(1, tp_size + 1)))
+    pauses_taken = []
+    pause_errors = []
+
+    def pauser() -> None:
+        """Stands in for a trainer thread updating the model between generation steps."""
+        try:
+            time.sleep(skew_seconds * rank)  # so that the ranks do not ask for the pause at the same iteration
+            for _ in range(num_pauses):
+                with manager.pause():
+                    # A collective on the TP group, like a training step would issue. It only returns the right value
+                    # if every rank is in the same pause window.
+                    probe = torch.full((16,), float(rank + 1), device=model.device)
+                    dist.all_reduce(probe, group=tp_group)
+                    if probe[0].item() != expected_probe:
+                        raise AssertionError(
+                            f"TP collective inside the pause returned {probe[0].item()}, expected {expected_probe}: "
+                            f"the ranks are not in the same pause window"
+                        )
+                    pauses_taken.append(1)
+                time.sleep(0.02)  # let the generation loop progress between pauses
+        except Exception as error:  # re-raised on the main thread below
+            pause_errors.append(error)
+
+    pause_thread = threading.Thread(target=pauser)
+    pause_thread.start()
+
+    try:
+        # `add_request` only enqueues on the TP driver and returns None on the other ranks. The requests are then
+        # broadcast, so every rank produces outputs for the driver's request ids: collect by count and key on the ids
+        # that come back.
+        for ids in input_ids:
+            manager.add_request(ids, max_new_tokens=max_new_tokens, streaming=False)
+        outputs = {}
+        deadline = time.time() + 300
+        while len(outputs) < len(input_ids) and time.time() < deadline:
+            result = manager.get_result(timeout=1.0)
+            if result is not None and result.is_finished():
+                outputs[result.request_id] = result
+        pause_thread.join(timeout=120)
+    finally:
+        # The pause thread must be done before stopping: `stop` joins the generation thread, which cannot exit while a
+        # pause is held. Also, no rank may stop while another rank is still pausing, since the stop goes through the
+        # same all-reduce as the pause and the late rank would be left waiting on a loop that no longer exists.
+        if not pause_thread.is_alive():
+            dist.barrier(group=sync_group)
+            manager.stop(block=True)
+
+    assert not pause_thread.is_alive(), f"rank {rank}: the pausing thread did not finish"
+    if pause_errors:
+        # `is_running()` does not distinguish a dead loop from a stopped one, so chain the fatal error if there is one
+        loop_error = manager.background_thread_status.fatal_error
+        raise pause_errors[0] from loop_error
+    assert len(pauses_taken) == num_pauses, f"rank {rank}: took {len(pauses_taken)} pauses, expected {num_pauses}"
+    assert len(outputs) == len(input_ids), f"rank {rank}: got {len(outputs)}/{len(input_ids)} requests back"
+
+    # Pausing must not change the generated tokens nor make the ranks diverge. Sorting by request id gives every rank
+    # the same order.
+    local_tokens = [outputs[request_id].generated_tokens for request_id in sorted(outputs)]
+    gathered_tokens = [None] * tp_size
+    dist.all_gather_object(gathered_tokens, local_tokens, group=tp_group)
+
+    if rank != 0:
+        return
+
+    for index, tokens in enumerate(local_tokens):
+        assert len(tokens) > 0, f"Request {index} got no generated tokens"
+    for src_rank, src_tokens in enumerate(gathered_tokens):
+        if src_tokens != gathered_tokens[0]:
+            raise AssertionError(
+                f"Generation diverges across ranks when pausing: rank {src_rank} got {src_tokens}, rank 0 got "
+                f"{gathered_tokens[0]}"
+            )
+
+
 @require_torch_multi_accelerator
 class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     """Integration tests for continuous batching with tensor parallelism. Each test spawns a TP-sized process group
@@ -2092,6 +2798,17 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
         that all TP ranks agree on the generated tokens."""
         self._run_cb_worker(max_new_tokens=4)
+
+    def test_continuous_batching_tp_pause(self) -> None:
+        """Test that `pause` keeps the TP ranks in the same pause window even when they request it at different
+        iterations, and that pausing repeatedly mid-generation loses no request and does not make the ranks diverge."""
+        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_pause_generation_worker)(
+            model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            attn_implementation="paged|sdpa",
+            max_new_tokens=20,
+            num_pauses=5,
+            skew_seconds=0.25,
+        )
 
     @slow
     def test_continuous_batching_tp_greedy(self) -> None:
