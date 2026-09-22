@@ -1207,9 +1207,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     "input_ids": inputs_dict["input_ids"],
                     "attention_mask": torch.ones_like(inputs_dict["input_ids"]),
                 }
-            if config.model_type == "gemma4_text":
-                # Exercise shared KV independently of the unsupported MoE lowering.
-                config.enable_moe_block = False
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
