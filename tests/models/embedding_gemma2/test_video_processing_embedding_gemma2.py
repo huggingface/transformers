@@ -75,7 +75,7 @@ class EmbeddingGemma2VideoProcessingTester:
             "patch_size": self.patch_size,
             "max_soft_tokens": self.max_soft_tokens,
             "pooling_kernel_size": self.pooling_kernel_size,
-            "do_sample_frames": True,
+            "do_sample_frames": False,
             "num_frames": self.num_frames,
         }
 
@@ -118,21 +118,21 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
         pass
 
     def test_call_sample_frames(self):
-        """`num_frames` sampling only: EmbeddingGemma 2 defaults to 1-FPS sampling, which needs metadata,
-        and a class-level `num_frames` default means `fps`-only never reaches the metadata-required path."""
+        """`max_frames` sampling only: EmbeddingGemma 2 defaults to 1-FPS sampling, which needs metadata,
+        and a class-level `max_frames` default means `fps`-only never reaches the metadata-required path."""
         for video_processing_class in self.video_processor_list:
-            video_processing = video_processing_class(**self.video_processor_dict)
+            video_processing = video_processing_class(**self.video_processor_dict, fps=1)
             video_inputs = self.video_processor_tester.prepare_video_inputs(
                 equal_resolution=False, return_tensors="torch"
             )
 
             video_processing.do_sample_frames = False
-            encoded = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
+            encoded = video_processing(video_inputs[0], return_tensors="pt", fps=None, max_frames=3)[self.input_name]
             self.assertEqual(encoded.shape[1], self.video_processor_tester.num_frames)
 
             video_processing.do_sample_frames = True
-            encoded = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
-            encoded_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
+            encoded = video_processing(video_inputs[0], return_tensors="pt", fps=None, max_frames=3)[self.input_name]
+            encoded_batched = video_processing(video_inputs, return_tensors="pt", fps=None, max_frames=3)[self.input_name]
             self.assertEqual(encoded.shape[1], 3)
             self.assertEqual(encoded_batched.shape[1], 3)
 
@@ -174,13 +174,13 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
 
         # 10 seconds at 25 fps: one frame per second, all kept.
         meta_short = VideoMetadata(fps=25.0, total_num_frames=250, duration=10.0)
-        sampled_short = processor.sample_frames(meta_short, max_frames=32)
+        sampled_short = processor.sample_frames(meta_short, fps=1, max_frames=32)
         expected_short = np.array([int(s * 25) for s in range(10)])
         np.testing.assert_array_equal(sampled_short, expected_short)
 
         # 100 seconds at 25 fps: per-second indices subsampled down to `max_frames`.
         meta_long = VideoMetadata(fps=25.0, total_num_frames=2500, duration=100.0)
-        sampled_long = processor.sample_frames(meta_long, max_frames=32)
+        sampled_long = processor.sample_frames(meta_long, fps=1, max_frames=32, overflow_strategy="uniform")
         self.assertEqual(len(sampled_long), 32)
         sec_indices_long = [int(s * 25) for s in range(100)]
         expected_long = np.array([sec_indices_long[i] for i in np.linspace(0, 99, 32, dtype=int)])
@@ -192,7 +192,7 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
             processor.sample_frames(meta_missing, fps=1)
 
         # Opting out falls back to the base uniform sampling.
-        self.assertEqual(len(processor.sample_frames(meta_short, num_frames=2)), 2)
+        self.assertEqual(len(processor.sample_frames(meta_short, overflow_strategy="uniform", max_frames=2)), 2)
 
     def test_unsupported_max_soft_tokens_raises(self):
         with self.assertRaises(ValueError):

@@ -750,51 +750,48 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
     fps = 1
     max_frames = 32
     overflow_strategy = "uniform"
-    num_frames = AttributeError()
     exclude_timestamps = True
+    num_frames = AttributeError()
+
     valid_kwargs = EmbeddingGemma2VideoProcessorKwargs
 
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        num_frames: int | None = None,
         fps: int | float | None = None,
         max_frames: int | None = None,
-        overflow_strategy: str = "uniform",
+        overflow_strategy: str | None = None,
         **kwargs,
     ) -> np.ndarray:
-        max_frames = max_frames if max_frames is not None else self.max_frames
-        num_frames = num_frames if num_frames is not None else self.num_frames
-        overflow_strategy = overflow_strategy if overflow_strategy is not None else self.overflow_strategy
-        fps = fps if fps is not None else self.fps
-        total_num_frames = metadata.total_num_frames
-
-        if num_frames is not None:
-            # Pre-extracted frames without FPS metadata: keep all frames if <= num_frames
-            if total_num_frames <= num_frames:
-                return np.arange(total_num_frames)
-            else:
-                return np.linspace(0, total_num_frames - 1, num_frames, dtype=int)
-        elif fps is not None and metadata.fps is None:
-            raise ValueError(
-                "Asked to sample uniformly with `fps`, but no video metadata was provided or "
-                "`fps` is missing. Please pass in `VideoMetadata` object with valid `fps`."
+        # 1) Sample to match the taget `fps` if it is set, otherwise keep the whole video
+        if fps is None:
+            indices = np.arange(metadata.total_num_frames, dtype=int)
+        else:
+            if metadata.fps is None:
+                raise ValueError(
+                    "Asked to sample uniformly with `fps`, but no video metadata was provided or "
+                    "`fps` is missing. Please pass in `VideoMetadata` object with valid `fps`."
+                )
+            step = metadata.fps / fps  # native frames per sampled frame
+            num_sampled = max(1, int(metadata.duration * fps))
+            indices = np.array(
+                [min(metadata.total_num_frames - 1, int(i * step)) for i in range(num_sampled)], dtype=int
             )
 
-        step = metadata.fps / fps  # native frames per sampled frame
-        num_sampled = max(1, int(metadata.duration * fps))
-        sec_indices = [min(total_num_frames - 1, int(i * step)) for i in range(num_sampled)]
+        # 2) Cap total number of frames to `max_frames` checking the input `overflow_strategy`
+        if overflow_strategy is not None:
+            if max_frames is None:
+                raise ValueError(
+                    f"You must pass `max_frames` when requesting an overflow_strategy={overflow_strategy}!"
+                )
 
-        if len(sec_indices) <= max_frames:
-            return np.array(sec_indices)
+            if overflow_strategy == "truncate":
+                indices = indices[:max_frames]
+            elif overflow_strategy == "uniform":
+                linspace_idx = np.linspace(0, len(indices) - 1, max_frames, dtype=int)
+                indices = np.array([indices[i] for i in linspace_idx], dtype=int)
 
-        if overflow_strategy == "truncate":
-            return np.array(sec_indices[:max_frames])
-        elif overflow_strategy == "uniform":
-            linspace_idx = np.linspace(0, len(sec_indices) - 1, max_frames, dtype=int)
-            return np.array([sec_indices[i] for i in linspace_idx])
-        else:
-            raise ValueError(f"Unknown `overflow_strategy`: {overflow_strategy!r}. Expected 'uniform' or 'truncate'.")
+        return indices
 
 
 class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
