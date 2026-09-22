@@ -154,11 +154,16 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
         self.assertEqual(processor.fps, 1)
 
     def test_embedding_gemma2_video_flag_defaults(self):
-        """EmbeddingGemma 2 was trained on visual-only, 1-FPS-sampled video, so both flags default to
-        `True` -- unlike Gemma 4, which defaults both to `False`."""
+        """The video defaults are `fps=1` with a `max_frames=32` budget applied uniformly, and no
+        timestamps: one frame per second, linspace-subsampled once the clip exceeds the budget."""
         processor = self.fast_video_processing_class()
-        self.assertTrue(processor.max_frames)
-        self.assertTrue(processor.exclude_timestamps)
+        self.assertEqual(processor.fps, 1)
+        self.assertEqual(processor.max_frames, 32)
+        self.assertEqual(processor.overflow_strategy, "uniform")
+        self.assertFalse(processor.add_timestamps)
+        # `num_frames = AttributeError()` deletes the class attribute; lookup falls through to
+        # `BaseVideoProcessor.num_frames = None`, which is what keeps `preprocess` from forwarding a value.
+        self.assertIsNone(processor.num_frames)
 
     def test_video_flag_defaults_survive_roundtrip(self):
         import tempfile
@@ -167,15 +172,21 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
         with tempfile.TemporaryDirectory() as tmpdir:
             processor.save_pretrained(tmpdir)
             reloaded = self.fast_video_processing_class.from_pretrained(tmpdir)
-        self.assertTrue(reloaded.exclude_timestamps)
+        self.assertFalse(reloaded.add_timestamps)
+        self.assertEqual(reloaded.fps, 1)
+        self.assertEqual(reloaded.max_frames, 32)
+        self.assertEqual(reloaded.overflow_strategy, "uniform")
+        # A serialized `num_frames` would be forwarded by `preprocess` and rejected by `sample_frames`.
+        self.assertNotIn("num_frames", processor.to_dict())
 
     def test_sample_frames_1fps_linear(self):
-        """`use_1fps_linear_sampling` takes one frame per second, then linspace-subsamples to `num_frames`."""
+        """`fps=1` takes one frame per second; `overflow_strategy="uniform"` then linspace-subsamples
+        the per-second indices down to `max_frames`."""
         processor = self.fast_video_processing_class()
 
-        # 10 seconds at 25 fps: one frame per second, all kept.
+        # 10 seconds at 25 fps: one frame per second, all kept (under budget, so the cap is a no-op).
         meta_short = VideoMetadata(fps=25.0, total_num_frames=250, duration=10.0)
-        sampled_short = processor.sample_frames(meta_short, fps=1, max_frames=32)
+        sampled_short = processor.sample_frames(meta_short, fps=1, max_frames=32, overflow_strategy="uniform")
         expected_short = np.array([int(s * 25) for s in range(10)])
         np.testing.assert_array_equal(sampled_short, expected_short)
 
@@ -187,13 +198,111 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
         expected_long = np.array([sec_indices_long[i] for i in np.linspace(0, 99, 32, dtype=int)])
         np.testing.assert_array_equal(sampled_long, expected_long)
 
-        # `metadata.fps` is not recoverable.
+        # `metadata.fps` is not recoverable, so rate-based sampling is skipped and every frame is kept.
         meta_missing = VideoMetadata(fps=None, total_num_frames=25)
-        with self.assertRaises(ValueError):
-            processor.sample_frames(meta_missing, fps=1)
+        np.testing.assert_array_equal(processor.sample_frames(meta_missing, fps=1), np.arange(25))
 
         # Opting out falls back to the base uniform sampling.
         self.assertEqual(len(processor.sample_frames(meta_short, overflow_strategy="uniform", max_frames=2)), 2)
+
+    def test_sample_frames_under_budget_is_not_upsampled(self):
+        """Regression: `uniform` must not pad a short video up to `max_frames` by repeating indices."""
+        processor = self.fast_video_processing_class()
+        meta = VideoMetadata(fps=25.0, total_num_frames=250, duration=10.0)
+
+        sampled = processor.sample_frames(meta, fps=1, max_frames=32, overflow_strategy="uniform")
+        self.assertEqual(len(sampled), 10)
+        self.assertEqual(len(np.unique(sampled)), 10)
+
+        # Same guarantee through `preprocess`, where the class defaults supply `overflow_strategy`.
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
+        video_processing.do_sample_frames = True
+        video = torch.randint(0, 255, (10, 3, 32, 32), dtype=torch.uint8)
+        encoded = video_processing(
+            video,
+            video_metadata=[VideoMetadata(fps=1.0, total_num_frames=10, duration=10.0)],
+            return_tensors="pt",
+        )[self.input_name]
+        self.assertEqual(encoded.shape[1], 10)
+
+    def test_sample_frames_truncate_keeps_the_first_frames(self):
+        processor = self.fast_video_processing_class()
+        meta = VideoMetadata(fps=25.0, total_num_frames=2500, duration=100.0)
+
+        sampled = processor.sample_frames(meta, fps=1, max_frames=32, overflow_strategy="truncate")
+        np.testing.assert_array_equal(sampled, np.array([int(s * 25) for s in range(32)]))
+
+        # Under budget, truncation is a no-op rather than a pad.
+        meta_short = VideoMetadata(fps=25.0, total_num_frames=250, duration=10.0)
+        self.assertEqual(
+            len(processor.sample_frames(meta_short, fps=1, max_frames=32, overflow_strategy="truncate")), 10
+        )
+
+    def test_sample_frames_rejects_num_frames(self):
+        """EmbeddingGemma 2 does not implement the `num_frames` contract: it must fail loudly rather than
+        silently sample by `fps` instead (a stale `num_frames` in an exported config lands here too)."""
+        processor = self.fast_video_processing_class()
+        meta = VideoMetadata(fps=25.0, total_num_frames=250, duration=10.0)
+        with self.assertRaises(ValueError):
+            processor.sample_frames(meta, num_frames=8)
+
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
+        video_processing.do_sample_frames = True
+        video = torch.randint(0, 255, (10, 3, 32, 32), dtype=torch.uint8)
+        with self.assertRaises(ValueError):
+            video_processing(
+                video,
+                num_frames=8,
+                video_metadata=[VideoMetadata(fps=1.0, total_num_frames=10, duration=10.0)],
+                return_tensors="pt",
+            )
+
+    def test_sample_frames_invalid_arguments_raise(self):
+        processor = self.fast_video_processing_class()
+        meta = VideoMetadata(fps=25.0, total_num_frames=2500, duration=100.0)
+
+        # Unknown strategy: must not silently skip the cap.
+        with self.assertRaises(ValueError):
+            processor.sample_frames(meta, fps=1, max_frames=32, overflow_strategy="unifrom")
+
+        # A strategy without a budget is meaningless.
+        with self.assertRaises(ValueError):
+            processor.sample_frames(meta, fps=1, max_frames=None, overflow_strategy="uniform")
+
+    def test_sample_frames_incomplete_metadata_falls_back_to_cap_only(self):
+        """A decoded array has no frame rate, so FPS sampling cannot apply. Rather than raise or guess a
+        source rate, the request degrades to the `max_frames` budget alone and every frame is kept."""
+        processor = self.fast_video_processing_class()
+
+        # `fps` present but `duration` missing, and vice versa: neither is enough on its own.
+        for meta in (
+            VideoMetadata(fps=25.0, total_num_frames=20),
+            VideoMetadata(total_num_frames=20, duration=100.0),
+            VideoMetadata(total_num_frames=20),
+        ):
+            indices = processor.sample_frames(meta, fps=1, max_frames=32, overflow_strategy="uniform")
+            np.testing.assert_array_equal(indices, np.arange(20))
+
+        # The budget is still enforced on the kept frames.
+        meta = VideoMetadata(total_num_frames=100)
+        indices = processor.sample_frames(meta, fps=1, max_frames=4, overflow_strategy="uniform")
+        np.testing.assert_array_equal(indices, np.array([0, 33, 66, 99]))
+
+    def test_sample_frames_without_fps_keeps_all_frames_then_caps(self):
+        """`fps=None` is the documented recipe for decoded arrays with no metadata: no FPS sampling, but
+        the `max_frames` budget still applies."""
+        processor = self.fast_video_processing_class()
+        meta = VideoMetadata(total_num_frames=100)
+
+        np.testing.assert_array_equal(processor.sample_frames(meta, fps=None), np.arange(100))
+        np.testing.assert_array_equal(
+            processor.sample_frames(meta, fps=None, max_frames=4, overflow_strategy="uniform"),
+            np.array([0, 33, 66, 99]),
+        )
+        np.testing.assert_array_equal(
+            processor.sample_frames(meta, fps=None, max_frames=4, overflow_strategy="truncate"),
+            np.array([0, 1, 2, 3]),
+        )
 
     def test_unsupported_max_soft_tokens_raises(self):
         with self.assertRaises(ValueError):

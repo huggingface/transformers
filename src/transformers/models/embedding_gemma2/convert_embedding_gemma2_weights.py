@@ -217,7 +217,10 @@ _CONFIG = EmbeddingGemma2Config(
 _IMAGE_SEQ_LENGTH = 280
 _AUDIO_SEQ_LENGTH = 280
 _VIDEO_MAX_SOFT_TOKENS = 140
-_VIDEO_NUM_FRAMES = 32
+# Frame sampling defaults: one frame per second, capped at 32 frames by uniform (linspace) re-sampling.
+_VIDEO_FPS = 1
+_VIDEO_MAX_FRAMES = 32
+_VIDEO_OVERFLOW_STRATEGY = "uniform"
 
 
 # ==== Flags ====
@@ -902,11 +905,14 @@ def _build_processor(tokenizer: GemmaTokenizer) -> EmbeddingGemma2Processor:
     video_processor = EmbeddingGemma2VideoProcessor(
         max_soft_tokens=_VIDEO_MAX_SOFT_TOKENS,
         do_normalize=False,
-        num_frames=_VIDEO_NUM_FRAMES,
-        # Both are already the EmbeddingGemma 2 defaults; passed explicitly so the exported
-        # `video_preprocessor_config.json` records them rather than relying on the class default.
-        use_1fps_linear_sampling=True,
-        exclude_timestamps=True,
+        # All four are already the EmbeddingGemma 2 class defaults; passed explicitly so the exported
+        # config records the sampling contract rather than relying on the class definition.
+        # `num_frames` is deliberately absent: `EmbeddingGemma2VideoProcessor.sample_frames` rejects it
+        # (it would otherwise be forwarded by `preprocess` and raise on every call).
+        fps=_VIDEO_FPS,
+        max_frames=_VIDEO_MAX_FRAMES,
+        overflow_strategy=_VIDEO_OVERFLOW_STRATEGY,
+        add_timestamps=False,
     )
     return EmbeddingGemma2Processor(
         image_processor=image_processor,

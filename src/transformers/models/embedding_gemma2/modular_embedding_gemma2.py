@@ -726,18 +726,20 @@ class EmbeddingGemma2VideoProcessorKwargs(Gemma4VideoProcessorKwargs):
         Must be one of {70, 140, 280, 560, 1120}.
     pooling_kernel_size (`int`, *optional*):
         Spatial pooling kernel size applied after patchification.
-    exclude_timestamps (`bool`, *optional*):
-        Whether to exclude frame timestamps from the video placeholder expansion.
+    add_timestamps (`bool`, *optional*):
+        Whether to prefix each frame in the video placeholder expansion with its `mm:ss` timestamp.
+        Requires `VideoMetadata` with a valid `fps`, since timestamps cannot be inferred from
+        already-decoded frames.
     max_frames (`int`, *optional*):
         The maximum number of frames to sample. If set, the sampled indices will
         be uniformly re-sampled to fit the budget.
     overflow_strategy (`str`, *optional*):
-        The strategy to cut down total number of sampled frames to for into budget.
-        Can be set only to "uniform" or "truncate", and is used only together with
-        FPS-based sampling
+        The strategy used to cut the total number of sampled frames down to fit into the budget.
+        Can be set only to "uniform" or "truncate". Applied after FPS-based sampling, and on its
+        own when FPS-based sampling is off or not applicable.
     """
 
-    exclude_timestamps: bool
+    add_timestamps: bool
     max_frames: int | None
     overflow_strategy: str | None
 
@@ -747,7 +749,7 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
     fps = 1
     max_frames = 32
     overflow_strategy = "uniform"
-    exclude_timestamps = True
+    add_timestamps = False
     num_frames = AttributeError()
 
     valid_kwargs = EmbeddingGemma2VideoProcessorKwargs
@@ -766,15 +768,21 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
                 "Please use `fps` and `max_frames` to control video sampling."
             )
 
-        # 1) Sample to match the taget `fps` if it is set, otherwise keep the whole video
+        # 1) Sample to match the target `fps` if it is set, otherwise keep the whole video.
+        # A decoded array carries no frame rate, and neither `fps` nor `duration` can be inferred
+        # from one, so rate-based sampling is simply not applicable to that input. Skip it rather
+        # than guess a source rate: a wrong guess silently discards frames.
+        if fps is not None and (metadata.fps is None or metadata.duration is None):
+            logger.warning_once(
+                "Asked to sample uniformly with `fps`, but the video metadata has no `fps` or `duration`. "
+                "Keeping every frame and applying only the `max_frames` budget. Pass a `VideoMetadata` "
+                "object with a valid `fps` and `duration` to sample at a target frame rate."
+            )
+            fps = None
+
         if fps is None:
             indices = np.arange(metadata.total_num_frames, dtype=int)
         else:
-            if metadata.fps is None or metadata.duration is None:
-                raise ValueError(
-                    "Asked to sample uniformly with `fps`, but no `fps` or `duration` was provided in "
-                    "video metadata. Please pass in `VideoMetadata` object with valid `fps` and `duration`."
-                )
             step = metadata.fps / fps  # native frames per sampled frame
             num_sampled = max(1, int(metadata.duration * fps))
             indices = np.array(
@@ -891,10 +899,10 @@ class EmbeddingGemma2Processor(Gemma4Processor):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
-        exclude_timestamps = kwargs.get("exclude_timestamps", self.video_processor.exclude_timestamps)
+        add_timestamps = kwargs.get("add_timestamps", self.video_processor.add_timestamps)
 
-        # Visual-only mode: matches the EmbeddingGemma 2 training distribution
-        if exclude_timestamps:
+        # Visual-only mode: one block per frame, no timestamps
+        if not add_timestamps:
             num_frames = video_inputs["pixel_values_videos"][video_idx].shape[0]
             frame_str = f"{self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
             return "".join([frame_str] * num_frames)
@@ -902,12 +910,11 @@ class EmbeddingGemma2Processor(Gemma4Processor):
         metadata = video_inputs["video_metadata"][video_idx]
 
         if metadata.fps is None:
-            logger.warning_once(
-                "EmbeddingGemma 2 requires frame timestamps to construct prompts, but the `fps` of the input video "
-                "could not be inferred. Probably `video_metadata` was missing from inputs and you passed pre-sampled "
-                "frames. Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            raise ValueError(
+                "Asked to build a prompt with frame timestamps, but no `fps` was provided in video metadata. "
+                "The capture rate of already-decoded frames cannot be inferred. Please pass a `VideoMetadata` "
+                "object with a valid `fps`, or set `add_timestamps=False`."
             )
-        metadata.fps = 24 if metadata.fps is None else metadata.fps
 
         # mm:ss format for timestamps
         timestamp_str = [f"{int(seconds // 60):02d}:{int(seconds % 60):02d}" for seconds in metadata.timestamps]

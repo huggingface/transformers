@@ -20,6 +20,7 @@ import numpy as np
 
 from transformers import EmbeddingGemma2Processor, EmbeddingGemma2VideoProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
+from transformers.video_utils import VideoMetadata
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -158,8 +159,8 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
 
     @require_torch
-    def test_video_exclude_timestamps(self):
-        """`exclude_timestamps=True` omits the timestamps and concatenates one block per frame."""
+    def test_video_timestamps(self):
+        """`add_timestamps=False` omits the timestamps and concatenates one block per frame."""
         processor = self.get_processor()
         video_inputs = [np.random.randint(0, 256, size=(2, 56, 56, 3), dtype=np.uint8)]
         text = f"{processor.video_token} What is this video?"
@@ -175,16 +176,34 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_video_str = expected_frame * 2
         self.assertIn(expected_video_str, decoded)
 
-        # Opting back in restores the `mm:ss` timestamps
+        # Opting back in restores the `mm:ss` timestamps. The frame rate of an already-decoded array is
+        # unknowable, so timestamps require real metadata: a 2 s clip at 1 FPS -> 00:00, 00:01.
+        video_metadata = [VideoMetadata(fps=1.0, total_num_frames=2, duration=2.0)]
         out_with_ts = processor(
             text=text,
             videos=[video_inputs],
             do_sample_frames=True,
-            videos_kwargs={"exclude_timestamps": False, "overflow_strategy": "uniform", "max_frames": 2, "fps": None},
+            video_metadata=video_metadata,
+            videos_kwargs={"add_timestamps": True, "overflow_strategy": "uniform", "max_frames": 2, "fps": None},
             return_tensors="pt",
         )
         decoded_with_ts = processor.decode(out_with_ts["input_ids"][0])
         self.assertIn("00:00", decoded_with_ts)
+
+    @require_torch
+    def test_video_timestamps_require_metadata(self):
+        """Timestamps are prompt content, so a missing `fps` must fail loudly rather than be guessed."""
+        processor = self.get_processor()
+        video_inputs = [np.random.randint(0, 256, size=(2, 56, 56, 3), dtype=np.uint8)]
+        text = f"{processor.video_token} What is this video?"
+
+        with self.assertRaises(ValueError):
+            processor(
+                text=text,
+                videos=[video_inputs],
+                videos_kwargs={"add_timestamps": True, "fps": None},
+                return_tensors="pt",
+            )
 
     def test_processor_and_video_processor_serialization(self):
         """The EmbeddingGemma 2 video flags survive a `save_pretrained` / `from_pretrained` round-trip."""
@@ -194,8 +213,12 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor.save_pretrained(tmp_dir)
             loaded_processor = self.processor_class.from_pretrained(tmp_dir)
             self.assertIsInstance(loaded_processor.video_processor, EmbeddingGemma2VideoProcessor)
-            self.assertTrue(loaded_processor.video_processor.max_frames)
-            self.assertTrue(loaded_processor.video_processor.exclude_timestamps)
+            self.assertEqual(loaded_processor.video_processor.fps, 1)
+            self.assertEqual(loaded_processor.video_processor.max_frames, 32)
+            self.assertEqual(loaded_processor.video_processor.overflow_strategy, "uniform")
+            self.assertFalse(loaded_processor.video_processor.add_timestamps)
+            # A serialized `num_frames` is forwarded by `preprocess` and rejected by `sample_frames`.
+            self.assertNotIn("num_frames", loaded_processor.video_processor.to_dict())
 
     def test_single_modality_inputs_need_no_text(self):
         """Unlike Gemma 4, any single modality on its own is a valid embedding input."""

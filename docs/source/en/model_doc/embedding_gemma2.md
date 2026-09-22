@@ -34,7 +34,7 @@ The key differences from Gemma 4 are:
 - **An embedding head on the text backbone.** [`EmbeddingGemma2TextModel`] owns `embedding_projection`, a bias-free `nn.Linear(hidden_size, embedding_dim)` applied after the final norm. Because a linear map commutes with averaging, projecting per token is equivalent to projecting the mean-pooled sentence embedding.
 - **Bidirectional attention.** The stack is an encoder: every layer attends bidirectionally, over the full sequence on `full_attention` layers and over a symmetric window on `sliding_attention` layers. There is no causal mask and no key-value cache.
 - **Projection-only Per-Layer Embeddings (PLE).** Gemma 4 sums a token-identity term (an `embed_tokens_per_layer` lookup table) with a context-aware projection of `inputs_embeds`. EmbeddingGemma 2 keeps only the context-aware half: `EmbeddingGemma2TextPLE` takes `inputs_embeds` alone, and neither `vocab_size_per_layer_input` nor the lookup table exists. The text model computes the per-layer embeddings once with `EmbeddingGemma2TextPLE`; each decoder layer then mixes its own slice into the residual stream with `EmbeddingGemma2TextPLEBlock`, after attention and the MLP.
-- **Reused Gemma 4 towers and processors.** `config.vision_config` is a [`Gemma4VisionConfig`] and `config.audio_config` is a [`Gemma4AudioConfig`]; the towers themselves are resolved through `AutoModel`, so they are a `Gemma4VisionModel` and a `Gemma4AudioModel`. The image processor ([`Gemma4ImageProcessor`]) and the audio feature extractor ([`Gemma4AudioFeatureExtractor`]) are reused as-is through the auto mappings. Only the video processor is specialized: [`EmbeddingGemma2VideoProcessor`] defaults to 1-FPS linspace frame sampling (`use_1fps_linear_sampling=True`) and drops frame timestamps from the prompt (`exclude_timestamps=True`), matching the visual-only training distribution.
+- **Reused Gemma 4 towers and processors.** `config.vision_config` is a [`Gemma4VisionConfig`] and `config.audio_config` is a [`Gemma4AudioConfig`]; the towers themselves are resolved through `AutoModel`, so they are a `Gemma4VisionModel` and a `Gemma4AudioModel`. The image processor ([`Gemma4ImageProcessor`]) and the audio feature extractor ([`Gemma4AudioFeatureExtractor`]) are reused as-is through the auto mappings. Only the video processor is specialized: [`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS (`fps=1`), caps a clip at 32 frames by uniformly subsampling anything longer (`max_frames=32`, `overflow_strategy="uniform"`), and leaves frame timestamps out of the prompt (`add_timestamps=False`).
 
 You can find all the original EmbeddingGemma checkpoints under the [EmbeddingGemma](https://huggingface.co/collections/google/embeddinggemma) collection. The examples below use the `google/embeddinggemma-2` identifier.
 
@@ -199,7 +199,7 @@ Video preprocessing flags are forwarded through `processing_kwargs`.
 ```python
 video_embedding = model.encode(
     {"video": "path/to/video.mp4"},
-    processing_kwargs={"video": {"exclude_timestamps": False, "use_1fps_linear_sampling": False}},
+    processing_kwargs={"video": {"add_timestamps": True, "fps": 2, "max_frames": 16}},
 )
 ```
 
@@ -273,13 +273,16 @@ print(inputs["input_ids"].shape, inputs["pixel_values"].shape)
 # torch.Size([1, 68]) torch.Size([1, 630, 768])
 ```
 
-[`EmbeddingGemma2VideoProcessor`] defaults to 1 FPS linspace frame sampling and drops frame timestamps from the prompt, matching the training distribution. Both are overridable per call.
+[`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS, caps a clip at 32 frames, and leaves frame timestamps out of the prompt. Every knob is overridable per call.
+
+Rate-based sampling needs to know the source frame rate, which only comes from decoding a file. A pre-decoded array carries no `fps` or `duration`, so for those inputs the processor warns, skips FPS sampling, and applies the `max_frames` budget alone — pass a `VideoMetadata` with a valid `fps` and `duration` if you want the array sampled at a target rate. Timestamps have no such fallback: `add_timestamps=True` on an array with no `fps` raises, because a guessed rate would write wrong `mm:ss` labels into the prompt.
 
 ```python
 inputs = processor(
     videos=["path/to/video.mp4"],
-    exclude_timestamps=False,
-    use_1fps_linear_sampling=False,
+    add_timestamps=True,
+    fps=2,
+    max_frames=16,
     return_tensors="pt",
 )
 ```
@@ -311,7 +314,7 @@ inputs = processor.apply_chat_template(messages, tokenize=True, return_dict=True
 
 - Because `embedding_projection` is linear, projecting every token and then averaging is equivalent to averaging and then projecting. Pooling the model output is therefore the same as pooling the backbone's hidden states and projecting once.
 
-- Media inputs are expensive in tokens: an image costs 280 soft tokens by default, and a video costs 140 per sampled frame with 32 frames sampled per video.
+- Media inputs are expensive in tokens: an image costs 280 soft tokens by default, and a video costs `max_soft_tokens` per sampled frame, with up to `max_frames` (32) frames per clip.
 
 ## EmbeddingGemma2TextConfig
 

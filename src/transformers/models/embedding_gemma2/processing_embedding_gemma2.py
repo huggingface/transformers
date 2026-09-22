@@ -27,7 +27,6 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
     is_vision_available,
-    logging,
 )
 from ...utils.import_utils import requires
 from ...video_utils import VideoInput, make_batched_videos
@@ -35,9 +34,6 @@ from ...video_utils import VideoInput, make_batched_videos
 
 if is_vision_available():
     from ..gemma4.image_processing_gemma4 import Gemma4ImageProcessorKwargs, get_aspect_ratio_preserving_size
-
-
-logger = logging.get_logger(__name__)
 
 
 class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -186,10 +182,10 @@ class EmbeddingGemma2Processor(ProcessorMixin):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
-        exclude_timestamps = kwargs.get("exclude_timestamps", self.video_processor.exclude_timestamps)
+        add_timestamps = kwargs.get("add_timestamps", self.video_processor.add_timestamps)
 
-        # Visual-only mode: matches the EmbeddingGemma 2 training distribution
-        if exclude_timestamps:
+        # Visual-only mode: one block per frame, no timestamps
+        if not add_timestamps:
             num_frames = video_inputs["pixel_values_videos"][video_idx].shape[0]
             frame_str = f"{self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
             return "".join([frame_str] * num_frames)
@@ -197,12 +193,11 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         metadata = video_inputs["video_metadata"][video_idx]
 
         if metadata.fps is None:
-            logger.warning_once(
-                "EmbeddingGemma 2 requires frame timestamps to construct prompts, but the `fps` of the input video "
-                "could not be inferred. Probably `video_metadata` was missing from inputs and you passed pre-sampled "
-                "frames. Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            raise ValueError(
+                "Asked to build a prompt with frame timestamps, but no `fps` was provided in video metadata. "
+                "The capture rate of already-decoded frames cannot be inferred. Please pass a `VideoMetadata` "
+                "object with a valid `fps`, or set `add_timestamps=False`."
             )
-        metadata.fps = 24 if metadata.fps is None else metadata.fps
 
         # mm:ss format for timestamps
         timestamp_str = [f"{int(seconds // 60):02d}:{int(seconds % 60):02d}" for seconds in metadata.timestamps]
