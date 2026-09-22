@@ -38,7 +38,7 @@ found [here](https://github.com/google-research/t5x).
 
 ## Usage tips
 
-- UMT5 was only pre-trained on [mC4](https://huggingface.co/datasets/legacy-datasets/mc4) excluding any supervised training.
+- UMT5 was only pre-trained on a refreshed version of the mC4 corpus (107 languages; the original mC4 is the `multilingual` config of [`allenai/c4`](https://huggingface.co/datasets/allenai/c4/viewer/multilingual)), excluding any supervised training.
 Therefore, this model has to be fine-tuned before it is usable on a downstream task, unlike the original T5 model.
 - Since umT5 was pre-trained in an unsupervised manner, there's no real advantage to using a task prefix during single-task
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
