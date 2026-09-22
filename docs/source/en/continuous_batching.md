@@ -204,7 +204,7 @@ By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and ne
 
 | Feature | Memory | Throughput | Latency |
 |---|---|---|---|
-| `max_memory_percent` / `block_size` | ✓ controls KV budget | | |
+| `max_memory_percent` / `page_size` | ✓ controls KV budget | | |
 | `max_batch_tokens` | ↑ larger input buffers | ✓ bigger prefill batches | ✓ TTFT when prefill-bound |
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
 | CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
@@ -223,8 +223,8 @@ By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and ne
 from transformers.generation import ContinuousBatchingConfig
 
 cb_config = ContinuousBatchingConfig(
-    max_memory_percent=0.8,  # fraction of free GPU memory to use for the KV cache
-    block_size=256,          # KV cache block size in tokens
+    max_memory_percent=0.8,
+    page_size=256,           # KV cache page size in tokens
     scheduler_type="fifo",        # "fifo" or "prefill_first"
 )
 
@@ -235,12 +235,14 @@ outputs = model.generate_batch(
 )
 ```
 
-### KV cache block size
+### KV cache page size
 
-`block_size` sets how many tokens each KV cache block holds. It must be at least 4, and `generate_batch` raises a `ValueError` for any smaller value. The cache reserves two extra blocks for padding and sentinel bookkeeping, so very small blocks spend a large fraction of memory on this fixed overhead. Larger blocks cut bookkeeping but waste space when a sequence doesn't fill its last block. The default of 256 matches the `flash_attn_with_kvcache` decode kernel and works well in most cases. Keep `block_size` well above the minimum for an efficient cache.
+`page_size` (default is `256`) sets how many tokens of KV each page holds for one layer. It must be at least `4`, or initialization raises a `ValueError`. Prefer `page_size` over the older `block_size` name, which is still accepted for compatibility but emits a warning and aliases to `page_size`.
+
+Larger pages cut bookkeeping but waste space when a sequence does not fill its last page. Smaller pages raise that waste less often, but the two reserved chunks used only for padding reads and writes take a larger share of the pool. Keep `page_size` well above the minimum for an efficient cache. See [Memory management](./continuous_batching_architecture#memory-management) for how pages, blocks, and chunks fit together.
 
 ```py
-cb_config = ContinuousBatchingConfig(block_size=128)
+cb_config = ContinuousBatchingConfig(page_size=128)
 ```
 
 ### Prefill batch size
@@ -263,7 +265,7 @@ cb_config = ContinuousBatchingConfig(max_batch_tokens=16384)
 cb_config = ContinuousBatchingConfig(max_requests_per_batch=256)
 ```
 
-`safety_margin` reserves a fraction of the KV cache for active requests. When free blocks fall below `safety_margin * num_blocks`, the scheduler stops admitting new prefills and only continues decoding the requests already in progress. This prioritizes finishing active work over starting new requests, which protects decode latency and delays [offloading](./continuous_batching_architecture#offloading). The value must fall between `0` and `1`, where `0` disables the margin.
+`safety_margin` reserves a fraction of free cache capacity for active requests. When free capacity falls below `safety_margin` (a fraction of total cache size), the scheduler stops admitting new prefills and only continues decoding requests already in progress. This prioritizes finishing active work over starting new requests, which protects decode latency and delays [offloading](./continuous_batching_architecture#offloading). The value must fall between `0` and `1`, where `0` disables the margin.
 
 ```py
 cb_config = ContinuousBatchingConfig(safety_margin=0.15)
@@ -361,7 +363,7 @@ The fast path relies on the `flash_attn_with_kvcache` kernel, which is available
 
 For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
 
-Sliding window attention doesn't support block tables, so the cache forces `max_blocks_per_request` to `0` for any model with sliding window layers, regardless of the attention implementation. If you set a nonzero value, it's overridden and the cache logs `Sliding window attention groups detected: disabling block table support.`
+Full attention supports kernel block tables, but sliding attention does not. If the model has any sliding attention layers, including hybrid models that also use full attention, initialization forces `max_blocks_per_request` to `0`, and a nonzero value you set is overridden. The manager then logs that the decode fast path is not available because some of the model's attention types do not support kernel block tables.
 
 ### CPU offloading
 
@@ -387,7 +389,7 @@ cb_config = ContinuousBatchingConfig(cpu_group_timeout=600.0)
 
 ### Prefix caching
 
-When multiple requests share a common prefix, like a system prompt, the manager reuses their KV cache blocks instead of recomputing them. This is enabled by default and requires all model layers to use full attention (it's automatically disabled for sliding window models).
+When multiple requests share a common prefix, like a system prompt, the manager reuses their KV cache blocks instead of recomputing them. `allow_block_sharing` defaults to `True`. Prefix sharing is active only when every attention type allocator supports sharing, so only full attention-only models use it. Pure sliding and hybrid models turn it off even when `allow_block_sharing` is `True`.
 
 ```py
 cb_config = ContinuousBatchingConfig(
@@ -414,12 +416,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because Flash does not require an attention mask.
-Hence, when flash attention is available, if a model uses `attn_implementation="eager"` or `attn_implementation="sdpa"`, the attention implementation will be replaced by flash.
-This works if flash is accessible through the `flash_attn` package or the `kernels` package.  
-To avoid this, you may set `attn_implementation="paged|eager"` or `attn_implementation="paged|sdpa"`, and continuous batching will interpret this as the user 
-specifically requesting those implementations. This can be useful in the context of testing or in a setting where flash attention is hard to enable (although, thanks
-to the `kernels` package, this is becoming rare).
+Continuous batching works much better with FlashAttention than with eager or SDPA, mostly because it does not need an attention mask. When FlashAttention is available through `flash_attn` or `kernels`, `attn_implementation="eager"` or `"sdpa"` is replaced by it. Set `attn_implementation="paged|eager"` or `"paged|sdpa"` to keep those backends for testing or environments where FlashAttention is hard to enable.
 
 
 ## Tensor parallelism
@@ -458,7 +455,9 @@ The tensor parallel size must divide the model's `num_key_value_heads` (check th
 
 ## Sliding window attention
 
-Models with sliding window attention (Mistral, Gemma 2) work with continuous batching. To manually configure a sliding window for fine-tuning or custom experiments, set it in the model config before loading.
+Models with sliding window attention (Mistral, Gemma 2) work with continuous batching. Sliding layers use `SlidingAttentionCacheAllocator`, which keeps only a fixed window of recent tokens by recycling a small set of pages. Attention type comes from the model's `layer_types` or `sliding_window`, not from [`ContinuousBatchingConfig`].
+
+To manually configure a sliding window for fine-tuning or custom experiments, set it in the model config before loading.
 
 ```py
 from transformers import AutoConfig, AutoModelForCausalLM
@@ -475,7 +474,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Prefix caching and the [decode fast path](#decode-fast-path) are disabled automatically when sliding window attention is active.
+[Prefix caching](#prefix-caching) and the [decode fast path](#decode-fast-path) are disabled whenever sliding attention is present, including hybrid models that also have full attention layers.
 
 ## Next steps
 
