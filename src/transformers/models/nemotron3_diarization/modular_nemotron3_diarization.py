@@ -538,6 +538,7 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.feature_stacking(input_features)
+            # if inputs_embeds is provided, we expect attention_mask already downsampled
             if attention_mask is not None:
                 lengths = self._get_feat_extract_output_lengths(attention_mask.sum(dim=-1))
                 attention_mask = (
