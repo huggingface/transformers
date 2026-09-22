@@ -565,11 +565,6 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
         self.rotary_emb = Nemotron3DiarizationRotaryEmbedding(config)
         self.post_init()
 
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.Tensor) -> torch.Tensor:
-        """Number of encoder frames produced by feature stacking for `input_lengths` spectrogram frames."""
-        factor = self.config.subsampling_factor
-        return (input_lengths + factor - 1) // factor
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -588,10 +583,7 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
             inputs_embeds = self.feature_stacking(input_features)
             # if inputs_embeds is provided, we expect attention_mask already downsampled
             if attention_mask is not None:
-                lengths = self._get_feat_extract_output_lengths(attention_mask.sum(dim=-1))
-                attention_mask = (
-                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None, :] < lengths[:, None]
-                )
+                attention_mask = attention_mask[:, :: self.config.subsampling_factor].bool()
 
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None, :]
@@ -739,8 +731,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
 
         embed_mask = None
         if attention_mask is not None:
-            embed_lengths = self.model._get_feat_extract_output_lengths(attention_mask.sum(dim=-1))
-            embed_mask = torch.arange(num_embeds, device=inputs_embeds.device)[None, :] < embed_lengths[:, None]
+            embed_mask = attention_mask[:, ::subsampling_factor].bool()
 
         if is_streaming:
             chunk_length, chunk_right_context = num_chunk_embeds, num_lookahead_frames
