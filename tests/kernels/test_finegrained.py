@@ -186,6 +186,38 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
 
 
 @require_torch
+@require_torch
+class FineGrainedGroupedLinearSwapTest(unittest.TestCase):
+    def test_a_grouped_linear_is_recognised_by_its_groups_not_its_name(self):
+        """`replace_with_finegrained_layer` picks `FineGrainedGroupedLinear` for a block-diagonal
+        linear — a plain one would collapse the groups into a single giant matmul and return the
+        wrong output dim. The branch keys on `n_groups`, the attribute the swap consumes: a class
+        NAME substring would miss a grouped linear named anything else, and would match (then
+        `AttributeError` on) one that carries its group count under another name.
+        """
+        from types import SimpleNamespace
+
+        import torch.nn as nn
+
+        from transformers.integrations.finegrained import FineGrainedGroupedLinear, replace_with_finegrained_layer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        class OddlyNamedBlockDiagonal(nn.Linear):
+            def __init__(self):
+                super().__init__(8, 16, bias=False)
+                self.n_groups = 2
+
+        model = nn.Module()
+        model.config = SimpleNamespace(get_text_config=lambda: SimpleNamespace())
+        model.grouped = OddlyNamedBlockDiagonal()
+        model.plain = nn.Linear(8, 16, bias=False)
+
+        with torch.device("meta"):
+            replace_with_finegrained_layer(model, None, FineGrainedConfig(quant_method="fp8"))
+        self.assertIsInstance(model.grouped, FineGrainedGroupedLinear)
+        self.assertNotIsInstance(model.plain, FineGrainedGroupedLinear)
+
+
 class FineGrainedEmbeddingTest(unittest.TestCase):
     """A quantized embedding TABLE (Qwen4-Exp's n-gram table): FP8 rows with one per-tensor scale,
     rescaled on the rows a lookup gathers; swapped in for the names in `modules_to_convert`."""
@@ -993,7 +1025,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
         # block-FP8 has no per-group scale grid to swizzle: one scalar per (N/128, K/128) block
         _, experts = self._experts("fp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2))
-        with mock.patch.object(fg, "_swizzles_scales", return_value=False):
+        with mock.patch.object(fg, "_holds_swizzled_scales", return_value=False):
             _, experts = self._experts("mxfp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 256, 8))
 
@@ -1904,7 +1936,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         )  # K >= 256: the swizzled arm has tiles
         cfg._experts_implementation = "grouped_mm"
         experts = FineGrainedExperts(cfg, weight_format="mxfp8").cuda()
-        with mock.patch.object(fg, "_swizzles_scales", return_value=False):
+        with mock.patch.object(fg, "_holds_swizzled_scales", return_value=False):
             affine_experts = FineGrainedExperts(cfg, weight_format="mxfp8").cuda()
         model = torch.nn.Module()
         model.experts = experts

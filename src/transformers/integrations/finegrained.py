@@ -11,6 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Quantized modules and forwards for the fine-grained family — block-FP8, MXFP8, MXFP4, NVFP4
+and weight-only — served by `kernels-community/finegrained-kernels`. The checkpoint's layout is
+moved onto these modules by `finegrained_conversions`.
+"""
+
 from __future__ import annotations
 
 import functools
@@ -272,7 +277,7 @@ def _alloc_expert_proj(
     )
 
 
-def _swizzles_scales(config, format_spec: WeightFormat, activation_format: str | None) -> bool:
+def _holds_swizzled_scales(config, format_spec: WeightFormat, activation_format: str | None) -> bool:
     """Whether an experts module holds its block scales in the ``SWIZZLE_32_4_4`` layout the
     Blackwell tcgen05 scaled-MMA reads directly (row-major forces a per-tile gather). Needs SM100,
     a triton dispatch (the DeepGEMM backends read affine scales), a group-scaled format and a chain
@@ -683,7 +688,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         # the tensors now hold, so re-deriving it would claim a layout they do not have.
         impl = getattr(config, "_experts_implementation", None)
         self.holds_interleaved_gate_up = self.has_gate and impl != "deepgemm_megamoe"
-        swizzled = _swizzles_scales(config, format_spec, activation_format)
+        swizzled = _holds_swizzled_scales(config, format_spec, activation_format)
 
         up_name = "gate_up_proj" if self.has_gate else "up_proj"
         up_rows = (2 if self.has_gate else 1) * self.intermediate_dim
@@ -955,10 +960,11 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
                     activation_format=quantization_config.activation_format,
                     **storage,
                 )
-            elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:
-                # Block-diagonal grouped linear (e.g. DSv4's `DeepseekV4GroupedLinear`): a
-                # plain `FineGrainedLinear` would collapse the groups into one giant linear and
-                # yield the wrong output dim.
+            elif isinstance(module, nn.Linear) and hasattr(module, "n_groups"):
+                # Block-diagonal grouped linear (DSv4's `DeepseekV4GroupedLinear`), recognised by
+                # the attribute the swap needs rather than by its class NAME: a plain
+                # `FineGrainedLinear` would collapse the groups into one giant linear and yield
+                # the wrong output dim.
                 new_module = FineGrainedGroupedLinear(
                     in_features_per_group=module.in_features,
                     out_features=module.out_features,

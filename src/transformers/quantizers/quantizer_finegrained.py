@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""The `HfQuantizer` for the fine-grained family: converter chains, the parallel plan, and the
+environment checks. The modules are in `integrations/finegrained`.
+"""
+
 import re
 from typing import TYPE_CHECKING
 
@@ -359,9 +363,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
         stacked per layer (the fused vLLM layout, Muse-Spark). A checkpoint matches one set and
         the other never fires. Routed experts only — a generic `weight_scale*` rename would run
         before converter collection and mangle these keys."""
-        # A weight-only run keeps activations bf16, so its experts hold no activation global and
-        # the checkpoint's calibrated `input_scale` has nowhere to land: leave those keys to the
-        # unexpected-key filter rather than converting them onto a module slot that does not exist.
+        # weight-only keeps activations bf16, so there is no activation global for a calibrated
+        # `input_scale` to land on — leave those keys to the unexpected-key filter
         calibrated = self.quantization_config.activation_format != "bf16"
         return self._nvfp4_per_expert_conversions(calibrated) + self._nvfp4_fused_conversions(calibrated)
 
