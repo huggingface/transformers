@@ -498,7 +498,7 @@ class ContinuousBatchingIOs:
             cache=self.cache,
             block_table=self.block_table[:, :num_sequences] if self.use_block_table else None,
             use_cache=False,
-            is_causal=True,
+            is_causal=self.attention_mask is None,  # False for SDPA and eager, True for flash
         )
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)

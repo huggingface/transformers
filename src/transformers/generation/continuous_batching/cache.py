@@ -391,10 +391,11 @@ class PagedAttentionCache:
             for allocator, read_indices in zip(self.cache_allocators.values(), read_index):
                 read_indices.extend(allocator.get_read_indices(request_id, past_length, query_length))
 
+    @torch.compiler.disable
     def update(
         self,
-        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
-        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        key_states: torch.Tensor,  # shape [1, seqlen_q, num_kv_heads, head_dim]
+        value_states: torch.Tensor,  # shape [1, seqlen_q, num_kv_heads, head_dim]
         layer_idx: int,
         read_index: list[torch.Tensor],  # one tensor per attention group
         write_index: list[torch.Tensor],  # one tensor per attention group

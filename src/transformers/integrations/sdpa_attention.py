@@ -1,5 +1,6 @@
 import torch
 
+from ..generation.continuous_batching.cache import PagedAttentionCache
 from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
@@ -86,23 +87,38 @@ def sdpa_attention_forward(
     scaling: float | None = None,
     is_causal: bool | None = None,
     position_bias: torch.Tensor | None = None,
+    cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+    query_length = query.shape[2]
+    key_length = key.shape[2]
+
+    # Check for incompatible kwargs
     if kwargs.get("output_attentions", False):
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
+
+    # If there is a paged cache, update it now
+    is_paged = isinstance(cache, PagedAttentionCache)
+    if is_paged:
+        key, value = cache.update(  # type: ignore
+            key_states=key.transpose(1, 2),
+            value_states=value.transpose(1, 2),
+            layer_idx=module.layer_idx,
+            read_index=kwargs["read_index"],
+            write_index=kwargs["write_index"],
+        )
+        key, value = key.transpose(1, 2), value.transpose(1, 2)
+
     sdpa_kwargs = {}
-    if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
-        if not use_gqa_in_sdpa(attention_mask, key, value):
+    if getattr(module, "num_key_value_groups", 0) > 1:
+        if use_gqa_in_sdpa(attention_mask, key, value):
+            sdpa_kwargs["enable_gqa"] = True
+        else:
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
-        else:
-            sdpa_kwargs = {"enable_gqa": True}
-
-    q_length = query.shape[2]
-    kv_length = key.shape[2]
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
@@ -121,11 +137,11 @@ def sdpa_attention_forward(
     #   operand, so `is_causal` can end up being that `SymBool` (e.g. the seamless_m4t / seamless_m4t_v2 speech
     #   encoders). Reordering the conditions fixes it but breaks the compile requirement above, so it should rather be
     #   handled on the exporter side. See https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141
-    is_causal = q_length > 1 and attention_mask is None and is_causal
+    is_causal = query_length > 1 and attention_mask is None and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
-    if torch.jit.is_tracing() and isinstance(is_causal, torch.Tensor):
+    if isinstance(is_causal, torch.Tensor) and torch.jit.is_tracing():
         is_causal = is_causal.item()
 
     # When `is_causal = False` and the `attention_mask` is not of boolean type, the Ascend NPU's SDPA interface cannot utilize the FlashAttentionScore operator，
@@ -142,12 +158,12 @@ def sdpa_attention_forward(
     # rather than to use the other available kernels for such a case.
     # Note that we never compile prefill, and even if the user is doing it on its own, prefill and decode are 2 separate graphs
     # anyway, so altering the shapes is fine here
-    if is_causal and attention_mask is None and q_length > 1 and kv_length > q_length:
-        key = key[:, :, :q_length, :]
-        value = value[:, :, :q_length, :]
+    if is_causal and attention_mask is None and query_length > 1 and key_length > query_length:
+        key = key[:, :, :query_length, :]
+        value = value[:, :, :query_length, :]
         # If we have a position_bias, we need to crop it as well (on last dim, which is the kv seq_len dim)
         if position_bias is not None:
-            position_bias = position_bias[:, :, :, :q_length]
+            position_bias = position_bias[:, :, :, :query_length]
 
     # If we have a position_bias, create the correct floating-point mask by combining it with the existing mask, or a causal mask
     # if `is_causal=True`

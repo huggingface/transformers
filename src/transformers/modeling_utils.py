@@ -84,7 +84,6 @@ from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kerneliz
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
-from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
@@ -5108,7 +5107,7 @@ class AttentionInterface(GeneralInterface):
         "paged|flash_attention_4": flash_attention_forward,  # TODO: deprecation cycle?
         "paged|flash_attention_3": flash_attention_forward,
         "paged|flash_attention_2": flash_attention_forward,
-        "paged|sdpa": sdpa_attention_paged_forward,
+        "paged|sdpa": sdpa_attention_forward,
         "paged|eager": eager_paged_attention_forward,
     }
 
