@@ -1169,6 +1169,24 @@ def compare_trainer_and_checkpoint_args(training_args, trainer_state):
         logger.warning_once(warning_str)
 
 
+def _align_special_token(name, tokenizer_token_id, config, generation_config, updated_tokens):
+    """
+    Aligns a single special token id held by the configs with the tokenizer, recording the change in
+    `updated_tokens`. A token the tokenizer does not define is left untouched.
+    """
+    if tokenizer_token_id is None:
+        return
+    tokenizer_has_new_token = tokenizer_token_id != getattr(config, name, None)
+    if generation_config is not None:
+        tokenizer_has_new_token |= tokenizer_token_id != getattr(generation_config, name)
+
+    if tokenizer_has_new_token:
+        updated_tokens[name] = tokenizer_token_id
+        setattr(config, name, tokenizer_token_id)
+        if generation_config is not None:
+            setattr(generation_config, name, tokenizer_token_id)
+
+
 def align_special_tokens(model, processing_class):
     """
     Aligns the special tokens of the tokenizer with the model configs.
@@ -1219,31 +1237,12 @@ def align_special_tokens(model, processing_class):
                     all_eos_tokens += list(model.generation_config.eos_token_id)
                 model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
-    # 2 - Align BOS
-    if tokenizer.bos_token_id is not None:
-        tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(config, "bos_token_id", None)
-        if model_has_generation_config:
-            tokenizer_has_new_bos |= tokenizer.bos_token_id != model.generation_config.bos_token_id
+    # 2 - Align BOS and PAD, which hold a single token each
+    generation_config = model.generation_config if model_has_generation_config else None
+    _align_special_token("bos_token_id", tokenizer.bos_token_id, config, generation_config, updated_tokens)
+    _align_special_token("pad_token_id", tokenizer.pad_token_id, config, generation_config, updated_tokens)
 
-        if tokenizer_has_new_bos:
-            updated_tokens["bos_token_id"] = tokenizer.bos_token_id
-            config.bos_token_id = tokenizer.bos_token_id
-            if model_has_generation_config:
-                model.generation_config.bos_token_id = tokenizer.bos_token_id
-
-    # 3 - Align PAD
-    if tokenizer.pad_token_id is not None:
-        tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(config, "pad_token_id", None)
-        if model_has_generation_config:
-            tokenizer_has_new_pad |= tokenizer.pad_token_id != model.generation_config.pad_token_id
-
-        if tokenizer_has_new_pad:
-            updated_tokens["pad_token_id"] = tokenizer.pad_token_id
-            config.pad_token_id = tokenizer.pad_token_id
-            if model_has_generation_config:
-                model.generation_config.pad_token_id = tokenizer.pad_token_id
-
-    # 4 - Warn users about the changes
+    # 3 - Warn users about the changes
     if len(updated_tokens) > 0:
         logger.warning(
             "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
