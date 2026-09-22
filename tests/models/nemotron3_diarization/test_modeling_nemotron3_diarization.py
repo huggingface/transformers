@@ -348,7 +348,7 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+class Nemotron3DiarizationIntegrationTest(unittest.TestCase):
     """
     Validate the speaker probabilities against NeMo, offline and streaming.
 
