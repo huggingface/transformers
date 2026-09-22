@@ -464,8 +464,6 @@ class MossTranscribeDiarizeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWi
 class MossTranscribeDiarizeModel(AudioFlamingo3Model):
     def __init__(self, config: MossTranscribeDiarizeConfig):
         super().__init__(config)
-        # `AutoModel.from_config(config.audio_config)` would resolve a plain `WhisperConfig` to the full
-        # `WhisperModel` (encoder + decoder); this model only ever needs the encoder, so build it directly.
         self.audio_tower = MossTranscribeDiarizeEncoder(config.audio_config)
         self.post_init()
 
@@ -490,10 +488,6 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         """
         device = input_features.device
 
-        # `WhisperEncoder` does not support masking `input_features` (silence in the padded log-mel region is
-        # ignored by convention), so only the post-hoc lengths are needed to trim the encoder's output below.
-        # It also doesn't cast `input_features` to its own dtype/device internally (unlike `Qwen2AudioEncoder`),
-        # so that has to happen here.
         merge_size = self.config.audio_merge_size
         conv_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(device=device))
         input_features = input_features.to(
