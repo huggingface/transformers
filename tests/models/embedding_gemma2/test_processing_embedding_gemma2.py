@@ -168,9 +168,9 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded = processor.decode(out["input_ids"][0])
         self.assertNotIn("00:00", decoded)
 
-        num_soft_tokens = processor.video_processor(video_inputs, num_frames=2, return_tensors="pt")[
-            "num_soft_tokens_per_video"
-        ][0]
+        num_soft_tokens = processor.video_processor(
+            video_inputs, overflow_strategy="uniform", max_frames=2, fps=None, return_tensors="pt"
+        )["num_soft_tokens_per_video"][0]
         expected_frame = f"{processor.boi_token}{processor.video_token * num_soft_tokens}{processor.eoi_token}"
         expected_video_str = expected_frame * 2
         self.assertIn(expected_video_str, decoded)
@@ -179,8 +179,8 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out_with_ts = processor(
             text=text,
             videos=[video_inputs],
-            do_sample_frames=False,
-            videos_kwargs={"exclude_timestamps": False},
+            do_sample_frames=True,
+            videos_kwargs={"exclude_timestamps": False, "overflow_strategy": "uniform", "max_frames": 2, "fps": None},
             return_tensors="pt",
         )
         decoded_with_ts = processor.decode(out_with_ts["input_ids"][0])
