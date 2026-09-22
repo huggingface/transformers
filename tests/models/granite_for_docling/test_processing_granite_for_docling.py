@@ -76,6 +76,12 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # A tall image is tiled on a 1x2 grid (1 column, 2 rows) plus the thumbnail
         return np.random.randint(0, 255, size=(64, 32, 3), dtype=np.uint8)
 
+    def test_fake_image_token_id_after_adding_special_tokens(self):
+        processor = self.get_processor()
+        self.assertEqual(
+            processor.fake_image_token_id, processor.tokenizer.convert_tokens_to_ids(processor.fake_image_token)
+        )
+
     def expected_image_prompt(self, processor, num_rows, num_cols, fine_route=False):
         image_tokens = processor.image_token * (processor.image_seq_len * (4 if fine_route else 1))
         prompt = ""
@@ -119,7 +125,10 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages = [
             {
                 "role": "user",
-                "content": [{"type": "image", "image": self.prepare_page_image()}, {"type": "text", "text": "<doclang>"}],
+                "content": [
+                    {"type": "image", "image": self.prepare_page_image()},
+                    {"type": "text", "text": "<doclang>"},
+                ],
             }
         ]
         inputs = processor.apply_chat_template(

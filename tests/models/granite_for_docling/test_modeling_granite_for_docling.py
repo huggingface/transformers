@@ -140,6 +140,57 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
         self.assertIsNone(outputs.router_logits)
         self.assertTrue(torch.isfinite(outputs.loss))
 
+    def test_mtp_heads_keep_all_valid_prediction_positions(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_mtp_layers = 4
+        model = GraniteForDoclingForConditionalGeneration(config).to(torch_device).eval()
+        input_ids = torch.randint(0, config.text_config.vocab_size, (2, 10), device=torch_device)
+        embed_tokens = model.get_input_embeddings()
+
+        with torch.no_grad():
+            hidden_states = embed_tokens(input_ids)
+            head_hidden_states = model.mtp(hidden_states, input_ids, embed_tokens)
+
+        self.assertEqual([states.shape[1] for states in head_hidden_states], [8, 7, 6, 5])
+
+    def test_reusing_image_features_preserves_deepstack(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteForDoclingForConditionalGeneration(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+        pixel_values = inputs_dict["pixel_values"]
+
+        with torch.no_grad():
+            direct = model(input_ids=input_ids, pixel_values=pixel_values, use_cache=False)
+            reused = model(
+                input_ids=input_ids,
+                image_hidden_states=direct.image_hidden_states,
+                deepstack_image_features=direct.deepstack_image_features,
+                use_cache=False,
+            )
+            for num_beams, use_cache in ((1, True), (1, False), (2, True)):
+                generated_direct = model.generate(
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    max_new_tokens=2,
+                    num_beams=num_beams,
+                    use_cache=use_cache,
+                    bad_words_ids=[[config.image_token_id]],
+                )
+                generated_reused = model.generate(
+                    input_ids=input_ids,
+                    image_hidden_states=direct.image_hidden_states,
+                    deepstack_image_features=direct.deepstack_image_features,
+                    max_new_tokens=2,
+                    num_beams=num_beams,
+                    use_cache=use_cache,
+                    bad_words_ids=[[config.image_token_id]],
+                )
+                torch.testing.assert_close(generated_reused, generated_direct)
+
+        torch.testing.assert_close(reused.logits, direct.logits)
+        with self.assertRaisesRegex(ValueError, "also requires deepstack_image_features"):
+            model(input_ids=input_ids, image_hidden_states=direct.image_hidden_states, use_cache=False)
+
     def test_predict_fine_route(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = GraniteForDoclingForConditionalGeneration(config).to(torch_device).eval()

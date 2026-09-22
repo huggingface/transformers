@@ -57,6 +57,8 @@ logger = logging.get_logger(__name__)
 @dataclass
 class GraniteForDoclingBaseModelOutputWithPast(ModelOutput):
     r"""
+    deepstack_image_features (`list[torch.FloatTensor]`, *optional*):
+        Projected intermediate vision features needed to reuse `image_hidden_states` with DeepStack.
     router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
         Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
         given.
@@ -68,6 +70,7 @@ class GraniteForDoclingBaseModelOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
+    deepstack_image_features: list[torch.FloatTensor] | None = None
     router_logits: torch.FloatTensor | None = None
 
 
@@ -83,6 +86,8 @@ class GraniteForDoclingCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    deepstack_image_features (`list[torch.FloatTensor]`, *optional*):
+        Projected intermediate vision features needed to reuse `image_hidden_states` with DeepStack.
     router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
         Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
         given.
@@ -95,6 +100,7 @@ class GraniteForDoclingCausalLMOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
+    deepstack_image_features: list[torch.FloatTensor] | None = None
     router_logits: torch.FloatTensor | None = None
 
 
@@ -756,8 +762,9 @@ class GraniteForDoclingMTP(nn.Module):
         i - 2, hidden_size)`) predicts token `t + i + 2`.
         """
         head_hidden_states = []
+        sequence_length = hidden_states.shape[1]
         for offset, block in enumerate(self.blocks, start=1):
-            span = hidden_states.shape[1] - offset - 1
+            span = sequence_length - offset - 1
             if span <= 0:
                 break
             hidden_states = block(hidden_states[:, :span], embed_tokens(input_ids[:, offset : offset + span]))
@@ -1181,6 +1188,7 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.FloatTensor | None = None,
+        deepstack_image_features: list[torch.FloatTensor] | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteForDoclingBaseModelOutputWithPast:
@@ -1189,9 +1197,11 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
             Tiles to route through the fine connector path, which yields four times as many image tokens per tile.
         image_hidden_states (`torch.FloatTensor` of shape `(num_tiles, image_seq_len, hidden_size)`, or `(num_tiles, 4 * image_seq_len, hidden_size)` on the fine route):
             The hidden states of the image encoder after modality projection. Pass this instead of `pixel_values`
-            to reuse a previous call's vision-tower output and skip recomputing it (e.g. across turns in a
-            conversation). Do not pass both at once: clear `pixel_values` from the inputs first, or a `ValueError`
-            is raised.
+            to reuse a previous call's vision-tower output and skip recomputing it. When DeepStack is configured,
+            also pass the matching `deepstack_image_features`. Do not pass this with `pixel_values`.
+        deepstack_image_features (`list[torch.FloatTensor]`, *optional*):
+            Intermediate projected image features returned by `get_image_features` or a previous forward call.
+            Required when reusing `image_hidden_states` with DeepStack.
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
@@ -1218,16 +1228,26 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
                 "You cannot specify both pixel_values and image_hidden_states at the same time. To reuse a "
                 "previous call's image_hidden_states, remove pixel_values from the inputs instead of passing both."
             )
+        if pixel_values is not None and deepstack_image_features is not None:
+            raise ValueError("Pass either pixel_values or deepstack_image_features, not both.")
         elif pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, tile_fine_mask=tile_fine_mask, return_dict=True)
             image_hidden_states = image_outputs.pooler_output
             router_logits = image_outputs.router_logits
-            deepstack_visual_embeds = {
-                layer_idx: features.reshape(-1, features.shape[-1])
-                for layer_idx, features in zip(self.config.deepstack_attn_layers, image_outputs.deepstack_features)
-            }
+            deepstack_image_features = image_outputs.deepstack_features
 
+        if image_hidden_states is None and deepstack_image_features is not None:
+            raise ValueError("deepstack_image_features requires image_hidden_states.")
         if image_hidden_states is not None:
+            if deepstack_image_features is None and self.config.deepstack_attn_layers:
+                raise ValueError("Reusing image_hidden_states with DeepStack also requires deepstack_image_features.")
+            if deepstack_image_features is not None:
+                if len(deepstack_image_features) != len(self.config.deepstack_attn_layers):
+                    raise ValueError("deepstack_image_features must match the configured DeepStack layers.")
+                deepstack_visual_embeds = {
+                    layer_idx: features.reshape(-1, features.shape[-1])
+                    for layer_idx, features in zip(self.config.deepstack_attn_layers, deepstack_image_features)
+                }
             image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_hidden_states)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask.unsqueeze(-1), image_hidden_states)
@@ -1250,6 +1270,7 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_hidden_states,
+            deepstack_image_features=deepstack_image_features,
             router_logits=router_logits,
         )
 
@@ -1354,6 +1375,7 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.FloatTensor | None = None,
+        deepstack_image_features: list[torch.FloatTensor] | None = None,
         labels: torch.LongTensor | None = None,
         router_labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
@@ -1364,7 +1386,10 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`, *optional*):
             Tiles to route through the fine connector path, which yields four times as many image tokens per tile.
         image_hidden_states (`torch.FloatTensor` of shape `(num_tiles, image_seq_len, hidden_size)`, or `(num_tiles, 4 * image_seq_len, hidden_size)` on the fine route):
-            The hidden states of the image encoder after modality projection.
+            Projected image features to reuse instead of `pixel_values`. When DeepStack is configured, also pass the
+            matching `deepstack_image_features`.
+        deepstack_image_features (`list[torch.FloatTensor]`, *optional*):
+            Intermediate projected image features returned by `get_image_features` or a previous forward call.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `GraniteForDoclingForConditionalGeneration`).
@@ -1410,6 +1435,7 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
             pixel_values=pixel_values,
             tile_fine_mask=tile_fine_mask,
             image_hidden_states=image_hidden_states,
+            deepstack_image_features=deepstack_image_features,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
@@ -1457,6 +1483,7 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            deepstack_image_features=outputs.deepstack_image_features,
             router_logits=outputs.router_logits,
         )
 
@@ -1473,6 +1500,48 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
             `torch.BoolTensor` of shape `(batch_size,)`: `True` for the samples that need the fine connector path.
         """
         return self.model.predict_fine_route(pixel_values)
+
+    def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(*args, is_first_iteration=is_first_iteration, **kwargs)
+        if not is_first_iteration and model_inputs.get("past_key_values") is not None:
+            model_inputs.pop("image_hidden_states", None)
+            model_inputs.pop("deepstack_image_features", None)
+        return model_inputs
+
+    def _expand_inputs_for_generation(self, expand_size=1, is_encoder_decoder=False, input_ids=None, **model_kwargs):
+        image_hidden_states = model_kwargs.pop("image_hidden_states", None)
+        deepstack_image_features = model_kwargs.pop("deepstack_image_features", None)
+        if image_hidden_states is not None and expand_size > 1:
+            if input_ids is None:
+                raise ValueError("Expanding reused image features requires input_ids to locate the image tokens.")
+            image_token_counts = (input_ids == self.config.image_token_id).sum(dim=1).tolist()
+
+            def expand_features(features):
+                if features.ndim == 3:
+                    if any(count % features.shape[1] for count in image_token_counts):
+                        raise ValueError("Image token counts do not match the reused image features.")
+                    split_sizes = [count // features.shape[1] for count in image_token_counts]
+                elif features.ndim == 2:
+                    split_sizes = image_token_counts
+                else:
+                    raise ValueError("Reused image features must have two or three dimensions.")
+                if sum(split_sizes) != features.shape[0]:
+                    raise ValueError("Image token counts do not match the reused image features.")
+                parts = features.split(split_sizes, dim=0)
+                return torch.cat([part for part in parts for _ in range(expand_size)], dim=0)
+
+            image_hidden_states = expand_features(image_hidden_states)
+            if deepstack_image_features is not None:
+                deepstack_image_features = [expand_features(features) for features in deepstack_image_features]
+
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size, is_encoder_decoder=is_encoder_decoder, input_ids=input_ids, **model_kwargs
+        )
+        if image_hidden_states is not None:
+            model_kwargs["image_hidden_states"] = image_hidden_states
+        if deepstack_image_features is not None:
+            model_kwargs["deepstack_image_features"] = deepstack_image_features
+        return input_ids, model_kwargs
 
 
 __all__ = [

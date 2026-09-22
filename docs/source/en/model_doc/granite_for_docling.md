@@ -88,7 +88,7 @@ messages = [
         ],
     }
 ]
-pipe(text=messages, max_new_tokens=4096, return_full_text=False)
+pipe(text=messages, max_new_tokens=4096, return_full_text=False, skip_special_tokens=False)
 ```
 
 </hfoption>
