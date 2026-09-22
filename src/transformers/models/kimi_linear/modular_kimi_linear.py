@@ -21,7 +21,6 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.accelerate import force_accelerate_hooks
@@ -31,8 +30,10 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Attention,
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
+    DeepseekV3MLP,
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
 )
@@ -176,14 +177,6 @@ class KimiLinearConfig(DeepseekV3Config):
         if self.dense_ffn_hidden is None:
             self.dense_ffn_hidden = self.intermediate_size
 
-        # Guard token IDs that were inherited from the production checkpoint defaults but are
-        # outside the configured vocabulary.  This allows constructing small-vocab configs
-        # (e.g. for testing) without hitting nn.Embedding's padding_idx assertion.
-        for attr in ("pad_token_id", "bos_token_id", "eos_token_id"):
-            val = getattr(self, attr, None)
-            if val is not None and isinstance(val, int) and val >= self.vocab_size:
-                setattr(self, attr, None)
-
 
 class KimiLinearRMSNorm(LlamaRMSNorm):
     pass
@@ -197,28 +190,18 @@ class KimiLinearExperts(DeepseekV3Experts):
     pass
 
 
-class KimiLinearMLP(nn.Module):
+class KimiLinearMLP(DeepseekV3MLP):
     """Dense FFN for Kimi Linear / Kimi K3.
 
-    Uses ``config.dense_ffn_hidden`` as the intermediate dimension (falls back to
-    ``config.intermediate_size``). When ``hidden_act == "situ"``, uses separate SiTU
-    activations with per-projection betas.
+    Subclasses DeepseekV3MLP and overrides only ``intermediate_size`` (uses
+    ``config.dense_ffn_hidden``) and ``forward`` (adds the paired-beta SiTU path).
     """
 
     def __init__(self, config: "KimiLinearConfig", intermediate_size: int | None = None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.dense_ffn_hidden
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-
+        super().__init__(config, intermediate_size=intermediate_size or config.dense_ffn_hidden)
         if config.hidden_act == "situ":
             self.situ_gate_beta = config.activation_situ_beta
             self.situ_up_beta = config.activation_situ_linear_beta
-        else:
-            self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         if self.config.hidden_act == "situ":
@@ -230,86 +213,34 @@ class KimiLinearMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-class KimiLinearAttention(nn.Module):
-    """Multi-headed Latent Attention (MLA) for Kimi Linear / Kimi K3.
+class KimiLinearAttention(DeepseekV3Attention):
+    """MLA for Kimi Linear / Kimi K3.
 
-    Extends the DeepSeek V3 MLA with:
-    - Pure NoPE mode (``mla_use_nope=True``): no rotary embeddings; ``qk_rope_head_dim``
-      must be 0.
-    - Output gate (``mla_use_output_gate=True``): a learned sigmoid gate is applied to
-      the attention output before ``o_proj``.
+    Extends DeepseekV3Attention with:
+    - Pure NoPE mode (``mla_use_nope=True``): ``qk_rope_head_dim`` is 0, no RoPE applied.
+    - Output gate (``mla_use_output_gate=True``): learned sigmoid gate on attention output.
     """
 
     def __init__(self, config: "KimiLinearConfig", layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        super().__init__(config, layer_idx)
         self.use_nope = config.mla_use_nope
         self.use_output_gate = config.mla_use_output_gate
-        self.is_causal = True
-
-        self.q_proj = (
-            None
-            if self.q_lora_rank is not None
-            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        )
-        self.q_a_proj = (
-            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
-            if self.q_lora_rank is not None
-            else None
-        )
-        self.q_a_layernorm = KimiLinearRMSNorm(self.q_lora_rank) if self.q_lora_rank is not None else None
-        self.q_b_proj = (
-            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is not None
-            else None
-        )
-
-        # In NoPE mode qk_rope_head_dim == 0; projection only outputs the compressed latent.
-        self.kv_a_proj_with_mqa = nn.Linear(
-            self.hidden_size,
-            config.kv_lora_rank + config.qk_rope_head_dim,
-            bias=config.attention_bias,
-        )
+        # Override layernorms to use the Kimi variant
         self.kv_a_layernorm = KimiLinearRMSNorm(config.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            config.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
-            bias=False,
-        )
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            self.hidden_size,
-            bias=config.attention_bias,
-        )
+        if self.q_lora_rank is not None:
+            self.q_a_layernorm = KimiLinearRMSNorm(self.q_lora_rank)
         if self.use_output_gate:
             self.o_gate_proj = nn.Linear(self.hidden_size, self.num_heads * self.v_head_dim, bias=False)
-
+        # NoPE: plain dot-product scaling (no yarn mscale)
         self.scaling = self.qk_head_dim ** (-0.5)
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Expand compressed latents into full key and value states."""
         batch_size, _, seq_length, _ = kv_nope.shape
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-
         kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
         k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
         if self.use_nope:
-            # Pure NoPE: key == k_nope only, no RoPE concatenation
             return k_nope.contiguous(), value_states
-
         k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)
         key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
         key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
@@ -334,7 +265,6 @@ class KimiLinearAttention(nn.Module):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         if self.use_nope:
-            # qk_rope_head_dim == 0: whole output is the latent KV
             kv_nope = self.kv_a_layernorm(compressed_kv)
             k_rot = compressed_kv.new_empty(batch_size, 1, seq_length, 0)
         else:
@@ -343,7 +273,6 @@ class KimiLinearAttention(nn.Module):
             k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         kv_nope = kv_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
-
         if past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
@@ -366,8 +295,7 @@ class KimiLinearAttention(nn.Module):
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         if self.use_output_gate:
             attn_output = attn_output * torch.sigmoid(self.o_gate_proj(hidden_states))
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        return self.o_proj(attn_output), attn_weights
 
 
 class KimiLinearForgetGate(Glm5NextTextForgetGate):
@@ -544,11 +472,6 @@ class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
             self.mlp_res_proj = nn.Linear(config.hidden_size, 1, bias=False)
             self.mlp_res_norm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @property
-    def attn_res(self) -> bool:
-        """Returns True when Block AttnRes is enabled for this layer."""
-        return self.attn_res_block_size > 0
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -556,24 +479,26 @@ class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        attn_res_blocks: list[torch.Tensor] | None = None,
         attn_res_partial: torch.Tensor | None = None,
+        attn_res_blocks: list[torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        """Forward pass.  Returns ``hidden_states`` only.
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Forward pass.
 
-        When AttnRes is enabled (``attn_res_block_size > 0``), ``attn_res_blocks`` and
-        ``attn_res_partial`` are modified in-place so the model loop can track state
-        without changing the return signature expected by gradient checkpointing.
+        Returns ``(hidden_states, updated_partial)`` where ``updated_partial`` is
+        ``attn_res_partial + attn_out + mlp_out`` when AttnRes is active, else ``None``.
+        The model loop owns the ``attn_res_blocks`` list and the running partial; it
+        pre-computes the attended residual tensors and passes them in, so the layer
+        never mutates shared state.
         """
         use_attn_res = self.attn_res_block_size > 0
 
         # ---- Attention sub-layer ----
         if use_attn_res:
-            h = _attn_res_forward(
+            h_attn = _attn_res_forward(
                 self.self_attention_res_proj, self.self_attention_res_norm, attn_res_blocks, attn_res_partial
             )
-            h_attn_in = self.input_layernorm(h)
+            h_attn_in = self.input_layernorm(h_attn)
         else:
             h_attn_in = self.input_layernorm(hidden_states)
 
@@ -594,22 +519,22 @@ class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
                 **kwargs,
             )
 
-        if use_attn_res:
-            # In-place update so the model loop sees the change via the same tensor reference
-            attn_res_partial.add_(attn_out)
-        else:
+        if not use_attn_res:
             hidden_states = hidden_states + attn_out
 
         # ---- MLP sub-layer ----
         if use_attn_res:
-            h = _attn_res_forward(self.mlp_res_proj, self.mlp_res_norm, attn_res_blocks, attn_res_partial)
-            mlp_out = self.mlp(self.post_attention_layernorm(h))
-            attn_res_partial.add_(mlp_out)
-            hidden_states = attn_res_partial
+            # partial_after_attn is local — no mutation of the caller's tensor
+            partial_after_attn = attn_res_partial + attn_out
+            h_mlp = _attn_res_forward(
+                self.mlp_res_proj, self.mlp_res_norm, attn_res_blocks, partial_after_attn
+            )
+            mlp_out = self.mlp(self.post_attention_layernorm(h_mlp))
+            updated_partial = partial_after_attn + mlp_out
+            return updated_partial, updated_partial
         else:
             hidden_states = hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
-
-        return hidden_states
+            return hidden_states, None
 
 
 @auto_docstring
@@ -692,8 +617,8 @@ class KimiLinearModel(Qwen3NextModel):
 
         hidden_states = inputs_embeds
 
-        # AttnRes state: completed block reps list + current partial-block sum.
-        # Token embeddings serve as block 0.
+        # AttnRes: the model loop owns the block history and running partial.
+        # Token embeddings serve as completed block 0.
         use_attn_res = self.attn_res_block_size > 0
         if use_attn_res:
             attn_res_blocks: list[torch.Tensor] = [hidden_states]
@@ -708,16 +633,17 @@ class KimiLinearModel(Qwen3NextModel):
                 **kwargs,
             )
             if use_attn_res:
-                layer_kwargs["attn_res_blocks"] = attn_res_blocks
                 layer_kwargs["attn_res_partial"] = attn_res_partial
+                layer_kwargs["attn_res_blocks"] = attn_res_blocks
 
-            hidden_states = decoder_layer(hidden_states, **layer_kwargs)
+            hidden_states, updated_partial = decoder_layer(hidden_states, **layer_kwargs)
 
             if use_attn_res:
-                # Block boundary: save accumulated partial, reset for next block
+                attn_res_partial = updated_partial
+                # Block boundary: archive the accumulated partial, start fresh
                 if (i + 1) % self.attn_res_block_size == 0:
-                    attn_res_blocks.append(attn_res_partial.clone())
-                    attn_res_partial.zero_()
+                    attn_res_blocks.append(attn_res_partial)
+                    attn_res_partial = torch.zeros_like(hidden_states)
 
         hidden_states = self.norm(hidden_states)
 

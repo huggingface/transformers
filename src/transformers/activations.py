@@ -221,30 +221,6 @@ class SqrtSoftplusActivation(nn.Module):
         return nn.functional.softplus(input).sqrt()
 
 
-class SiTUActivation(nn.Module):
-    """SiTU activation used by Kimi K3.
-
-    For the gate branch:
-        beta * tanh(x / beta) * sigmoid(x)
-
-    For the linear/up branch:
-        beta * tanh(x / beta)
-    """
-
-    def __init__(self, beta: float = 1.0, linear: bool = False):
-        super().__init__()
-        self.beta = beta
-        self.linear = linear
-
-    def forward(self, input: Tensor) -> Tensor:
-        input = input.float()
-
-        if self.linear:
-            return self.beta * torch.tanh(input / self.beta)
-
-        return self.beta * torch.tanh(input / self.beta) * torch.sigmoid(input)
-
-
 class ClassInstantier(OrderedDict):
     def __getitem__(self, key):
         content = super().__getitem__(key)
@@ -365,7 +341,6 @@ ACT2CLS = {
     "relu6": nn.ReLU6,
     "sigmoid": nn.Sigmoid,
     "silu": SiLUActivation,
-    "situ": SiTUActivation,
     "sqrtsoftplus": SqrtSoftplusActivation,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,

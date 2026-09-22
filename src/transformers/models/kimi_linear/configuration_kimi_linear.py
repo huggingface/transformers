@@ -179,13 +179,5 @@ class KimiLinearConfig(PreTrainedConfig):
         if self.dense_ffn_hidden is None:
             self.dense_ffn_hidden = self.intermediate_size
 
-        # Guard token IDs that were inherited from the production checkpoint defaults but are
-        # outside the configured vocabulary.  This allows constructing small-vocab configs
-        # (e.g. for testing) without hitting nn.Embedding's padding_idx assertion.
-        for attr in ("pad_token_id", "bos_token_id", "eos_token_id"):
-            val = getattr(self, attr, None)
-            if val is not None and isinstance(val, int) and val >= self.vocab_size:
-                setattr(self, attr, None)
-
 
 __all__ = ["KimiLinearConfig"]
