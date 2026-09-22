@@ -398,14 +398,18 @@ class PagedAttentionCache:
         layer_idx: int,
         read_index: list[torch.Tensor],  # one tensor per attention group
         write_index: list[torch.Tensor],  # one tensor per attention group
-    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_q + past_length, num_kv_heads, head_dim]
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [1, seqlen_q + past_length, num_kv_heads, head_dim]
         """Updates the cache with new key-value states for a specific layer and retrieves the KV states needed for the
         attention computation. The actual work is dispatched to the allocator in charge of the layer, using the read
         and write indices prepared for its group."""
         allocator = self.layer_to_allocator[layer_idx]
         layer_read_index = read_index[allocator.index]
         layer_write_index = write_index[allocator.index]
-        return allocator.update(key_states, value_states, layer_idx, layer_read_index, layer_write_index)
+        # Allocator perform cache update without the singleton batch_size dimension
+        key_states, value_states = allocator.update(
+            key_states.squeeze(0), value_states.squeeze(0), layer_idx, layer_read_index, layer_write_index
+        )
+        return key_states.unsqueeze(0), value_states.unsqueeze(0)
 
     def specialize_kwargs(self, layer_idx: int, num_sequences: int, kwargs: dict) -> bool:
         """Selects the right cu_seqlen and max_seqlen inside the kwargs for the given layer, based on its layer type.
@@ -413,7 +417,7 @@ class PagedAttentionCache:
         # Whether we use the block table or not, we need to select the right cu_seqlen and max_seqlen
         layer_type = self.layer_to_allocator[layer_idx].layer_type
         kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][layer_type].to(torch.int32)
-        kwargs["max_seqlen_k"] = kwargs["max_seqlen_k"][layer_type].to(torch.int32)
+        kwargs["max_seqlen_k"] = kwargs["max_seqlen_k"][layer_type]
 
         # If there is no block table, we can exit early and update the cache
         block_table = kwargs.get("block_table")

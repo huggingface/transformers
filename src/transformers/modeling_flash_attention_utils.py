@@ -523,7 +523,7 @@ def _flash_attention_forward(
     block_table: torch.Tensor | None = None,
     attn_implementation: str | None = None,
     **kwargs,
-):
+) -> torch.Tensor:
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
     first unpad the input, then computes the attention scores and pad the final attention scores.
@@ -570,7 +570,9 @@ def _flash_attention_forward(
             return out[0] if isinstance(out, tuple) else out
 
     # Flattens the batch dimension, which does not exist in varlen or with block table
-    query_states, key_states, value_states = [x.view(-1, x.shape[2:]) for x in (query_states, key_states, value_states)]
+    query_states, key_states, value_states = [
+        x.view(-1, *x.shape[2:]) for x in (query_states, key_states, value_states)
+    ]
     # Block table has a singleton dimension to align with the cache though
     if is_fa_with_block_table:
         query_states, key_states, value_states = [x.unsqueeze(1) for x in (query_states, key_states, value_states)]
