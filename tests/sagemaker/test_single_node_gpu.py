@@ -82,5 +82,5 @@ class SingleNodeTest(unittest.TestCase):
         assert all(t <= self.results["eval_loss"] for t in eval_loss)
 
         # dump tests result into json file to share in PR
-        with open(f"{estimator.latest_training_job.name}.json", "w") as outfile:
+        with open(f"{estimator.latest_training_job.name}.json", "w", encoding="utf-8") as outfile:
             json.dump({"train_time": train_runtime, "eval_accuracy": eval_accuracy, "eval_loss": eval_loss}, outfile)

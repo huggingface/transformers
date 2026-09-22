@@ -340,10 +340,10 @@ class CommonPipelineTest(unittest.TestCase):
             from transformers.utils import ADAPTER_CONFIG_NAME
 
             adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
-            with open(adapter_config_path, "r") as handle:
+            with open(adapter_config_path, "r", encoding="utf-8") as handle:
                 adapter_config = json.load(handle)
             adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
-            with open(adapter_config_path, "w") as handle:
+            with open(adapter_config_path, "w", encoding="utf-8") as handle:
                 json.dump(adapter_config, handle)
 
             # Load from the saved path and make sure it actually loads despite
