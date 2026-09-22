@@ -21,7 +21,7 @@ import torch
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, ContinuousBatchingConfig
-from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
@@ -142,7 +142,7 @@ def ensure_decode_fast_path_is_available(
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
         if fa_cuda or fa_xpu:  # Block table is only supported on these
-            flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
+            flash_attn_with_kvcache = lazy_import_flash_attention(config._attn_implementation)[1][2]
             # Throw a warning only if the decode fast path was requested by the user
             if flash_attn_with_kvcache is None:
                 if user_requested:

@@ -271,18 +271,6 @@ def lazy_import_flash_attention(
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn), _process_flash_kwargs_fn
 
 
-def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):  # TODO: remove
-    """
-    Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
-    """
-    from .integrations.flash_paged import paged_attention_forward
-
-    (_, flash_attn_varlen_func, flash_attn_with_kvcache_fn), _ = lazy_import_flash_attention(
-        implementation, attention_wrapper=paged_attention_forward, allow_all_kernels=allow_all_kernels
-    )
-    return flash_attn_varlen_func, flash_attn_with_kvcache_fn
-
-
 def _prepare_unpad_state(
     state: torch.Tensor,
     attention_mask: torch.Tensor,

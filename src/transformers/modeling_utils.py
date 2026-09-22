@@ -79,7 +79,6 @@ from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
-from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
@@ -91,7 +90,6 @@ from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
     FLASH_ATTN_KERNEL_FALLBACK,
     lazy_import_flash_attention,
-    lazy_import_paged_flash_attention,
 )
 from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .monkey_patching import apply_patches, patch_output_recorders
@@ -1793,12 +1791,7 @@ class PreTrainedModel(
         if is_kernel(applicable_attn_implementation):
             try:
                 # preload flash attention here to allow compile with fullgraph
-                if is_paged:
-                    lazy_import_paged_flash_attention(
-                        applicable_attn_implementation, allow_all_kernels=allow_all_kernels
-                    )
-                else:
-                    lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
+                lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -5112,9 +5105,9 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
-        "paged|flash_attention_4": paged_attention_forward,
-        "paged|flash_attention_3": paged_attention_forward,
-        "paged|flash_attention_2": paged_attention_forward,
+        "paged|flash_attention_4": flash_attention_forward,  # TODO: deprecation cycle?
+        "paged|flash_attention_3": flash_attention_forward,
+        "paged|flash_attention_2": flash_attention_forward,
         "paged|sdpa": sdpa_attention_paged_forward,
         "paged|eager": eager_paged_attention_forward,
     }
