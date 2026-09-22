@@ -62,8 +62,8 @@ def with_no_grad(method):
 
 
 def _memory_leak_settings() -> tuple[float | None, str]:
-    """Return `(threshold_mib, mode)` from the environment; `threshold_mib` is `None` when the check is off."""
-    raw = os.environ.get("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", "").strip()
+    """Default to warnings above 10 MiB; an explicitly empty threshold disables checking."""
+    raw = os.environ.get("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", "10").strip()
     if not raw:
         return None, "warn"
     try:
@@ -125,8 +125,9 @@ class MemoryCleanupMixin:
     Attributes assigned in the class body are kept; everything added later is dropped. An overridden `setUp` must
     call `super().setUp()` (the instance snapshot is taken there) or the test errors out saying so.
 
-    Leak check, off by default since collecting frees what a reproducer needs: `TRANSFORMERS_TEST_MEMORY_LEAK_MIB=<n>`
-    reports tests leaving more than `<n>` MiB on the device, `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` fails them.
+    Leak checks warn by default when more than 10 MiB remains allocated on the device after cleanup.
+    `TRANSFORMERS_TEST_MEMORY_LEAK_MIB=<n>` overrides the threshold; an empty value disables checking.
+    `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` fails leaking tests instead of warning.
     The same threshold is applied again at the class boundary, against a baseline read before `setUpClass`,
     since a leaked class fixture sits inside every test's own baseline and so reports zero on all of them.
 

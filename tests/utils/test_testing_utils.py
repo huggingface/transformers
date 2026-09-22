@@ -424,7 +424,7 @@ class MemoryCleanupUnderPytestTest(MemoryCleanupMixin, unittest.TestCase):
 
 
 class MemoryLeakCheckTest(unittest.TestCase):
-    """Opt-in leak reporting: unset means never measured, `warn` reports, `error` fails."""
+    """Leak reporting warns by default, can be disabled explicitly, and can fail in `error` mode."""
 
     def _run_leaking_class(self, leaked_mib):
         # Readings: class baseline, `setUp`, `tearDown`, class check. The last is 0 so only the per-test
@@ -440,12 +440,37 @@ class MemoryLeakCheckTest(unittest.TestCase):
         ):
             return _run_inner_test_class(Inner)
 
-    def test_off_by_default(self):
+    def test_warns_by_default(self):
         with patch.dict("os.environ", {}, clear=False):
             testing_utils.os.environ.pop("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", None)
+            testing_utils.os.environ.pop("TRANSFORMERS_TEST_MEMORY_LEAK_MODE", None)
+            self.assertEqual(test_memory_cleanup_mixin._memory_leak_settings(), (10, "warn"))
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
                 result = self._run_leaking_class(leaked_mib=512)
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        messages = [str(w.message) for w in caught if "MiB allocated" in str(w.message)]
+        self.assertEqual(len(messages), 1, caught)
+        self.assertIn("512.0 MiB", messages[0])
+
+    def test_explicitly_disabled(self):
+        class Inner(MemoryCleanupMixin, unittest.TestCase):
+            def test_noop(self):
+                pass
+
+        with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": ""}):
+            with patch.object(test_memory_cleanup_mixin, "_device_memory_allocated") as allocated:
+                result = _run_inner_test_class(Inner)
+            allocated.assert_not_called()
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+
+    def test_default_threshold_is_silent_at_the_boundary(self):
+        with patch.dict("os.environ", {}, clear=False):
+            testing_utils.os.environ.pop("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", None)
+            testing_utils.os.environ.pop("TRANSFORMERS_TEST_MEMORY_LEAK_MODE", None)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self._run_leaking_class(leaked_mib=10)
         self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
         self.assertEqual([str(w.message) for w in caught if "MiB allocated" in str(w.message)], [])
 
@@ -548,9 +573,21 @@ class ClassScopeMemoryLeakCheckTest(unittest.TestCase):
         self.assertFalse(result.wasSuccessful())
         self.assertIn("tearDownClass", str(result.errors + result.failures))
 
-    def test_off_by_default(self):
+    def test_warns_by_default(self):
         with patch.dict("os.environ", {}, clear=False):
             testing_utils.os.environ.pop("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", None)
+            testing_utils.os.environ.pop("TRANSFORMERS_TEST_MEMORY_LEAK_MODE", None)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self._run_class([0, 4096, 4096, 4096])
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        messages = self._leak_messages(caught)
+        self.assertEqual(len(messages), 1, caught)
+        self.assertIn("+4096.0 MiB", messages[0])
+        self.assertIn("threshold 10.0 MiB", messages[0])
+
+    def test_explicitly_disabled(self):
+        with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": ""}):
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
                 result = self._run_class([0, 4096])  # no baseline is taken when the check is off
