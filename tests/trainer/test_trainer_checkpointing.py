@@ -489,13 +489,13 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 )
                 trainer.train(resume_from_checkpoint=checkpoint)
                 for name, param in trainer.model.state_dict().items():
-                    torch.testing.assert_close(param, state_dict[name])
+                    torch.testing.assert_close(param.cpu(), state_dict[name].cpu())
 
                 trainer.state.best_model_checkpoint = checkpoint
                 trainer._load_best_model()
                 best_state_dict = Qwen3MoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device).state_dict()
                 for name, param in trainer.model.state_dict().items():
-                    torch.testing.assert_close(param, best_state_dict[name])
+                    torch.testing.assert_close(param.cpu(), best_state_dict[name].cpu())
 
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_checkpoint(self):

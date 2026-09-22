@@ -54,7 +54,7 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler
 
 from . import __version__
 from .configuration_utils import PreTrainedConfig
-from .conversion_mapping import get_model_conversion_mapping
+from .core_model_loading import apply_weight_conversion
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
@@ -63,7 +63,6 @@ from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import (
-    _apply_weight_conversions_to_state_dict,
     deepspeed_init,
     deepspeed_load_checkpoint,
     deepspeed_sp_compute_loss,
@@ -3565,10 +3564,9 @@ class Trainer:
                 else:
                     check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
-                # Re-apply all renaming and/or weight operations reverted by `save_pretrained`
+                # Re-apply the renamings and weight operations `save_pretrained` reverted
                 if isinstance(model, PreTrainedModel):
-                    weight_mapping = getattr(model, "_weight_conversions", None) or get_model_conversion_mapping(model)
-                    state_dict = _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping)
+                    state_dict = apply_weight_conversion(model, state_dict)
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
@@ -3693,12 +3691,9 @@ class Trainer:
                     else:
                         check_torch_load_is_safe()
                         state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
-                    # Re-apply all renaming and/or weight operations reverted by `save_pretrained`
+                    # Re-apply the renamings and weight operations `save_pretrained` reverted
                     if isinstance(model, PreTrainedModel):
-                        weight_mapping = getattr(model, "_weight_conversions", None) or get_model_conversion_mapping(
-                            model
-                        )
-                        state_dict = _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping)
+                        state_dict = apply_weight_conversion(model, state_dict)
 
                     # If the model is on the GPU, it still works!
                     # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963

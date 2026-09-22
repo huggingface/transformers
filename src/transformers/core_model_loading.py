@@ -1800,6 +1800,91 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
+def apply_weight_conversion(
+    model: PreTrainedModel,
+    state_dict: dict[str, torch.Tensor],
+    weight_mapping: list[WeightConverter | WeightRenaming] | None = None,
+) -> dict[str, torch.Tensor]:
+    """
+    Apply the weight conversions (renamings and merging/splitting operations) to a state dict, without loading it
+    into `model`. This is the inverse of `revert_weight_conversion`, which `save_pretrained` uses: a checkpoint it
+    wrote is converted back to the format `model` holds, ready for `load_state_dict`.
+
+    With `weight_mapping=None`, uses the mapping the model was loaded with, or the default one for its architecture.
+    """
+    if weight_mapping is None:
+        from .conversion_mapping import get_model_conversion_mapping
+
+        weight_mapping = getattr(model, "_weight_conversions", None) or get_model_conversion_mapping(model)
+
+    # Preserve metadata from the original state dict
+    metadata = getattr(state_dict, "_metadata", None)
+    base_model_prefix = model.base_model_prefix
+
+    # Only keys and shapes are needed for matching: a meta state dict does not duplicate the model's parameters
+    model_state_dict = {}
+    for key, param in model.state_dict().items():
+        model_state_dict[key] = torch.empty(param.shape, dtype=param.dtype, device="meta")
+
+    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
+
+    # Fast path: only renamings, no tensors to collect
+    if len(converters) == 0:
+        new_state_dict = {}
+        for original_key, tensor in state_dict.items():
+            renamed_key, _ = rename_source_key(
+                original_key, renamings, [], base_model_prefix=base_model_prefix, meta_state_dict=model_state_dict
+            )
+            if renamed_key in model_state_dict:
+                new_state_dict[renamed_key] = tensor
+        if metadata is not None:
+            new_state_dict._metadata = metadata
+        return new_state_dict
+
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+
+    # Sorted keys give a consistent order (important for MoE conversions); popping frees each tensor as we go
+    conversion_mapping = {}
+    new_state_dict = {}
+    sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
+    for original_key in sorted_keys:
+        tensor = state_dict.pop(original_key)
+        renamed_key, source_pattern = rename_source_key(
+            original_key, renamings, converters, base_model_prefix=base_model_prefix, meta_state_dict=model_state_dict
+        )
+        if renamed_key in model_state_dict:
+            if source_pattern is not None:
+                # A fresh converter per layer holds its tensors; the operations list is shared
+                converter = pattern_to_converter[source_pattern]
+                new_converter = WeightConverter(
+                    source_patterns=converter.source_patterns,
+                    target_patterns=converter.target_patterns,
+                    operations=converter.operations,
+                )
+                mapping = conversion_mapping.setdefault(renamed_key, new_converter)
+                mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+            else:
+                new_state_dict[renamed_key] = tensor
+
+    for renamed_key, mapping in conversion_mapping.items():
+        try:
+            realized_value = mapping.convert(renamed_key, model=model, config=model.config)
+            for target_name, param in realized_value.items():
+                param = param[0] if isinstance(param, list) else param
+                new_state_dict[target_name] = param
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to apply weight conversion for '{renamed_key}'. "
+                f"This likely means the checkpoint format is incompatible with the current model version. "
+                f"Error: {e}"
+            ) from e
+
+    if metadata is not None:
+        new_state_dict._metadata = metadata
+    return new_state_dict
+
+
 def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
     """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
