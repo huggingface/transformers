@@ -1464,7 +1464,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
                 "allow_is_causal_skip": False,
             }
             causal_mask_mapping = {
-                "qwen_sparse_attention": create_causal_mask(**mask_kwargs),
+                "indexed_attention": create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
@@ -1483,7 +1483,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping["qwen_sparse_attention"],
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 conv_mask=conv_mask,
                 past_key_values=past_key_values,
                 ple_input_ids=ple_input_ids,
@@ -1625,11 +1625,6 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
