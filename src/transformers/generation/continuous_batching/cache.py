@@ -407,20 +407,26 @@ class PagedAttentionCache:
         layer_write_index = write_index[allocator.index]
         return allocator.update(key_states, value_states, layer_idx, layer_read_index, layer_write_index)
 
-    def specialize_kwargs(self, layer_idx: int, kwargs: dict) -> bool:
+    def specialize_kwargs(self, layer_idx: int, num_sequences: int, kwargs: dict) -> bool:
         """Selects the right cu_seqlen and max_seqlen inside the kwargs for the given layer, based on its layer type.
-        This modifies the kwargs in place. Returns True if the block table is used, False otherwise."""
+        This modifies the kwargs in place. Returns True the cache needs to be updated, False otherwise."""
+        # Whether we use the block table or not, we need to select the right cu_seqlen and max_seqlen
         layer_type = self.layer_to_allocator[layer_idx].layer_type
         kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][layer_type].to(torch.int32)
         kwargs["max_seqlen_k"] = kwargs["max_seqlen_k"][layer_type].to(torch.int32)
-        # Also prepare the block table for this layer, if there is one
+
+        # If there is no block table, we can exit early and update the cache
         block_table = kwargs.get("block_table")
-        if block_table is not None:
-            block_table_index, k_cache, v_cache = self.get_cache_for_block_table(layer_idx)
-            kwargs["block_table"] = block_table[block_table_index]
-            kwargs["k_cache"] = k_cache
-            kwargs["v_cache"] = v_cache
+        if block_table is None:
             return True
+
+        # Otherwise, we prepare the block table kwargs and no update of the cache (it will happen in the flash call)
+        block_table_index, k_cache, v_cache = self.get_cache_for_block_table(layer_idx)
+        cache_seqlens = (kwargs["cu_seq_lens_k"][1 : num_sequences + 1] - kwargs["cu_seq_lens_k"][:num_sequences] - 1)
+        kwargs["cache_seqlens"] = cache_seqlens.to(torch.int32)
+        kwargs["block_table"] = block_table[block_table_index]
+        kwargs["k_cache"] = k_cache
+        kwargs["v_cache"] = v_cache
         return False
 
     def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
@@ -493,23 +499,6 @@ class PagedAttentionCache:
         """Fills each allocator's row of the kernel block table for the given request."""
         for allocator in self.cache_allocators.values():
             allocator.fill_block_table(request_id, past_length, query_length, block_table[allocator.index])
-
-    def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
-        """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
-        signature is only inspected once. This is necessary because different version of flash have different names for
-        the block table key."""
-        if self._block_table_key is None:
-            kwarg_names = inspect.signature(flash_attn_with_kvcache_fn).parameters.keys()
-            if "block_table" in kwarg_names:
-                self._block_table_key = "block_table"
-            elif "page_table" in kwarg_names:
-                self._block_table_key = "page_table"
-            else:
-                raise ValueError(
-                    f"flash_attn_with_kvcache_fn does not have a block_table or page_table argument: "
-                    f"{inspect.signature(flash_attn_with_kvcache_fn)}"
-                )
-        return self._block_table_key
 
 
 # TODO: can we get rid of this class?

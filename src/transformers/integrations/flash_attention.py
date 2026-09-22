@@ -42,22 +42,19 @@ def flash_attention_forward(
     # _flash_attention_forward needs non-transposed inputs, with shape [batch_size, seq_len, num_heads, head_dim]
     query, key, value = (x.transpose(1, 2) for x in (query, key, value))
 
-    # If there is a paged cache, now is the time to update it
-    if isinstance(cache, PagedAttentionCache):
+    # If there is a paged cache, now is the time to prepare the kwargs for the flash attention forward pass
+    is_paged_cache = isinstance(cache, PagedAttentionCache)
+    if is_paged_cache:
         query, key, value = (x.contiguous() for x in (query, key, value))
-        use_block_table = cache.specialize_kwargs(module.layer_idx, kwargs)
-        if not use_block_table:
-            key, value = cache.update(
+        update_cache = cache.specialize_kwargs(module.layer_idx, key.size(1), kwargs)  # type: ignore
+        if update_cache:
+            key, value = cache.update(  # type: ignore
                 key_states=key,
                 value_states=value,
                 layer_idx=module.layer_idx,
                 read_index=kwargs["read_index"],
                 write_index=kwargs["write_index"],
             )
-        else:
-            num_tokens = key.size(1)
-            cache_seqlens = (kwargs["cu_seq_lens_k"][1 : num_tokens + 1] - kwargs["cu_seq_lens_k"][:num_tokens] - 1)
-            kwargs["cache_seqlens"] = cache_seqlens.to(torch.int32)
 
     # FlashAttention requires the query and value have the same head dim; pad `value` up to the query head dim and crop
     # the output below. This happens for example in MLA, where `v_head_dim < qk_head_dim`.
@@ -71,11 +68,12 @@ def flash_attention_forward(
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else module.is_causal
 
-    attn_output = _flash_attention_forward(
-        query,
-        key,
-        value,
-        attention_mask,
+    # Call the flash attention, either compiled or uncompiled
+    all_kwargs = dict(
+        query_states=query,
+        key_states=key,
+        value_states=value,
+        attention_mask=attention_mask,
         query_length=seq_len,
         is_causal=is_causal,
         dropout=dropout,
@@ -88,8 +86,17 @@ def flash_attention_forward(
         s_aux=s_aux,
         **kwargs,
     )
+    if is_paged_cache:
+        attn_output = _uncompiled_flash_attention_forward(**all_kwargs)
+    else:
+        attn_output = _flash_attention_forward(**all_kwargs)
 
     if v_head_dim != q_head_dim:
         attn_output = attn_output[..., :v_head_dim]
 
     return attn_output, None
+
+
+@torch.compiler.disable
+def _uncompiled_flash_attention_forward(**kwargs) -> torch.Tensor:
+    return _flash_attention_forward(**kwargs)

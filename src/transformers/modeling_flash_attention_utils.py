@@ -139,7 +139,7 @@ _hf_api_to_flash_mapping = {
     "sliding_window": "window_size",
 }
 # alternative names within the different flash attention APIs, e.g. for attention sinks
-_flash_api_alternative_names = {"s_aux": "learnable_sink"}
+_flash_api_alternative_names = {"s_aux": "learnable_sink", "block_table": "page_table"}
 
 
 def _lazy_imports(
@@ -172,6 +172,7 @@ def _lazy_imports(
         from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
     elif implementation == "flash_attention_4" or fa_fallback_version == 4:
         from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
+
         flash_attn_with_kvcache = None  # not supported yet
 
     # Otherwise, use the `kernels` package as a fallback
@@ -270,7 +271,7 @@ def lazy_import_flash_attention(
     return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn), _process_flash_kwargs_fn
 
 
-def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):  # TODO: remove this
+def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):  # TODO: remove
     """
     Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
     """
@@ -283,7 +284,8 @@ def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kern
 
 
 def _prepare_unpad_state(
-    state: torch.Tensor, attention_mask: torch.Tensor,
+    state: torch.Tensor,
+    attention_mask: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, torch.Tensor]:
     """
     Given a state, with can be queries or keys, computes the variables needed to unpad it and run it through flash
@@ -295,7 +297,7 @@ def _prepare_unpad_state(
 
     seqlens = attention_mask.sum(dim=-1, dtype=torch.int32)
     cu_seqlens = F.pad(torch.cumsum(seqlens, dim=0, dtype=torch.int32), (1, 0))
-    max_seqlen = seqlens.max().item() # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen = seqlens.max().item()  # using .item() here is required to prevent a performance regression (#46693)
     return unpadded_indices, cu_seqlens, max_seqlen
 
 
@@ -324,7 +326,7 @@ def prepare_fa_kwargs_from_attn_mask(
 
 
 def prepare_fa_kwargs_from_position_ids(
-    position_ids: torch.Tensor
+    position_ids: torch.Tensor,
 ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[int, int]]:
     """This function returns all the necessary kwargs to call `flash_attn_varlen_func` extracted from position_ids. The
     attention mask is a boolean tensor of shape [batch_size, num_kv_tokens]."""
@@ -417,6 +419,7 @@ def _process_flash_attention_kwargs(
     s_aux: torch.Tensor | None = None,
     max_seqlen_q: int | torch.IntTensor | None = None,
     max_seqlen_k: int | torch.IntTensor | None = None,
+    block_table: torch.Tensor | None = None,
     supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
@@ -478,11 +481,18 @@ def _process_flash_attention_kwargs(
     if supports_mapping["softcap"] and softcap is not None:
         flash_kwargs["softcap"] = softcap
 
-    if ((legacy_sink_param := supports_mapping["s_aux"]) or supports_mapping["learnable_sink"]) and s_aux is not None:
-        if legacy_sink_param:
-            flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
-        else:
-            flash_kwargs["learnable_sink"] = s_aux  # FA4
+    if s_aux is not None:
+        if supports_mapping["s_aux"]:
+            flash_kwargs["s_aux"] = s_aux
+        elif supports_mapping["learnable_sink"]:
+            flash_kwargs["learnable_sink"] = s_aux
+
+    # The block table is named `block_table` in Tri Dao's kernels and `page_table` in vLLM's FA3 kernel
+    if block_table is not None:
+        if supports_mapping["block_table"]:
+            flash_kwargs["block_table"] = block_table
+        elif supports_mapping["page_table"]:
+            flash_kwargs["page_table"] = block_table
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
@@ -552,7 +562,7 @@ def _flash_attention_forward(
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
     extract_flash_kwargs = partial(
-        process_flash_kwargs_fn, query_length=query_length, key_length=key_length, is_causal=is_causal, **kwargs,
+        process_flash_kwargs_fn, query_length=query_length, key_length=key_length, is_causal=is_causal, **kwargs
     )
 
     # We use `flash_varlen_fn` to prevent cross-sequence attention and allow padding free approaches under two cases:
@@ -587,7 +597,7 @@ def _flash_attention_forward(
     elif not (is_fa_with_varlen_kwargs or is_fa_with_block_table):
         (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
 
-    flash_kwargs = extract_flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+    flash_kwargs = extract_flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table)
 
     # Compute the right seq_lens objects and call flash
     if is_fa_with_block_table:
