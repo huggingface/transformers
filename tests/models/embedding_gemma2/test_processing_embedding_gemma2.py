@@ -20,7 +20,6 @@ import numpy as np
 
 from transformers import EmbeddingGemma2Processor, EmbeddingGemma2VideoProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
-from transformers.video_processing_utils import VideoMetadata
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -47,7 +46,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "patch_size": 28,
             "max_soft_tokens": 70,
             "pooling_kernel_size": 3,
-            "num_frames": 2,
+            "fps": 1,
         }
         return video_processor_class(**video_processor_kwargs)
 
@@ -158,51 +157,6 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
         self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
 
-    def test_video_processor_flag_defaults(self):
-        """EmbeddingGemma 2 was trained on visual-only, 1-FPS-sampled video, so both flags default to True."""
-        video_processor = EmbeddingGemma2VideoProcessor()
-        self.assertTrue(video_processor.use_1fps_linear_sampling)
-        self.assertTrue(video_processor.exclude_timestamps)
-
-        # ... and the defaults survive the component setup used by the processor tests
-        component = self.get_component("video_processor")
-        self.assertTrue(component.use_1fps_linear_sampling)
-        self.assertTrue(component.exclude_timestamps)
-
-    def test_video_1fps_linear_sampling(self):
-        """Tests that `use_1fps_linear_sampling` implements 1-FPS linspace sequence sampling."""
-        video_processor = self.get_component("video_processor")
-
-        # Short video: 10 seconds at 25 fps = 250 frames. One frame per second, all kept.
-        meta_short = VideoMetadata(fps=25.0, total_num_frames=250, duration=10.0)
-        sampled_short = video_processor.sample_frames(meta_short, num_frames=32)
-        expected_short = np.array([int(s * 25) for s in range(10)])
-        np.testing.assert_array_equal(sampled_short, expected_short)
-
-        # Long video: 100 seconds at 25 fps = 2500 frames. The per-second indices are subsampled
-        # with a linspace down to `num_frames`.
-        meta_long = VideoMetadata(fps=25.0, total_num_frames=2500, duration=100.0)
-        sampled_long = video_processor.sample_frames(meta_long, num_frames=32)
-        self.assertEqual(len(sampled_long), 32)
-        sec_indices_long = [int(s * 25) for s in range(100)]
-        expected_linspace_idx = np.linspace(0, 99, 32, dtype=int)
-        expected_long = np.array([sec_indices_long[i] for i in expected_linspace_idx])
-        np.testing.assert_array_equal(sampled_long, expected_long)
-
-        # Fallback when `total_num_frames` is missing but `duration` and `fps` are known
-        meta_duration_only = VideoMetadata(fps=25.0, total_num_frames=None, duration=10.0)
-        sampled_duration = video_processor.sample_frames(meta_duration_only, num_frames=32)
-        np.testing.assert_array_equal(sampled_duration, expected_short)
-
-        # Error when neither `total_num_frames` nor `duration` is available
-        meta_missing = VideoMetadata(fps=25.0, total_num_frames=None, duration=None)
-        with self.assertRaises(ValueError):
-            video_processor.sample_frames(meta_missing, num_frames=32)
-
-        # Explicitly opting out falls back to the base uniform sampling
-        sampled_default = video_processor.sample_frames(meta_short, num_frames=2, use_1fps_linear_sampling=False)
-        self.assertEqual(len(sampled_default), 2)
-
     @require_torch
     def test_video_exclude_timestamps(self):
         """`exclude_timestamps=True` omits the timestamps and concatenates one block per frame."""
@@ -214,7 +168,9 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded = processor.decode(out["input_ids"][0])
         self.assertNotIn("00:00", decoded)
 
-        num_soft_tokens = processor.video_processor(video_inputs, return_tensors="pt")["num_soft_tokens_per_video"][0]
+        num_soft_tokens = processor.video_processor(video_inputs, num_frames=2, return_tensors="pt")[
+            "num_soft_tokens_per_video"
+        ][0]
         expected_frame = f"{processor.boi_token}{processor.video_token * num_soft_tokens}{processor.eoi_token}"
         expected_video_str = expected_frame * 2
         self.assertIn(expected_video_str, decoded)
@@ -237,9 +193,8 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             processor.save_pretrained(tmp_dir)
             loaded_processor = self.processor_class.from_pretrained(tmp_dir)
-
             self.assertIsInstance(loaded_processor.video_processor, EmbeddingGemma2VideoProcessor)
-            self.assertTrue(loaded_processor.video_processor.use_1fps_linear_sampling)
+            self.assertTrue(loaded_processor.video_processor.max_frames)
             self.assertTrue(loaded_processor.video_processor.exclude_timestamps)
 
     def test_single_modality_inputs_need_no_text(self):

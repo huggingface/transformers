@@ -146,14 +146,15 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    num_frames = 32
     do_sample_frames = True
     patch_size = 16
     max_soft_tokens = 70
     pooling_kernel_size = 3
     valid_kwargs = EmbeddingGemma2VideoProcessorKwargs
     model_input_names = ["pixel_values_videos", "video_position_ids"]
-    use_1fps_linear_sampling = True
+    # unlike Gemma4 - by default sample 1 fps uniformly
+    fps = 1
+    max_frames = 64  # What should be the capping max frame count ?
     exclude_timestamps = True
 
     def __init__(self, **kwargs: Unpack[EmbeddingGemma2VideoProcessorKwargs]):
@@ -281,47 +282,41 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
         metadata: VideoMetadata,
         num_frames: int | None = None,
         fps: int | float | None = None,
-        use_1fps_linear_sampling: bool | None = None,
+        max_frames: int | None = None,
+        overflow_strategy: str = "uniform",
         **kwargs,
     ) -> np.ndarray:
-        use_1fps_linear_sampling = (
-            use_1fps_linear_sampling if use_1fps_linear_sampling is not None else self.use_1fps_linear_sampling
-        )
+        max_frames = max_frames if max_frames is not None else self.max_frames
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        fps = fps if fps is not None else self.fps
+        total_num_frames = metadata.total_num_frames
 
-        if use_1fps_linear_sampling:
-            num_frames = num_frames if num_frames is not None else self.num_frames
-            total_num_frames = metadata.total_num_frames if metadata is not None else None
+        if num_frames is not None:
+            # Pre-extracted frames without FPS metadata: keep all frames if <= num_frames
+            if total_num_frames <= num_frames:
+                return np.arange(total_num_frames)
+            else:
+                return np.linspace(0, total_num_frames - 1, num_frames, dtype=int)
+        elif fps is not None and metadata.fps is None:
+            raise ValueError(
+                "Asked to sample uniformly with `fps`, but no video metadata was provided or "
+                "`fps` is missing. Please pass in `VideoMetadata` object with valid `fps`."
+            )
 
-            if (
-                total_num_frames is None
-                and metadata is not None
-                and metadata.duration is not None
-                and metadata.fps is not None
-            ):
-                total_num_frames = int(metadata.duration * metadata.fps)
+        step = metadata.fps / fps  # native frames per sampled frame
+        num_sampled = max(1, int(metadata.duration * fps))
+        sec_indices = [min(total_num_frames - 1, int(i * step)) for i in range(num_sampled)]
 
-            if metadata is None or metadata.fps is None or total_num_frames is None:
-                # Pre-extracted frames without FPS metadata: keep all frames if <= num_frames, else uniformly sample
-                if total_num_frames is not None and total_num_frames <= num_frames:
-                    return np.arange(total_num_frames)
-                if total_num_frames is not None:
-                    return np.linspace(0, total_num_frames - 1, num_frames, dtype=int)
-                raise ValueError(
-                    "Asked to sample with `use_1fps_linear_sampling=True`, but no video metadata was provided or "
-                    "`total_num_frames` is missing. Please pass in `VideoMetadata` object with total_num_frames."
-                )
+        if len(sec_indices) <= max_frames:
+            return np.array(sec_indices)
 
-            video_fps = metadata.fps
-            total_seconds = max(1, int(total_num_frames / video_fps))
-            sec_indices = [min(total_num_frames - 1, int(s * video_fps)) for s in range(total_seconds)]
-            if len(sec_indices) <= num_frames:
-                return np.array(sec_indices)
-            linspace_idx = np.linspace(0, len(sec_indices) - 1, num_frames, dtype=int)
+        if overflow_strategy == "truncate":
+            return np.array(sec_indices[:max_frames])
+        elif overflow_strategy == "uniform":
+            linspace_idx = np.linspace(0, len(sec_indices) - 1, max_frames, dtype=int)
             return np.array([sec_indices[i] for i in linspace_idx])
-
-        # Explicit parent call: `Gemma4VideoProcessor` has no `sample_frames`, so a literal `super()`
-        # call would leave the converter with no parent body to splice.
-        return super().sample_frames(metadata, num_frames=num_frames, fps=fps, **kwargs)
+        else:
+            raise ValueError(f"Unknown `overflow_strategy`: {overflow_strategy!r}. Expected 'uniform' or 'truncate'.")
 
 
 __all__ = ["EmbeddingGemma2VideoProcessor"]

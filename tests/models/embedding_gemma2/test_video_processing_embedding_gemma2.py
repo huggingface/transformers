@@ -131,12 +131,8 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
             self.assertEqual(encoded.shape[1], self.video_processor_tester.num_frames)
 
             video_processing.do_sample_frames = True
-            encoded = video_processing(
-                video_inputs[0], return_tensors="pt", num_frames=3, use_1fps_linear_sampling=False
-            )[self.input_name]
-            encoded_batched = video_processing(
-                video_inputs, return_tensors="pt", num_frames=3, use_1fps_linear_sampling=False
-            )[self.input_name]
+            encoded = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
+            encoded_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
             self.assertEqual(encoded.shape[1], 3)
             self.assertEqual(encoded_batched.shape[1], 3)
 
@@ -154,13 +150,13 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
         self.assertEqual(processor.patch_size, 16)
         self.assertEqual(processor.max_soft_tokens, 70)
         self.assertEqual(processor.pooling_kernel_size, 3)
-        self.assertEqual(processor.num_frames, 32)
+        self.assertEqual(processor.fps, 1)
 
     def test_embedding_gemma2_video_flag_defaults(self):
         """EmbeddingGemma 2 was trained on visual-only, 1-FPS-sampled video, so both flags default to
         `True` -- unlike Gemma 4, which defaults both to `False`."""
         processor = self.fast_video_processing_class()
-        self.assertTrue(processor.use_1fps_linear_sampling)
+        self.assertTrue(processor.max_frames)
         self.assertTrue(processor.exclude_timestamps)
 
     def test_video_flag_defaults_survive_roundtrip(self):
@@ -170,7 +166,6 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
         with tempfile.TemporaryDirectory() as tmpdir:
             processor.save_pretrained(tmpdir)
             reloaded = self.fast_video_processing_class.from_pretrained(tmpdir)
-        self.assertTrue(reloaded.use_1fps_linear_sampling)
         self.assertTrue(reloaded.exclude_timestamps)
 
     def test_sample_frames_1fps_linear(self):
@@ -179,29 +174,25 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
 
         # 10 seconds at 25 fps: one frame per second, all kept.
         meta_short = VideoMetadata(fps=25.0, total_num_frames=250, duration=10.0)
-        sampled_short = processor.sample_frames(meta_short, num_frames=32)
+        sampled_short = processor.sample_frames(meta_short, max_frames=32)
         expected_short = np.array([int(s * 25) for s in range(10)])
         np.testing.assert_array_equal(sampled_short, expected_short)
 
-        # 100 seconds at 25 fps: per-second indices subsampled down to `num_frames`.
+        # 100 seconds at 25 fps: per-second indices subsampled down to `max_frames`.
         meta_long = VideoMetadata(fps=25.0, total_num_frames=2500, duration=100.0)
-        sampled_long = processor.sample_frames(meta_long, num_frames=32)
+        sampled_long = processor.sample_frames(meta_long, max_frames=32)
         self.assertEqual(len(sampled_long), 32)
         sec_indices_long = [int(s * 25) for s in range(100)]
         expected_long = np.array([sec_indices_long[i] for i in np.linspace(0, 99, 32, dtype=int)])
         np.testing.assert_array_equal(sampled_long, expected_long)
 
-        # `total_num_frames` may be missing when `duration` and `fps` are known.
-        meta_duration_only = VideoMetadata(fps=25.0, total_num_frames=None, duration=10.0)
-        np.testing.assert_array_equal(processor.sample_frames(meta_duration_only, num_frames=32), expected_short)
-
-        # Neither `total_num_frames` nor `duration` is recoverable.
-        meta_missing = VideoMetadata(fps=25.0, total_num_frames=None, duration=None)
+        # `metadata.fps` is not recoverable.
+        meta_missing = VideoMetadata(fps=None, total_num_frames=25)
         with self.assertRaises(ValueError):
-            processor.sample_frames(meta_missing, num_frames=32)
+            processor.sample_frames(meta_missing, fps=1)
 
         # Opting out falls back to the base uniform sampling.
-        self.assertEqual(len(processor.sample_frames(meta_short, num_frames=2, use_1fps_linear_sampling=False)), 2)
+        self.assertEqual(len(processor.sample_frames(meta_short, num_frames=2)), 2)
 
     def test_unsupported_max_soft_tokens_raises(self):
         with self.assertRaises(ValueError):
