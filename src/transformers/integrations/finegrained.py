@@ -498,6 +498,8 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         activation_scheme: str = "dynamic",
         scale_fmt: str = "float",
         has_bias: bool = False,
+        weight_format: str = "fp8",
+        activation_format: str | None = None,
     ):
         super().__init__(
             in_features=in_features_per_group,
@@ -506,6 +508,8 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
             activation_scheme=activation_scheme,
             scale_fmt=scale_fmt,
             has_bias=has_bias,
+            weight_format=weight_format,
+            activation_format=activation_format,
         )
         self.n_groups = n_groups
 
@@ -904,6 +908,34 @@ def replace_with_finegrained_embedding(model, patterns: list[str], modules_to_no
     return model
 
 
+def _quantized_experts(module: nn.Module, model: nn.Module, storage: dict) -> nn.Module:
+    """A `FineGrainedExperts` holding `module`'s weights, in the model's own gate|up convention.
+
+    The flags travel twice over: `use_experts_implementation` stamps them on the instance after
+    `__init__`, so the class it builds needs them as well as the constructor. A per-expert output
+    norm belongs to the model rather than to the quantization, so it comes across as it is.
+    """
+    flags = {
+        "has_gate": getattr(module, "has_gate", True),
+        "has_bias": getattr(module, "has_bias", False),
+        "is_concatenated": getattr(module, "is_concatenated", True),
+    }
+    experts_class = use_experts_implementation(
+        experts_class=FineGrainedExperts,
+        experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
+        **flags,
+    )
+    experts = experts_class(config=getattr(module, "config", model.config.get_text_config()), **storage, **flags)
+    if getattr(module, "post_expert_norm", None) is not None:
+        # `_apply_post_norm` is the standard hook and needs no rebinding; a NAMED form is what a
+        # backend can fuse. `use_experts_implementation` owns the flag and sets it from the class
+        # declaration, so this updates it rather than deriving it.
+        experts.post_expert_norm = module.post_expert_norm
+        experts.has_post_expert_norm = True
+        experts.post_expert_norm_name = getattr(module, "post_expert_norm_name", None)
+    return experts
+
+
 def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """Swap the model's ``nn.Linear`` (and grouped-linear) modules for ``FineGrainedLinear`` and its
     ``.experts`` modules for ``FineGrainedExperts``, both allocated in the quantized storage the
@@ -934,32 +966,7 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
         new_module = None
         with torch.device("meta"):
             if module_name.endswith(".experts"):
-                # the decorator stamps these on the instance after __init__, so the model's own
-                # gate|up convention has to travel through it as well as into the ctor
-                flags = {
-                    "has_gate": getattr(module, "has_gate", True),
-                    "has_bias": getattr(module, "has_bias", False),
-                    "is_concatenated": getattr(module, "is_concatenated", True),
-                }
-                new_class = use_experts_implementation(
-                    experts_class=FineGrainedExperts,
-                    experts_interface=ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
-                    **flags,
-                )
-                new_module = new_class(
-                    config=getattr(module, "config", model.config.get_text_config()),
-                    **storage_for(module_name),
-                    **flags,
-                )
-                # A per-expert output norm belongs to the model, not the quantization, so the
-                # swap carries the submodule over; `_apply_post_norm` is the standard hook and
-                # needs no rebinding. A named form is what a backend can fuse.
-                if getattr(module, "post_expert_norm", None) is not None:
-                    new_module.post_expert_norm = module.post_expert_norm
-                    # `use_experts_implementation` owns this flag on every experts class and sets
-                    # it from the class declaration, so the swap updates it rather than deriving it
-                    new_module.has_post_expert_norm = True
-                    new_module.post_expert_norm_name = getattr(module, "post_expert_norm_name", None)
+                new_module = _quantized_experts(module, model, storage_for(module_name))
             elif type(module) is nn.Linear:
                 new_module = FineGrainedLinear(
                     in_features=module.in_features,
@@ -972,13 +979,12 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
                 # the attribute the swap needs rather than by its class NAME: a plain
                 # `FineGrainedLinear` would collapse the groups into one giant linear and yield
                 # the wrong output dim.
-                storage = storage_for(module_name)
                 new_module = FineGrainedGroupedLinear(
                     in_features_per_group=module.in_features,
                     out_features=module.out_features,
                     n_groups=module.n_groups,
                     has_bias=module.bias is not None,
-                    **{k: storage[k] for k in ("block_size", "activation_scheme", "scale_fmt")},
+                    **storage_for(module_name),
                 )
             if new_module is not None:
                 # The kernels take raw pointers, so every operand must be a plain tensor. This is

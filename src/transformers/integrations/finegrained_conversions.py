@@ -319,8 +319,9 @@ class FineGrainedQuantize(_FineGrainedOp):
     power-of-two UE8M0 inverse scales); the group formats run the kernels' row-wise quantizers
     (``mxfp8_act_quant`` / ``mxfp4_act_quant`` / ``nvfp4_act_quant``), NVFP4 after normalizing by the
     canonical per-tensor / per-expert global ``amax / (6 * 448)``.
-    Tensors that are not a finegrained module's weight (1-D norms, biases, shapes that don't tile)
-    pass through. Without a model (direct invocation) it quantizes block-FP8 from the config."""
+    A tensor that is not a finegrained module's weight passes through — `_weight_holder` decides,
+    since rank alone does not (an expert bias is 2-D). Without a model, a direct invocation has
+    nothing to ask and quantizes block-FP8 from the config."""
 
     def convert(self, input_dict: dict[str, torch.Tensor], model=None, **kwargs) -> dict[str, torch.Tensor]:
         result: dict[str, torch.Tensor] = {}
