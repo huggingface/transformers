@@ -333,7 +333,7 @@ class GgufIntegrationTest(unittest.TestCase):
         self.assertEqual(self.packed_modules(model), [], "blocks were kept with nothing able to read them")
         self.assertIn("Berlin", self.generates(model))
         # Nothing is packed, so ggml's attention is not assumed either.
-        self.assertNotEqual(model.config._attn_implementation, "transformers-community/ggml-attn")
+        self.assertNotEqual(model.config._attn_implementation, "ggml-org/ggml-attn")
 
     @require_torch_mps
     @require_kernels
@@ -341,7 +341,7 @@ class GgufIntegrationTest(unittest.TestCase):
         """Packed weights already run on ggml's kernels, so its attention is the default too."""
         model = self.load()
 
-        self.assertEqual(model.config._attn_implementation, "transformers-community/ggml-attn")
+        self.assertEqual(model.config._attn_implementation, "ggml-org/ggml-attn")
         self.assertIn("Berlin", self.generates(model))
 
     @require_torch_mps
