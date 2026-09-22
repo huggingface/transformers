@@ -46,6 +46,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "HYV4Config": ["layer_types"],
     # For consistency we keep head dim but it's not used as NoPE is applied
     "Glm5NextTextConfig": ["head_dim"],
+    # Kept as a config field, the ViT-style attention has no output dropout
+    "RadioConfig": ["hidden_dropout_prob"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],
@@ -86,7 +88,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
-    "LlavaOnevision1_5VisionConfig": ["temporal_patch_size"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],

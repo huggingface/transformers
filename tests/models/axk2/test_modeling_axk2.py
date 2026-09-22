@@ -92,7 +92,7 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class AXK1IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+class AXK2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "hf-internal-testing/tiny-axk2"
 
     def test_model_logits_batched(self):
@@ -126,7 +126,7 @@ class AXK1IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_model_generation(self):
         expected_texts = Expectations(
             {
-                ("cuda", (8, 6)): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간を実{acknowledgements 사건과-OctCTPコロ passengers Dice GD workloads 울진 Fibonacci announcesdest denote 이야기도 scrap',
+                ("cuda", (8, 6)): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간 guarant 실시간 juicy김정 conceal 요소들은미세먼 lover평론가-graph 나가서 rooms rooms rooms rooms측에서pid',
                 ("xpu", None): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간 guarant 실시간 juicy김정 conceal 요소들은미세먼 lover평론가-graph 나가서 rooms rooms rooms rooms측에서pid',
             }
         )  # fmt: skip
