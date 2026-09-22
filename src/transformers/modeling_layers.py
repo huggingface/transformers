@@ -27,6 +27,13 @@ from safetensors import safe_open
 from .cache_utils import Cache
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
+from .integrations.heterogeneity import (
+    HeterogeneousModelingSpec,
+    LayerIdxFromArgument,
+    NoOpReplacement,
+    get_heterogeneous_modeling_spec,
+    nest_skip_descriptor_paths,
+)
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
     BaseModelOutputWithPast,
@@ -369,18 +376,35 @@ class MtpModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["shared_head.weight", "embed_tokens.weight"]
 
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
-        super().__init__(main_model.config.get_mtp_config())
+        mtp_config = main_model.config.get_mtp_config()
+
+        if (
+            mtp_config.is_heterogeneous
+            and (main_heterogeneous_modeling_spec := get_heterogeneous_modeling_spec(main_model)) is not None
+        ):
+            self._heterogeneous_modeling_spec = HeterogeneousModelingSpec(
+                layer_cls=MtpLayer,
+                layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+                skip_descriptors=nest_skip_descriptor_paths(
+                    main_heterogeneous_modeling_spec.skip_descriptors, parent_path="mtp_block"
+                ),
+            )
+
+        super().__init__(mtp_config)
         # Make sure we have the correct loss type in case of training
         self.loss_type = "ForCausalLM"
         self.num_mtp_layers = num_mtp_layers
         # Infer the type of the layers based on the main model
         base_model = main_model.get_decoder()
         layer_cls = type(base_model.layers[-1])
-        norm_cls = next(
-            type(module)
+        norm = next(
+            module
             for name, module in base_model.layers[-1].named_modules()  # type: ignore
             if "norm" in name
         )
+        norm_cls = type(norm)
+        if main_model.config.generic_modeling_applied and isinstance(norm, NoOpReplacement):
+            norm_cls = norm.source_class
         # If the config contains the field, we never use per-layer post norm, but maybe a shared one
         self.use_post_norm = True
         self.use_shared_post_norm = False
@@ -434,7 +458,7 @@ class MtpModel(PreTrainedModel):
         if defined, and otherwise uses full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
-        layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
+        layer_config = self.config.per_layer_config[layer_idx]
         mask_kwargs = {
             "config": layer_config,
             "inputs_embeds": inputs_embeds,
