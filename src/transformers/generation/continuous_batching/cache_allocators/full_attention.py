@@ -25,6 +25,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
 
     supports_block_sharing = True
     supports_block_table = True
+    layer_type = "full_attention"
     # One row for the keys and one for the values of each token
     rows_per_token = 2
 

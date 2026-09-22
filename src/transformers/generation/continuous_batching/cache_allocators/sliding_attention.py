@@ -27,6 +27,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
     supports_block_sharing = False
     supports_block_table = False
+    layer_type = "sliding_attention"
 
     def __init__(
         self,

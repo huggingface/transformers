@@ -53,12 +53,12 @@ class PagedAttentionArgs(TypedDict):
     """
 
     input_ids: torch.Tensor
-    attention_mask: torch.Tensor | dict[str, torch.Tensor] | None
+    attention_mask: dict[str, torch.Tensor] | None
     position_ids: torch.Tensor
     cu_seq_lens_q: torch.Tensor
-    cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor]
+    cu_seq_lens_k: dict[str, torch.Tensor]
     max_seqlen_q: int
-    max_seqlen_k: int | dict[str, int]
+    max_seqlen_k: dict[str, int]
     write_index: list[torch.Tensor]
     read_index: list[torch.Tensor]
     logits_indices: torch.Tensor
@@ -66,6 +66,7 @@ class PagedAttentionArgs(TypedDict):
     block_table: torch.Tensor | None
     logits_processor_args: torch.Tensor
     use_cache: bool
+    is_causal: bool
 
 
 class ContinuousBatchingIOs:
@@ -158,9 +159,9 @@ class ContinuousBatchingIOs:
         # For sequence length of KV, the entries in the dict depend on the model
         self.cumulative_seqlens_k: dict[str, torch.Tensor] = {}
         if FULL_ATTENTION in self.cache.cache_allocators:
-            self.cumulative_seqlens_k["full_attention"] = full_attention_cumulative_seqlens_k
+            self.cumulative_seqlens_k[FULL_ATTENTION] = full_attention_cumulative_seqlens_k
         if SLIDING_ATTENTION in self.cache.cache_allocators:
-            self.cumulative_seqlens_k["sliding_attention"] = sliding_attention_cumulative_seqlens_k
+            self.cumulative_seqlens_k[SLIDING_ATTENTION] = sliding_attention_cumulative_seqlens_k
 
         # Output tensor and scalars
         num_output_rows = 2 if self.return_logprobs else 1
@@ -497,6 +498,7 @@ class ContinuousBatchingIOs:
             cache=self.cache,
             block_table=self.block_table[:, :num_sequences] if self.use_block_table else None,
             use_cache=False,
+            is_causal=True,
         )
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
@@ -532,13 +534,6 @@ class ContinuousBatchingIOs:
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
                 kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
-
-        # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
-        if len(self.cumulative_seqlens_k.keys()) == 1:
-            kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"].popitem()[1]  # type: ignore
-            kwargs["max_seqlen_k"] = kwargs["max_seqlen_k"].popitem()[1]  # type: ignore
-            if self.attention_mask is not None:
-                kwargs["attention_mask"] = kwargs["attention_mask"].popitem()[1]  # type: ignore
 
         return kwargs
 

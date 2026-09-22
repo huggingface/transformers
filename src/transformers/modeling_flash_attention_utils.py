@@ -519,6 +519,10 @@ def _flash_attention_forward(
     cu_seq_lens_k: torch.LongTensor | None = None,
     max_length_q: int | None = None,
     max_length_k: int | None = None,
+    k_cache: torch.Tensor | None = None,
+    v_cache: torch.Tensor | None = None,
+    cache_seqlens: torch.LongTensor | None = None,
+    block_table: torch.Tensor | None = None,
     attn_implementation: str | None = None,
     **kwargs,
 ):
@@ -540,6 +544,8 @@ def _flash_attention_forward(
             position of padding tokens and 1 for the position of non-padding tokens.
         attn_implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
+        block_table (`torch.Tensor`, *optional*):
+            The block table to use if this is a call to flash_kv_fn, which updates the cache in-place.
     """
     (flash_fn, flash_varlen_fn, flash_kv_fn), process_flash_kwargs_fn = lazy_import_flash_attention(attn_implementation)
     batch_size, key_length = key_states.shape[:2]
@@ -554,35 +560,45 @@ def _flash_attention_forward(
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids.
     #         It is safe to use `flash_varlen_fn` knowing we already have all necessary the kwargs.
 
-    # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
-    # See #39121 for more information.
-    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=batch_size)
     is_fa_with_varlen_kwargs = None not in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
+    is_fa_with_block_table = None not in (k_cache, v_cache, cache_seqlens, block_table)
 
-    # If there is no padding and it's a single sequence, we can just run flash and return
-    if not (attention_mask is not None or is_fa_with_varlen_kwargs or is_fa_with_position_ids):
-        out = flash_fn(query_states, key_states, value_states, **extract_flash_kwargs())
-        return out[0] if isinstance(out, tuple) else out
+    # If there is no padding and the sequence are not packed, we can just run flash and return
+    if attention_mask is None and not (is_fa_with_varlen_kwargs or is_fa_with_block_table):
+        # This check is more compute heavy, so it is separate from the rest. Also, it's a user's responsibility to take
+        # care of flattening `position_ids` if that's needed by the model. See #39121 for more information.
+        if not _is_packed_sequence(position_ids, batch_size):
+            out = flash_fn(query_states, key_states, value_states, **extract_flash_kwargs())
+            return out[0] if isinstance(out, tuple) else out
 
-    # Flattens the batch dimension, which does not exist in varlen
+    # Flattens the batch dimension, which does not exist in varlen or with block table
     query_states, key_states, value_states = [x.view(-1, x.shape[2:]) for x in (query_states, key_states, value_states)]
+    # Block table has a singleton dimension to align with the cache though
+    if is_fa_with_block_table:
+        query_states, key_states, value_states = [x.unsqueeze(1) for x in (query_states, key_states, value_states)]
 
     # If they have not been provided, compute the sequence-defining attributes
     if attention_mask is not None:
         (indices_q, indices_k), (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = (
             prepare_fa_kwargs_from_attn_mask(attention_mask, query_length, key_length)
         )
-        # Unpad the query and key states
-        query_states = query_states[indices_q]
+        query_states = query_states[indices_q]  # unpadding
         key_states, value_states = key_states[indices_k], value_states[indices_k]
-    elif not is_fa_with_varlen_kwargs:
+    elif not (is_fa_with_varlen_kwargs or is_fa_with_block_table):
         (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
 
     flash_kwargs = extract_flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
-    flash_kwargs["cu_seqlens_q"] = cu_seq_lens_q
-    flash_kwargs["cu_seqlens_k"] = cu_seq_lens_k.clone()  # type: ignore | not cloning crashes on MPS and on CUDA
 
-    out = flash_varlen_fn(query_states, key_states, value_states, **flash_kwargs)
+    # Compute the right seq_lens objects and call flash
+    if is_fa_with_block_table:
+        flash_kwargs["cache_seqlens"] = cache_seqlens
+        out = flash_kv_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
+
+    else:
+        flash_kwargs["cu_seqlens_q"] = cu_seq_lens_q
+        flash_kwargs["cu_seqlens_k"] = cu_seq_lens_k.clone()  # type: ignore | not cloning crashes on MPS and on CUDA
+        out = flash_varlen_fn(query_states, key_states, value_states, **flash_kwargs)
+
     out = out[0] if isinstance(out, tuple) else out
 
     # If there was an attention mask, restore the padding

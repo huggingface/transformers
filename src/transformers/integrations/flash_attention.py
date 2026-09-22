@@ -1,5 +1,6 @@
 import torch
 
+from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import (
     _flash_attention_forward,
     cast_to_flash_compatible_dtype,
@@ -25,6 +26,7 @@ def flash_attention_forward(
     softcap: float | None = None,
     is_causal: bool | None = None,
     s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
+    cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     _, _, seq_len, q_head_dim = query.shape
@@ -37,6 +39,26 @@ def flash_attention_forward(
             " Please set your attention to `eager` if you want any of these features."
         )
 
+    # _flash_attention_forward needs non-transposed inputs, with shape [batch_size, seq_len, num_heads, head_dim]
+    query, key, value = (x.transpose(1, 2) for x in (query, key, value))
+
+    # If there is a paged cache, now is the time to update it
+    if isinstance(cache, PagedAttentionCache):
+        query, key, value = (x.contiguous() for x in (query, key, value))
+        use_block_table = cache.specialize_kwargs(module.layer_idx, kwargs)
+        if not use_block_table:
+            key, value = cache.update(
+                key_states=key,
+                value_states=value,
+                layer_idx=module.layer_idx,
+                read_index=kwargs["read_index"],
+                write_index=kwargs["write_index"],
+            )
+        else:
+            num_tokens = key.size(1)
+            cache_seqlens = (kwargs["cu_seq_lens_k"][1 : num_tokens + 1] - kwargs["cu_seq_lens_k"][:num_tokens] - 1)
+            kwargs["cache_seqlens"] = cache_seqlens.to(torch.int32)
+
     # FlashAttention requires the query and value have the same head dim; pad `value` up to the query head dim and crop
     # the output below. This happens for example in MLA, where `v_head_dim < qk_head_dim`.
     if v_head_dim != q_head_dim:
@@ -48,9 +70,6 @@ def flash_attention_forward(
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else module.is_causal
-
-    # _flash_attention_forward needs non-transposed inputs, with shape [batch_size, seq_len, num_heads, head_dim]
-    query, key, value = (x.transpose(1, 2) for x in (query, key, value))
 
     attn_output = _flash_attention_forward(
         query,

@@ -33,6 +33,13 @@ from .requests import RequestState, RequestStatus, get_device_and_memory_breakdo
 from .utils import find_head_dim, find_num_key_value_heads
 
 
+# Maps each attention type to the allocator class handling its cache
+ATTN_TYPE_TO_ALLOCATOR = {
+    FULL_ATTENTION: FullAttentionCacheAllocator,
+    SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
+}
+
+
 def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
     """Groups layers depending on their attention type.
 
@@ -51,21 +58,12 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
         return {FULL_ATTENTION: list(range(config.num_hidden_layers))}
 
     # Otherwise simply count the number of layers of each type, making sure they are supported at the same time
-    supported_attention_types = {FULL_ATTENTION, SLIDING_ATTENTION}
-
     layer_counts = {}
     for i, layer_type in enumerate(layer_types):
-        if layer_type not in supported_attention_types:
+        if layer_type not in ATTN_TYPE_TO_ALLOCATOR.keys():
             raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
     return layer_counts
-
-
-# Maps each attention type to the allocator class handling its cache
-ATTN_TYPE_TO_ALLOCATOR = {
-    FULL_ATTENTION: FullAttentionCacheAllocator,
-    SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
-}
 
 
 class PagedAttentionCache:
@@ -408,6 +406,22 @@ class PagedAttentionCache:
         layer_read_index = read_index[allocator.index]
         layer_write_index = write_index[allocator.index]
         return allocator.update(key_states, value_states, layer_idx, layer_read_index, layer_write_index)
+
+    def specialize_kwargs(self, layer_idx: int, kwargs: dict) -> bool:
+        """Selects the right cu_seqlen and max_seqlen inside the kwargs for the given layer, based on its layer type.
+        This modifies the kwargs in place. Returns True if the block table is used, False otherwise."""
+        layer_type = self.layer_to_allocator[layer_idx].layer_type
+        kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][layer_type].to(torch.int32)
+        kwargs["max_seqlen_k"] = kwargs["max_seqlen_k"][layer_type].to(torch.int32)
+        # Also prepare the block table for this layer, if there is one
+        block_table = kwargs.get("block_table")
+        if block_table is not None:
+            block_table_index, k_cache, v_cache = self.get_cache_for_block_table(layer_idx)
+            kwargs["block_table"] = block_table[block_table_index]
+            kwargs["k_cache"] = k_cache
+            kwargs["v_cache"] = v_cache
+            return True
+        return False
 
     def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
         """Returns the K and V cache views for a block table update."""
