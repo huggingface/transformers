@@ -1293,10 +1293,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
         "Nemotron3DiarizationForAudioFrameClassification": [
-            WeightRenaming(r"^encoder\.", "model.encoder."),
-            WeightRenaming(r"^speaker_projection\.", "model.speaker_projection."),
-            WeightRenaming(r"^upsampler\.", "model.upsampler."),
-            WeightRenaming(r"^classifier\.", "model.classifier."),
+            WeightRenaming(r"^encoder\.", "model."),
+            WeightRenaming(r"^head\.speaker_projection\.", "head.proj."),
         ],
         "nemotron_h": [
             WeightRenaming("backbone.", "model."),

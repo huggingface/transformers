@@ -24,28 +24,31 @@ import yaml
 from huggingface_hub import hf_hub_download
 
 from transformers import (
+    Nemotron3DiarizationAudioConfig,
     Nemotron3DiarizationConfig,
-    Nemotron3DiarizationEncoderConfig,
     Nemotron3DiarizationForAudioFrameClassification,
+    Nemotron3DiarizationHeadConfig,
     Nemotron3DiarizationProcessor,
+    Nemotron3DiarizationStreamingConfig,
     NemotronAsrStreamingFeatureExtractor,
 )
+from transformers.models.nemotron3_diarization.processing_nemotron3_diarization import DEFAULT_STREAMING_MODES
 
 
 # NeMo key regex -> HF key. The fused `attn.w_qkv` projection is split by `split_fused_qkv`.
 STATE_DICT_MAPPING = {
-    r"^encoder\.pre_encode\.proj\.": "encoder.feature_stacking.projection.",
-    r"^encoder\.embed_norm\.": "encoder.input_layer_norm.",
-    r"^encoder\.final_norm\.": "encoder.layer_norm.",
-    r"^encoder\.layers\.(\d+)\.norm1\.": r"encoder.layers.\1.layer_norm1.",
-    r"^encoder\.layers\.(\d+)\.norm2\.": r"encoder.layers.\1.layer_norm2.",
-    r"^encoder\.layers\.(\d+)\.attn\.out_proj\.": r"encoder.layers.\1.self_attn.o_proj.",
-    r"^encoder\.layers\.(\d+)\.ffn\.net\.0\.": r"encoder.layers.\1.mlp.fc1.",
-    r"^encoder\.layers\.(\d+)\.ffn\.net\.3\.": r"encoder.layers.\1.mlp.fc2.",
-    r"^sortformer_modules\.encoder_proj\.": "speaker_projection.",
-    r"^sortformer_modules\.subpixel_upsample\.": "upsampler.conv.",
-    r"^sortformer_modules\.first_hidden_to_hidden\.": "classifier.dense.",
-    r"^sortformer_modules\.single_hidden_to_spks\.": "classifier.out_proj.",
+    r"^encoder\.pre_encode\.proj\.": "model.feature_stacking.projection.",
+    r"^encoder\.embed_norm\.": "model.input_layer_norm.",
+    r"^encoder\.final_norm\.": "model.layer_norm.",
+    r"^encoder\.layers\.(\d+)\.norm1\.": r"model.layers.\1.layer_norm1.",
+    r"^encoder\.layers\.(\d+)\.norm2\.": r"model.layers.\1.layer_norm2.",
+    r"^encoder\.layers\.(\d+)\.attn\.out_proj\.": r"model.layers.\1.self_attn.o_proj.",
+    r"^encoder\.layers\.(\d+)\.ffn\.net\.0\.": r"model.layers.\1.mlp.fc1.",
+    r"^encoder\.layers\.(\d+)\.ffn\.net\.3\.": r"model.layers.\1.mlp.fc2.",
+    r"^sortformer_modules\.encoder_proj\.": "head.proj.",
+    r"^sortformer_modules\.subpixel_upsample\.": "head.upsampler.conv.",
+    r"^sortformer_modules\.first_hidden_to_hidden\.": "head.classifier.dense.",
+    r"^sortformer_modules\.single_hidden_to_spks\.": "head.classifier.out_proj.",
     r"^sortformer_modules\.learnable_sil_emb$": "silence_embeds",
 }
 
@@ -57,15 +60,9 @@ KEYS_TO_DROP = {
     r"^preprocessor\.featurizer\.",
 }
 
-# Model-card inference profile ("Very high latency (offline)", 30.4 s input buffer). The `.nemo` config holds the
-# training-time values (fifo 0, chunk 264, update 188, no right context) which are not meant for inference.
-OFFLINE_PROFILE = {
-    "speaker_cache_length": 264,
-    "fifo_length": 40,
-    "chunk_length": 340,
-    "chunk_right_context": 40,
-    "speaker_cache_update_period": 300,
-}
+# The `.nemo` config holds the training-time streaming values (fifo 0, chunk 264, update 188, no right context),
+# which are not meant for inference: the config defaults are the model-card "offline" profile (chunking and
+# `offline_*` cache sizes) and the cache sizes shared by its streaming profiles (`streaming_*`).
 
 
 def split_fused_qkv(state_dict: dict) -> dict:
@@ -77,7 +74,7 @@ def split_fused_qkv(state_dict: dict) -> dict:
             converted[key] = value
             continue
         query, key_weight, value_weight = value.chunk(3, dim=0)
-        prefix = f"encoder.layers.{match.group(1)}.self_attn."
+        prefix = f"model.layers.{match.group(1)}.self_attn."
         converted[prefix + "q_proj.weight"] = query
         converted[prefix + "k_proj.weight"] = key_weight
         converted[prefix + "v_proj.weight"] = value_weight
@@ -90,8 +87,8 @@ def convert_state_dict(state_dict: dict) -> dict:
     for key, value in state_dict.items():
         if any(re.match(pattern, key) for pattern in KEYS_TO_DROP):
             continue
-        if key.startswith("encoder.layers.") and ".self_attn." in key:
-            converted["model." + key] = value
+        if key.startswith("model.layers.") and ".self_attn." in key:
+            converted[key] = value
             continue
         new_key = None
         for pattern, replacement in STATE_DICT_MAPPING.items():
@@ -100,8 +97,6 @@ def convert_state_dict(state_dict: dict) -> dict:
                 break
         if new_key is None:
             raise ValueError(f"No mapping for checkpoint key {key!r}")
-        if new_key.startswith(("encoder.", "speaker_projection.", "upsampler.", "classifier.")):
-            new_key = "model." + new_key
         converted[new_key] = value
     return converted
 
@@ -117,7 +112,7 @@ def build_config(nemo_config: dict) -> Nemotron3DiarizationConfig:
     if not nemo_config.get("high_resolution", False) or not nemo_config.get("streaming_mode", False):
         raise ValueError("Only high-resolution streaming checkpoints are supported.")
     return Nemotron3DiarizationConfig(
-        encoder_config=Nemotron3DiarizationEncoderConfig(
+        audio_config=Nemotron3DiarizationAudioConfig(
             num_mel_bins=encoder["feat_in"],
             subsampling_factor=encoder["subsampling_factor"],
             hidden_size=encoder["d_model"],
@@ -129,15 +124,18 @@ def build_config(nemo_config: dict) -> Nemotron3DiarizationConfig:
             max_position_embeddings=encoder.get("pos_emb_max_len", 5000),
             rope_parameters={"rope_type": "default", "rope_theta": encoder.get("rope_base", 10000.0)},
         ),
-        speaker_hidden_size=modules["tf_d_model"],
-        num_speakers=modules["num_spks"],
-        speaker_cache_silence_frames_per_speaker=modules["spkcache_sil_frames_per_spk"],
-        prediction_score_threshold=modules["pred_score_threshold"],
-        latest_frames_score_boost=modules["scores_boost_latest"],
-        strong_boost_rate=modules["strong_boost_rate"],
-        weak_boost_rate=modules["weak_boost_rate"],
-        min_positive_scores_rate=modules["min_pos_scores_rate"],
-        **OFFLINE_PROFILE,
+        head_config=Nemotron3DiarizationHeadConfig(
+            hidden_size=modules["tf_d_model"],
+            num_speakers=modules["num_spks"],
+        ),
+        streaming_config=Nemotron3DiarizationStreamingConfig(
+            speaker_cache_silence_frames_per_speaker=modules["spkcache_sil_frames_per_spk"],
+            prediction_score_threshold=modules["pred_score_threshold"],
+            latest_frames_score_boost=modules["scores_boost_latest"],
+            strong_boost_rate=modules["strong_boost_rate"],
+            weak_boost_rate=modules["weak_boost_rate"],
+            min_positive_scores_rate=modules["min_pos_scores_rate"],
+        ),
         dtype="float32",
     )
 
@@ -176,9 +174,9 @@ def main(nemo_path: str | None, model_id: str, output_dir: str):
     model.save_pretrained(output_dir)
     processor = Nemotron3DiarizationProcessor(
         feature_extractor=build_feature_extractor(nemo_config),
-        chunk_length=config.chunk_length,
-        chunk_right_context=config.chunk_right_context,
-        subsampling_factor=config.encoder_config.subsampling_factor,
+        subsampling_factor=config.audio_config.subsampling_factor,
+        # the model-card modes, written out so that the checkpoint is their source of truth
+        streaming_modes=DEFAULT_STREAMING_MODES,
     )
     processor.save_pretrained(output_dir)
     print(f"Saved model and processor to {output_dir}")

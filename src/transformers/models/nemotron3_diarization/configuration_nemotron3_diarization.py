@@ -21,20 +21,19 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
 @strict
-class Nemotron3DiarizationEncoderConfig(PreTrainedConfig):
+class Nemotron3DiarizationAudioConfig(PreTrainedConfig):
     r"""
     subsampling_factor (`int`, *optional*, defaults to 8):
         Number of consecutive spectrogram frames stacked into one encoder frame. The classifier upsamples its
         outputs by the same factor, so speaker activity is predicted at the spectrogram frame rate.
     """
 
-    model_type = "nemotron3_diarization_encoder"
+    model_type = "nemotron3_diarization_audio"
 
     hidden_size: int = 512
     intermediate_size: int = 2048
@@ -44,10 +43,10 @@ class Nemotron3DiarizationEncoderConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     max_position_embeddings: int = 5000
     initializer_range: float = 0.02
-    rope_parameters: RopeParameters | dict | None = None
+    rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
     num_mel_bins: int = 128
-    base_config_key = "encoder_config"
+    base_config_key = "audio_config"
     subsampling_factor: int = 8
 
     def __post_init__(self, **kwargs):
@@ -64,33 +63,44 @@ class Nemotron3DiarizationEncoderConfig(PreTrainedConfig):
                 f"`hidden_size` ({self.hidden_size}) must be divisible by `num_attention_heads` "
                 f"({self.num_attention_heads})."
             )
-        if self.subsampling_factor < 1:
-            raise ValueError(f"`subsampling_factor` must be a positive integer, got {self.subsampling_factor}.")
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
 @strict
-class Nemotron3DiarizationConfig(PreTrainedConfig):
+class Nemotron3DiarizationHeadConfig(PreTrainedConfig):
     r"""
-    encoder_config (`Nemotron3DiarizationEncoderConfig` or `dict`, *optional*):
-        Configuration of the transformer encoder. Defaults to `Nemotron3DiarizationEncoderConfig()`.
-    speaker_hidden_size (`int`, *optional*, defaults to 192):
-        Hidden size of the speaker head (projection of the encoder output, upsampler and classifier).
+    hidden_size (`int`, *optional*, defaults to 192):
+        Hidden size of the speaker head: the encoder output is projected to it, and the upsampler and the classifier
+        keep it.
     num_speakers (`int`, *optional*, defaults to 8):
         Maximum number of speakers, i.e. the number of per-frame activity outputs. Speakers are ordered by their first
         arrival in the audio.
+    """
+
+    base_config_key = "head_config"
+
+    hidden_size: int = 192
+    num_speakers: int = 8
+
+    def validate_architecture(self):
+        for name in ["hidden_size", "num_speakers"]:
+            if getattr(self, name) < 1:
+                raise ValueError(f"`{name}` must be a positive integer, got {getattr(self, name)}.")
+
+
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@strict
+class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
+    r"""
+    fifo_length (`int`, *optional*, defaults to 264):
+        Capacity of the FIFO queue of the most recent encoder frames in streaming mode (offline mode uses
+        `Nemotron3DiarizationConfig.fifo_length`).
+    speaker_cache_update_period (`int`, *optional*, defaults to 222):
+        Number of encoder frames moved from the FIFO queue to the speaker cache when the queue overflows, in
+        streaming mode (offline mode uses `Nemotron3DiarizationConfig.speaker_cache_update_period`).
     speaker_cache_length (`int`, *optional*, defaults to 264):
-        Capacity of the Arrival-Order Speaker Cache, in encoder frames. Must be at least
-        `(1 + speaker_cache_silence_frames_per_speaker) * num_speakers`.
-    fifo_length (`int`, *optional*, defaults to 40):
-        Capacity of the FIFO queue of the most recent encoder frames, in encoder frames.
-    chunk_length (`int`, *optional*, defaults to 340):
-        Number of encoder frames processed per streaming step.
-    chunk_right_context (`int`, *optional*, defaults to 40):
-        Number of look-ahead encoder frames appended to each chunk. The input buffer latency of a step is
-        `(chunk_length + chunk_right_context)` encoder frames.
-    speaker_cache_update_period (`int`, *optional*, defaults to 300):
-        Number of encoder frames moved from the FIFO queue to the speaker cache when the queue overflows.
+        Capacity of the Arrival-Order Speaker Cache. Must be at least
+        `(1 + speaker_cache_silence_frames_per_speaker) * Nemotron3DiarizationHeadConfig.num_speakers`.
     speaker_cache_silence_frames_per_speaker (`int`, *optional*, defaults to 1):
         Number of speaker-cache slots per speaker reserved for the learned silence embedding when the cache is
         compressed.
@@ -109,18 +119,9 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
         non-positive (overlapped speech) frames excluded from the cache.
     """
 
-    model_type = "nemotron3_diarization"
-    sub_configs = {"encoder_config": Nemotron3DiarizationEncoderConfig}
-
-    encoder_config: Nemotron3DiarizationEncoderConfig | dict | None = None
-    initializer_range: float = 0.02
-    speaker_hidden_size: int = 192
-    num_speakers: int = 8
+    fifo_length: int = 264
+    speaker_cache_update_period: int = 222
     speaker_cache_length: int = 264
-    fifo_length: int = 40
-    chunk_length: int = 340
-    chunk_right_context: int = 40
-    speaker_cache_update_period: int = 300
     speaker_cache_silence_frames_per_speaker: int = 1
     prediction_score_threshold: float = 0.25
     latest_frames_score_boost: float = 0.05
@@ -128,34 +129,96 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
     weak_boost_rate: float = 1.5
     min_positive_scores_rate: float = 0.5
 
+    def validate_architecture(self):
+        for name in ["fifo_length", "speaker_cache_update_period", "speaker_cache_length"]:
+            if getattr(self, name) < 1:
+                raise ValueError(f"`{name}` must be a positive integer, got {getattr(self, name)}.")
+        if self.speaker_cache_silence_frames_per_speaker < 0:
+            raise ValueError(
+                "`speaker_cache_silence_frames_per_speaker` must be a non-negative integer, got "
+                f"{self.speaker_cache_silence_frames_per_speaker}."
+            )
+
+
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@strict
+class Nemotron3DiarizationConfig(PreTrainedConfig):
+    r"""
+    audio_config (`Nemotron3DiarizationAudioConfig` or `dict`, *optional*):
+        Configuration of the transformer audio encoder. Defaults to `Nemotron3DiarizationAudioConfig()`.
+    head_config (`Nemotron3DiarizationHeadConfig` or `dict`, *optional*):
+        Configuration of the speaker head. Defaults to `Nemotron3DiarizationHeadConfig()`.
+    streaming_config (`Nemotron3DiarizationStreamingConfig` or `dict`, *optional*):
+        Speaker-cache policy, and the FIFO sizes of streaming mode. Defaults to
+        `Nemotron3DiarizationStreamingConfig()`.
+    chunk_length (`int`, *optional*, defaults to 340):
+        Offline mode: number of encoder frames per chunk when a whole recording is diarized in one forward. In
+        streaming mode the chunk is the input of each forward.
+    chunk_right_context (`int`, *optional*, defaults to 40):
+        Offline mode: number of look-ahead encoder frames each chunk takes from the following ones. In streaming mode
+        the look-ahead is `num_lookahead_frames` of each forward.
+    fifo_length (`int`, *optional*, defaults to 40):
+        Offline mode: capacity of the FIFO queue of the most recent encoder frames. Streaming mode uses
+        `streaming_config.fifo_length`.
+    speaker_cache_update_period (`int`, *optional*, defaults to 300):
+        Offline mode: number of encoder frames moved from the FIFO queue to the speaker cache when the queue
+        overflows. Streaming mode uses `streaming_config.speaker_cache_update_period`.
+    """
+
+    model_type = "nemotron3_diarization"
+    sub_configs = {
+        "audio_config": Nemotron3DiarizationAudioConfig,
+        "head_config": Nemotron3DiarizationHeadConfig,
+        "streaming_config": Nemotron3DiarizationStreamingConfig,
+    }
+
+    audio_config: Nemotron3DiarizationAudioConfig | dict | None = None
+    head_config: Nemotron3DiarizationHeadConfig | dict | None = None
+    streaming_config: Nemotron3DiarizationStreamingConfig | dict | None = None
+    chunk_length: int = 340
+    chunk_right_context: int = 40
+    fifo_length: int = 40
+    speaker_cache_update_period: int = 300
+    initializer_range: float = 0.02
+
     def __post_init__(self, **kwargs):
-        if self.encoder_config is None:
-            self.encoder_config = Nemotron3DiarizationEncoderConfig()
-        elif isinstance(self.encoder_config, dict):
-            self.encoder_config = Nemotron3DiarizationEncoderConfig(**self.encoder_config)
+        if self.audio_config is None:
+            self.audio_config = Nemotron3DiarizationAudioConfig()
+        elif isinstance(self.audio_config, dict):
+            self.audio_config = Nemotron3DiarizationAudioConfig(**self.audio_config)
+        if self.head_config is None:
+            self.head_config = Nemotron3DiarizationHeadConfig()
+        elif isinstance(self.head_config, dict):
+            self.head_config = Nemotron3DiarizationHeadConfig(**self.head_config)
+        if self.streaming_config is None:
+            self.streaming_config = Nemotron3DiarizationStreamingConfig()
+        elif isinstance(self.streaming_config, dict):
+            self.streaming_config = Nemotron3DiarizationStreamingConfig(**self.streaming_config)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
-        min_speaker_cache_length = (1 + self.speaker_cache_silence_frames_per_speaker) * self.num_speakers
-        if self.speaker_cache_length < min_speaker_cache_length:
-            raise ValueError(
-                f"`speaker_cache_length` ({self.speaker_cache_length}) must be at least "
-                f"`(1 + speaker_cache_silence_frames_per_speaker) * num_speakers` ({min_speaker_cache_length})."
-            )
-        for name in ["chunk_length", "speaker_cache_update_period"]:
-            if getattr(self, name) < 1:
-                raise ValueError(f"`{name}` must be a positive integer, got {getattr(self, name)}.")
-        for name in ["fifo_length", "chunk_right_context", "speaker_cache_silence_frames_per_speaker"]:
-            if getattr(self, name) < 0:
-                raise ValueError(f"`{name}` must be a non-negative integer, got {getattr(self, name)}.")
         if self.chunk_right_context >= self.chunk_length:
             raise ValueError(
                 f"`chunk_right_context` ({self.chunk_right_context}) must be smaller than "
                 f"`chunk_length` ({self.chunk_length})."
             )
 
+        silence_frames = self.streaming_config.speaker_cache_silence_frames_per_speaker
+        min_speaker_cache_length = (1 + silence_frames) * self.head_config.num_speakers
+        if self.streaming_config.speaker_cache_length < min_speaker_cache_length:
+            raise ValueError(
+                f"`streaming_config.speaker_cache_length` ({self.streaming_config.speaker_cache_length}) must be at "
+                "least `(1 + streaming_config.speaker_cache_silence_frames_per_speaker) * head_config.num_speakers` "
+                f"({min_speaker_cache_length})."
+            )
+
     def get_text_config(self, *args, **kwargs):
-        return self.encoder_config
+        return self.audio_config
 
 
-__all__ = ["Nemotron3DiarizationConfig", "Nemotron3DiarizationEncoderConfig"]
+__all__ = [
+    "Nemotron3DiarizationAudioConfig",
+    "Nemotron3DiarizationConfig",
+    "Nemotron3DiarizationHeadConfig",
+    "Nemotron3DiarizationStreamingConfig",
+]

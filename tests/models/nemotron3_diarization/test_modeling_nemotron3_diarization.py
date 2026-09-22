@@ -40,11 +40,13 @@ if is_torch_available():
     from transformers import (
         AutoModel,
         AutoProcessor,
+        Nemotron3DiarizationAudioConfig,
+        Nemotron3DiarizationAudioModel,
         Nemotron3DiarizationConfig,
-        Nemotron3DiarizationEncoderConfig,
         Nemotron3DiarizationForAudioFrameClassification,
-        Nemotron3DiarizationModel,
+        Nemotron3DiarizationHeadConfig,
         Nemotron3DiarizationSpeakerCache,
+        Nemotron3DiarizationStreamingConfig,
     )
 
 
@@ -69,6 +71,7 @@ class Nemotron3DiarizationModelTester:
         chunk_right_context=0,
         speaker_cache_update_period=4,
     ):
+        # the tiny model uses the same FIFO sizes offline and streaming, so that the two modes can be compared
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -94,7 +97,7 @@ class Nemotron3DiarizationModelTester:
 
     def get_config(self):
         return Nemotron3DiarizationConfig(
-            encoder_config=Nemotron3DiarizationEncoderConfig(
+            audio_config=Nemotron3DiarizationAudioConfig(
                 num_mel_bins=self.num_mel_bins,
                 subsampling_factor=self.subsampling_factor,
                 hidden_size=self.hidden_size,
@@ -103,12 +106,18 @@ class Nemotron3DiarizationModelTester:
                 intermediate_size=self.intermediate_size,
                 dropout=0.0,
             ),
-            speaker_hidden_size=self.speaker_hidden_size,
-            num_speakers=self.num_speakers,
-            speaker_cache_length=self.speaker_cache_length,
-            fifo_length=self.fifo_length,
+            head_config=Nemotron3DiarizationHeadConfig(
+                hidden_size=self.speaker_hidden_size,
+                num_speakers=self.num_speakers,
+            ),
+            streaming_config=Nemotron3DiarizationStreamingConfig(
+                speaker_cache_length=self.speaker_cache_length,
+                fifo_length=self.fifo_length,
+                speaker_cache_update_period=self.speaker_cache_update_period,
+            ),
             chunk_length=self.streaming_chunk_length,
             chunk_right_context=self.chunk_right_context,
+            fifo_length=self.fifo_length,
             speaker_cache_update_period=self.speaker_cache_update_period,
         )
 
@@ -144,36 +153,65 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_encoder_config_roundtrip(self):
+    def test_sub_configs_roundtrip(self):
         config = self.model_tester.get_config()
         restored = Nemotron3DiarizationConfig.from_dict(config.to_dict())
-        self.assertIsInstance(restored.encoder_config, Nemotron3DiarizationEncoderConfig)
-        self.assertEqual(restored.encoder_config.to_dict(), config.encoder_config.to_dict())
+        self.assertIsInstance(restored.audio_config, Nemotron3DiarizationAudioConfig)
+        self.assertIsInstance(restored.head_config, Nemotron3DiarizationHeadConfig)
+        self.assertIsInstance(restored.streaming_config, Nemotron3DiarizationStreamingConfig)
+        self.assertEqual(restored.audio_config.to_dict(), config.audio_config.to_dict())
+        self.assertEqual(restored.head_config.to_dict(), config.head_config.to_dict())
+        self.assertEqual(restored.streaming_config.to_dict(), config.streaming_config.to_dict())
         self.assertNotIn("hidden_size", config.to_dict())
+        self.assertNotIn("num_speakers", config.to_dict())
+        self.assertNotIn("chunk_length", config.streaming_config.to_dict())
+
+    def test_modes(self):
+        """
+        Offline (neither `num_lookahead_frames` nor `speaker_cache`) chunks the input by the config and returns no
+        cache; streaming (either given) takes the input as one chunk and returns a cache sized by `streaming_config`.
+        """
+        config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
+        config.chunk_length, config.chunk_right_context = 4, 1
+        config.streaming_config.fifo_length, config.streaming_config.speaker_cache_update_period = 6, 3
+        attention_mask = self._prefix_mask(attention_mask)
+        model = Nemotron3DiarizationForAudioFrameClassification(config).to(torch_device).eval()
+        with torch.no_grad():
+            offline = model(input_features, attention_mask=attention_mask)
+            first = model(input_features, attention_mask=attention_mask, num_lookahead_frames=1)
+            last = model(input_features, attention_mask=attention_mask, speaker_cache=first.speaker_cache)
+        self.assertIsNone(offline.speaker_cache)
+        self.assertEqual(offline.logits.shape[1], input_features.shape[1])
+        # a streaming forward scores everything but its look-ahead, as one chunk
+        subsampling_factor = config.audio_config.subsampling_factor
+        self.assertEqual(first.logits.shape[1], input_features.shape[1] - subsampling_factor)
+        self.assertEqual(first.speaker_cache.fifo_length, 6)
+        self.assertEqual(first.speaker_cache.speaker_cache_update_period, 3)
+        self.assertTrue(first.speaker_cache.streaming)
+        self.assertIs(last.speaker_cache, first.speaker_cache)
+        self.assertEqual(last.logits.shape[1], input_features.shape[1])
+        self.assertFalse(torch.allclose(first.logits, offline.logits[:, : first.logits.shape[1]]))
+
+        # a cache built by the offline loop cannot be continued
+        with self.assertRaises(ValueError):
+            model(input_features, speaker_cache=Nemotron3DiarizationSpeakerCache(config, streaming=False))
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_base_model_precomputed_embeddings(self):
+    def test_audio_model_precomputed_embeddings(self):
         config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
-        config.chunk_length = 4
-        model = Nemotron3DiarizationModel(config).to(torch_device).eval()
+        model = Nemotron3DiarizationAudioModel(config.audio_config).to(torch_device).eval()
         attention_mask = self._prefix_mask(attention_mask)
         with torch.no_grad():
-            expected = model(input_features, attention_mask=attention_mask).logits
-            inputs_embeds = model.encoder.feature_stacking(input_features)
+            expected = model(input_features, attention_mask=attention_mask)
+            inputs_embeds = model.feature_stacking(input_features)
             lengths = model._get_feat_extract_output_lengths(attention_mask.sum(-1))
             mask = torch.arange(inputs_embeds.shape[1], device=torch_device)[None, :] < lengths[:, None]
-            actual = model(inputs_embeds=inputs_embeds, attention_mask=mask).logits
-        self.assertGreater(inputs_embeds.shape[1], config.chunk_length)
+            actual = model(inputs_embeds=inputs_embeds, attention_mask=mask)
         self.assertEqual(
-            actual.shape,
-            (
-                input_features.shape[0],
-                inputs_embeds.shape[1] * config.encoder_config.subsampling_factor,
-                config.num_speakers,
-            ),
+            actual.shape, (input_features.shape[0], inputs_embeds.shape[1], config.audio_config.hidden_size)
         )
         torch.testing.assert_close(actual, expected)
         with self.assertRaises(ValueError):
@@ -181,18 +219,23 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             model()
 
-    def test_base_model_and_legacy_checkpoint_loading(self):
+    def test_audio_model_auto_class(self):
         config = self.model_tester.get_config()
-        model = Nemotron3DiarizationForAudioFrameClassification(config).eval()
+        self.assertIsInstance(AutoModel.from_config(config.audio_config), Nemotron3DiarizationAudioModel)
+
+    def test_published_checkpoint_layout_roundtrip(self):
+        """
+        The published checkpoint names the encoder `encoder.` and the speaker projection
+        `head.speaker_projection.`; `conversion_mapping.py` maps both onto `model.` and `head.proj.`, in both
+        directions.
+        """
+        model = Nemotron3DiarizationForAudioFrameClassification(self.model_tester.get_config()).eval()
         with tempfile.TemporaryDirectory() as directory:
             model.save_pretrained(directory)
-            base = AutoModel.from_pretrained(directory)
-            self.assertIsInstance(base, Nemotron3DiarizationModel)
-            for name, tensor in base.state_dict().items():
-                torch.testing.assert_close(tensor, model.model.state_dict()[name])
+            saved = load_file(os.path.join(directory, "model.safetensors"))
+            self.assertIn("head.speaker_projection.weight", saved)
+            self.assertTrue(any(name.startswith("encoder.layers.") for name in saved))
 
-            legacy_state = {name.removeprefix("model."): tensor for name, tensor in model.state_dict().items()}
-            model.save_pretrained(directory, state_dict=legacy_state)
             restored, info = Nemotron3DiarizationForAudioFrameClassification.from_pretrained(
                 directory, output_loading_info=True
             )
@@ -211,6 +254,7 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         return torch.arange(attention_mask.shape[1], device=lengths.device)[None, :] < lengths[:, None]
 
     def test_streaming_steps_match_offline(self):
+        """With equal FIFO sizes, feeding the offline chunks one forward at a time reproduces the offline forward."""
         config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
         config.chunk_length = 4
         config.chunk_right_context = 1
@@ -220,8 +264,8 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         with torch.no_grad():
             offline_logits = model(input_features, attention_mask=attention_mask).logits
 
-        chunk_frames = config.chunk_length * config.encoder_config.subsampling_factor
-        lookahead_frames = config.chunk_right_context * config.encoder_config.subsampling_factor
+        chunk_frames = config.chunk_length * config.audio_config.subsampling_factor
+        lookahead_frames = config.chunk_right_context * config.audio_config.subsampling_factor
         num_frames = input_features.shape[1]
         step_logits, speaker_cache, start = [], None, 0
         with torch.no_grad():
@@ -231,49 +275,50 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
                     input_features[:, start:end],
                     attention_mask=attention_mask[:, start:end],
                     speaker_cache=speaker_cache,
-                    use_cache=True,
+                    num_lookahead_frames=config.chunk_right_context,
                 )
                 step_logits.append(outputs.logits)
                 speaker_cache = outputs.speaker_cache
                 start += chunk_frames
-            # Final flush: the remaining frames are the last (partial) chunk without look-ahead.
+            # The last call: the remaining frames are the last (partial) chunk, none of them is look-ahead.
             outputs = model(
                 input_features[:, start:],
                 attention_mask=attention_mask[:, start:],
                 speaker_cache=speaker_cache,
             )
             step_logits.append(outputs.logits)
-        self.assertIsNone(outputs.speaker_cache)
+        self.assertIs(outputs.speaker_cache, speaker_cache)
         streaming_logits = torch.cat(step_logits, dim=1)
         self.assertEqual(streaming_logits.shape, offline_logits.shape)
         torch.testing.assert_close(streaming_logits, offline_logits, atol=1e-5, rtol=1e-5)
 
-    def test_streaming_rejects_too_many_lookahead_frames(self):
+    def test_streaming_rejects_invalid_lookahead(self):
         config, input_features, attention_mask = self.model_tester.prepare_config_and_inputs()
-        config.chunk_length = 4
-        config.chunk_right_context = 1
         model = Nemotron3DiarizationForAudioFrameClassification(config).to(torch_device).eval()
-        too_many = (config.chunk_length + config.chunk_right_context + 1) * config.encoder_config.subsampling_factor
+        subsampling_factor = config.audio_config.subsampling_factor
         with self.assertRaises(ValueError):
-            model(input_features[:, :too_many], use_cache=True)
+            model(input_features, num_lookahead_frames=-1)
+        # nothing but look-ahead
         with self.assertRaises(ValueError):
-            model(input_features[:, : config.encoder_config.subsampling_factor], use_cache=True)
+            model(input_features[:, :subsampling_factor], num_lookahead_frames=1)
 
     @slow
     @require_torch_gpu
     def test_speaker_cache_fullgraph(self):
         config = Nemotron3DiarizationConfig(
-            encoder_config=Nemotron3DiarizationEncoderConfig(hidden_size=16, num_attention_heads=4),
-            num_speakers=2,
-            speaker_cache_length=8,
-            speaker_cache_silence_frames_per_speaker=1,
-            fifo_length=4,
-            speaker_cache_update_period=4,
+            audio_config=Nemotron3DiarizationAudioConfig(hidden_size=16, num_attention_heads=4),
+            streaming_config=Nemotron3DiarizationStreamingConfig(
+                speaker_cache_length=8,
+                speaker_cache_silence_frames_per_speaker=1,
+                fifo_length=4,
+                speaker_cache_update_period=4,
+            ),
+            head_config=Nemotron3DiarizationHeadConfig(num_speakers=2),
         )
         eager_cache = Nemotron3DiarizationSpeakerCache(config)
         compiled_cache = Nemotron3DiarizationSpeakerCache(config)
-        chunk = torch.randn(2, 4, config.encoder_config.hidden_size, device=torch_device)
-        silence = torch.randn(config.encoder_config.hidden_size, device=torch_device)
+        chunk = torch.randn(2, 4, config.audio_config.hidden_size, device=torch_device)
+        silence = torch.randn(config.audio_config.hidden_size, device=torch_device)
         for cache in (eager_cache, compiled_cache):
             cache.lazy_initialization(chunk)
         buffers = (compiled_cache.embeds, compiled_cache.probs, compiled_cache.fifo)
@@ -282,8 +327,8 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
         def step(cache, chunk, probs, silence):
             embeds = cache.get_embeds(chunk)
             chunk_input_embeds = torch.cat([embeds, chunk], dim=1)
-            chunk_logits = probs.logit().repeat_interleave(config.encoder_config.subsampling_factor, dim=1)
-            cache.update(chunk_input_embeds, chunk_logits, silence)
+            chunk_logits = probs.logit().repeat_interleave(config.audio_config.subsampling_factor, dim=1)
+            cache.update(chunk_input_embeds, chunk_logits, silence, num_chunk_frames=chunk.shape[1])
             return embeds
 
         compiled_step = torch.compile(step, fullgraph=True)
@@ -291,8 +336,8 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
             # Empty state, FIFO filling, cache filling, first compression, and repeated compression.
             for _ in range(6):
                 chunk = torch.randn_like(chunk)
-                length = eager_cache.cache_length + eager_cache.fifo_length + chunk.shape[1]
-                probs = torch.rand(2, length, config.num_speakers, device=torch_device)
+                length = eager_cache.num_cache_frames + eager_cache.num_fifo_frames + chunk.shape[1]
+                probs = torch.rand(2, length, config.head_config.num_speakers, device=torch_device)
                 expected = step(eager_cache, chunk, probs, silence)
                 actual = compiled_step(compiled_cache, chunk, probs, silence)
                 torch.testing.assert_close(actual, expected)
@@ -300,8 +345,8 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
                     actual_buffer = getattr(compiled_cache, name)
                     self.assertEqual(actual_buffer.data_ptr(), address)
                     torch.testing.assert_close(actual_buffer, getattr(eager_cache, name))
-                self.assertEqual(compiled_cache.cache_length, eager_cache.cache_length)
-                self.assertEqual(compiled_cache.fifo_length, eager_cache.fifo_length)
+                self.assertEqual(compiled_cache.num_cache_frames, eager_cache.num_cache_frames)
+                self.assertEqual(compiled_cache.num_fifo_frames, eager_cache.num_fifo_frames)
         self.assertTrue(compiled_cache.is_compressed)
 
 
@@ -316,13 +361,6 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
     gist: https://gist.github.com/eustlb/f20c18d24580e7416697aec5747d1107
     """
 
-    # Model-card "low latency" profile (1.04 s input buffer), in encoder frames of 80 ms.
-    LOW_LATENCY_PROFILE = {
-        "fifo_length": 264,
-        "chunk_length": 9,
-        "chunk_right_context": 4,
-        "speaker_cache_update_period": 222,
-    }
     AUDIO_URL = (
         "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/diarization_example.mp3"
     )
@@ -333,7 +371,7 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "nvidia/Nemotron-3-Diarization-preview"
-        cls.revision = "refs/pr/5"
+        cls.revision = "refs/pr/6"
         cls.bucket = "hf-internal-testing/nemotron3-diarization-integration-test"
         cls.dtype = torch.float32
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
@@ -360,6 +398,19 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
         )
         return model.to(torch_device).eval()
 
+    def _low_latency_offline_model(self):
+        """
+        The `low_latency` streaming mode run as one offline forward: chunking and FIFO sizes of the mode moved to the
+        offline fields of the config, which reproduces the streaming session on pre-extracted features.
+        """
+        chunk_length, chunk_right_context = self.processor.streaming_modes["low_latency"]
+        return self._load_model(
+            chunk_length=chunk_length,
+            chunk_right_context=chunk_right_context,
+            fifo_length=264,
+            speaker_cache_update_period=222,
+        )
+
     def _assert_close(self, probabilities, expected):
         """
         Compare with NeMo everywhere but on the last encoder frame.
@@ -374,8 +425,7 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
     def _speaker_probabilities(self, model, names):
         """Per-sample speaker probabilities on the valid frames, as in the reproducer."""
         inputs = self.processor(
-            [self._load_sample(name) for name in names],
-            sampling_rate=self.processor.feature_extractor.sampling_rate,
+            [self._load_sample(name) for name in names], sampling_rate=self.processor.feature_extractor.sampling_rate
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
         with torch.no_grad():
@@ -411,28 +461,31 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
         """reproducer: reproducer_probabilities.py — 720 ms chunks, 320 ms look-ahead, speaker-cache compressions"""
         EXPECTED_PROBABILITIES = self._load_expected("low_latency_long")
 
-        model = self._load_model(**self.LOW_LATENCY_PROFILE)
+        model = self._low_latency_offline_model()
         probabilities = self._speaker_probabilities(model, ["long"])[0]
         self._assert_close(probabilities, EXPECTED_PROBABILITIES)
 
     @slow
     def test_model_integration_streaming_steps(self):
         """
-        reproducer: reproducer_probabilities.py — feeding pre-extracted chunk + look-ahead frames one step at a time
-        with `use_cache=True` must reproduce the offline forward and the NeMo reference.
+        reproducer: reproducer_probabilities.py — feeding pre-extracted chunk + look-ahead frames one forward at a
+        time, in streaming mode, must reproduce the equivalent offline forward and the NeMo reference.
         """
         EXPECTED_PROBABILITIES = self._load_expected("low_latency_long")
 
-        model = self._load_model(**self.LOW_LATENCY_PROFILE)
-        inputs = self.processor(
-            self._load_sample("long"), sampling_rate=self.processor.feature_extractor.sampling_rate
-        ).to(torch_device, dtype=self.dtype)
+        model = self._load_model()
+        offline_model = self._low_latency_offline_model()
+        processor = self.processor
+        inputs = processor(self._load_sample("long"), sampling_rate=processor.feature_extractor.sampling_rate)
+        inputs = inputs.to(torch_device, dtype=self.dtype)
         input_features, attention_mask = inputs.input_features, inputs.attention_mask
-        chunk_frames = model.config.chunk_length * model.config.encoder_config.subsampling_factor
-        lookahead_frames = model.config.chunk_right_context * model.config.encoder_config.subsampling_factor
+        self.assertEqual(processor.streaming_mode, "low_latency")
+        _, chunk_right_context = processor.streaming_modes[processor.streaming_mode]
+        chunk_frames = processor.num_mel_frames_per_step
+        lookahead_frames = processor.num_mel_frames_per_audio_chunk - chunk_frames
 
         with torch.no_grad():
-            offline_logits = model(**inputs).logits
+            offline_logits = offline_model(**inputs).logits
             step_logits, speaker_cache, start = [], None, 0
             while start + chunk_frames + lookahead_frames <= input_features.shape[1]:
                 end = start + chunk_frames + lookahead_frames
@@ -440,12 +493,12 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
                     input_features[:, start:end],
                     attention_mask=attention_mask[:, start:end],
                     speaker_cache=speaker_cache,
-                    use_cache=True,
+                    num_lookahead_frames=chunk_right_context,
                 )
                 step_logits.append(outputs.logits)
                 speaker_cache = outputs.speaker_cache
                 start += chunk_frames
-            # Final flush: the remaining frames are the last (partial) chunk, without look-ahead.
+            # The last chunk: the remaining frames, none of them is look-ahead.
             outputs = model(
                 input_features[:, start:], attention_mask=attention_mask[:, start:], speaker_cache=speaker_cache
             )
@@ -465,43 +518,40 @@ class Nemotron3DiarizationForAudioFrameClassificationIntegrationTest(unittest.Te
         """
         EXPECTED_PROBABILITIES = self._load_expected("low_latency_long")
 
-        model = self._load_model(**self.LOW_LATENCY_PROFILE)
+        model = self._load_model()
         processor = self.processor
-        processor.set_streaming_profile(
-            chunk_length=self.LOW_LATENCY_PROFILE["chunk_length"],
-            chunk_right_context=self.LOW_LATENCY_PROFILE["chunk_right_context"],
-        )
+        self.assertEqual(processor.streaming_mode, "low_latency")
         self.assertEqual(processor.streaming_latency_ms, 1040)
         audio = self._load_sample("long")
         sampling_rate = processor.feature_extractor.sampling_rate
 
-        def input_features_generator():
-            def extract(start, stop, is_first):
+        def inputs_generator():
+            def extract(start, stop, is_first, is_last):
                 chunk = audio[start:stop] if stop is not None else audio[start:]
-                inputs = processor(
-                    chunk, sampling_rate=sampling_rate, is_streaming=True, is_first_audio_chunk=is_first
+                return processor(
+                    chunk,
+                    sampling_rate=sampling_rate,
+                    is_streaming=True,
+                    is_first_audio_chunk=is_first,
+                    is_last_audio_chunk=is_last,
                 )
-                return inputs.input_features
 
-            yield extract(0, processor.num_samples_first_audio_chunk, True), False
+            yield extract(0, processor.num_samples_first_audio_chunk, True, False)
 
             mel_frame_idx = processor.num_mel_frames_per_step
             start_idx = processor.audio_chunk_start(mel_frame_idx)
             while (end_idx := start_idx + processor.num_samples_per_audio_chunk) <= audio.shape[0]:
-                yield extract(start_idx, end_idx, False), False
+                yield extract(start_idx, end_idx, False, False)
                 mel_frame_idx += processor.num_mel_frames_per_step
                 start_idx = processor.audio_chunk_start(mel_frame_idx)
 
-            yield extract(start_idx, None, False), True
+            yield extract(start_idx, None, False, True)
 
         speaker_cache, step_logits = None, []
         with torch.no_grad():
-            for input_features, is_last_chunk in input_features_generator():
-                outputs = model(
-                    input_features.to(torch_device, dtype=self.dtype),
-                    speaker_cache=speaker_cache,
-                    use_cache=not is_last_chunk,
-                )
+            for inputs in inputs_generator():
+                inputs = inputs.to(torch_device, dtype=self.dtype)
+                outputs = model(**inputs, speaker_cache=speaker_cache)
                 step_logits.append(outputs.logits)
                 speaker_cache = outputs.speaker_cache
         probabilities = torch.cat(step_logits, dim=1)[0].sigmoid().cpu()
