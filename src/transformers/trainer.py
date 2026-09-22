@@ -54,7 +54,7 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler
 
 from . import __version__
 from .configuration_utils import PreTrainedConfig
-from .core_model_loading import apply_weight_conversion
+from .core_model_loading import convert_state_dict
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
@@ -3566,7 +3566,7 @@ class Trainer:
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
                 # Re-apply the renamings and weight operations `save_pretrained` reverted
                 if isinstance(model, PreTrainedModel):
-                    state_dict = apply_weight_conversion(model, state_dict)
+                    state_dict = convert_state_dict(model, state_dict)
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
@@ -3693,7 +3693,7 @@ class Trainer:
                         state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
                     # Re-apply the renamings and weight operations `save_pretrained` reverted
                     if isinstance(model, PreTrainedModel):
-                        state_dict = apply_weight_conversion(model, state_dict)
+                        state_dict = convert_state_dict(model, state_dict)
 
                     # If the model is on the GPU, it still works!
                     # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963

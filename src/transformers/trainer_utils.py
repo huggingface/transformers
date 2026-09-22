@@ -1074,7 +1074,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             - `missing_keys` is a list of str containing the missing keys
             - `unexpected_keys` is a list of str containing the unexpected keys
     """
-    from .core_model_loading import apply_weight_conversion
+    from .core_model_loading import convert_state_dict
     from .modeling_utils import PreTrainedModel
 
     # Load the index
@@ -1107,7 +1107,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     for shard_file in shard_files:
         state_dict.update(loader(os.path.join(folder, shard_file)))
     if isinstance(model, PreTrainedModel):
-        state_dict = apply_weight_conversion(model, state_dict)
+        state_dict = convert_state_dict(model, state_dict)
 
     # If strict=True, error before loading any of the state dicts.
     loaded_keys = state_dict.keys()

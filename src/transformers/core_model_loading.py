@@ -1800,7 +1800,7 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
-def apply_weight_conversion(
+def convert_state_dict(
     model: PreTrainedModel,
     state_dict: dict[str, torch.Tensor],
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None,

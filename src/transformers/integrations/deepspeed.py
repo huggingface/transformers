@@ -365,9 +365,9 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
                     "are not yet implemented but support is coming soon. Please disable tensor_parallel "
                     "in your DeepSpeed config or convert your checkpoint to the expected format first."
                 )
-        from ..core_model_loading import apply_weight_conversion
+        from ..core_model_loading import convert_state_dict
 
-        state_dict = apply_weight_conversion(model_to_load, state_dict, weight_mapping)
+        state_dict = convert_state_dict(model_to_load, state_dict, weight_mapping)
         # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
         model_to_load._weight_conversions = weight_mapping
 
