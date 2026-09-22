@@ -51,8 +51,13 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
         Spatial pooling kernel size applied after patchification.
     exclude_timestamps (`bool`, *optional*):
         Whether to exclude frame timestamps from the video placeholder expansion.
-    use_1fps_linear_sampling (`bool`, *optional*):
-        Whether to sample frames using 1-FPS linspace sequence sampling matching internal Google3 pipelines.
+    max_frames (`int`, *optional*):
+        The maximum number of frames to sample. If set, the sampled indices will
+        be uniformly re-sampled to fit the budget.
+    overflow_strategy (`str`, *optional*):
+        The strategy to cut down total number of sampled frames to for into budget.
+        Can be set only to "uniform" or "truncate", and is used only together with
+        FPS-based sampling
     """
 
     patch_size: int
@@ -60,7 +65,8 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
     pooling_kernel_size: int
 
     exclude_timestamps: bool
-    use_1fps_linear_sampling: bool
+    max_frames: int | None
+    overflow_strategy: str | None
 
 
 class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
