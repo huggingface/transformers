@@ -748,7 +748,7 @@ class EmbeddingGemma2VideoProcessorKwargs(Gemma4VideoProcessorKwargs):
 class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
     # unlike Gemma4 - by default sample 1 fps uniformly
     fps = 1
-    max_frames = 64  # What should be the capping max frame count ?
+    max_frames = 32
     overflow_strategy = "uniform"
     num_frames = AttributeError()
     exclude_timestamps = True

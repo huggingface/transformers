@@ -154,7 +154,7 @@ class EmbeddingGemma2VideoProcessor(BaseVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_position_ids"]
     # unlike Gemma4 - by default sample 1 fps uniformly
     fps = 1
-    max_frames = 64  # What should be the capping max frame count ?
+    max_frames = 32
     overflow_strategy = "uniform"
     exclude_timestamps = True
 
