@@ -1963,25 +1963,34 @@ class GenerationMixin(ContinuousMixin):
 
         return generation_config, model_kwargs
 
-    def _get_static_cache_init_shape(self: "GenerativePreTrainedModel") -> tuple[int, int] | None:
+    def _get_static_cache_init_shape(self: "GenerativePreTrainedModel") -> tuple[list[int], list[int]] | None:
         """
-        Returns the per-rank `(num_heads, head_dim)` to eagerly initialize a `StaticCache`, with the head count sharded
-        for tensor parallelism. Returns `None` when the cache cannot be early initialized.
+        Returns per-layer `(num_heads, head_dim)` lists to eagerly initialize a `StaticCache`, with each head count
+        sharded for tensor parallelism. Returns `None` when the cache cannot be early initialized.
         """
         if hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1:
             # The model layers are on different devices
             return None
         text_config = self.config.get_text_config(decoder=True)
+        # Trailing layers sharing KV states have no cache of their own.
+        num_cache_layers = text_config.num_hidden_layers - (getattr(text_config, "num_kv_shared_layers", None) or 0)
+        layer_configs = [text_config.per_layer_config[layer_idx] for layer_idx in range(num_cache_layers)]
         tp_size = getattr(self, "_tp_size", None) or 1
-        num_key_value_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-        if num_key_value_heads % tp_size != 0:
+        num_key_value_heads = [
+            getattr(layer_config, "num_key_value_heads", None) or layer_config.num_attention_heads
+            for layer_config in layer_configs
+        ]
+        if any(num_heads % tp_size != 0 for num_heads in num_key_value_heads):
             # The model cannot be evenly sharded by head
             return None
-        if getattr(text_config, "qk_head_dim", None) is not None:
+        if any(getattr(layer_config, "qk_head_dim", None) is not None for layer_config in layer_configs):
             # MLA models have distinct key (`qk_head_dim`) and value (`v_head_dim`) sizes.
             return None
-        head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-        return num_key_value_heads // tp_size, head_dim
+        head_dim = [
+            getattr(layer_config, "head_dim", None) or layer_config.hidden_size // layer_config.num_attention_heads
+            for layer_config in layer_configs
+        ]
+        return [num_heads // tp_size for num_heads in num_key_value_heads], head_dim
 
     def _prepare_static_cache(
         self: "GenerativePreTrainedModel",
