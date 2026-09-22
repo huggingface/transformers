@@ -181,7 +181,6 @@ inputs = tokenizer("Hello, world!", return_tensors="pt")
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="mlx", dynamic=True)
 
-program = exporter.export(model, inputs, config=config)
 components = exporter.export_for_generation(model, inputs, config=config)
 ```
 

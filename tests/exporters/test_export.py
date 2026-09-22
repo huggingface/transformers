@@ -46,6 +46,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_executorch_available
 
 
 # ──────────────────────────── skip lists ────────────────────────────
@@ -62,9 +63,6 @@ from transformers.testing_utils import (
 
 
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
-    "mlx.generate": {
-        "Gemma4ForCausalLM": "MLX lowering does not support histc and grouped_mm_fallback in MoE layers.",
-    },
     # Every backend, every variant.
     "all": {
         "VideoMAEForPreTraining": (
@@ -387,19 +385,34 @@ GENERATE_EXPORT_PARAMS = parameterized.expand(
 )
 
 
-_EXECUTORCH_BACKENDS = ("xnnpack", "mlx")
+_EXECUTORCH_BACKENDS = ("xnnpack",)
+if is_executorch_available() and importlib.util.find_spec("executorch.backends.mlx") is not None:
+    try:
+        from executorch.runtime import Runtime
+
+        if "MLXBackend" in Runtime.get().backend_registry.registered_backend_names:
+            _EXECUTORCH_BACKENDS += ("mlx",)
+    except ImportError:
+        pass  # The Python backend can be installed without the native runtime.
+
 EXECUTORCH_EXPORT_PARAMS = parameterized.expand(
     list(itertools.product(_EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES)),
-    name_func=lambda f, _, p: (
-        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}" + (f"_{p.args[0]}" if p.args[0] != "xnnpack" else "")
-    ),
+    name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}_{p.args[0]}",
 )
 EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
-    list(itertools.product(_EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS)),
+    [
+        (backend, dynamic, generation_config)
+        for backend, dynamic, generation_config in itertools.product(
+            _EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS
+        )
+        if not (
+            backend == "mlx" and generation_config is not None and generation_config.cache_implementation == "static"
+        )
+    ],
     name_func=lambda f, _, p: (
         f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}"
         + (f"_{p.args[2].cache_implementation}_cache" if p.args[2] is not None else "")
-        + (f"_{p.args[0]}" if p.args[0] != "xnnpack" else "")
+        + f"_{p.args[0]}"
     ),
 )
 
@@ -597,15 +610,6 @@ class ExportTesterMixin:
     submodule is tested independently.
     """
 
-    def _skip_if_executorch_backend_unavailable(self, backend):
-        if importlib.util.find_spec(f"executorch.backends.{backend}") is None:
-            self.skipTest(f"ExecuTorch backend {backend} is not installed")
-        if backend == "mlx":
-            from executorch.runtime import Runtime
-
-            if "MLXBackend" not in Runtime.get().backend_registry.registered_backend_names:
-                self.skipTest("ExecuTorch runtime does not have the native MLXBackend registered")
-
     def _skip_if_not_exportable(self):
         """Skip the test if the model architecture is not exportable."""
         if not self.test_torch_exportable:
@@ -771,7 +775,6 @@ class ExportTesterMixin:
         """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
-        self._skip_if_executorch_backend_unavailable(backend)
         exporter = ExecutorchExporter()
         config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
@@ -935,9 +938,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
-        if backend == "mlx" and generation_config is not None and generation_config.cache_implementation == "static":
-            self.skipTest("StaticCache is not supported by the ExecuTorch MLX backend")
-        self._skip_if_executorch_backend_unavailable(backend)
         exporter = ExecutorchExporter()
         config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 

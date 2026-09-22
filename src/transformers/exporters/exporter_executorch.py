@@ -290,6 +290,9 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
     model.requires_grad_(False)
     model = model.to(device="cpu")
+    # MLX does not support grouped MoE kernels.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
     partitioner = [MLXPartitioner()]
     return model, _make_contiguous(sample_inputs), partitioner
 
