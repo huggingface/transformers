@@ -15,7 +15,6 @@ import collections
 import copy
 import inspect
 import math
-import os
 import os.path
 import random
 import re
@@ -6507,7 +6506,7 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
-    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
+    config.rope_parameters = copy.deepcopy(getattr(config, "rope_parameters", {}) or {})
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
     # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`

@@ -758,7 +758,7 @@ class MllamaRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -1215,10 +1215,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
               the forward pass of cross-attention layers.
             This mask is derived from the cross_attention_mask and is used to handle cases where a text token
             should not attend to any image token.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -1458,10 +1454,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         cross_attention_states (`torch.FloatTensor`, *optional*):
             Output of the vision model, used for cross-attention. This tensor contains the processed image features that
             the language model will attend to.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -1583,12 +1575,21 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             model_inputs["aspect_ratio_ids"] = None
             model_inputs["aspect_ratio_mask"] = None
 
-        # `cross_attention_mask` gains a row per decoded token: slice it down to the tokens being processed, otherwise
-        # dynamo recompiles at every step. The `clone` gives the slice a consistent stride, which it also guards on.
-        if next_sequence_length is not None and model_inputs.get("cross_attention_mask") is not None:
-            model_inputs["cross_attention_mask"] = model_inputs["cross_attention_mask"][
-                :, -next_sequence_length:
-            ].clone(memory_format=torch.contiguous_format)
+        cross_attention_mask = model_inputs.get("cross_attention_mask")
+        if cross_attention_mask is not None:
+            sequence_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+            padding_length = sequence_length - cross_attention_mask.shape[1]
+            if padding_length > 0:
+                cross_attention_mask = torch.cat(
+                    [cross_attention_mask, cross_attention_mask[:, -1:].expand(-1, padding_length, -1, -1)], dim=1
+                )
+            # The mask gains a row per decoded token: slice it down to the tokens being processed, otherwise dynamo
+            # recompiles at every step. The `clone` gives the slice a consistent stride, which it also guards on.
+            if next_sequence_length is not None:
+                cross_attention_mask = cross_attention_mask[:, -next_sequence_length:].clone(
+                    memory_format=torch.contiguous_format
+                )
+            model_inputs["cross_attention_mask"] = cross_attention_mask
 
         return model_inputs
 
