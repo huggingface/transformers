@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -51,10 +50,12 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
+    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -122,7 +123,7 @@ class Glm5NextTextExperts(nn.Module):
     ) -> torch.Tensor:
         final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in hit:
             expert_idx = expert_idx[0]
@@ -143,7 +144,7 @@ class Glm5NextTextExperts(nn.Module):
 
 
 class Glm5NextTextTopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
@@ -218,79 +219,114 @@ class Glm5NextTextUnweightedRMSNorm(nn.Module):
 
 class Glm5NextTextHyperConnection(nn.Module):
     r"""
-    Manifold-Constrained Hyper-Connections
-    (mHC) (Xie et al., 2026) to strengthen the conventional residual connections between adjacent
-    Transformer blocks
+    A module to implement manifold-constrained Hyper-Connections (mHC) (Xie et al., 2026) which strengthens the
+    conventional residual connections between adjacent Transformer blocks.
 
-    Owns the learned (`fn`, `base`, `scale`)
-    parameters that turn the incoming `hc_mult` residual streams into collapse / expand
-    weights. The decoder layer instantiates two of these (one for the attention site,
-    one for the mlp site).
+    When using mHC, each token is projected onto `hc_mult` streams, so the shape of decoder layer inputs changes from
+    [batch_size, sequence_length, hidden_size] to [batch_size, sequence_length, hc_mult, hidden_size].
+    To keep the same input shape for attention or MLP blocks, the streams are collapsed into one upon entering a block,
+    and expanded back into `hc_mult` streams upon exiting. There is also a weighted residual connection between the
+    input and output streams.
+    The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the `hc_mult` input
+    streams through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
 
-    ASCII shape guide — `B` = batch, `S` = seq, `H` = hc_mult, `D` = hidden_size::
+    The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
 
-              hidden_streams        flatten(2)        RMSNorm-rescale + F.linear(fn)
-         [B, S, H, D]  ──────────►  [B, S, H*D]  ─────────────────────────────────►
-                                                             mix-logits
-                                                             [B, S, (2+H)*H]
-                                                                    │
-                            ┌───────────────────────────────────────┴──────────────────────────────┐
-                            ▼                          ▼                                           ▼
-                        pre logits                post logits                               comb logits
-                        [B, S, H]                 [B, S, H]                                 [B, S, H, H]
-                        × scale[0]                × scale[1]                                × scale[2]
-                        + base[:H]                + base[H:2H]                              + base[2H:]
-                        σ() + eps                 2·σ()                                     softmax(-1) + eps
-                        │                         │                                         │
-                        pre                       post                                      Sinkhorn(iters)
-                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
-                                                                                            │
-                                                                                            comb
-                                                                                            (stream mixer)
+                                                  ┌───────────────────┐
+                             N input streams  ────│ FLATTEN + PROJECT |────> (pre, post, comb) weights
+                              [B, S, N, D]        └───────────────────┘      ([B, S, N],  [B, S, N],  [B, S, N, N])
+                                  │ │ │
+               ╭──────────────────┴─┼─┼──────────────────╮
+               │ ╭──────────────────┴─┼────────────────╮ │
+               │ │ ╭──────────────────┴──────────────╮ │ │
+               │ │ │                                 │ │ │
+        ┌─────────────────┐                          │ │ │
+        │ COLLAPSE (pre)  │                          │ │ │
+        └─────────────────┘                          │ │ │
+                 │                                   │ │ │
+            Block input                              │ │ │
+             [B, S, D]                               │ │ │
+                 │                                   │ │ │
+        ┌─────────────────┐                     ┌─────────────┐
+        │   ATTN or MLP   │                     │  MIX (comb) │
+        └─────────────────┘                     └─────────────┘
+                 │                                   │ │ │
+           Block output                              │ │ │
+             [B, S, D]                               │ │ │
+                 │                                   │ │ │
+        ┌─────────────────┐                          │ │ │
+        │  EXPAND (post)  │                          │ │ │
+        └─────────────────┘                          │ │ │
+               │ │ │                                 │ │ │
+        N expanded streams                    N residual streams
+           [B, S, N, D]                          [B, S, N, D]
+               │ │ │                                 │ │ │
+               │ │ ╰───────────┌─────────┐───────────╯ │ │
+               │ ╰─────────────│   ADD   │─────────────╯ │
+               ╰───────────────└─────────┘───────────────╯
+                                  │ │ │
+                                  ▼ ▼ ▼
+                            N output streams
+                              [B, S, N, D]
     """
 
     def __init__(self, config: Glm5NextTextConfig):
         super().__init__()
-        self.hc_mult = config.hc_mult
+        self.hc_mult = config.hc_mult  # number of streams, referred as N below
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = Glm5NextTextUnweightedRMSNorm(eps=config.rms_norm_eps)
-        mix = (2 + self.hc_mult) * self.hc_mult
-        self.fn = nn.Parameter(torch.empty(mix, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(mix))
-        # 3 = number of outputs from the mHC mapping: `pre` (input projection
-        # weights), `post` (sublayer output projection weights), `comb` (the
-        # H×H residual combine matrix that gets Sinkhorn-projected onto the
-        # doubly-stochastic manifold). Each output gets its own learned scale.
+        # The mHC projects the N inputs streams into 3 weights: pre (size: N), post (size: N) and comb (size: N*N)
+        # Hence the output size of the projection is 2 * N + N * N = (2 + N) * N.
+        concatenated_weights_size = (2 + self.hc_mult) * self.hc_mult
+        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
+        # The mHC produces 3 outputs, each with their own scale parameter (the "pre", "post" and "comb" weights)
         self.scale = nn.Parameter(torch.empty(3))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        r"""
-        Compute `pre`, `post`, `comb` from the mHC mapping (paper §2.2 eq. 8).
-        `comb` is projected onto the doubly-stochastic manifold via Sinkhorn-
-        Knopp: starting from the sigmoid-positive matrix, alternate row and
-        column normalisation for `hc_sinkhorn_iters` steps. `pre` then collapses
-        the `hc_mult` parallel streams into a single sequence (input projection
-        into the sublayer); `post` and `comb` are returned for the caller to
-        apply on the sublayer output.
         """
+        Computes the weights used to mix in the `hc_mult` streams with the input and output of the next layer, which can
+        be an attention or a MLP layer. This is done through three weights:
+
+        - pre: used to collapse the `hc_mult` input streams into one, creating an input tensor for the next layer
+        - post: used to expand the output of the next layer back into `hc_mult` streams
+        - comb: used to mix the `hc_mult` input streams with the `hc_mult` output streams
+
+        All weights are returned except "pre", which is consumed here.
+        """
+        batch_size, seq_len = hidden_streams.shape[:2]
         hc = self.hc_mult
-        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
-        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc * hc], dim=-1)
+
+        # Flatten and norm the hidden streams
+        flattened = hidden_streams.view(batch_size, seq_len, -1).float()
+        flattened = self.input_norm(flattened)
+        # Mix the streams together to infer the weight coefficients
+        flattened = F.linear(flattened, self.fn.float())
+        # Split the weight coefficients
+        pre_w, post_w, comb_w = flattened.split([hc, hc, hc * hc], dim=-1)
         pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
 
+        comb_w = comb_w.view(*comb_w.shape[:-1], hc, hc)  # these are matrix weights, unlike pre or post
+        comb_b = comb_b.view(hc, hc)
+
+        # All weights are computed with a one layer perceptron. For pre and post, this is it.
         pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
         post = 2 * torch.sigmoid(post_w * post_scale + post_b)
-        comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
-        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
+        comb = torch.softmax(comb_w * comb_scale + comb_b, dim=-1) + self.hc_eps
+
+        # The comb weight is a bit different: it dictates how the input streams (In) are added to the output streams
+        # (Out) in this way: Mixed = In @ Comb + Out. To make sure the norm of "Mixed" does not blow up, we constrain
+        # the comb weight to be doubly-stochastic (ie. its rows and columns must sum to 1) with a few iterations of the
+        # Sinkhorn-Knopp algorithm, which iteratively normalizes the rows and columns to sum to 1.
         comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         for _ in range(self.hc_sinkhorn_iters - 1):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
-        # Collapse the `hc_mult` parallel streams down to a single sequence using
-        # the `pre` weights: one weighted sum across the stream axis, ready for
-        # the sublayer (attn / MLP).
+
+        # Since "pre" is meant to be used with the input streams (available here as `hidden_streams`), we collapse the
+        # streams here and return `collapsed` tensor, which will be the input for the next attention or MLP block.
         collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
         return post, comb, collapsed
 
@@ -530,7 +566,8 @@ def chunk_kimi_delta_attention(
     # Main difference to GDN is the per head application of `g` which was broadcasted across heads instead
     g = g.cumsum(dim=-2)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
-    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).exp().float()
+    strict_mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
+    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).masked_fill(strict_mask[..., None], float("-inf")).exp().float()
     attn = -(k_beta.unsqueeze(-2) * key.unsqueeze(-3) * decay_mask).sum(dim=-1).masked_fill(mask, 0)
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()
@@ -1064,12 +1101,11 @@ def eager_attention_forward(
 
 class Glm5NextTextAttention(nn.Module):
     """
-    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
+    DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
 
-    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
-    reuses the previous full layer's top-k selection (`"shared"`).
-    `next_skip_topk` signals that the *next* layer will reuse this
-    layer's top-k, so it is propagated upward via `prev_topk_indices`.
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or reuses the previous
+    full layer's top-k selection (`"shared"`). `next_skip_topk` signals that the *next* layer will reuse this layer's
+    top-k, so it is propagated upward via `prev_topk_indices`.
     """
 
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
@@ -1089,25 +1125,9 @@ class Glm5NextTextAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
-
-        self.q_proj = (
-            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is None
-            else None
-        )
-        self.q_a_proj = (
-            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            if self.q_lora_rank is not None
-            else None
-        )
-        self.q_a_layernorm = (
-            Glm5NextTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
-        )
-        self.q_b_proj = (
-            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is not None
-            else None
-        )
+        self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+        self.q_a_layernorm = Glm5NextTextRMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
+        self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -1173,11 +1193,11 @@ class Glm5NextTextAttention(nn.Module):
         k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        # Cache update
+        # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         if self.indexer is not None:
             topk_indices = self.indexer(
@@ -1343,7 +1363,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
-    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock"]
+    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock", "Glm5NextVisionPatchMerger"]
     _skip_keys_device_placement = ["past_key_values"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
@@ -1400,9 +1420,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextIndexer):
             init.zeros_(module.index_kpool_compress_ape)
             init.ones_(module.index_kpool_compress_gate)
-        elif isinstance(module, Glm5NextVisionRotaryEmbedding):  # noqa: F821
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 # Do not inherit from DSv4 as it messes modular prefixes up for the PreTrainedModel
@@ -1471,7 +1488,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             attention_mask = attention_mask.bool()
 
             causal_mask_mapping = {
-                "deepseek_sparse_attention": attention_mask,
+                "indexed_attention": attention_mask,
                 "linear_attention": attention_mask,
             }
 
@@ -1698,18 +1715,6 @@ class Glm5NextVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Glm5NextVisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
-
-
 class Glm5NextVisionPatchEmbed(nn.Module):
     def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__()
@@ -1730,6 +1735,72 @@ class Glm5NextVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+class Glm5NextVisionRotaryEmbedding(nn.Module):
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
+
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: Glm5NextVisionConfig, device=None):
+        super().__init__()
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_axial_rope_parameters(
+        config: Glm5NextVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
+
+
 @auto_docstring
 class Glm5NextVisionModel(Glm5NextPreTrainedModel):
     config: Glm5NextVisionConfig
@@ -1746,8 +1817,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
         self.patch_size = config.patch_size
         self.patch_embed = Glm5NextVisionPatchEmbed(config)
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Glm5NextVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Glm5NextVisionRotaryEmbedding(config)
         self.blocks = nn.ModuleList([Glm5NextVisionBlock(config) for _ in range(config.depth)])
         self.merger = Glm5NextVisionPatchMerger(
             dim=config.out_hidden_size,
@@ -1765,16 +1835,6 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
 
         self.gradient_checkpointing = False
         self.post_init()
-
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb, position_ids
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1798,9 +1858,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        rotary_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for blk in self.blocks:
             hidden_states = blk(
@@ -2374,7 +2432,7 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             )
         attention_mask = attention_mask.bool()
 
-        return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
+        return {"indexed_attention": attention_mask, "linear_attention": attention_mask}
 
 
 __all__ = [

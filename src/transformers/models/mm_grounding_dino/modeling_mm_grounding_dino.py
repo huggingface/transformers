@@ -1099,8 +1099,8 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes_list):
             ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
                 indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
@@ -1839,14 +1839,14 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
 
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
-        valid_height = torch.sum(mask[:, :, 0], 1)
-        valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_height = valid_height.float() / height
-        valid_ratio_width = valid_width.float() / width
+        valid_height = torch.sum(mask[:, :, 0], 1, dtype=dtype)
+        valid_width = torch.sum(mask[:, 0, :], 1, dtype=dtype)
+        valid_ratio_height = valid_height / height
+        valid_ratio_width = valid_width / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
@@ -1875,8 +1875,8 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
             grid_y, grid_x = torch.meshgrid(
-                torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
-                torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                torch.linspace(0, height - 1, height, dtype=enc_output.dtype, device=enc_output.device),
+                torch.linspace(0, width - 1, width, dtype=enc_output.dtype, device=enc_output.device),
                 indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
@@ -1932,7 +1932,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, AutoModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2044,8 +2044,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
+        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
@@ -2412,16 +2411,11 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
             1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> import torch

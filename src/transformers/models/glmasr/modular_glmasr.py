@@ -17,7 +17,7 @@ from collections.abc import Callable
 import numpy as np
 
 from ...activations import ACT2FN
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
@@ -146,9 +146,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "audio", "path": audio_item}
-                        if isinstance(audio_item, str)
-                        else {"type": "audio", "audio": audio_item},
+                        make_audio_chat_template_content(audio_item),
                         {"type": "text", "text": prompt_text},
                     ],
                 }
@@ -403,10 +401,6 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

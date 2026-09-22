@@ -140,10 +140,6 @@ class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    @unittest.skip("DataParallel is a deprecated legacy API and not officially supported")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 @slow
 @require_torch_accelerator
@@ -154,7 +150,9 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # model weights in baidu/Qianfan-OCR will be updated after this PR get released in transformers,
         # use bairongz/QianfanOCR for testing and will update back to baidu/Qianfan-OCR after weight update
         self.model_checkpoint = "bairongz/QianfanOCR"
-        self.image_url = url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.image_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -223,7 +221,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. They",
+                ("cuda", (8, 6)): "The image features two striped cats lying down on a couch, both appearing to be",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
                 ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }
@@ -302,7 +300,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. The",
+                ("cuda", (8, 6)): "The image features two striped cats lying down on a couch, both appearing to be",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
                 ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }

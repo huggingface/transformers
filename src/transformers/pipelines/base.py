@@ -524,7 +524,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
     def __iter__(self):
-        with open(self.input_path, "r") as f:
+        with open(self.input_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if self.is_multi_columns:
@@ -539,7 +539,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
         Args:
             data (`list[dict]`): The data to store.
         """
-        with open(self.output_path, "w") as f:
+        with open(self.output_path, "w", encoding="utf-8") as f:
             if len(data) > 0:
                 writer = csv.DictWriter(f, list(data[0].keys()))
                 writer.writeheader()
@@ -567,7 +567,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
-        with open(input_path, "r") as f:
+        with open(input_path, "r", encoding="utf-8") as f:
             self._entries = json.load(f)
 
     def __iter__(self):
@@ -584,7 +584,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
         Args:
             data (`dict`): The data to store.
         """
-        with open(self.output_path, "w") as f:
+        with open(self.output_path, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
 
@@ -701,12 +701,16 @@ def build_pipeline_init_args(
             pipelines](https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching) .
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
-        device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too
-        dtype (`str` or `torch.dtype`, *optional*):
-            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
-            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`)"""
+        device (`int` or `str` or `torch.device`, *optional*):
+            Device on which the pipeline is allocated. When left unset, the pipeline is placed on the first available
+            accelerator (CUDA, MPS, XPU, ...) and falls back to CPU only when none is available; the model is moved
+            there automatically. Pass `device="cpu"` (or `-1`) to force CPU, a positive ordinal or `"cuda:1"` to select
+            a specific accelerator, or a native `torch.device`/`str`. This argument cannot be combined with a model
+            already loaded via `accelerate` (i.e. one with an `hf_device_map`).
+        dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
+            Precision the model is loaded in, forwarded to `from_pretrained`. Defaults to `"auto"`, which loads the
+            model in the dtype it was saved in (read from the checkpoint's `config.dtype`, otherwise inferred from the
+            weights). Pass an explicit `torch.float16`, `torch.bfloat16`, `torch.float32`, ... to override it."""
     if supports_binary_output:
         docstring += r"""
         binary_output (`bool`, *optional*, defaults to `False`):

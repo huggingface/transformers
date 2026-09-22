@@ -28,9 +28,9 @@ import warnings
 from pathlib import Path
 from unittest.mock import patch
 
-import httpx
 import pytest
 from huggingface_hub import HfApi, snapshot_download, split_torch_state_dict_into_shards
+from huggingface_hub.utils import httpx
 from parameterized import parameterized
 from pytest import mark
 
@@ -67,6 +67,9 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    backend_empty_cache,
+    backend_memory_allocated,
+    backend_synchronize,
     force_serialization_as_bin_files,
     hub_retry,
     is_staging_test,
@@ -718,7 +721,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.config.dtype, torch.float16)
         self.assertEqual(model.dtype, torch.float16)
         # tests `config.dtype` saving
-        with open(f"{model_path}/config.json") as f:
+        with open(f"{model_path}/config.json", encoding="utf-8") as f:
             config_dict = json.load(f)
         self.assertEqual(config_dict["dtype"], "float16")
         # 2. test dtype="auto" via auto-derivation
@@ -1428,7 +1431,7 @@ class ModelUtilsTest(TestCasePlus):
 
         with self.assertRaises(OSError) as missing_model_file_error:
             with tempfile.TemporaryDirectory() as tmp_dir:
-                with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                     f.write("{}")
                 f.close()
                 BertModel.from_pretrained(tmp_dir)
@@ -1540,7 +1543,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save the config
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 f.write(json.dumps(model.config.to_dict()))
 
             state_dict = model.state_dict()
@@ -1569,7 +1572,7 @@ class ModelUtilsTest(TestCasePlus):
                 self.assertIs(model.linear.weight, model.linear_3.weight, msg="Weights are not tied!")
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     # Save the config
-                    with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                    with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                         f.write(json.dumps(model.config.to_dict()))
 
                     state_dict = model.state_dict()
@@ -1622,7 +1625,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save the config
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 f.write(json.dumps(model.config.to_dict()))
 
             state_dict = model.state_dict()
@@ -1652,7 +1655,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save the config
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 f.write(json.dumps(model.config.to_dict()))
 
             state_dict = model.state_dict()
@@ -1679,7 +1682,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save the config
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 f.write(json.dumps(model.config.to_dict()))
 
             state_dict = model.state_dict()
@@ -2157,7 +2160,7 @@ class ModelUtilsTest(TestCasePlus):
             """
         )
 
-        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+        with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w+", suffix=".py") as tmp:
             tmp.write(script_to_run)
             tmp.flush()
             tmp.seek(0)
@@ -2208,7 +2211,7 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmpdirname)
 
             # The config should not have a mention of transformers_weights
-            with open(os.path.join(tmpdirname, "config.json")) as f:
+            with open(os.path.join(tmpdirname, "config.json"), encoding="utf-8") as f:
                 config = json.loads(f.read())
                 self.assertFalse("transformers_weights" in config)
 
@@ -2234,7 +2237,7 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmpdirname, max_shard_size="100kb")
 
             # The config should not have a mention of transformers_weights
-            with open(os.path.join(tmpdirname, "config.json")) as f:
+            with open(os.path.join(tmpdirname, "config.json"), encoding="utf-8") as f:
                 config = json.loads(f.read())
                 self.assertFalse("transformers_weights" in config)
 
@@ -2501,6 +2504,49 @@ class ModelUtilsTest(TestCasePlus):
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
 
+    def test_last_hidden_state_can_be_untied_from_config(self):
+        """Test that `config.tie_last_hidden_states` overrides the default of the `capture_outputs` decorator, so that
+        `hidden_states[-1]` stays the hidden state before the final norm (which embedding models dropping that norm
+        rely on). As for the test above, testing it on Llama is enough as the entry point is the general
+        `capture_outputs` decorator, so this cannot easily be made a common model test."""
+        from transformers import LlamaConfig, LlamaModel
+
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
+            hidden_size=32,
+            intermediate_size=64,
+            vocab_size=100,
+        )
+        model = LlamaModel(config).to(torch_device).eval()
+        input_ids = torch.randint(5, 95, (2, 17), device=torch_device)
+
+        # By default, the output of the last decoder layer is overwritten with the post-norm `last_hidden_state`
+        with torch.no_grad():
+            tied = model(input_ids, output_hidden_states=True)
+        torch.testing.assert_close(tied.hidden_states[-1], tied.last_hidden_state)
+
+        model.config.tie_last_hidden_states = False
+        with torch.no_grad():
+            untied = model(input_ids, output_hidden_states=True)
+
+        # Neither `last_hidden_state` nor the earlier hidden states are affected
+        torch.testing.assert_close(untied.last_hidden_state, tied.last_hidden_state)
+        for untied_hidden_state, tied_hidden_state in zip(untied.hidden_states[:-1], tied.hidden_states[:-1]):
+            torch.testing.assert_close(untied_hidden_state, tied_hidden_state)
+
+        # But `hidden_states[-1]` is now the input of the final norm instead of its output
+        torch.testing.assert_close(model.norm(untied.hidden_states[-1]), tied.hidden_states[-1])
+
+        # `None` means unset, i.e. fall back to the decorator default, as a config saved with an explicit
+        # `"tie_last_hidden_states": null` must not silently untie the model
+        model.config.tie_last_hidden_states = None
+        with torch.no_grad():
+            unset = model(input_ids, output_hidden_states=True)
+        torch.testing.assert_close(unset.hidden_states[-1], unset.last_hidden_state)
+
     def test_linear_attention_models_can_use_accelerate_hooks(self):
         """
         Test that linear attention models (here only tested on lfm2 as it has small checkpoints) can use device_map and
@@ -2566,6 +2612,28 @@ class ModelUtilsTest(TestCasePlus):
 
         # Raises `TypeError: ... different number of arguments` if the decorator hides the signature
         _validate_layer(check_cls=Qwen3_5GatedDeltaNet, cls=KernelGatedDeltaNet, repo="dummy-repo")
+
+    def test_accelerator_warmup_skipped_when_mem_get_info_unavailable(self):
+        """
+        Some backends cannot answer free-memory queries (e.g. Intel XPU under WSL2, where the Level Zero Sysman
+        interface is not exposed, so `torch.xpu.mem_get_info` raises). Warmup is a best-effort optimization and must
+        not turn such a failure into a model loading failure.
+        """
+        from transformers.modeling_utils import caching_allocator_warmup
+
+        model = LlamaForCausalLM(
+            LlamaConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37)
+        )
+        # Pretend everything is loaded on an accelerator; the warmup must bail out before touching the device
+        expanded_device_map = {name: "cuda:0" for name, _ in model.named_parameters()}
+
+        # The warning is emitted through `warning_once`, which is cached globally
+        logging.warning_once.cache_clear()
+        with patch("torch.cuda.mem_get_info", side_effect=RuntimeError("The device doesn't get_mem_info.")):
+            with CaptureLogger(logging.get_logger("transformers.modeling_utils")) as cl:
+                caching_allocator_warmup(model, expanded_device_map, None)
+
+        self.assertIn("Skipping caching allocator warmup", cl.out)
 
 
 @slow
@@ -3903,3 +3971,64 @@ class RemoteAndCustomCodeModelTests(unittest.TestCase):
 
         self.assertTrue(model.is_custom_code())
         self.assertFalse(model.is_remote_code())
+
+
+@require_torch_accelerator
+class GradientCheckpointingOffloadTest(unittest.TestCase):
+    """`gradient_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
+
+    def _model(self, num_hidden_layers=8, hidden_size=256):
+        from transformers import LlamaModel, set_seed
+
+        config = LlamaConfig(
+            num_hidden_layers=num_hidden_layers,
+            hidden_size=hidden_size,
+            intermediate_size=hidden_size * 2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            vocab_size=128,
+        )
+        set_seed(0)
+        return LlamaModel(config).to(torch_device).train()
+
+    def _backward(self, model, input_ids):
+        model(input_ids=input_ids).last_hidden_state.float().pow(2).mean().backward()
+
+    def test_gradients_match_the_non_offloaded_run(self):
+        model = self._model()
+        input_ids = torch.randint(0, 128, (1, 64), device=torch_device)
+
+        model.gradient_checkpointing_enable()
+        self._backward(model, input_ids)
+        expected = [p.grad.clone() for p in model.parameters()]
+
+        model.zero_grad(set_to_none=True)
+        model.gradient_checkpointing_enable(offload=True)
+        self._backward(model, input_ids)
+
+        for expected_grad, param in zip(expected, model.parameters()):
+            torch.testing.assert_close(param.grad, expected_grad)
+
+    def test_frees_exactly_the_saved_activations(self):
+        num_hidden_layers, hidden_size, seq_len = 8, 256, 2048
+        # Each checkpointed layer saves one `seq_len x hidden_size` input for its recompute.
+        saved_bytes = num_hidden_layers * seq_len * hidden_size * 4  # fp32
+
+        resident = []
+        for offload in (False, True):
+            model = self._model(num_hidden_layers, hidden_size)
+            model.gradient_checkpointing_enable(offload=offload)
+            input_ids = torch.randint(0, 128, (1, seq_len), device=torch_device)
+            self._backward(model, input_ids)  # warm the allocator
+            model.zero_grad(set_to_none=True)
+            backend_synchronize(torch_device)
+            backend_empty_cache(torch_device)
+
+            # Sampled after the forward, where every layer's saved input is still live.
+            base = backend_memory_allocated(torch_device)
+            output = model(input_ids=input_ids)
+            backend_synchronize(torch_device)
+            resident.append(backend_memory_allocated(torch_device) - base)
+            del output, model
+
+        self.assertEqual(resident[0] - resident[1], saved_bytes)
