@@ -1169,22 +1169,33 @@ def compare_trainer_and_checkpoint_args(training_args, trainer_state):
         logger.warning_once(warning_str)
 
 
-def _align_special_token(name, tokenizer_token_id, config, generation_config, updated_tokens):
+def _align_special_token(name, tokenizer, config, generation_config, updated_tokens, several=False):
     """
-    Aligns a single special token id held by the configs with the tokenizer, recording the change in
-    `updated_tokens`. A token the tokenizer does not define is left untouched.
+    Aligns one special token id held by the configs with the tokenizer, recording the change in `updated_tokens`. A
+    token the tokenizer does not define is left untouched. With `several`, the generation config keeps the tokens it
+    already holds alongside the tokenizer's one, as a list.
     """
+    tokenizer_token_id = getattr(tokenizer, name)
     if tokenizer_token_id is None:
         return
-    tokenizer_has_new_token = tokenizer_token_id != getattr(config, name, None)
-    if generation_config is not None:
-        tokenizer_has_new_token |= tokenizer_token_id != getattr(generation_config, name)
+    generation_token_ids = getattr(generation_config, name) if generation_config is not None else None
+    if not isinstance(generation_token_ids, list):
+        generation_token_ids = [generation_token_ids]
 
-    if tokenizer_has_new_token:
-        updated_tokens[name] = tokenizer_token_id
-        setattr(config, name, tokenizer_token_id)
-        if generation_config is not None:
-            setattr(generation_config, name, tokenizer_token_id)
+    if tokenizer_token_id == getattr(config, name, None) and (
+        generation_config is None or tokenizer_token_id in generation_token_ids
+    ):
+        return
+
+    updated_tokens[name] = tokenizer_token_id
+    setattr(config, name, tokenizer_token_id)
+    if generation_config is None:
+        return
+    if several:
+        # Any of the tokens listed here will halt generation, so the ones already defined are preserved.
+        setattr(generation_config, name, [tokenizer_token_id, *(t for t in generation_token_ids if t is not None)])
+    else:
+        setattr(generation_config, name, tokenizer_token_id)
 
 
 def align_special_tokens(model, processing_class):
@@ -1211,38 +1222,13 @@ def align_special_tokens(model, processing_class):
     # declares: `_special_tokens_map` is initialized with `None` for every special token, so an absent attribute
     # and a deliberately cleared one are indistinguishable. Only values the tokenizer defines are propagated.
 
-    # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
-    # token.
-    if tokenizer.eos_token_id is not None:
-        tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(config, "eos_token_id", None)
-        if model_has_generation_config:
-            # `generation_config.eos_token_id` is None: direct comparison
-            if model.generation_config.eos_token_id is None:
-                tokenizer_has_new_eos |= tokenizer.eos_token_id != model.generation_config.eos_token_id
-            else:
-                # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
-                if isinstance(model.generation_config.eos_token_id, int):
-                    model.generation_config.eos_token_id = [model.generation_config.eos_token_id]
-                # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
-                tokenizer_has_new_eos |= tokenizer.eos_token_id not in model.generation_config.eos_token_id
-
-        if tokenizer_has_new_eos:
-            updated_tokens["eos_token_id"] = tokenizer.eos_token_id
-            config.eos_token_id = tokenizer.eos_token_id
-            # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
-            # EOS tokens defined here will halt generation.
-            if model_has_generation_config:
-                all_eos_tokens = [tokenizer.eos_token_id]
-                if model.generation_config.eos_token_id is not None:
-                    all_eos_tokens += list(model.generation_config.eos_token_id)
-                model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
-
-    # 2 - Align BOS and PAD, which hold a single token each
+    # 1 - Align the tokens. The generation config may hold more than one EOS token.
     generation_config = model.generation_config if model_has_generation_config else None
-    _align_special_token("bos_token_id", tokenizer.bos_token_id, config, generation_config, updated_tokens)
-    _align_special_token("pad_token_id", tokenizer.pad_token_id, config, generation_config, updated_tokens)
+    _align_special_token("eos_token_id", tokenizer, config, generation_config, updated_tokens, several=True)
+    _align_special_token("bos_token_id", tokenizer, config, generation_config, updated_tokens)
+    _align_special_token("pad_token_id", tokenizer, config, generation_config, updated_tokens)
 
-    # 3 - Warn users about the changes
+    # 2 - Warn users about the changes
     if len(updated_tokens) > 0:
         logger.warning(
             "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
