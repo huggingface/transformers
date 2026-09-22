@@ -654,10 +654,12 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         is_streaming = num_lookahead_frames is not None or speaker_cache is not None
         if speaker_cache is None:
             fifo_length = self.config.streaming_config.fifo_length if is_streaming else self.config.fifo_length
-            speaker_cache_update_period = self.config.streaming_config.speaker_cache_update_period if is_streaming else self.config.speaker_cache_update_period
-            speaker_cache = Nemotron3DiarizationSpeakerCache(
-                self.config, fifo_length, speaker_cache_update_period
+            speaker_cache_update_period = (
+                self.config.streaming_config.speaker_cache_update_period
+                if is_streaming
+                else self.config.speaker_cache_update_period
             )
+            speaker_cache = Nemotron3DiarizationSpeakerCache(self.config, fifo_length, speaker_cache_update_period)
         if num_lookahead_frames is None:
             num_lookahead_frames = 0
 
@@ -699,9 +701,13 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
                 chunk_mask = embed_mask[:, start_idx : start_idx + chunk_embeds.shape[1]]
                 step_mask = torch.cat([chunk_mask.new_ones(batch_size, cached_length), chunk_mask], dim=1)
 
-            # positions restart at every chunk, which is the encoder's default `position_ids`
+            # positions restart at every chunk
+            position_ids = torch.arange(chunk_input_embeds.shape[1], device=chunk_input_embeds.device)[None, :]
             encoder_outputs: BaseModelOutput = self.model(
-                inputs_embeds=chunk_input_embeds, attention_mask=step_mask, **kwargs
+                inputs_embeds=chunk_input_embeds,
+                attention_mask=step_mask,
+                position_ids=position_ids,
+                **kwargs,
             )
             all_hidden_states += encoder_outputs.hidden_states or ()
             all_attentions += encoder_outputs.attentions or ()
