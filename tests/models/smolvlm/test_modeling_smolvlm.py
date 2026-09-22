@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -662,3 +663,9 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         exportable_module = TorchExportableModuleForVLM(model)
         exported_program = exportable_module.export_text_decoder()
         self.assertIsInstance(exported_program, torch.export.ExportedProgram)
+
+
+class SmolVLMFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-SmolVLMForConditionalGeneration"
+    all_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("text", "video")

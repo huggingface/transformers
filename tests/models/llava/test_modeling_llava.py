@@ -41,6 +41,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -692,3 +693,41 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
         self.assertEqual(output, EXPECTED_GENERATION)
+
+
+class LlavaFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-LlavaForConditionalGeneration"
+    all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("text", "image")
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if cls.processor is not None:
+            from transformers import LlavaConfig
+
+            config = LlavaConfig.from_pretrained(cls.model_id)
+
+            # Fix 1: tiny repo stores crop_size as {longest_edge, shortest_edge} but
+            # CLIPImageProcessor.center_crop requires {height, width}.
+            cs = cls.processor.image_processor.crop_size
+            if "longest_edge" in cs:
+                size = cs["longest_edge"]
+                cls.processor.image_processor.crop_size = {"height": size, "width": size}
+
+            # Fix 2: patch_size, vision_feature_select_strategy, and num_additional_image_tokens
+            # are not in the tiny repo's processor_config.json; pull from the model config.
+            # With strategy="default", the processor subtracts 1 from the patch count, so
+            # num_additional_image_tokens=1 is needed to keep processor tokens == model features.
+            if cls.processor.patch_size is None:
+                cls.processor.patch_size = config.vision_config.patch_size
+                cls.processor.vision_feature_select_strategy = config.vision_feature_select_strategy
+                if config.vision_feature_select_strategy == "default":
+                    cls.processor.num_additional_image_tokens = 1
+
+    def _prepare_model_inputs(self, model, inputs):
+        # Fix 3: the tiny model's image_token_id in config defaults to 0, but the processor
+        # uses the tokenizer's <image> token id.  Align the model config to the processor.
+        if model.config.image_token_id != self.processor.image_token_id:
+            model.config.image_token_id = self.processor.image_token_id
+        return inputs

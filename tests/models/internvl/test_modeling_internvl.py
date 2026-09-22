@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_image_processing_common import load_test_image, url_to_local_path
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -1006,3 +1007,13 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             expected_output,
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
+
+
+@unittest.skip(
+    "hf-tiny-v2/tiny-random-InternVLForConditionalGeneration has image_processor_type='GotOcr2ImageProcessor' "
+    "in its preprocessor_config.json which is incorrect.  Re-enable once the hub repo is fixed."
+)
+class InternVLFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-InternVLForConditionalGeneration"
+    all_model_classes = (InternVLForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("text", "image")

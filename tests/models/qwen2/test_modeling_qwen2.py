@@ -43,6 +43,7 @@ if is_torch_available():
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 
 
 class Qwen2ModelTester(CausalLMModelTester):
@@ -710,3 +711,8 @@ In summary:"""
         new_generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches flash attention"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
+
+
+class Qwen2FastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-Qwen2ForCausalLM"
+    all_model_classes = (Qwen2ForCausalLM,) if is_torch_available() else ()

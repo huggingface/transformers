@@ -43,6 +43,7 @@ from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -3462,3 +3463,32 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_flex_attention_with_grads():
         return
+
+
+class WhisperFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-WhisperForConditionalGeneration"
+    all_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("audio",)
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if cls.processor is not None:
+            # The tiny model has max_source_positions=200 (expects 400 mel frames after
+            # the 2× conv downsampling), but the feature extractor defaults to padding
+            # to n_samples=480000 (30 s × 16 kHz = 3000 frames).  Pass max_length in
+            # raw samples so the forward pass receives 400 frames instead of 3000.
+            from transformers import WhisperConfig
+
+            config = WhisperConfig.from_pretrained(cls.model_id)
+            hop_length = cls.processor.feature_extractor.hop_length
+            cls.processor_call_kwargs = {"max_length": config.max_source_positions * 2 * hop_length}
+
+    def _prepare_model_inputs(self, model, inputs):
+        import torch
+
+        # Whisper is seq2seq: a bare forward pass needs decoder_input_ids.
+        # Without them the model creates both decoder_input_ids and
+        # decoder_inputs_embeds internally and then raises a conflict error.
+        inputs["decoder_input_ids"] = torch.tensor([[model.config.decoder_start_token_id]])
+        return inputs
