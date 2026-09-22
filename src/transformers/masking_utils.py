@@ -234,6 +234,20 @@ def fast_all(tensor: torch.BoolTensor) -> torch.BoolTensor:
     return tensor.sum() == tensor.numel()
 
 
+def _cannot_decide_skip_while_tracing(padding_mask: torch.Tensor | None) -> bool:
+    """Whether skipping the mask must be declined because we are tracing.
+
+    `torch.export` hard-codes the decision into the exported forward, which is in general wrong
+    (see https://github.com/pytorch/pytorch/issues/108108). Reading the values of a `padding_mask` is a
+    data-dependent control flow, which cannot be traced either. Without a `padding_mask`, the remaining
+    conditions are static, so `torch.compile` can guard on them and no mask needs to be materialized.
+
+    NOTE: before torch 2.14 (pytorch#176499), dynamo also reported exporting under `torch.compile`, so on
+    older versions this keeps the previous, conservative behavior of never skipping while compiling.
+    """
+    return is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask))
+
+
 def _ignore_causal_mask_sdpa(
     padding_mask: torch.Tensor | None,
     q_length: int,
@@ -254,36 +268,23 @@ def _ignore_causal_mask_sdpa(
         mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
-    # `torch.export` hard-codes `is_causal` into the exported forward, which is in general wrong
-    # (see https://github.com/pytorch/pytorch/issues/108108). `torch.compile` reguards and is thus unaffected.
-    # NOTE: before torch 2.14 (pytorch#176499), dynamo also reported exporting under `torch.compile`, which simply
-    # means that we keep the previous, conservative behavior of never skipping while compiling on older versions.
-    if is_torchdynamo_exporting():
+    if _cannot_decide_skip_while_tracing(padding_mask):
         return False
-
-    # Local attention requires additional patterns in the mask, which sdpa's `is_causal` cannot express
+    # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
         return False
 
-    # `q_length == 1` mimics lower-right alignment with `is_causal=False`, while `kv_length == q_length` is
-    # upper-left aligned (torch's default) and thus equivalent, so both can rely on sdpa's `is_causal`
-    is_causal_aligned = q_length == 1 or kv_length == q_length
-    # An empty cache is upper-left aligned as well, which allows skipping during prefill even with padding
-    cache_is_empty = q_offset == 0
-
-    # Without a padding mask, only these static conditions matter, which dynamo guards on
-    if padding_mask is None:
-        return is_causal_aligned or cache_is_empty
-
-    # Reading the mask values is a data-dependent control flow, which cannot be traced
-    if is_tracing(padding_mask):
-        return False
-
-    # Padding must be represented in the mask, so it can only be skipped if there is none
-    if is_causal_aligned and fast_all(padding_mask):
+    # If `q_length == 1`, we then use `is_causal=False` in sdpa integration to mimic lower-right alignment. If `kv_length == q_length`,
+    # we use `is_causal=True` as upper-left alignment (torch's default) is the same as lower-right in this case. If we have padding,
+    # we need to add padding to the mask, so cannot be skipped
+    if (q_length == 1 or kv_length == q_length) and (padding_mask is None or fast_all(padding_mask)):
         return True
-    # The exception is padding that only covers the "future k/v tokens" of a StaticCache's static k/v states
-    if cache_is_empty and fast_all(padding_mask[:, :q_length]) and fast_all(~padding_mask[:, q_length:]):
+    # Additional case to optimize prefill: if the cache is empty (`q_offset == 0`), we can use `is_causal=True` even
+    # with a padding_mask, if the padding_mask only contains padding related to "future k/v tokens" of the static k/v states
+    # returned by StaticCaches. This works thanks to the upper-left alignment of sdpa's `is_causal` mask
+    if q_offset == 0 and (
+        padding_mask is None or (fast_all(padding_mask[:, :q_length]) and fast_all(~padding_mask[:, q_length:]))
+    ):
         return True
 
     return False
@@ -301,23 +302,19 @@ def _can_skip_bidirectional_mask_xpu(
     - Skip if no padding and no local attention constraint
     """
 
-    # Under `torch.export`, the skip would be hard-coded into the exported forward, which is in general wrong
-    if is_torchdynamo_exporting():
+    if _cannot_decide_skip_while_tracing(padding_mask):
         return False
 
-    # Local attention requires additional patterns in the mask, which sdpa's `is_causal` cannot express (same as CUDA)
+    # Check local attention constraint (same as CUDA)
     if local_attention_size is not None and kv_length >= local_attention_size:
         return False
 
-    # Without a padding mask, full bidirectional attention never requires an explicit mask
     if padding_mask is None:
+        # Without padding mask, can always skip for full bidirectional attention
         return True
 
-    # Reading the mask values is a data-dependent control flow, which cannot be traced
-    if is_tracing(padding_mask):
-        return False
-
-    return bool(fast_all(padding_mask))
+    # Skip only if no padding tokens present
+    return padding_mask.all()
 
 
 def _ignore_bidirectional_mask_sdpa(
@@ -338,23 +335,15 @@ def _ignore_bidirectional_mask_sdpa(
         # - Skip if no padding and no local attention constraint
         return _can_skip_bidirectional_mask_xpu(padding_mask, kv_length, local_attention_size)
 
-    # Under `torch.export`, the skip would be hard-coded into the exported forward, which is in general wrong
-    if is_torchdynamo_exporting():
-        return False
-
-    # Local attention requires additional patterns in the mask, which sdpa's `is_causal` cannot express
-    if local_attention_size is not None and kv_length >= local_attention_size:
-        return False
-
-    # Without a padding mask, full bidirectional attention never requires an explicit mask
-    if padding_mask is None:
+    if (
+        not _cannot_decide_skip_while_tracing(padding_mask)
+        and (padding_mask is None or padding_mask.all())
+        # in this case we need to add special patterns to the mask so cannot be skipped otherwise
+        and (local_attention_size is None or kv_length < local_attention_size)
+    ):
         return True
 
-    # Reading the mask values is a data-dependent control flow, which cannot be traced
-    if is_tracing(padding_mask):
-        return False
-
-    return bool(fast_all(padding_mask))
+    return False
 
 
 def _vmap_expansion_sdpa(mask_function: Callable) -> Callable:
