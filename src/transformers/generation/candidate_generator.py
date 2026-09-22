@@ -1690,21 +1690,23 @@ def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_en
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
 
     mask_key = "decoder_attention_mask" if is_encoder_decoder else "attention_mask"
-    mask = model_kwargs.get(mask_key)
-    mask_length_diff = None
-    if mask is not None:
-        mask_length_diff = new_length - mask.shape[1]
-        if mask_length_diff < 0:
-            model_kwargs[mask_key] = mask[:, :mask_length_diff]
-        elif mask_length_diff > 0:
-            model_kwargs[mask_key] = torch.cat([mask, mask.new_ones((mask.shape[0], mask_length_diff))], dim=-1)
+    if mask_key not in model_kwargs:
+        return model_kwargs
+
+    mask = model_kwargs[mask_key]
+    if mask is None:
+        return model_kwargs
+
+    mask_length_diff = new_length - mask.shape[1]
+    if mask_length_diff < 0:
+        model_kwargs[mask_key] = mask[:, :mask_length_diff]
+    elif mask_length_diff > 0:
+        model_kwargs[mask_key] = torch.cat([mask, mask.new_ones((mask.shape[0], mask_length_diff))], dim=-1)
 
     # Handle cross attention models
     if "cross_attention_mask" in model_kwargs:
         # Mllama case
         cross_mask = model_kwargs["cross_attention_mask"]
-        if mask_length_diff is None:
-            mask_length_diff = new_length - cross_mask.shape[1]
         if mask_length_diff < 0:
             model_kwargs["cross_attention_mask"] = cross_mask[:, :mask_length_diff]
         elif mask_length_diff > 0:
@@ -1713,8 +1715,6 @@ def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_en
     elif "image_attention_mask" in model_kwargs:
         # IDEFICS case
         cross_mask = model_kwargs["image_attention_mask"]
-        if mask_length_diff is None:
-            mask_length_diff = new_length - cross_mask.shape[1]
         if mask_length_diff < 0:
             model_kwargs["image_attention_mask"] = cross_mask[:, :mask_length_diff]
         elif mask_length_diff > 0:
