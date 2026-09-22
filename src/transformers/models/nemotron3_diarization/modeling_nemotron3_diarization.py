@@ -29,12 +29,19 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+)
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_nemotron3_diarization import Nemotron3DiarizationAudioConfig, Nemotron3DiarizationConfig
 
@@ -246,6 +253,13 @@ class Nemotron3DiarizationOutput(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, num_frames, config.head_config.num_speakers)`):
         Per-frame speaker activity logits at the spectrogram frame rate. `logits.sigmoid()` gives the probability
         that each speaker is active in each frame; speakers are ordered by their first arrival in the audio.
+    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*, returned when `output_hidden_states=True`):
+        Encoder hidden states of every chunk, in chunk order: the encoder runs once per chunk, so the tuple holds
+        `config.audio_config.num_hidden_layers + 1` tensors per chunk. Their sequence length is the chunk's, cache
+        and look-ahead frames included.
+    attentions (`tuple[torch.FloatTensor, ...]`, *optional*, returned when `output_attentions=True`):
+        Encoder attention weights of every chunk, in chunk order, `config.audio_config.num_hidden_layers` tensors
+        per chunk.
     speaker_cache (`Nemotron3DiarizationSpeakerCache`, *optional*, returned in streaming mode):
         Updated streaming state, to pass to the forward of the next audio chunk of the same streams.
     """
@@ -556,6 +570,8 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
         factor = self.config.subsampling_factor
         return (input_lengths + factor - 1) // factor
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -564,7 +580,7 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> BaseModelOutput:
         if (input_features is None) == (inputs_embeds is None):
             raise ValueError("Provide exactly one of `input_features` and `inputs_embeds`.")
 
@@ -591,7 +607,7 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-        return self.layer_norm(hidden_states)
+        return BaseModelOutput(last_hidden_state=self.layer_norm(hidden_states))
 
 
 class Nemotron3DiarizationSubpixelUpsampler(nn.Module):
@@ -655,7 +671,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         self.silence_embeds = nn.Parameter(torch.zeros(config.audio_config.hidden_size))
         self.post_init()
 
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -731,6 +747,8 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
             chunk_length, chunk_right_context = self.config.chunk_length, self.config.chunk_right_context
 
         logits = []
+        # the encoder runs once per chunk, so its recorded outputs are concatenated in chunk order
+        all_hidden_states, all_attentions = (), ()
         for start_idx in range(0, num_chunk_embeds, chunk_length):
             end_idx = min(start_idx + chunk_length, num_chunk_embeds)
             num_chunk_frames = end_idx - start_idx
@@ -746,8 +764,12 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
                 step_mask = torch.cat([chunk_mask.new_ones(batch_size, cached_length), chunk_mask], dim=1)
 
             # positions restart at every chunk, which is the encoder's default `position_ids`
-            hidden_states = self.model(inputs_embeds=chunk_input_embeds, attention_mask=step_mask, **kwargs)
-            chunk_logits = self.head(hidden_states)
+            encoder_outputs: BaseModelOutput = self.model(
+                inputs_embeds=chunk_input_embeds, attention_mask=step_mask, **kwargs
+            )
+            all_hidden_states += encoder_outputs.hidden_states or ()
+            all_attentions += encoder_outputs.attentions or ()
+            chunk_logits = self.head(encoder_outputs.last_hidden_state)
             speaker_cache.update(
                 chunk_input_embeds, chunk_logits, self.silence_embeds, num_chunk_frames, mask=step_mask
             )
@@ -759,7 +781,12 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         # with no look-ahead, the last encoder frame may be the padding added by feature stacking
         logits = torch.cat(logits, dim=1)[:, :num_frames]
 
-        return Nemotron3DiarizationOutput(logits=logits, speaker_cache=speaker_cache if is_streaming else None)
+        return Nemotron3DiarizationOutput(
+            logits=logits,
+            hidden_states=all_hidden_states or None,
+            attentions=all_attentions or None,
+            speaker_cache=speaker_cache if is_streaming else None,
+        )
 
 
 __all__ = [
