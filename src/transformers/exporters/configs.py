@@ -166,7 +166,7 @@ class ExecutorchConfig(DynamoConfig):
             - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
         cache_implementation (`str`, *optional*):
             Cache implementation in the exported program. `None` preserves the HF cache export
-            behavior. `"executorch_native"` replaces it before tracing with ExecuTorch's native
+            behavior. `"executorch_off_graph_cache"` replaces it before tracing with ExecuTorch's native
             off-graph cache (initially supported only with `backend="mlx"`). This does not change
             `GenerationConfig.cache_implementation`, which controls the HF cache used during generation
             capture. Native cache capacity and allocation are configured by the runtime caller.
@@ -193,5 +193,5 @@ class ExecutorchConfig(DynamoConfig):
     cache_implementation: str | None = None
 
     def __post_init__(self):
-        if self.cache_implementation not in (None, "executorch_native"):
-            raise ValueError("ExecutorchConfig.cache_implementation must be None or 'executorch_native'.")
+        if self.cache_implementation not in (None, "executorch_off_graph_cache"):
+            raise ValueError("ExecutorchConfig.cache_implementation must be None or 'executorch_off_graph_cache'.")

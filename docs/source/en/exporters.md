@@ -451,7 +451,7 @@ cache handles where they land internally.
 
 ### ExecuTorch native KV cache
 
-Set `ExecutorchConfig(cache_implementation="executorch_native")` to keep historical K/V in a native runtime cache,
+Set `ExecutorchConfig(cache_implementation="executorch_off_graph_cache")` to keep historical K/V in a native runtime cache,
 not in graph inputs, outputs, or mutable buffers. This uses ExecuTorch's backend-neutral
 `kvcache::update_and_attend` operator. Initially, export is enabled only for `backend="mlx"`.
 It requires an ExecuTorch build providing `extension.llm.cache.update_and_attend` and
@@ -465,7 +465,7 @@ from transformers.exporters import ExecutorchConfig, ExecutorchExporter
 components = ExecutorchExporter().export_for_generation(
     model.eval(),
     inputs,
-    config=ExecutorchConfig(backend="mlx", dynamic=True, cache_implementation="executorch_native"),
+    config=ExecutorchConfig(backend="mlx", dynamic=True, cache_implementation="executorch_off_graph_cache"),
     generation_config=GenerationConfig(cache_implementation="dynamic", do_sample=False),
     multi_token_decode=True,
 )
@@ -473,7 +473,7 @@ components = ExecutorchExporter().export_for_generation(
 
 `GenerationConfig.cache_implementation` controls the ordinary HF cache used during generation
 capture. `ExecutorchConfig.cache_implementation` controls the exported program: `None` (the default)
-preserves the existing HF cache export behavior, while `"executorch_native"` installs native attention
+preserves the existing HF cache export behavior, while `"executorch_off_graph_cache"` installs native attention
 and removes the captured HF cache before `torch.export`. Generation itself is unchanged, and no native
 reference-cache session is needed for capture or tracing. Token positions remain explicit inputs. With
 `multi_token_decode=True` and dynamic shapes, the decode graph can process both an empty-cache
@@ -496,7 +496,7 @@ Initial support is single-sequence, unpadded, decoder-only text models using the
 interface with full causal attention and uniform K/V head geometry. Padding/custom masks, shared-KV
 layers, sliding-window/SSM/encoder-decoder caches, beam expansion, speculative generation, and
 attention-weight outputs are rejected. Select this on the export config, not on `GenerationConfig`;
-`"executorch_native"` is not a cache implementation for standalone `model.generate()`.
+`"executorch_off_graph_cache"` is not a cache implementation for standalone `model.generate()`.
 
 ### Static KV cache
 
