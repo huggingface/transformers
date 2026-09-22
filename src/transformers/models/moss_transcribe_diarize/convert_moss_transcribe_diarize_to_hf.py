@@ -39,10 +39,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # fmt: off
 STATE_DICT_MAPPING = {
-    # Whisper audio encoder, renamed to match `MossTranscribeDiarizeModel.audio_tower`.
     r"^model\.whisper_encoder\.":     r"model.audio_tower.",
-    # VQAdaptor `nn.Sequential` (Linear, SiLU, Linear, LayerNorm), renamed to match
-    # `MossTranscribeDiarizeMultiModalProjector` (linear_1, act, linear_2, norm).
     r"^model\.vq_adaptor\.layers\.0\.": r"model.multi_modal_projector.linear_1.",
     r"^model\.vq_adaptor\.layers\.2\.": r"model.multi_modal_projector.linear_2.",
     r"^model\.vq_adaptor\.layers\.3\.": r"model.multi_modal_projector.norm.",
