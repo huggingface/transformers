@@ -38,6 +38,7 @@ if is_torch_available():
 
     from transformers import (
         AutoProcessor,
+        AutoModelForAudioFrameClassification,
         Nemotron3DiarizationAudioConfig,
         Nemotron3DiarizationConfig,
         Nemotron3DiarizationForAudioFrameClassification,
@@ -280,7 +281,7 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
             return load_file(local)[key]
 
     def _load_model(self, **config_overrides):
-        return Nemotron3DiarizationForAudioFrameClassification.from_pretrained(
+        return AutoModelForAudioFrameClassification.from_pretrained(
             self.checkpoint_name, revision=self.revision, device_map=torch_device, **config_overrides
         )
 
