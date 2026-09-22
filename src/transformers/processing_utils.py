@@ -62,6 +62,7 @@ from .utils import (
     is_torch_available,
     list_repo_templates,
     logging,
+    resolve_revision,
 )
 from .utils.chat_template_utils import _get_template_variables, render_jinja_template
 from .utils.type_validators import (
@@ -243,7 +244,8 @@ class ImagesKwargs(TypedDict, total=False):
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
-            Resize the shorter side of the input to `size["shortest_edge"]`.
+            Resize using one of the supported size dictionaries. Pixel-area bounds use
+            `{"min_pixels": int, "max_pixels": int}`.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
             Whether to default to a square when resizing, if size is an int.
         crop_size (`dict[str, int]`, *optional*):
@@ -410,6 +412,9 @@ class AudioKwargs(TypedDict, total=False):
             If set, will pad the sequence to a multiple of the provided value.
         return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        device (`str` or `torch.device`, *optional*):
+            The device to compute the audio features on (e.g. "cpu", "cuda"), only relevant for feature
+            extractors that compute them with torch.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -426,6 +431,7 @@ class AudioKwargs(TypedDict, total=False):
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
     pad_to_multiple_of: Annotated[int | None, positive_int()]
     return_attention_mask: bool | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     load_audio_backend: str | None
 
@@ -1231,7 +1237,8 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
-        # holding a copy for optionally loading the audio tokenizer (if available)
+        # holding a copy for optionally loading the audio tokenizer (if available). It keeps the revision requested by
+        # the user, as the audio tokenizer usually lives in another repository.
         audio_tokenizer_kwargs = copy.deepcopy(kwargs)
 
         cache_dir = kwargs.pop("cache_dir", None)
@@ -1241,6 +1248,15 @@ class ProcessorMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+
+        # Resolve the revision once, so that the template listing and all the files below come from the same repo state
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -1721,7 +1737,14 @@ class ProcessorMixin(PushToHubMixin):
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
+        # Resolve the revision once, so the processor config and all its sub-processors come from the same repo state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         if token is not None:
             kwargs["token"] = token
@@ -2077,15 +2100,21 @@ class ProcessorMixin(PushToHubMixin):
                     True  # force offset mapping so we can infer token boundaries
                 )
 
-        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
-        sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
+        audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
+        sampling_rate = kwargs.get(
+            "sampling_rate", processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
+        )
         if sampling_rate is None:
             if hasattr(self._audio_processor, "sampling_rate"):
                 sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 
-        load_audio_backend = kwargs.get("load_audio_backend", processor_kwargs.get("load_audio_backend"))
+        load_audio_backend = kwargs.get(
+            "load_audio_backend",
+            processor_kwargs.get("load_audio_backend", audio_kwargs_from_user.get("load_audio_backend")),
+        )
         if load_audio_backend is None:
             default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
             load_audio_backend = default_audio_kwargs.get("load_audio_backend", "auto")
@@ -2206,6 +2235,14 @@ class ProcessorMixin(PushToHubMixin):
             # Set only is user passes a non-None value. Otherwise wa want to use each processor's own defaults
             if return_tensors:
                 processor_kwargs["return_tensors"] = return_tensors
+
+            # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
+            # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
+            if batch_audios:
+                if "sampling_rate" in audio_kwargs_from_user:
+                    processor_kwargs["audio_kwargs"] = {**audio_kwargs_from_user, "sampling_rate": sampling_rate}
+                else:
+                    processor_kwargs["sampling_rate"] = sampling_rate
 
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)

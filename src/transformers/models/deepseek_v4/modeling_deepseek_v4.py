@@ -242,6 +242,13 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.entry_count[name] += compressed.shape[1]
         return self.compressed_kv[name]
 
+    def reset(self) -> None:
+        super().reset()
+        # Dropped rather than zeroed, as they grow by concatenation, like the main states
+        for name in self.compressed_kv:
+            self.buffer_kv[name] = self.buffer_gate[name] = self.compressed_kv[name] = None
+            self.entry_count[name] = 0
+
 
 class DeepseekV4CSACache(DeepseekV4HCACache):
     r"""Cache layer for CSA blocks (paper §2.3.1). Extends :class:`DeepseekV4HCACache`
@@ -289,6 +296,11 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
         return prior_kv, prior_gate
+
+    def reset(self) -> None:
+        super().reset()
+        for name in self.overlap_kv:
+            self.overlap_kv[name] = self.overlap_gate[name] = None
 
 
 class DeepseekV4GroupedLinear(nn.Linear):
@@ -866,79 +878,114 @@ class DeepseekV4Attention(nn.Module):
 
 class DeepseekV4HyperConnection(nn.Module):
     r"""
-    Manifold-Constrained Hyper-Connections
-    (mHC) (Xie et al., 2026) to strengthen the conventional residual connections between adjacent
-    Transformer blocks
+    A module to implement manifold-constrained Hyper-Connections (mHC) (Xie et al., 2026) which strengthens the
+    conventional residual connections between adjacent Transformer blocks.
 
-    Owns the learned (`fn`, `base`, `scale`)
-    parameters that turn the incoming `hc_mult` residual streams into collapse / expand
-    weights. The decoder layer instantiates two of these (one for the attention site,
-    one for the mlp site).
+    When using mHC, each token is projected onto `hc_mult` streams, so the shape of decoder layer inputs changes from
+    [batch_size, sequence_length, hidden_size] to [batch_size, sequence_length, hc_mult, hidden_size].
+    To keep the same input shape for attention or MLP blocks, the streams are collapsed into one upon entering a block,
+    and expanded back into `hc_mult` streams upon exiting. There is also a weighted residual connection between the
+    input and output streams.
+    The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the `hc_mult` input
+    streams through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
 
-    ASCII shape guide — `B` = batch, `S` = seq, `H` = hc_mult, `D` = hidden_size::
+    The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
 
-              hidden_streams        flatten(2)        RMSNorm-rescale + F.linear(fn)
-         [B, S, H, D]  ──────────►  [B, S, H*D]  ─────────────────────────────────►
-                                                             mix-logits
-                                                             [B, S, (2+H)*H]
-                                                                    │
-                            ┌───────────────────────────────────────┴──────────────────────────────┐
-                            ▼                          ▼                                           ▼
-                        pre logits                post logits                               comb logits
-                        [B, S, H]                 [B, S, H]                                 [B, S, H, H]
-                        × scale[0]                × scale[1]                                × scale[2]
-                        + base[:H]                + base[H:2H]                              + base[2H:]
-                        σ() + eps                 2·σ()                                     softmax(-1) + eps
-                        │                         │                                         │
-                        pre                       post                                      Sinkhorn(iters)
-                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
-                                                                                            │
-                                                                                            comb
-                                                                                            (stream mixer)
+                                                  ┌───────────────────┐
+                             N input streams  ────│ FLATTEN + PROJECT |────> (pre, post, comb) weights
+                              [B, S, N, D]        └───────────────────┘      ([B, S, N],  [B, S, N],  [B, S, N, N])
+                                  │ │ │
+               ╭──────────────────┴─┼─┼──────────────────╮
+               │ ╭──────────────────┴─┼────────────────╮ │
+               │ │ ╭──────────────────┴──────────────╮ │ │
+               │ │ │                                 │ │ │
+        ┌─────────────────┐                          │ │ │
+        │ COLLAPSE (pre)  │                          │ │ │
+        └─────────────────┘                          │ │ │
+                 │                                   │ │ │
+            Block input                              │ │ │
+             [B, S, D]                               │ │ │
+                 │                                   │ │ │
+        ┌─────────────────┐                     ┌─────────────┐
+        │   ATTN or MLP   │                     │  MIX (comb) │
+        └─────────────────┘                     └─────────────┘
+                 │                                   │ │ │
+           Block output                              │ │ │
+             [B, S, D]                               │ │ │
+                 │                                   │ │ │
+        ┌─────────────────┐                          │ │ │
+        │  EXPAND (post)  │                          │ │ │
+        └─────────────────┘                          │ │ │
+               │ │ │                                 │ │ │
+        N expanded streams                    N residual streams
+           [B, S, N, D]                          [B, S, N, D]
+               │ │ │                                 │ │ │
+               │ │ ╰───────────┌─────────┐───────────╯ │ │
+               │ ╰─────────────│   ADD   │─────────────╯ │
+               ╰───────────────└─────────┘───────────────╯
+                                  │ │ │
+                                  ▼ ▼ ▼
+                            N output streams
+                              [B, S, N, D]
     """
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.hc_mult = config.hc_mult
+        self.hc_mult = config.hc_mult  # number of streams, referred as N below
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
-        mix = (2 + self.hc_mult) * self.hc_mult
-        self.fn = nn.Parameter(torch.empty(mix, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(mix))
-        # 3 = number of outputs from the mHC mapping: `pre` (input projection
-        # weights), `post` (sublayer output projection weights), `comb` (the
-        # H×H residual combine matrix that gets Sinkhorn-projected onto the
-        # doubly-stochastic manifold). Each output gets its own learned scale.
+        # The mHC projects the N inputs streams into 3 weights: pre (size: N), post (size: N) and comb (size: N*N)
+        # Hence the output size of the projection is 2 * N + N * N = (2 + N) * N.
+        concatenated_weights_size = (2 + self.hc_mult) * self.hc_mult
+        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
+        # The mHC produces 3 outputs, each with their own scale parameter (the "pre", "post" and "comb" weights)
         self.scale = nn.Parameter(torch.empty(3))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        r"""
-        Compute `pre`, `post`, `comb` from the mHC mapping (paper §2.2 eq. 8).
-        `comb` is projected onto the doubly-stochastic manifold via Sinkhorn-
-        Knopp: starting from the sigmoid-positive matrix, alternate row and
-        column normalisation for `hc_sinkhorn_iters` steps. `pre` then collapses
-        the `hc_mult` parallel streams into a single sequence (input projection
-        into the sublayer); `post` and `comb` are returned for the caller to
-        apply on the sublayer output.
         """
+        Computes the weights used to mix in the `hc_mult` streams with the input and output of the next layer, which can
+        be an attention or a MLP layer. This is done through three weights:
+
+        - pre: used to collapse the `hc_mult` input streams into one, creating an input tensor for the next layer
+        - post: used to expand the output of the next layer back into `hc_mult` streams
+        - comb: used to mix the `hc_mult` input streams with the `hc_mult` output streams
+
+        All weights are returned except "pre", which is consumed here.
+        """
+        batch_size, seq_len = hidden_streams.shape[:2]
         hc = self.hc_mult
-        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
-        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc * hc], dim=-1)
+
+        # Flatten and norm the hidden streams
+        flattened = hidden_streams.view(batch_size, seq_len, -1).float()
+        flattened = self.input_norm(flattened)
+        # Mix the streams together to infer the weight coefficients
+        flattened = F.linear(flattened, self.fn.float())
+        # Split the weight coefficients
+        pre_w, post_w, comb_w = flattened.split([hc, hc, hc * hc], dim=-1)
         pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
 
+        comb_w = comb_w.view(*comb_w.shape[:-1], hc, hc)  # these are matrix weights, unlike pre or post
+        comb_b = comb_b.view(hc, hc)
+
+        # All weights are computed with a one layer perceptron. For pre and post, this is it.
         pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
         post = 2 * torch.sigmoid(post_w * post_scale + post_b)
-        comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
-        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
+        comb = torch.softmax(comb_w * comb_scale + comb_b, dim=-1) + self.hc_eps
+
+        # The comb weight is a bit different: it dictates how the input streams (In) are added to the output streams
+        # (Out) in this way: Mixed = In @ Comb + Out. To make sure the norm of "Mixed" does not blow up, we constrain
+        # the comb weight to be doubly-stochastic (ie. its rows and columns must sum to 1) with a few iterations of the
+        # Sinkhorn-Knopp algorithm, which iteratively normalizes the rows and columns to sum to 1.
         comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         for _ in range(self.hc_sinkhorn_iters - 1):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
-        # Collapse the `hc_mult` parallel streams down to a single sequence using
-        # the `pre` weights: one weighted sum across the stream axis, ready for
-        # the sublayer (attn / MLP).
+
+        # Since "pre" is meant to be used with the input streams (available here as `hidden_streams`), we collapse the
+        # streams here and return `collapsed` tensor, which will be the input for the next attention or MLP block.
         collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
         return post, comb, collapsed
 
@@ -999,7 +1046,7 @@ class DeepseekV4Experts(nn.Module):
     ) -> torch.Tensor:
         final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in hit:
             expert_idx = expert_idx[0]
@@ -1360,51 +1407,38 @@ def load_balancing_loss_func(
     if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
 
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
 
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count of top-k assignments per expert
+            tokens_per_expert_sum = (
+                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
 
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
@@ -1445,11 +1479,6 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

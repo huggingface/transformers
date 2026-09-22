@@ -20,7 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
@@ -36,7 +36,7 @@ if is_torch_available():
     )
 
 
-class Lfm2VlImageProcessingTester:
+class Lfm2VlImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -583,7 +583,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_grayscale_image(self):
         """Test that grayscale (1-channel) images are converted to RGB."""
-        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False, do_convert_rgb=True)
 
         # Create grayscale image
         grayscale_image = Image.new("L", (256, 256), color=128)

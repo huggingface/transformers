@@ -17,12 +17,11 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling, load_image
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin
-from ...test_processing_common import url_to_local_path
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_vision_available():
@@ -33,7 +32,7 @@ if is_torch_available():
     import torch
 
 
-class SmolVLMImageProcessingTester:
+class SmolVLMImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -91,19 +90,16 @@ class SmolVLMImageProcessingTester:
             "do_image_splitting": self.do_image_splitting,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to SmolVLMImageProcessor,
-        assuming do_resize is set to True. The expected size in that case the max image size.
-        """
-        return self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
         effective_nb_images = (
             self.num_images * 5 if self.do_image_splitting else 1
         )  # 5 is a squared image divided into 4 + global image resized
-        return effective_nb_images, self.num_channels, height, width
+        return (
+            effective_nb_images,
+            self.num_channels,
+            self.max_image_size["longest_edge"],
+            self.max_image_size["longest_edge"],
+        )
 
     def prepare_image_inputs(
         self,
@@ -279,71 +275,6 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 tuple(encoded_images.shape),
                 (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
-
-    @require_vision
-    @require_torch
-    def test_backends_equivalence(self):
-        """Override to also compare pixel_attention_mask, rows, and cols (return_row_col_info=True)."""
-        if len(self.image_processing_classes) < 2:
-            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
-
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
-        dummy_image = dummy_image.resize((100, 150))
-
-        encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
-            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt", return_row_col_info=True)
-
-        backend_names = list(encodings.keys())
-        reference_backend = backend_names[0]
-        reference = encodings[reference_backend]
-        for backend_name in backend_names[1:]:
-            encoding = encodings[backend_name]
-            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values)
-            self._assert_tensors_equivalence(
-                reference.pixel_attention_mask.float(), encoding.pixel_attention_mask.float()
-            )
-            self.assertEqual(reference.rows, encoding.rows)
-            self.assertEqual(reference.cols, encoding.cols)
-
-    @require_vision
-    @require_torch
-    def test_backends_equivalence_batched(self):
-        """Override to also compare pixel_attention_mask, rows, and cols (return_row_col_info=True)."""
-        if len(self.image_processing_classes) < 2:
-            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
-
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
-            )
-
-        dummy_images = self.image_processor_tester.prepare_image_inputs(
-            equal_resolution=False, num_images=5, torchify=True
-        )
-        # pop some images to have non homogenous batches:
-        indices_to_pop = [i if np.random.random() < 0.5 else None for i in range(len(dummy_images))]
-        for i in indices_to_pop:
-            if i is not None:
-                dummy_images[i].pop()
-
-        encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
-            encodings[backend_name] = image_processor(dummy_images, return_tensors="pt", return_row_col_info=True)
-
-        backend_names = list(encodings.keys())
-        reference_backend = backend_names[0]
-        reference = encodings[reference_backend]
-        for backend_name in backend_names[1:]:
-            encoding = encodings[backend_name]
-            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values, atol=3e-1)
-            self._assert_tensors_equivalence(
-                reference.pixel_attention_mask.float(), encoding.pixel_attention_mask.float()
-            )
-            self.assertEqual(reference.rows, encoding.rows)
-            self.assertEqual(reference.cols, encoding.cols)
 
     def test_get_num_patches_without_images(self):
         for image_processing_class in self.image_processing_classes.values():

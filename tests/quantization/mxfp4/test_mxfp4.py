@@ -22,6 +22,7 @@ from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
     require_kernels,
     require_torch,
+    require_torch_accelerator_memory,
     require_torch_large_accelerator,
     require_triton,
     slow,
@@ -428,6 +429,8 @@ class Mxfp4ModelTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.check_inference_correctness_quantized(model, tokenizer)
 
+    # ~39 GiB for the dequantized bfloat16 weights.
+    @require_torch_accelerator_memory(memory=48)
     def test_gpt_oss_model_loading_dequantized_with_device_map(self):
         """Test loading OpenAI MoE model with mxfp4 dequantization and device_map"""
 
@@ -456,6 +459,8 @@ class Mxfp4ModelTest(unittest.TestCase):
         # Test with CPU in device map (CPU already support mxfp4)
         quantizer.validate_environment(device_map={"": "cpu"})
 
+    # Holds the packed (~13 GiB) and the dequantized (~39 GiB) model at the same time, by design.
+    @require_torch_accelerator_memory(memory=56)
     def test_memory_footprint_comparison(self):
         """Test memory footprint differences between quantized and unquantized models"""
 
@@ -476,6 +481,8 @@ class Mxfp4ModelTest(unittest.TestCase):
         dequantized_mem = dequantized_model.get_memory_footprint()
         self.assertLess(quantized_mem, dequantized_mem)
 
+    # Keeps the packed model alive while reloading the saved copy, dequantized (~13 + ~39 GiB).
+    @require_torch_accelerator_memory(memory=56)
     def test_save_mxfp4(self):
         """Test saving quantized OpenAI MoE model with device_map"""
 
@@ -507,6 +514,8 @@ class Mxfp4ModelTest(unittest.TestCase):
             )
             self.check_inference_correctness_quantized(loaded_model, tokenizer)
 
+    # Quantizes from a bfloat16 checkpoint, so it holds the bfloat16 source and the mxfp4 result at once.
+    @require_torch_accelerator_memory(memory=56)
     def test_save_mxfp4_non_quantized(self):
         """Test saving dequantized OpenAI MoE model with mxfp4 quantization and device_map"""
         non_quantized_model_name = "hf-internal-testing/gpt-oss-20b-bf16"

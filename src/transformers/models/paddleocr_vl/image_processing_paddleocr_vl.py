@@ -45,6 +45,10 @@ class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    min_pixels (`int`, *optional*, defaults to `384 * 384`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `1536 * 1536`):
+        The max pixels of the image to resize the image.
     """
 
     min_pixels: int
@@ -106,7 +110,7 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
     def __init__(self, **kwargs: Unpack[PaddleOCRVLImageProcessorKwargs]):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        size = dict(self.size) if size is None else size
         if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
             size["shortest_edge"] = min_pixels
             size.pop("min_pixels", None)
@@ -122,8 +126,13 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
+        if min_pixels is not None or max_pixels is not None:
+            size_dict = dict(size) if isinstance(size, dict) else {}
+            if min_pixels is not None:
+                size_dict["shortest_edge"] = min_pixels
+            if max_pixels is not None:
+                size_dict["longest_edge"] = max_pixels
+            size = SizeDict(**size_dict)
         return super()._standardize_kwargs(size=size, **kwargs)
 
     @auto_docstring

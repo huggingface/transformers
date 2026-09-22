@@ -696,6 +696,10 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
 
+    def prepare_inputs_for_generation(self, input_ids, next_sequence_length=None, **kwargs):
+        # `forward` slices off the cached prefix itself, so it needs the full `input_ids`.
+        return super().prepare_inputs_for_generation(input_ids, next_sequence_length=None, **kwargs)
+
     @auto_docstring
     def forward(
         self,

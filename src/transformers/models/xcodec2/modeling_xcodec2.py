@@ -761,8 +761,9 @@ class Xcodec2ISTFTHead(nn.Module):
         self.window = nn.Buffer(window, persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        stft_pred = self.linear(hidden_states).transpose(1, 2)
-        magnitude, phase = stft_pred.chunk(2, dim=1)
+        stft_pred = self.linear(hidden_states)
+        # Keep the frequency axis last for `torch.polar` compatibility with torch.compile
+        magnitude, phase = stft_pred.chunk(2, dim=-1)
         # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
         magnitude = magnitude.float()
         phase = phase.float()
@@ -772,9 +773,9 @@ class Xcodec2ISTFTHead(nn.Module):
 
         # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
         # so we use irfft + fold with explicit pre-computed padding to replicate it)
-        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")
+        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward").transpose(1, 2)
         time_frames = time_frames * self.window[None, :, None]
-        num_frames = spectrogram_complex.shape[-1]
+        num_frames = spectrogram_complex.shape[1]
         output_size = (num_frames - 1) * self.hop_length + self.n_fft
         audio = F.fold(
             time_frames,

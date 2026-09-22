@@ -17,6 +17,7 @@ import unittest
 
 from transformers import AutoTokenizer, DogeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -235,6 +236,22 @@ class DogeModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_sdpa_decoder_is_causal(self, config, input_ids, *args):
+        model = DogeForCausalLM(config).to(torch_device).eval()
+        model.set_attn_implementation("sdpa")
+        other_input_ids = input_ids.clone()
+        other_input_ids[:, -1] = (input_ids[:, -1] + 1) % config.vocab_size
+        # The three inputs for which `create_causal_mask` may return `None` under sdpa
+        for attention_mask, use_cache in ((None, False), (torch.ones_like(input_ids), False), (None, True)):
+            with torch.no_grad():
+                logits = model(input_ids, attention_mask=attention_mask, use_cache=use_cache).logits
+                other_logits = model(other_input_ids, attention_mask=attention_mask, use_cache=use_cache).logits
+            self.parent.assertTrue(
+                torch.allclose(logits[:, :-1], other_logits[:, :-1], atol=1e-5, rtol=1e-5),
+                msg=f"Max diff: {(logits[:, :-1] - other_logits[:, :-1]).abs().max().item():.6f} "
+                f"(attention_mask={attention_mask is not None}, use_cache={use_cache})",
+            )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -335,6 +352,10 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
+    def test_sdpa_decoder_is_causal(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_sdpa_decoder_is_causal(*config_and_inputs)
+
     def test_tp_plan_matches_params(self):
         """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
         be valid all at the same time"""
@@ -370,7 +391,12 @@ class DogeIntegrationTest(unittest.TestCase):
         """
         An integration test for Doge-20M. It tests against a long output to ensure the subtle numerical differences
         """
-        EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular"
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "Here's everything I know about dogs. Dogs is the best animal in the world, and they are the most common pets. Dogs are known for their unique personalities and behaviors,",
+                ("cuda", 8): "Here's everything I know about dogs. Dogs is the best animal in the world, and they are the most common pets. Dogs are known for their unique personalities and behaviors,",
+            }
+        ).get_expectation()  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
         model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", dtype=torch.bfloat16)
