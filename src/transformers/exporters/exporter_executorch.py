@@ -201,6 +201,7 @@ class ExecutorchExporter(DynamoExporter):
         elif type(config) is not ExecutorchConfig:
             raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
 
+        _validate_executorch_off_graph_cache_backend(config)
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
@@ -236,17 +237,18 @@ class ExecutorchExporter(DynamoExporter):
 
 
 # -- Off-graph cache adapter ---------------------------------------------------
-
+_OFF_GRAPH_CACHE_BACKENDS = frozenset({"mlx"})
 # HF's attention registry is process-global.
 _EXECUTORCH_OFF_GRAPH_CACHE_EXPORT_LOCK = threading.RLock()
 _EXECUTORCH_OFF_GRAPH_CACHE_ATTENTION_NAME = "executorch_off_graph_cache"
 
 
-def _uses_executorch_off_graph_cache(model):
-    return (
-        getattr(getattr(model, "config", None), "_attn_implementation", None)
-        == _EXECUTORCH_OFF_GRAPH_CACHE_ATTENTION_NAME
-    )
+def _validate_executorch_off_graph_cache_backend(config):
+    if config.cache_implementation == "executorch_off_graph_cache" and config.backend not in _OFF_GRAPH_CACHE_BACKENDS:
+        raise ValueError(
+            f"executorch_off_graph_cache is not supported by the ExecuTorch {config.backend.upper()} backend. "
+            f"Supported backends: {', '.join(sorted(_OFF_GRAPH_CACHE_BACKENDS))}."
+        )
 
 
 def _validate_executorch_off_graph_cache_model_scope(model):
@@ -557,9 +559,6 @@ def _prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     create in-``forward`` tensors (``arange``/``zeros``/sinusoids) without ``device=``, which
     default to CPU and would mismatch a CUDA model (``FakeTensor Device Propagation ... cuda, cpu``).
     ``prepare_for_export`` then casts the inputs to CPU during the trace."""
-    if _uses_executorch_off_graph_cache(model):
-        raise ValueError("executorch_off_graph_cache is not supported by the ExecuTorch XNNPACK backend.")
-
     model.requires_grad_(False)
     model = model.to(device="cpu")
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
@@ -576,8 +575,6 @@ def _prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     kernels compiled by AOTInductor, which needs a GPU to compile/autotune. The model itself can
     stay on any device (e.g. CPU): AOTInductor targets the machine's GPU regardless of where the
     traced tensors live, so no `.to("cuda")` is needed."""
-    if _uses_executorch_off_graph_cache(model):
-        raise ValueError("executorch_off_graph_cache is not supported by the ExecuTorch CUDA backend.")
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
 
