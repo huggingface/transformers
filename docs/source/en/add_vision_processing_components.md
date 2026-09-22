@@ -185,11 +185,11 @@ Add tests for each vision processing component in the model test directory. Use 
 
 ### Image processor tests
 
-Image processor tests live in `tests/models/<model_name>/test_image_processing_<model_name>.py`. Define a tester that inherits from `ImageProcessingTester` and a test class that inherits from `ImageProcessingTestMixin` and `unittest.TestCase`.
+Image processor tests live in `tests/models/<model_name>/test_image_processing_<model_name>.py`. Define a tester that inherits from [`ImageProcessingTester`] and a test class that inherits from [`ImageProcessingTestMixin`] and `unittest.TestCase`.
 
 The image processing tester defines default test attributes such as the processor initialization arguments and parameters to create random inputs for the tests. Only override arguments if they should be different from the image processor defaults. For example, we usually test with smaller image sizes to keep the tests fast. The image processor classes are automatically inferred from `IMAGE_PROCESSOR_MAPPING_NAMES`.
 
-Set `image_processor_tester_class` on the test class. The mixin creates `self.image_processor_tester` and supplies most required test methods.
+Set `image_processor_tester_class` on the test class. The mixin creates `self.image_processor_tester` and already covers most required test methods.
 
 ```py
 import unittest
