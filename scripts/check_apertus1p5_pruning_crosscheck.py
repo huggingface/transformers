@@ -40,8 +40,10 @@ def main():
 
     failed = False
 
-    hub_config = json.load(open(hf_hub_download(args.reference_repo, "config.json", revision=args.revision)))
-    local_config = json.load(open(os.path.join(args.local, "config.json")))
+    hub_config = json.load(
+        open(hf_hub_download(args.reference_repo, "config.json", revision=args.revision), encoding="utf-8")
+    )
+    local_config = json.load(open(os.path.join(args.local, "config.json"), encoding="utf-8"))
     for key in ("vocab_size", "output_vocab_size", "tie_word_embeddings"):
         match = hub_config.get(key) == local_config.get(key)
         failed |= not match
@@ -51,13 +53,16 @@ def main():
         )
 
     hub_index = json.load(
-        open(hf_hub_download(args.reference_repo, "model.safetensors.index.json", revision=args.revision))
+        open(
+            hf_hub_download(args.reference_repo, "model.safetensors.index.json", revision=args.revision),
+            encoding="utf-8",
+        )
     )
     hub_shard_name = hub_index["weight_map"]["lm_head.weight"]
     print(f"downloading reference shard containing lm_head: {hub_shard_name} ...")
     hub_shard = hf_hub_download(args.reference_repo, hub_shard_name, revision=args.revision)
 
-    local_index = json.load(open(os.path.join(args.local, "model.safetensors.index.json")))
+    local_index = json.load(open(os.path.join(args.local, "model.safetensors.index.json"), encoding="utf-8"))
     local_shard = os.path.join(args.local, local_index["weight_map"]["lm_head.weight"])
 
     with safe_open(hub_shard, framework="pt") as file:
