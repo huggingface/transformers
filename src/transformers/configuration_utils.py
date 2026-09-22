@@ -1400,10 +1400,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         if cls.sub_configs_defaults:
             for key, specs in cls.sub_configs_defaults.items():
-                default_subconfig_class = specs.get_config_class(specs.model_type)
-                subconfig_default_fields = default_subconfig_class.default_config_fields()
-                subconfig_default_fields.update(specs.init_kwargs)
-                default_config_fields[key] = subconfig_default_fields
+                # Backbone configs are special as they sometimes hold timm-configs
+                if key != "backbone_config":
+                    default_subconfig_class = specs.get_config_class(specs.model_type)
+                    subconfig_default_fields = default_subconfig_class.default_config_fields()
+                    subconfig_default_fields.update(specs.init_kwargs)
+                    default_config_fields[key] = subconfig_default_fields
 
         return default_config_fields
 

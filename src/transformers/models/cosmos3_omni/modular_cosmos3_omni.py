@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..auto.configuration_auto import AutoConfig
+from ..auto import AutoConfig
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLForConditionalGeneration, Qwen3VLPreTrainedModel
 

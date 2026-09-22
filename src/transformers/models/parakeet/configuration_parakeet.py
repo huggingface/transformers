@@ -160,7 +160,7 @@ class ParakeetRNNTConfig(PreTrainedConfig):
     """
 
     model_type = "parakeet_rnnt"
-    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+    sub_configs_defaults = {"encoder_config": SubConfigSpec(config_class=ParakeetEncoderConfig)}
 
     vocab_size: int = 8193
     decoder_hidden_size: int = 640
@@ -173,12 +173,8 @@ class ParakeetRNNTConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = ParakeetEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
         super().__post_init__(**kwargs)
+        self.initializer_range = self.encoder_config.initializer_range
 
 
 @auto_docstring(checkpoint="nvidia/parakeet-tdt-0.6b-v3")

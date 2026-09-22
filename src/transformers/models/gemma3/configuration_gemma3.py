@@ -24,7 +24,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto.configuration_auto import AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="google/gemma-3-4b-it")
