@@ -96,7 +96,7 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             task="entity_classification",
             extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>"],
         )
-        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
         expected_tokens = ["<s>", "<ent>", "Bey", "once", "<ent>", "Ġlives", "Ġin", "ĠLos", "ĠAngeles", ".", "</s>"]

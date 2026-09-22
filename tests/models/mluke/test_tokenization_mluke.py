@@ -35,7 +35,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-        cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
+        cls.special_tokens_map = {"entity_1_token": "<ent>", "entity_2_token": "<ent2>"}
 
     @classmethod
     def get_tokenizer(cls, pretrained_name=None, task=None, **kwargs):
@@ -113,7 +113,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             task="entity_classification",
             extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
         )
-        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
         expected_tokens = ["<s>", "<ent>", "▁Beyonce", "<ent>", "▁lives", "▁in", "▁Los", "▁Angeles", ".", "</s>"]
@@ -125,8 +125,8 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             task="entity_pair_classification",
             extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
         )
-        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
-        self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_token_2_id)
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_1_token_id)
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_2_token_id)
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
         expected_tokens = [
