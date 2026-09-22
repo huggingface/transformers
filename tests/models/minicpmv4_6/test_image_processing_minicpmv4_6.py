@@ -32,13 +32,17 @@ if is_vision_available():
 
 
 class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
-    batch_size = 2
-    min_resolution = 64
-    max_resolution = 128
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("min_resolution", 64)
+        kwargs.setdefault("max_resolution", 128)
 
-    # Image processor init kwargs
-    scale_resolution = 448
-    patch_size = 14
+        # Image processor init kwargs
+        kwargs.setdefault("scale_resolution", 448)
+        kwargs.setdefault("patch_size", 14)
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, image_inputs):
         """Return the expected NaViT-packed shape [C, P, total_L] for pixel_values[0]."""
@@ -65,7 +69,7 @@ class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class MiniCPMV4_6ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = MiniCPMV4_6ImageProcessingTester
+    image_processor_tester_class = MiniCPMV4_6ImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

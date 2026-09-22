@@ -32,17 +32,21 @@ if is_torch_available():
 
 
 class DPTImageProcessingTester(ImageProcessingTester):
-    num_labels = 5
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
 
-    # Image processor init kwargs
-    size = {"height": 18, "width": 18}
-    do_reduce_labels = False
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_reduce_labels", False)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
-    image_processing_tester_class = DPTImageProcessingTester
+    image_processor_tester_class = DPTImageProcessingTester
 
     def test_padding(self):
         for backend_name, image_processing_class in self.image_processing_classes.items():

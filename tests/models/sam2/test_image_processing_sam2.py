@@ -25,15 +25,18 @@ if is_torch_available():
 
 
 class Sam2ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 20, "width": 20}
-    mask_size = {"height": 12, "width": 12}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        kwargs.setdefault("mask_size", {"height": 12, "width": 12})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Sam2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Sam2ImageProcessingTester
+    image_processor_tester_class = Sam2ImageProcessingTester
 
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processing_classes.values():

@@ -35,11 +35,15 @@ if is_vision_available():
 
 
 class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
-    min_resolution = 56
-    max_resolution = 1024
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
 
-    # Image processor init kwargs
-    size = {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28})
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -57,7 +61,7 @@ class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Ernie4_5_VLMoeImageProcessingTester
+    image_processor_tester_class = Ernie4_5_VLMoeImageProcessingTester
 
     def test_select_best_resolution(self):
         # Test with a final resize resolution

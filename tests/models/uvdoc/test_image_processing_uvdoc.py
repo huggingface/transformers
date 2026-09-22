@@ -22,15 +22,18 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class UVDocImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    do_normalize = False
-    size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("do_normalize", False)
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = UVDocImageProcessingTester
+    image_processor_tester_class = UVDocImageProcessingTester
 
     @unittest.skip("UVDoc image processors doesn't support 4 channel images")
     def test_call_numpy_4_channels(self):

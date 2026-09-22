@@ -37,11 +37,15 @@ if is_vision_available():
 
 
 class Pix2StructImageProcessingTester(ImageProcessingTester):
-    max_patches_values = [512, 1024, 2048, 4096]
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_patches_values", [512, 1024, 2048, 4096])
 
-    # Image processor init kwargs
-    patch_size = {"height": 16, "width": 16}
-    size = {"height": 20, "width": 20}
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", {"height": 16, "width": 16})
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+
+        super().__init__(**kwargs)
 
     def prepare_dummy_image(self):
         img_url = url_to_local_path(
@@ -54,7 +58,7 @@ class Pix2StructImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Pix2StructImageProcessingTester
+    image_processor_tester_class = Pix2StructImageProcessingTester
 
     @require_vision
     @require_torch
@@ -126,7 +130,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 * self.image_processor_tester.num_channels
             ) + 2
 
-            for max_patch in self.image_processing_tester.max_patches_values:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -162,7 +166,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
             image_processor.is_vqa = True
 
-            for max_patch in self.image_processing_tester.max_patches_values:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 with self.assertRaises(ValueError):
                     encoded_images = image_processor(
@@ -202,7 +206,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 * self.image_processor_tester.num_channels
             ) + 2
 
-            for max_patch in self.image_processing_tester.max_patches_values:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -236,7 +240,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 * self.image_processor_tester.num_channels
             ) + 2
 
-            for max_patch in self.image_processing_tester.max_patches_values:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch, input_data_format="channels_last"
@@ -271,7 +275,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 * self.image_processor_tester.num_channels
             ) + 2
 
-            for max_patch in self.image_processing_tester.max_patches_values:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -313,7 +317,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 @require_torch
 @require_vision
 class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Pix2StructImageProcessingTester
+    image_processor_tester_class = Pix2StructImageProcessingTester
 
     def setUp(self):
         super().setUp()
@@ -335,7 +339,7 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
                 * (self.image_processor_tester.num_channels - 1)
             ) + 2
 
-            for max_patch in self.image_processing_tester.max_patches_values:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch

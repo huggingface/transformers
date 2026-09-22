@@ -36,13 +36,17 @@ if is_vision_available():
 
 
 class Kimi26ImageProcessingTester(ImageProcessingTester):
-    num_frames = 10
-    min_resolution = 56
-    max_resolution = 1024
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_frames", 10)
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
 
-    # Image processor init kwargs
-    size = {"max_height": 512, "max_width": 512}
-    max_patches = 36
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"max_height": 512, "max_width": 512})
+        kwargs.setdefault("max_patches", 36)
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -72,7 +76,7 @@ class Kimi26ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Kimi26ImageProcessingTester
+    image_processor_tester_class = Kimi26ImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

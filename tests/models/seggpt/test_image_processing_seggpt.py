@@ -37,10 +37,14 @@ if is_vision_available():
 
 
 class SegGptImageProcessingTester(ImageProcessingTester):
-    num_segmentation_labels = 5
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_segmentation_labels", 5)
 
-    # Image processor init kwargs
-    size = {"height": 18, "width": 18}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
     def expected_post_processed_shape(self):
         return self.size["height"] // 2, self.size["width"]
@@ -82,7 +86,7 @@ def prepare_img():
 @require_torch
 @require_vision
 class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
-    image_processing_tester_class = SegGptImageProcessingTester
+    image_processor_tester_class = SegGptImageProcessingTester
 
     def test_image_processor_palette(self):
         num_labels = 3
@@ -194,8 +198,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_height, image_width = (
-                self.image_processing_tester.size["height"],
-                self.image_processing_tester.size["width"],
+                self.image_processor_tester.size["height"],
+                self.image_processor_tester.size["width"],
             )
 
             # Single Mask Examples
@@ -275,8 +279,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         image_height, image_width = (
-            self.image_processing_tester.size["height"],
-            self.image_processing_tester.size["width"],
+            self.image_processor_tester.size["height"],
+            self.image_processor_tester.size["width"],
         )
         image_np = np.random.randint(0, 256, (3, image_height, image_width), dtype=np.uint8)
         mask_np = np.zeros((image_height, image_width), dtype=np.uint8)

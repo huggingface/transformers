@@ -40,14 +40,17 @@ if is_torch_available():
 
 
 class LayoutLMv2ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_pytesseract
 class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = LayoutLMv2ImageProcessingTester
+    image_processor_tester_class = LayoutLMv2ImageProcessingTester
 
     @unittest.skip(reason="Tesseract version is not correct in ci. @Arthur FIXME")
     def test_layoutlmv2_integration_test(self):

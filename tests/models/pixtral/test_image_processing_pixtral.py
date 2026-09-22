@@ -37,11 +37,15 @@ if is_vision_available():
 
 
 class PixtralImageProcessingTester(ImageProcessingTester):
-    max_num_images_per_sample = 3
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_num_images_per_sample", 3)
 
-    # Image processor init kwargs
-    size = {"longest_edge": 24}
-    patch_size = {"height": 8, "width": 8}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"longest_edge": 24})
+        kwargs.setdefault("patch_size", {"height": 8, "width": 8})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         if not isinstance(images, (list, tuple)):
@@ -77,7 +81,7 @@ class PixtralImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PixtralImageProcessingTester
+    image_processor_tester_class = PixtralImageProcessingTester
 
     def test_call_without_padding(self):
         for image_processing_class in self.image_processing_classes.values():

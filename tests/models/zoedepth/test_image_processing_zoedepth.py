@@ -34,10 +34,13 @@ class ZoeDepthDepthOutputProxy:
 
 
 class ZoeDepthImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 18, "width": 18}
-    ensure_multiple_of = 32
-    keep_aspect_ratio = False
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("ensure_multiple_of", 32)
+        kwargs.setdefault("keep_aspect_ratio", False)
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.ensure_multiple_of, self.ensure_multiple_of
@@ -59,7 +62,7 @@ class ZoeDepthImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = ZoeDepthImageProcessingTester
+    image_processor_tester_class = ZoeDepthImageProcessingTester
 
     def test_ensure_multiple_of(self):
         # Test variable by turning off all other variables which affect the size, size which is not multiple of 32

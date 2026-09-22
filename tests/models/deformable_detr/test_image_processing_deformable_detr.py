@@ -42,15 +42,18 @@ if is_vision_available():
 
 
 class DeformableDetrImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
-    size = {"shortest_edge": 18, "longest_edge": 1333}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
+        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 1333})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = DeformableDetrImageProcessingTester
+    image_processor_tester_class = DeformableDetrImageProcessingTester
 
     def test_from_dict_with_legacy_integer_size(self):
         for image_processing_class in self.image_processing_classes.values():

@@ -34,15 +34,19 @@ if is_vision_available():
 
 
 class PaddleOCRVLImageProcessingTester(ImageProcessingTester):
-    min_resolution = 56
-    max_resolution = 80
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 80)
 
-    # Image processor init kwargs
-    patch_size = 14
-    merge_size = 2
-    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
-    min_pixels = size["shortest_edge"]
-    max_pixels = size["longest_edge"]
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("size", {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280})
+        kwargs.setdefault("min_pixels", 56 * 56)
+        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         """
@@ -82,7 +86,7 @@ class PaddleOCRVLImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PaddleOCRVLImageProcessingTester
+    image_processor_tester_class = PaddleOCRVLImageProcessingTester
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():

@@ -20,14 +20,17 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class DINOv3ViTImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"shortest_edge": 20}
-    do_center_crop = True
-    crop_size = {"height": 18, "width": 18}
-    do_convert_rgb = True
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 20})
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_convert_rgb", True)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class DINOv3ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = DINOv3ViTImageProcessingTester
+    image_processor_tester_class = DINOv3ViTImageProcessingTester

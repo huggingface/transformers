@@ -29,19 +29,23 @@ if is_torch_available():
 
 
 class EfficientNetImageProcessingTester(ImageProcessingTester):
-    batch_size = 13
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 13)
 
-    # Image processor init kwargs
-    rescale_offset = True
-    rescale_factor = 1 / 127.5
-    size = {"height": 18, "width": 18}
-    resample = PILImageResampling.BILINEAR  # NEAREST is too different between PIL and torchvision
+        # Image processor init kwargs
+        kwargs.setdefault("rescale_offset", True)
+        kwargs.setdefault("rescale_factor", 1 / 127.5)
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("resample", PILImageResampling.BILINEAR)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = EfficientNetImageProcessingTester
+    image_processor_tester_class = EfficientNetImageProcessingTester
 
     def test_rescale(self):
         # EfficientNet optionally rescales between -1 and 1 instead of the usual 0 and 1

@@ -35,11 +35,14 @@ if is_vision_available():
 
 
 class FlavaImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 224, "width": 224}
-    input_size_patches = 14
-    codebook_size = {"height": 112, "width": 112}
-    mask_group_max_aspect_ratio = 0.3
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 224, "width": 224})
+        kwargs.setdefault("input_size_patches", 14)
+        kwargs.setdefault("codebook_size", {"height": 112, "width": 112})
+        kwargs.setdefault("mask_group_max_aspect_ratio", 0.3)
+
+        super().__init__(**kwargs)
 
     def get_expected_image_size(self):
         return (self.size["height"], self.size["width"])
@@ -63,7 +66,7 @@ class FlavaImageProcessingTester(ImageProcessingTester):
 class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     maxDiff = None
 
-    image_processing_tester_class = FlavaImageProcessingTester
+    image_processor_tester_class = FlavaImageProcessingTester
 
     def test_from_dict_with_codebook_size_overrides(self):
         for image_processing_class in self.image_processing_classes.values():

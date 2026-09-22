@@ -35,12 +35,15 @@ if is_vision_available():
 
 
 class DeepseekVLHybridImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    # Pass the mean explicitly to keep padding colors stable across backends and save/load.
-    image_mean = IMAGENET_STANDARD_MEAN
-    high_res_image_mean = IMAGENET_STANDARD_MEAN
-    size = {"height": 18, "width": 18}
-    high_res_size = {"height": 36, "width": 36}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        # Pass the mean explicitly to keep padding colors stable across backends and save/load.
+        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN.copy())
+        kwargs.setdefault("high_res_image_mean", IMAGENET_STANDARD_MEAN.copy())
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("high_res_size", {"height": 36, "width": 36})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         max_size = max(self.size["height"], self.size["width"])
@@ -54,7 +57,7 @@ class DeepseekVLHybridImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = DeepseekVLHybridImageProcessingTester
+    image_processor_tester_class = DeepseekVLHybridImageProcessingTester
 
     def test_call_pil_high_res(self):
         for image_processing_class in self.image_processing_classes.values():

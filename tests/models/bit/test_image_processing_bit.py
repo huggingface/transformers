@@ -20,12 +20,15 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class BitImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"shortest_edge": 20}
-    crop_size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 20})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class BitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = BitImageProcessingTester
+    image_processor_tester_class = BitImageProcessingTester

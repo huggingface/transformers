@@ -31,8 +31,11 @@ if is_vision_available():
 
 
 class GLPNImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size_divisor = 32
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size_divisor", 32)
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         if isinstance(images[0], Image.Image):
@@ -78,7 +81,7 @@ class GLPNImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = GLPNImageProcessingTester
+    image_processor_tester_class = GLPNImageProcessingTester
 
     def test_call_pil(self):
         # Initialize image_processing

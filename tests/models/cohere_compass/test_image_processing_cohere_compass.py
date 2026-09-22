@@ -39,19 +39,23 @@ if is_vision_available():
 
 
 class CohereCompassImageProcessingTester(ImageProcessingTester):
-    batch_size = 7
-    num_channels = 3
-    num_frames = 10
-    min_resolution = 56
-    max_resolution = 1024
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 7)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("num_frames", 10)
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
 
-    # Image processor init kwargs
-    do_resize = True
-    patch_size = 14
-    temporal_patch_size = 2
-    merge_size = 2
-    min_pixels = 56 * 56
-    max_pixels = 28 * 28 * 1280
+        # Image processor init kwargs
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("min_pixels", 56 * 56)
+        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         return {
@@ -91,7 +95,7 @@ class CohereCompassImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = CohereCompassImageProcessingTester
+    image_processor_tester_class = CohereCompassImageProcessingTester
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():

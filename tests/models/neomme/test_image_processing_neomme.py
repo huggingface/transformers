@@ -28,17 +28,21 @@ if is_vision_available():
 
 
 class NeoMMEImageProcessingTester(ImageProcessingTester):
-    batch_size = 5
-    num_channels = 3
-    min_resolution = 30
-    max_resolution = 80
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 5)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 30)
+        kwargs.setdefault("max_resolution", 80)
 
-    # Image processor init kwargs
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
-    rescale_factor = 1 / 127.5
-    patch_size = 4
+        # Image processor init kwargs
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("rescale_factor", 1 / 127.5)
+        kwargs.setdefault("patch_size", 4)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         """Return mixin kwargs without resolution budgets."""
@@ -79,7 +83,7 @@ class NeoMMEImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = NeoMMEImageProcessingTester
+    image_processor_tester_class = NeoMMEImageProcessingTester
 
     def _check_call(self, image_inputs) -> None:
         for image_processing_class in self.image_processing_classes.values():

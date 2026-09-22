@@ -35,10 +35,13 @@ if is_vision_available():
 
 
 class Gemma4ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    patch_size = 6
-    max_soft_tokens = 70
-    pooling_kernel_size = 1
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", 6)
+        kwargs.setdefault("max_soft_tokens", 70)
+        kwargs.setdefault("pooling_kernel_size", 1)
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images=None):
         """Return the expected per-image output shape: (max_patches, patch_pixels)."""
@@ -51,7 +54,7 @@ class Gemma4ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Gemma4ImageProcessingTester
+    image_processor_tester_class = Gemma4ImageProcessingTester
 
     @unittest.skip("Gemma4 patchification requires RGB (3-channel) images; 4-channel inputs are unsupported.")
     def test_call_numpy_4_channels(self):

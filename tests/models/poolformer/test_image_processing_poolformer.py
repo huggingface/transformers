@@ -20,21 +20,24 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PoolFormerImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"shortest_edge": 30}
-    crop_size = {"height": 30, "width": 30}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 30})
+        kwargs.setdefault("crop_size", {"height": 30, "width": 30})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PoolFormerImageProcessingTester
+    image_processor_tester_class = PoolFormerImageProcessingTester
 
 
 @require_torch
 @require_vision
 class PoolFormerImageProcessingNoCropPctTest(PoolFormerImageProcessingTest):
-    image_processing_tester_class = PoolFormerImageProcessingTester
+    image_processor_tester_class = PoolFormerImageProcessingTester
 
     def setUp(self):
         super().setUp()

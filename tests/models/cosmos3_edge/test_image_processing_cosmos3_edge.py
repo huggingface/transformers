@@ -24,13 +24,17 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
-    batch_size = 3
-    min_resolution = 32
-    max_resolution = 64
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("min_resolution", 32)
+        kwargs.setdefault("max_resolution", 64)
 
-    # Image processor init kwargs
-    patch_size = 16
-    size = {"shortest_edge": 32 * 32, "longest_edge": 64 * 64}
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("size", {"shortest_edge": 32 * 32, "longest_edge": 64 * 64})
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Wrap one image per sample to exercise Edge's nested multimodal input form."""
@@ -50,7 +54,7 @@ class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
 @require_torchvision
 @require_vision
 class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Cosmos3EdgeImageProcessingTester
+    image_processor_tester_class = Cosmos3EdgeImageProcessingTester
 
     def assert_packed_output(self, output, batch_size):
         """Check Edge's flattened patch matrix against its per-image THW grids."""

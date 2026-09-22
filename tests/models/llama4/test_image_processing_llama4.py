@@ -21,16 +21,19 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class Llama4ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    max_patches = 1
-    size = {"height": 20, "width": 20}
-    do_pad = False
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("max_patches", 1)
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        kwargs.setdefault("do_pad", False)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Llama4ImageProcessingTester
+    image_processor_tester_class = Llama4ImageProcessingTester
 
     def test_split_tiles(self):
         for image_processing_class in self.image_processing_classes.values():

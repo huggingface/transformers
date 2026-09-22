@@ -36,10 +36,14 @@ if is_torch_available():
 
 
 class Sapiens2ImageProcessingTester(ImageProcessingTester):
-    num_labels = 5
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
 
-    # Image processor init kwargs
-    size = {"height": 20, "width": 18}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
@@ -47,7 +51,7 @@ class Sapiens2ImageProcessingTester(ImageProcessingTester):
 class Sapiens2ImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    image_processing_tester_class = Sapiens2ImageProcessingTester
+    image_processor_tester_class = Sapiens2ImageProcessingTester
 
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processing_classes.values():

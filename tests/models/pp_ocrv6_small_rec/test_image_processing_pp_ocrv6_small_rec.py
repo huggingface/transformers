@@ -28,13 +28,17 @@ if is_vision_available():
 
 
 class PPOCRV6SmallRecImageProcessingTester(ImageProcessingTester):
-    min_resolution = 10
-    keep_aspect_ratio = False
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 10)
+        kwargs.setdefault("keep_aspect_ratio", False)
 
-    # Image processor init kwargs
-    max_image_width = 3200
-    size = {"height": 48, "width": 320}
-    do_pad = False
+        # Image processor init kwargs
+        kwargs.setdefault("max_image_width", 3200)
+        kwargs.setdefault("size", {"height": 48, "width": 320})
+        kwargs.setdefault("do_pad", False)
+
+        super().__init__(**kwargs)
 
     def get_expected_value(self, images):
         shape_list = []
@@ -78,7 +82,7 @@ class PPOCRV6SmallRecImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class PPOCRV6SmallRecImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PPOCRV6SmallRecImageProcessingTester
+    image_processor_tester_class = PPOCRV6SmallRecImageProcessingTester
 
     @unittest.skip(reason="PPOCRV6SmallRecImageProcessor does not support 4 channel images yet")
     def test_call_numpy_4_channels():

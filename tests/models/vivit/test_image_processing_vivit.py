@@ -33,13 +33,17 @@ if is_vision_available():
 
 
 class VivitImageProcessingTester(ImageProcessingTester):
-    num_frames = 10
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_frames", 10)
 
-    # Image processor init kwargs
-    do_normalize = True
-    do_resize = True
-    size = {"shortest_edge": 18}
-    crop_size = {"height": 18, "width": 18}
+        # Image processor init kwargs
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 18})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]
@@ -62,7 +66,7 @@ class VivitImageProcessingTester(ImageProcessingTester):
 class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VivitImageProcessor if is_vision_available() else None
 
-    image_processing_tester_class = VivitImageProcessingTester
+    image_processor_tester_class = VivitImageProcessingTester
 
     def test_rescale(self):
         # ViVit optionally rescales between -1 and 1 instead of the usual 0 and 1

@@ -24,19 +24,23 @@ from ...test_image_processing_common import (
 
 
 class CHMv2ImageProcessingTester(ImageProcessingTester):
-    num_labels = 5
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
 
-    # Image processor init kwargs
-    do_resize = True
-    size = {"height": 512, "width": 512}
-    keep_aspect_ratio = False
-    do_pad = False
+        # Image processor init kwargs
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("keep_aspect_ratio", False)
+        kwargs.setdefault("do_pad", False)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class CHMv2ImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
-    image_processing_tester_class = CHMv2ImageProcessingTester
+    image_processor_tester_class = CHMv2ImageProcessingTester
 
     @unittest.skip(reason="CHMv2 only has a fast image processor, no slow version")
     def test_image_processor_save_load_with_autoimageprocessor(self):

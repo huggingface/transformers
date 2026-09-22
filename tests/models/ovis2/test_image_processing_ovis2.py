@@ -26,15 +26,18 @@ if is_torch_available():
 
 
 class Ovis2ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 20, "width": 20}
-    do_pad = False
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        kwargs.setdefault("do_pad", False)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Ovis2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Ovis2ImageProcessingTester
+    image_processor_tester_class = Ovis2ImageProcessingTester
 
     def test_backends_equivalence_crop_to_patches(self):
         """Test equivalence between backends when cropping to patches."""

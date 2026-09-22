@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import importlib
 import inspect
 import json
@@ -184,9 +183,9 @@ def prepare_video_inputs(
 class ImageProcessingTester:
     """Provides default attributes and fixtures for ImageProcessingTestMixin.
 
-    Any class attributes are automatically used to initialize the processor class
-    under test if their name matches one of the args in the processor's init.
-    Set these class attributes only to override the processor's defaults.
+    Keyword arguments are used to initialize the processor class under test if
+    their name matches one of the processor's valid kwargs. Set defaults with
+    `kwargs.setdefault(...)` in subclass initializers to override processor defaults.
 
     Attributes:
         parent (`ImageProcessingTestMixin`):
@@ -201,41 +200,36 @@ class ImageProcessingTester:
             Default maximum height and width for creating random test inputs.
     """
 
-    # Attributes used to generate random inputs for tests. Not used for image processor initialization.
-    batch_size: int = 7
-    num_channels: int = 3
-    min_resolution: int = 30
-    max_resolution: int = 400
-
     def __init__(
         self,
         parent,
+        batch_size: int = 7,
+        num_channels: int = 3,
+        min_resolution: int = 30,
+        max_resolution: int = 400,
         **kwargs,
     ):
-        # Add defaults from class variables. We copy class variables to avoid accidental
-        # in-place mutation by tests which could leak into other tests.
-        for name, value in vars(type(self)).items():
-            if name.startswith("__") or callable(value) or isinstance(value, (property, staticmethod, classmethod)):
-                continue
-            kwargs.setdefault(name, copy.deepcopy(value))
-
         self.parent = parent
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
 
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        self.image_processor_classes = self._get_image_processor_classes()
+        self.image_processing_classes = self._get_image_processing_classes()
 
-    def _get_image_processor_classes(self) -> dict[str, str | None]:
+    def _get_image_processing_classes(self) -> dict[str, str | None]:
         """Returns {backend_name: processor_class} dict with processors registered for this model.
 
         The model name is automatically inferred from the parent folder name of the current test file.
         """
         test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
         model_name = test_file_path.parent.name
-        image_processor_classes_names = IMAGE_PROCESSOR_MAPPING_NAMES.get(model_name)
-        if image_processor_classes_names is None:
-            image_processor_classes_names = next(
+        image_processing_classes_names = IMAGE_PROCESSOR_MAPPING_NAMES.get(model_name)
+        if image_processing_classes_names is None:
+            image_processing_classes_names = next(
                 (
                     classes
                     for model_type, classes in IMAGE_PROCESSOR_MAPPING_NAMES.items()
@@ -245,13 +239,13 @@ class ImageProcessingTester:
             )
         return {
             backend_name: get_image_processor_class_from_name(class_name)
-            for backend_name, class_name in image_processor_classes_names.items()
+            for backend_name, class_name in image_processing_classes_names.items()
         }
 
     def _get_valid_images_kwargs_keys(self):
         """Returns all keyword arguments registered in the ImagesKwargs class of the processor(s)."""
         valid_keys = set()
-        for cls in self.image_processor_classes.values():
+        for cls in self.image_processing_classes.values():
             valid_keys.update(cls.valid_kwargs.__annotations__)
         return valid_keys
 
@@ -340,36 +334,26 @@ class ImageProcessingTester:
 
 class ImageProcessingTestMixin:
     # Must be set by subclass
-    image_processing_tester_class = None
+    image_processor_tester_class = None
 
     test_cast_dtype = None
 
     def setUp(self):
-        if self.image_processing_tester_class is None:
+        if self.image_processor_tester_class is None:
             raise ValueError(
-                f"{self.__class__.__name__}.image_processing_tester_class is None. "
+                f"{self.__class__.__name__}.image_processor_tester_class is None. "
                 f"Set it to the corresponding <Model>ImageProcessingTester class."
             )
 
-        self.image_processing_tester = self.image_processing_tester_class(parent=self)
+        self.image_processor_tester = self.image_processor_tester_class(parent=self)
 
-    # For BC with old tests, prefer self.image_processor_classes instead
     @property
     def image_processing_classes(self):
-        return self.image_processor_classes
-
-    # For BC with old tests, prefer self.image_processing_tester instead
-    @property
-    def image_processor_tester(self):
-        return self.image_processing_tester
-
-    @property
-    def image_processor_classes(self):
-        return self.image_processing_tester.image_processor_classes
+        return self.image_processor_tester.image_processing_classes
 
     @property
     def image_processor_dict(self):
-        return self.image_processing_tester.prepare_image_processor_dict()
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def _assert_tensors_equivalence(self, tensor1, tensor2, atol=1e-1, rtol=1e-3, mean_atol=5e-3):
         """Assert that two tensors are equivalent within specified tolerances."""
@@ -490,19 +474,19 @@ class ImageProcessingTestMixin:
 
     def test_image_processor_has_attributes(self):
         """Check that processor class registers input kwargs as attributes"""
-        for image_processor_class in self.image_processor_classes.values():
+        for image_processor_class in self.image_processing_classes.values():
             image_processor = image_processor_class(**self.image_processor_dict)
             self._assert_has_attributes(image_processor, self.image_processor_dict)
 
     def test_image_processor_from_dict_has_attributes(self):
         """Check that processor initialized with from_dict registers dict items as attributes"""
-        for image_processor_class in self.image_processor_classes.values():
+        for image_processor_class in self.image_processing_classes.values():
             image_processor = image_processor_class.from_dict(self.image_processor_dict)
             self._assert_has_attributes(image_processor, self.image_processor_dict)
 
     def test_image_processor_from_dict_with_kwargs_has_attributes(self):
         """Check that processor initialized with from_dict with kwargs registers kwargs as attributes"""
-        for image_processor_class in self.image_processor_classes.values():
+        for image_processor_class in self.image_processing_classes.values():
             image_processor = image_processor_class.from_dict(self.image_processor_dict, do_convert_rgb=False)
             self._assert_has_attributes(image_processor, {"do_convert_rgb": False})
 

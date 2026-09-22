@@ -34,13 +34,17 @@ if is_vision_available():
 
 
 class Glm4vImageProcessingTester(ImageProcessingTester):
-    max_resolution = 80
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_resolution", 80)
 
-    # Image processor init kwargs
-    temporal_patch_size = 2
-    patch_size = 14
-    merge_size = 2
-    size = {"longest_edge": 20, "shortest_edge": 10}
+        # Image processor init kwargs
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("size", {"longest_edge": 20, "shortest_edge": 10})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         grid_t = 1
@@ -82,7 +86,7 @@ class Glm4vImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Glm4vImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Glm4vImageProcessingTester
+    image_processor_tester_class = Glm4vImageProcessingTester
 
     # batch size is flattened
     def test_call_pil(self):

@@ -26,10 +26,13 @@ if is_vision_available():
 
 
 class Siglip2ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 18, "width": 18}
-    patch_size = 16
-    max_num_patches = 256
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("max_num_patches", 256)
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.max_num_patches, self.patch_size * self.patch_size * self.num_channels
@@ -38,7 +41,7 @@ class Siglip2ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Siglip2ImageProcessingTester
+    image_processor_tester_class = Siglip2ImageProcessingTester
 
     @unittest.skip(reason="not supported")
     def test_call_numpy_4_channels(self):

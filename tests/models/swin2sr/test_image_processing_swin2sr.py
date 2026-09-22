@@ -33,8 +33,11 @@ if is_vision_available():
 
 
 class Swin2SRImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size_divisor = 8
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size_divisor", 8)
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         img = images[0]
@@ -55,7 +58,7 @@ class Swin2SRImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Swin2SRImageProcessingTester
+    image_processor_tester_class = Swin2SRImageProcessingTester
 
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)

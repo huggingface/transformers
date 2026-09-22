@@ -32,13 +32,17 @@ if is_torch_available():
 
 
 class Idefics3ImageProcessingTester(ImageProcessingTester):
-    max_resolution = 40
-    num_images = 1
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_resolution", 40)
+        kwargs.setdefault("num_images", 1)
 
-    # Image processor init kwargs
-    do_image_splitting = True
-    size = {"longest_edge": max_resolution}
-    max_image_size = {"longest_edge": 20}
+        # Image processor init kwargs
+        kwargs.setdefault("do_image_splitting", True)
+        kwargs.setdefault("size", {"longest_edge": 40})
+        kwargs.setdefault("max_image_size", {"longest_edge": 20})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         effective_nb_images = (
@@ -108,7 +112,7 @@ class Idefics3ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Idefics3ImageProcessingTester
+    image_processor_tester_class = Idefics3ImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():

@@ -43,8 +43,11 @@ if is_vision_available():
 
 
 class IdeficsImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    image_size = 18
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("image_size", 18)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         return {**super().prepare_image_processor_dict(), "image_size": self.image_size}
@@ -56,7 +59,7 @@ class IdeficsImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = IdeficsImageProcessingTester
+    image_processor_tester_class = IdeficsImageProcessingTester
 
     @require_torchvision
     def test_torchvision_numpy_transforms_equivalency(self):

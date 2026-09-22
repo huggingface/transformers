@@ -39,14 +39,18 @@ if is_vision_available():
 
 
 class EomtImageProcessingTester(ImageProcessingTester):
-    num_labels = 10
-    num_queries = 3
-    height = 18
-    width = 18
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 10)
+        kwargs.setdefault("num_queries", 3)
+        kwargs.setdefault("height", 18)
+        kwargs.setdefault("width", 18)
 
-    # Image processor init kwargs
-    size = {"shortest_edge": 18, "longest_edge": 18}
-    do_pad = True
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 18})
+        kwargs.setdefault("do_pad", True)
+
+        super().__init__(**kwargs)
 
     def prepare_fake_eomt_outputs(self, batch_size, patch_offsets=None):
         return EomtForUniversalSegmentationOutput(
@@ -75,7 +79,7 @@ class EomtImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
-    image_processing_tester_class = EomtImageProcessingTester
+    image_processor_tester_class = EomtImageProcessingTester
 
     def setUp(self):
         super().setUp()
@@ -95,8 +99,8 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             expected_output_image_shape = (
                 1,
                 3,
-                self.image_processing_tester.height,
-                self.image_processing_tester.width,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
             )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -126,8 +130,8 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             expected_output_image_shape = (
                 1,
                 3,
-                self.image_processing_tester.height,
-                self.image_processing_tester.width,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
             )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -153,8 +157,8 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             expected_output_image_shape = (
                 1,
                 3,
-                self.image_processing_tester.height,
-                self.image_processing_tester.width,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
             )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 

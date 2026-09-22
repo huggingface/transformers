@@ -42,15 +42,18 @@ if is_vision_available():
 
 
 class VitMatteImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    rescale_factor = 0.5
-    size_divisor = 10
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("rescale_factor", 0.5)
+        kwargs.setdefault("size_divisor", 10)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = VitMatteImageProcessingTester
+    image_processor_tester_class = VitMatteImageProcessingTester
 
     def test_call_numpy(self):
         # create random numpy tensors

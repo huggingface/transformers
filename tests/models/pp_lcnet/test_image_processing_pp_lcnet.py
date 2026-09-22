@@ -21,17 +21,21 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPLCNetImageProcessingTester(ImageProcessingTester):
-    batch_size = 3
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 3)
 
-    # Image processor init kwargs
-    size = {"height": 256, "width": 256}
-    crop_size = {"height": 224, "width": 224}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 256, "width": 256})
+        kwargs.setdefault("crop_size", {"height": 224, "width": 224})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PPLCNetImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PPLCNetImageProcessingTester
+    image_processor_tester_class = PPLCNetImageProcessingTester
 
     @unittest.skip(reason="PPLCNet does not support 4 channel images yet")
     def test_call_numpy_4_channels(self):

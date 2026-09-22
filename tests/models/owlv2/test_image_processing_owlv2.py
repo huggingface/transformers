@@ -31,14 +31,17 @@ if is_torch_available():
 
 
 class Owlv2ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Owlv2ImageProcessingTester
+    image_processor_tester_class = Owlv2ImageProcessingTester
 
     @slow
     def test_image_processor_integration_test(self):

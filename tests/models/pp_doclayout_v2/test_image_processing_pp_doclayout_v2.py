@@ -20,14 +20,17 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPDocLayoutV2ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 40, "width": 40}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 40, "width": 40})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PPDocLayoutV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PPDocLayoutV2ImageProcessingTester
+    image_processor_tester_class = PPDocLayoutV2ImageProcessingTester
 
     @unittest.skip(
         reason="PPDocLayoutV2 uses antialias=False which is not supported for 4-channel images consistently"

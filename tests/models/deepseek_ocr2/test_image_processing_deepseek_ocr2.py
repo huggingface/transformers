@@ -25,18 +25,22 @@ if is_torch_available():
 
 
 class DeepseekOcr2ImageProcessingTester(ImageProcessingTester):
-    min_resolution = 500
-    max_resolution = 800
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 500)
+        kwargs.setdefault("max_resolution", 800)
 
-    # Image processor init kwargs
-    size = {"height": 512, "width": 512}
-    tile_size = 384
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("tile_size", 384)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = DeepseekOcr2ImageProcessingTester
+    image_processor_tester_class = DeepseekOcr2ImageProcessingTester
 
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):

@@ -33,20 +33,24 @@ if is_vision_available():
 
 
 class Glm5NextImageProcessingTester(ImageProcessingTester):
-    batch_size = 3
-    num_channels = 3
-    min_resolution = 30
-    max_resolution = 80
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 30)
+        kwargs.setdefault("max_resolution", 80)
 
-    # Image processor init kwargs
-    do_rescale = True
-    do_normalize = True
-    temporal_patch_size = 2
-    patch_size = 14
-    merge_size = 2
-    patch_expand_factor = 1
-    min_image_tokens = 1
-    max_image_tokens = 64
+        # Image processor init kwargs
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("patch_expand_factor", 1)
+        kwargs.setdefault("min_image_tokens", 1)
+        kwargs.setdefault("max_image_tokens", 64)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         return {
@@ -101,7 +105,7 @@ class Glm5NextImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Glm5NextImageProcessingTester
+    image_processor_tester_class = Glm5NextImageProcessingTester
 
     # batch size is flattened
     def test_call_pil(self):

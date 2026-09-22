@@ -40,13 +40,17 @@ if is_vision_available():
 
 
 class Qwen2VLImageProcessingTester(ImageProcessingTester):
-    num_frames = 10
-    min_resolution = 56
-    max_resolution = 1024
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_frames", 10)
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
 
-    # Image processor init kwargs
-    min_pixels = 56 * 56
-    max_pixels = 28 * 28 * 1280
+        # Image processor init kwargs
+        kwargs.setdefault("min_pixels", 56 * 56)
+        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -76,7 +80,7 @@ class Qwen2VLImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Qwen2VLImageProcessingTester
+    image_processor_tester_class = Qwen2VLImageProcessingTester
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():

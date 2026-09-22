@@ -42,14 +42,18 @@ if is_vision_available():
 
 
 class DetrImageProcessingTester(ImageProcessingTester):
-    num_labels = 5
-    num_queries = 3
-    height = 3
-    width = 4
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
+        kwargs.setdefault("num_queries", 3)
+        kwargs.setdefault("height", 3)
+        kwargs.setdefault("width", 4)
 
-    # Image processor init kwargs
-    # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
-    size = {"shortest_edge": 18, "longest_edge": 1333}
+        # Image processor init kwargs
+        # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
+        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 1333})
+
+        super().__init__(**kwargs)
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         from transformers.models.detr.modeling_detr import DetrSegmentationOutput
@@ -73,7 +77,7 @@ class DetrImageProcessingTester(ImageProcessingTester):
 class DetrImageProcessingTest(
     AnnotationFormatTestMixin, ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    image_processing_tester_class = DetrImageProcessingTester
+    image_processor_tester_class = DetrImageProcessingTester
 
     def test_from_dict_with_legacy_integer_size(self):
         for image_processing_class in self.image_processing_classes.values():

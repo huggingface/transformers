@@ -31,16 +31,20 @@ if is_vision_available():
 
 
 class LlavaOnevisionImageProcessingTester(ImageProcessingTester):
-    image_size = 20
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("image_size", 20)
 
-    # Image processor init kwargs
-    size = {"height": 20, "width": 20}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = LlavaOnevisionImageProcessingTester
+    image_processor_tester_class = LlavaOnevisionImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

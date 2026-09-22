@@ -21,11 +21,14 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPChart2TableImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 1024, "width": 1024}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 1024, "width": 1024})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PPChart2TableImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PPChart2TableImageProcessingTester
+    image_processor_tester_class = PPChart2TableImageProcessingTester

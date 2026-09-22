@@ -35,12 +35,16 @@ if is_vision_available():
 
 
 class Phi4MultimodalImageProcessingTester(ImageProcessingTester):
-    image_size = 100
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("image_size", 100)
 
-    # Image processor init kwargs
-    dynamic_hd = 36
-    do_resize = True
-    size = {"height": 100, "width": 100}
+        # Image processor init kwargs
+        kwargs.setdefault("dynamic_hd", 36)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 100, "width": 100})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         max_num_patches = 0
@@ -62,7 +66,7 @@ class Phi4MultimodalImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Phi4MultimodalImageProcessingTester
+    image_processor_tester_class = Phi4MultimodalImageProcessingTester
 
     @unittest.skip(reason="Phi4MultimodalImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
     def test_call_numpy_4_channels(self):

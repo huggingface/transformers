@@ -32,14 +32,17 @@ if is_vision_available():
 
 
 class DonutImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 18, "width": 20}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 20})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = DonutImageProcessingTester
+    image_processor_tester_class = DonutImageProcessingTester
 
     def test_from_dict_with_legacy_size_tuple(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -166,7 +169,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 @require_torch
 @require_vision
 class DonutImageProcessingAlignAxisTest(DonutImageProcessingTest):
-    image_processing_tester_class = DonutImageProcessingTester
+    image_processor_tester_class = DonutImageProcessingTester
 
     def setUp(self):
         super().setUp()

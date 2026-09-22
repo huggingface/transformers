@@ -21,15 +21,18 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class ChineseCLIPImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 224, "width": 224}
-    crop_size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 224, "width": 224})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = ChineseCLIPImageProcessingTester
+    image_processor_tester_class = ChineseCLIPImageProcessingTester
 
     @unittest.skip(
         reason="ChineseCLIPImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
@@ -41,7 +44,7 @@ class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 @require_torch
 @require_vision
 class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = ChineseCLIPImageProcessingTester
+    image_processor_tester_class = ChineseCLIPImageProcessingTester
 
     def setUp(self):
         super().setUp()

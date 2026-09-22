@@ -21,8 +21,11 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class ConvNextImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"shortest_edge": 20}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 20})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]
@@ -31,4 +34,4 @@ class ConvNextImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class ConvNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = ConvNextImageProcessingTester
+    image_processor_tester_class = ConvNextImageProcessingTester

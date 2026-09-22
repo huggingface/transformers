@@ -41,18 +41,22 @@ if is_vision_available():
 
 
 class MaskFormerImageProcessingTester(ImageProcessingTester):
-    batch_size = 2
-    num_queries = 3
-    num_classes = 2
-    height = 3
-    width = 4
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("num_queries", 3)
+        kwargs.setdefault("num_classes", 2)
+        kwargs.setdefault("height", 3)
+        kwargs.setdefault("width", 4)
 
-    # Image processor init kwargs
-    size = {"shortest_edge": 32, "longest_edge": 1333}
-    size_divisor = 0
-    num_labels = 10
-    do_reduce_labels = True
-    ignore_index = 255
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
+        kwargs.setdefault("size_divisor", 0)
+        kwargs.setdefault("num_labels", 10)
+        kwargs.setdefault("do_reduce_labels", True)
+        kwargs.setdefault("ignore_index", 255)
+
+        super().__init__(**kwargs)
 
     def get_fake_maskformer_outputs(self):
         return MaskFormerForInstanceSegmentationOutput(
@@ -76,7 +80,7 @@ class MaskFormerImageProcessingTester(ImageProcessingTester):
 class MaskFormerImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    image_processing_tester_class = MaskFormerImageProcessingTester
+    image_processor_tester_class = MaskFormerImageProcessingTester
 
     def comm_get_image_processing_inputs(
         self, image_processing_class, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"

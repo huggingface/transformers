@@ -35,14 +35,17 @@ if is_vision_available():
 
 
 class VitPoseImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 20, "width": 20}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = VitPoseImageProcessingTester
+    image_processor_tester_class = VitPoseImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

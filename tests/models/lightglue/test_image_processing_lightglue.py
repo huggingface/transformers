@@ -39,6 +39,9 @@ def random_tensor(size):
 class LightGlueImageProcessingTester(SuperGlueImageProcessingTester):
     """Tester for LightGlueImageProcessor"""
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
     def prepare_keypoint_matching_output(self, pixel_values):
         """Prepare a fake output for the keypoint matching model with random matches between 50 keypoints per image."""
         max_number_keypoints = 50
@@ -70,4 +73,4 @@ class LightGlueImageProcessingTester(SuperGlueImageProcessingTester):
 @require_torch
 @require_vision
 class LightGlueImageProcessingTest(SuperGlueImageProcessingTest, unittest.TestCase):
-    image_processing_tester_class = LightGlueImageProcessingTester
+    image_processor_tester_class = LightGlueImageProcessingTester

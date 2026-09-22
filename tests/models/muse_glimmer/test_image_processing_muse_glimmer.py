@@ -34,18 +34,22 @@ if is_vision_available():
 
 
 class MuseGlimmerImageProcessingTester(ImageProcessingTester):
-    batch_size = 7
-    num_channels = 3
-    min_resolution = 30
-    max_resolution = 80
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 7)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 30)
+        kwargs.setdefault("max_resolution", 80)
 
-    # Image processor init kwargs
-    do_resize = True
-    do_normalize = True
-    temporal_patch_size = 2
-    patch_size = 14
-    merge_size = 2
-    max_image_tokens = 40
+        # Image processor init kwargs
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("max_image_tokens", 40)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         return {
@@ -95,7 +99,7 @@ class MuseGlimmerImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class MuseGlimmerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = MuseGlimmerImageProcessingTester
+    image_processor_tester_class = MuseGlimmerImageProcessingTester
 
     # batch size is flattened
     def test_call_pil(self):

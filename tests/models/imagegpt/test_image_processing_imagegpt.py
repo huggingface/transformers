@@ -48,14 +48,20 @@ if is_vision_available():
 
 
 class ImageGPTImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    clusters = np.asarray(
-        [
-            [0.8866443634033203, 0.6618829369544983, 0.3891746401786804],
-            [-0.6042559146881104, -0.02295008860528469, 0.5423797369003296],
-        ]
-    )
-    size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault(
+            "clusters",
+            np.asarray(
+                [
+                    [0.8866443634033203, 0.6618829369544983, 0.3891746401786804],
+                    [-0.6042559146881104, -0.02295008860528469, 0.5423797369003296],
+                ]
+            ),
+        )
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return (self.size["height"] * self.size["width"],)
@@ -64,7 +70,7 @@ class ImageGPTImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = ImageGPTImageProcessingTester
+    image_processor_tester_class = ImageGPTImageProcessingTester
 
     @slow
     @require_torch_accelerator

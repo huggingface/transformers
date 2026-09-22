@@ -23,9 +23,12 @@ from ...test_processing_common import url_to_local_path
 
 
 class BridgeTowerImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    do_center_crop = True
-    size = {"shortest_edge": 288}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("size", {"shortest_edge": 288})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]
@@ -34,7 +37,7 @@ class BridgeTowerImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = BridgeTowerImageProcessingTester
+    image_processor_tester_class = BridgeTowerImageProcessingTester
 
     @require_vision
     @require_torch

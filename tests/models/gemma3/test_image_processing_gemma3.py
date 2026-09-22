@@ -30,18 +30,21 @@ if is_vision_available():
 
 
 class Gemma3ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 18, "width": 18}
-    do_pan_and_scan = True
-    pan_and_scan_min_crop_size = 10
-    pan_and_scan_max_num_crops = 2
-    pan_and_scan_min_ratio_to_activate = 1.2
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_pan_and_scan", True)
+        kwargs.setdefault("pan_and_scan_min_crop_size", 10)
+        kwargs.setdefault("pan_and_scan_max_num_crops", 2)
+        kwargs.setdefault("pan_and_scan_min_ratio_to_activate", 1.2)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Gemma3ImageProcessingTester
+    image_processor_tester_class = Gemma3ImageProcessingTester
 
     def test_without_pan_and_scan(self):
         """

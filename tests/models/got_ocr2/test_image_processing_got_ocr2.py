@@ -27,14 +27,17 @@ if is_torch_available():
 
 
 class GotOcr2ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 20, "width": 20}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = GotOcr2ImageProcessingTester
+    image_processor_tester_class = GotOcr2ImageProcessingTester
 
     def test_backends_equivalence_crop_to_patches(self):
         if len(self.image_processing_classes) < 2:

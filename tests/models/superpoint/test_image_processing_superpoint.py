@@ -28,9 +28,12 @@ if is_torch_available():
 
 
 class SuperPointImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 480, "width": 640}
-    do_grayscale = True
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 480, "width": 640})
+        kwargs.setdefault("do_grayscale", True)
+
+        super().__init__(**kwargs)
 
     def prepare_keypoint_detection_output(self, pixel_values):
         max_number_keypoints = 50
@@ -53,7 +56,7 @@ class SuperPointImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = SuperPointImageProcessingTester
+    image_processor_tester_class = SuperPointImageProcessingTester
 
     def test_image_processing(self):
         for image_processing_class in self.image_processing_classes.values():

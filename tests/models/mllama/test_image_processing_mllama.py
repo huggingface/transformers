@@ -33,11 +33,15 @@ if is_torch_available():
 
 
 class MllamaImageProcessingTester(ImageProcessingTester):
-    num_images = 18
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_images", 18)
 
-    # Image processor init kwargs
-    size = {"height": 224, "width": 224}
-    max_image_tiles = 4
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 224, "width": 224})
+        kwargs.setdefault("max_image_tiles", 4)
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(
         self,
@@ -102,7 +106,7 @@ class MllamaImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = MllamaImageProcessingTester
+    image_processor_tester_class = MllamaImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():

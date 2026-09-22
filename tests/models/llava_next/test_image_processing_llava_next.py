@@ -31,15 +31,18 @@ if is_vision_available():
 
 
 class LlavaNextImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"shortest_edge": 20}
-    crop_size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 20})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = LlavaNextImageProcessingTester
+    image_processor_tester_class = LlavaNextImageProcessingTester
 
     def test_select_best_resolution(self):
         possible_resolutions = [[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]

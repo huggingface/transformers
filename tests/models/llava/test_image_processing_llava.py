@@ -31,16 +31,19 @@ if is_vision_available():
 
 
 class LlavaImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    do_pad = True
-    size = {"shortest_edge": 20}
-    crop_size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("do_pad", True)
+        kwargs.setdefault("size", {"shortest_edge": 20})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = LlavaImageProcessingTester
+    image_processor_tester_class = LlavaImageProcessingTester
 
     def test_padding(self):
         """

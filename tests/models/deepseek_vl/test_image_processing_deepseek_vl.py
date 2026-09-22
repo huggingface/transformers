@@ -22,10 +22,13 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class DeepseekVLImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    # Pass the mean explicitly to keep padding colors stable across backends and save/load.
-    image_mean = IMAGENET_STANDARD_MEAN
-    size = {"height": 18, "width": 18}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        # Pass the mean explicitly to keep padding colors stable across backends and save/load.
+        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN.copy())
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
     # Ignore copy
     def expected_output_image_shape(self, images):
@@ -36,7 +39,7 @@ class DeepseekVLImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = DeepseekVLImageProcessingTester
+    image_processor_tester_class = DeepseekVLImageProcessingTester
 
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):

@@ -30,11 +30,15 @@ if is_torch_available():
 
 
 class Idefics2ImageProcessingTester(ImageProcessingTester):
-    num_images = 1
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_images", 1)
 
-    # Image processor init kwargs
-    size = {"shortest_edge": 378, "longest_edge": 980}
-    do_image_splitting = True
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 378, "longest_edge": 980})
+        kwargs.setdefault("do_image_splitting", True)
+
+        super().__init__(**kwargs)
 
     def get_expected_values(self, image_inputs, batched=False):
         if not batched:
@@ -123,7 +127,7 @@ class Idefics2ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Idefics2ImageProcessingTester
+    image_processor_tester_class = Idefics2ImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():

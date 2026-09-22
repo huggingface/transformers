@@ -30,14 +30,17 @@ if is_vision_available():
 
 
 class Cohere2VisionImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 30, "width": 30}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 30, "width": 30})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Cohere2VisionImageProcessingTester
+    image_processor_tester_class = Cohere2VisionImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

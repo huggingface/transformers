@@ -26,14 +26,17 @@ if is_torch_available():
 
 
 class PPDocLayoutV3ImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 40, "width": 40}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 40, "width": 40})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PPDocLayoutV3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PPDocLayoutV3ImageProcessingTester
+    image_processor_tester_class = PPDocLayoutV3ImageProcessingTester
 
     @unittest.skip(
         reason="PPDocLayoutV3 uses antialias=False which is not supported for 4-channel images consistently"

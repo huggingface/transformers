@@ -30,16 +30,19 @@ if is_vision_available():
 
 
 class InklingImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"height": 40, "width": 40}
-    do_resize = True
-    do_normalize = False
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 40, "width": 40})
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_normalize", False)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = InklingImageProcessingTester
+    image_processor_tester_class = InklingImageProcessingTester
 
     @unittest.skip("Inkling patchification requires RGB (3-channel) images; 4-channel inputs are unsupported.")
     def test_call_numpy_4_channels(self):

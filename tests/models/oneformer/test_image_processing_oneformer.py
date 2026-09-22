@@ -41,18 +41,22 @@ if is_vision_available():
 
 
 class OneFormerImageProcessingTester(ImageProcessingTester):
-    batch_size = 2
-    num_queries = 10
-    num_classes = 10
-    height = 3
-    width = 4
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("num_queries", 10)
+        kwargs.setdefault("num_classes", 10)
+        kwargs.setdefault("height", 3)
+        kwargs.setdefault("width", 4)
 
-    # Image processor init kwargs
-    size = {"shortest_edge": 32, "longest_edge": 1333}
-    num_labels = 10
-    ignore_index = 255
-    class_info_file = "ade20k_panoptic.json"
-    num_text = 10
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
+        kwargs.setdefault("num_labels", 10)
+        kwargs.setdefault("ignore_index", 255)
+        kwargs.setdefault("class_info_file", "ade20k_panoptic.json")
+        kwargs.setdefault("num_text", 10)
+
+        super().__init__(**kwargs)
 
     def get_fake_oneformer_outputs(self):
         return OneFormerForUniversalSegmentationOutput(
@@ -76,7 +80,7 @@ class OneFormerImageProcessingTester(ImageProcessingTester):
 class OneFormerImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    image_processing_tester_class = OneFormerImageProcessingTester
+    image_processor_tester_class = OneFormerImageProcessingTester
 
     def test_image_proc_properties(self):
         for image_processing_class in self.image_processing_classes.values():

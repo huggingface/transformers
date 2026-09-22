@@ -31,18 +31,22 @@ if is_vision_available():
 
 
 class ChameleonImageProcessingTester(ImageProcessingTester):
-    max_resolution = 200
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_resolution", 200)
 
-    # Image processor init kwargs
-    size = {"shortest_edge": 18}
-    crop_size = {"height": 18, "width": 18}
-    resample = PILImageResampling.BILINEAR
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 18})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+        kwargs.setdefault("resample", PILImageResampling.BILINEAR)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class ChameleonImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = ChameleonImageProcessingTester
+    image_processor_tester_class = ChameleonImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

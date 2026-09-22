@@ -37,11 +37,15 @@ if is_torch_available():
 
 
 class RTDetrImageProcessingTester(ImageProcessingTester):
-    batch_size = 4
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 4)
 
-    # Image processor init kwargs
-    size = {"height": 640, "width": 640}
-    return_tensors = "pt"
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 640, "width": 640})
+        kwargs.setdefault("return_tensors", "pt")
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
@@ -61,7 +65,7 @@ class RTDetrImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = RTDetrImageProcessingTester
+    image_processor_tester_class = RTDetrImageProcessingTester
 
     def test_valid_coco_detection_annotations(self):
         # prepare image and target

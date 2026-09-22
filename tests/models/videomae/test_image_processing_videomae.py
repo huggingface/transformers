@@ -31,11 +31,15 @@ if is_vision_available():
 
 
 class VideoMAEImageProcessingTester(ImageProcessingTester):
-    num_frames = 10
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_frames", 10)
 
-    # Image processor init kwargs
-    size = {"shortest_edge": 18}
-    crop_size = {"height": 18, "width": 18}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 18})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]
@@ -56,7 +60,7 @@ class VideoMAEImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = VideoMAEImageProcessingTester
+    image_processor_tester_class = VideoMAEImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

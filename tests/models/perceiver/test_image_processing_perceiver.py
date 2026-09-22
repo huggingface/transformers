@@ -32,11 +32,15 @@ if is_torch_available():
 
 
 class PerceiverImageProcessingTester(ImageProcessingTester):
-    num_images = 1
-    max_resolution = 40
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_images", 1)
+        kwargs.setdefault("max_resolution", 40)
 
-    # Image processor init kwargs
-    size = {"height": 224, "width": 224}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 224, "width": 224})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
@@ -45,7 +49,7 @@ class PerceiverImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PerceiverImageProcessingTester
+    image_processor_tester_class = PerceiverImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():

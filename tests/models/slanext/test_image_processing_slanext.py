@@ -31,11 +31,15 @@ if is_torch_available():
 
 
 class SLANeXtImageProcessingTester(ImageProcessingTester):
-    min_resolution = 10
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 10)
 
-    # Image processor init kwargs
-    size = {"height": 512, "width": 512}
-    do_pad = True
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("do_pad", True)
+
+        super().__init__(**kwargs)
 
     def get_expected_value(self, image_inputs):
         image = image_inputs[0]
@@ -67,7 +71,7 @@ class SLANeXtImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class SLANeXtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = SLANeXtImageProcessingTester
+    image_processor_tester_class = SLANeXtImageProcessingTester
 
     # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
     # Override to skip batched input tests.

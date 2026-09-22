@@ -31,18 +31,22 @@ if is_vision_available():
 
 
 class TvpImageProcessingTester(ImageProcessingTester):
-    fill = 0
-    num_frames = 2
-    batch_size = 2
-    min_resolution = 40
-    max_resolution = 80
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("fill", 0)
+        kwargs.setdefault("num_frames", 2)
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("min_resolution", 40)
+        kwargs.setdefault("max_resolution", 80)
 
-    # Image processor init kwargs
-    crop_size = None
-    size = {"longest_edge": 40}
-    do_rescale = False
-    do_center_crop = False
-    pad_size = {"height": 80, "width": 80}
+        # Image processor init kwargs
+        kwargs.setdefault("crop_size", None)
+        kwargs.setdefault("size", {"longest_edge": 40})
+        kwargs.setdefault("do_rescale", False)
+        kwargs.setdefault("do_center_crop", False)
+        kwargs.setdefault("pad_size", {"height": 80, "width": 80})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.pad_size["height"], self.pad_size["width"]
@@ -63,7 +67,7 @@ class TvpImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = TvpImageProcessingTester
+    image_processor_tester_class = TvpImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

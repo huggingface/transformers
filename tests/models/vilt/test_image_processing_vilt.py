@@ -28,9 +28,12 @@ if is_vision_available():
 
 
 class ViltImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"shortest_edge": 30}
-    size_divisor = 2
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 30})
+        kwargs.setdefault("size_divisor", 2)
+
+        super().__init__(**kwargs)
 
     def get_expected_values(self, image_inputs, batched=False):
         """
@@ -82,4 +85,4 @@ class ViltImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class ViltImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = ViltImageProcessingTester
+    image_processor_tester_class = ViltImageProcessingTester

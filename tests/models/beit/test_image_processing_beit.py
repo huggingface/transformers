@@ -31,12 +31,16 @@ if is_torch_available():
 
 
 class BeitImageProcessingTester(ImageProcessingTester):
-    num_labels = 5
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
 
-    # Image processor init kwargs
-    size = {"height": 20, "width": 20}
-    do_center_crop = True
-    crop_size = {"height": 18, "width": 18}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {
@@ -60,7 +64,7 @@ class BeitImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
-    image_processing_tester_class = BeitImageProcessingTester
+    image_processor_tester_class = BeitImageProcessingTester
 
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processing_classes.values():

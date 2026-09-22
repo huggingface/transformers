@@ -31,14 +31,18 @@ if is_torch_available():
 
 
 class AriaImageProcessingTester(ImageProcessingTester):
-    max_resolution = 40
-    num_images = 1
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_resolution", 40)
+        kwargs.setdefault("num_images", 1)
 
-    # Image processor init kwargs
-    max_image_size = 980
-    split_resolutions = [[980, 980]]
-    split_image = True
-    size = {"longest_edge": max_resolution}
+        # Image processor init kwargs
+        kwargs.setdefault("max_image_size", 980)
+        kwargs.setdefault("split_resolutions", [[980, 980]])
+        kwargs.setdefault("split_image", True)
+        kwargs.setdefault("size", {"longest_edge": 40})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.max_image_size, self.max_image_size
@@ -83,7 +87,7 @@ class AriaImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = AriaImageProcessingTester
+    image_processor_tester_class = AriaImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():

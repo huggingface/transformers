@@ -37,12 +37,16 @@ if is_vision_available():
 
 
 class GroundingDinoImageProcessingTester(ImageProcessingTester):
-    num_queries = 5
-    embed_dim = 5
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_queries", 5)
+        kwargs.setdefault("embed_dim", 5)
 
-    # Image processor init kwargs
-    # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
-    size = {"shortest_edge": 18, "longest_edge": 1333}
+        # Image processor init kwargs
+        # by setting size["longest_edge"] > max_resolution (default 400) we're effectively not testing this
+        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 1333})
+
+        super().__init__(**kwargs)
 
     def get_fake_grounding_dino_output(self):
         torch.manual_seed(42)
@@ -55,7 +59,7 @@ class GroundingDinoImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = GroundingDinoImageProcessingTester
+    image_processor_tester_class = GroundingDinoImageProcessingTester
 
     def test_from_dict_with_legacy_integer_size(self):
         for image_processing_class in self.image_processing_classes.values():

@@ -30,16 +30,19 @@ if is_vision_available():
 
 
 class PerceptionLMImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    tile_size = 16
-    max_num_tiles = 4
-    size = {"shortest_edge": 20}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("tile_size", 16)
+        kwargs.setdefault("max_num_tiles", 4)
+        kwargs.setdefault("size", {"shortest_edge": 20})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PerceptionLMImageProcessingTester
+    image_processor_tester_class = PerceptionLMImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

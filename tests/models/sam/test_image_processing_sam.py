@@ -26,11 +26,14 @@ if is_torch_available():
 
 
 class SamImageProcessingTester(ImageProcessingTester):
-    # Image processor init kwargs
-    size = {"longest_edge": 20}
-    pad_size = {"height": 20, "width": 20}
-    mask_size = {"longest_edge": 12}
-    mask_pad_size = {"height": 12, "width": 12}
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"longest_edge": 20})
+        kwargs.setdefault("pad_size", {"height": 20, "width": 20})
+        kwargs.setdefault("mask_size", {"longest_edge": 12})
+        kwargs.setdefault("mask_pad_size", {"height": 12, "width": 12})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.pad_size["height"], self.pad_size["width"]
@@ -39,7 +42,7 @@ class SamImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = SamImageProcessingTester
+    image_processor_tester_class = SamImageProcessingTester
 
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processing_classes.values():

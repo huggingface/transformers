@@ -33,10 +33,14 @@ if is_torch_available():
 
 
 class Tipsv2DptImageProcessingTester(ImageProcessingTester):
-    num_labels = 3
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 3)
 
-    # Image processor init kwargs
-    size = {"height": 18, "width": 18}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
@@ -44,7 +48,7 @@ class Tipsv2DptImageProcessingTester(ImageProcessingTester):
 class Tipsv2DptImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    image_processing_tester_class = Tipsv2DptImageProcessingTester
+    image_processor_tester_class = Tipsv2DptImageProcessingTester
 
     def test_post_process_depth_estimation(self):
         image_processor = Tipsv2DptImageProcessor()

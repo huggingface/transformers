@@ -37,12 +37,16 @@ if is_torch_available():
 
 
 class Lfm2VlImageProcessingTester(ImageProcessingTester):
-    num_images = 1
-    min_resolution = 256
-    max_resolution = 1024
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_images", 1)
+        kwargs.setdefault("min_resolution", 256)
+        kwargs.setdefault("max_resolution", 1024)
 
-    # Image processor init kwargs
-    do_image_splitting = False
+        # Image processor init kwargs
+        kwargs.setdefault("do_image_splitting", False)
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -60,7 +64,7 @@ class Lfm2VlImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = Lfm2VlImageProcessingTester
+    image_processor_tester_class = Lfm2VlImageProcessingTester
 
     @require_vision
     def test_smart_resize(self):

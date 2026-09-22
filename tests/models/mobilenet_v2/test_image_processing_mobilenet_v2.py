@@ -34,11 +34,15 @@ if is_torch_available():
 
 
 class MobileNetV2ImageProcessingTester(ImageProcessingTester):
-    num_labels = 5
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
 
-    # Image processor init kwargs
-    size = {"shortest_edge": 20}
-    crop_size = {"height": 18, "width": 18}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 20})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {
@@ -64,7 +68,7 @@ class MobileNetV2ImageProcessingTester(ImageProcessingTester):
 class MobileNetV2ImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    image_processing_tester_class = MobileNetV2ImageProcessingTester
+    image_processor_tester_class = MobileNetV2ImageProcessingTester
 
     def test_call_segmentation_maps(self):
         # Initialize image_processing

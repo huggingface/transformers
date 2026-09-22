@@ -37,22 +37,26 @@ if is_vision_available():
 
 
 class HunYuanVLImageProcessingTester(ImageProcessingTester):
-    min_resolution = 32
-    max_resolution = 64
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 32)
+        kwargs.setdefault("max_resolution", 64)
 
-    # Image processor init kwargs
-    patch_size = 16
-    temporal_patch_size = 1
-    min_pixels = 32 * 32
-    max_pixels = 32 * 32
-    merge_size = 1
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("temporal_patch_size", 1)
+        kwargs.setdefault("min_pixels", 32 * 32)
+        kwargs.setdefault("max_pixels", 32 * 32)
+        kwargs.setdefault("merge_size", 1)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 @require_torchvision
 class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = HunYuanVLImageProcessingTester
+    image_processor_tester_class = HunYuanVLImageProcessingTester
 
     def assert_image_processor_output(self, output, batch_size):
         grid_h = grid_w = 2

@@ -44,10 +44,14 @@ def random_tensor(size):
 
 
 class SuperGlueImageProcessingTester(ImageProcessingTester):
-    batch_size = 6
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 6)
 
-    # Image processor init kwargs
-    size = {"height": 480, "width": 640}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 480, "width": 640})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return 2, self.num_channels, self.size["height"], self.size["width"]
@@ -94,7 +98,7 @@ class SuperGlueImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = SuperGlueImageProcessingTester
+    image_processor_tester_class = SuperGlueImageProcessingTester
 
     def test_image_processing(self):
         for image_processing_class in self.image_processing_classes.values():

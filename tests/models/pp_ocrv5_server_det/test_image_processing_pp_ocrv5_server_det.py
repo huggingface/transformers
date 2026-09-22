@@ -31,14 +31,18 @@ if is_torch_available():
 
 
 class PPOCRV5ServerDetImageProcessingTester(ImageProcessingTester):
-    min_resolution = 10
-    keep_aspect_ratio = False
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 10)
+        kwargs.setdefault("keep_aspect_ratio", False)
 
-    # Image processor init kwargs
-    limit_side_len = 960
-    max_side_limit = 4000
-    size = {"height": 512, "width": 512}
-    do_pad = False
+        # Image processor init kwargs
+        kwargs.setdefault("limit_side_len", 960)
+        kwargs.setdefault("max_side_limit", 4000)
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("do_pad", False)
+
+        super().__init__(**kwargs)
 
     def get_expected_value(self, image_inputs):
         image = image_inputs[0]
@@ -82,7 +86,7 @@ class PPOCRV5ServerDetImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class PPOCRV5ServerDetImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = PPOCRV5ServerDetImageProcessingTester
+    image_processor_tester_class = PPOCRV5ServerDetImageProcessingTester
 
     # PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes."
     # Skip Test batched

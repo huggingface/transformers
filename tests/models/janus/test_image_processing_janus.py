@@ -31,20 +31,24 @@ if is_vision_available():
 
 
 class JanusImageProcessingTester(ImageProcessingTester):
-    image_size = 384
-    max_resolution = 200
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("image_size", 384)
+        kwargs.setdefault("max_resolution", 200)
 
-    # Image processor init kwargs
-    size = {"height": 384, "width": 384}
-    # Passing the mean explicitly also selects the padding background color.
-    image_mean = OPENAI_CLIP_MEAN
-    do_convert_rgb = True
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 384, "width": 384})
+        # Passing the mean explicitly also selects the padding background color.
+        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN.copy())
+        kwargs.setdefault("do_convert_rgb", True)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_tester_class = JanusImageProcessingTester
+    image_processor_tester_class = JanusImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

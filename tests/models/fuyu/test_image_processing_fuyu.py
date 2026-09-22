@@ -25,11 +25,15 @@ if is_vision_available():
 
 
 class FuyuImageProcessingTester(ImageProcessingTester):
-    batch_size = 3
-    max_resolution = 360
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("max_resolution", 360)
 
-    # Image processor init kwargs
-    size = {"height": 180, "width": 360}
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 180, "width": 360})
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Prepares a batch of images for testing"""
@@ -69,7 +73,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
     # Skip tests that expect pixel_values output
     test_cast_dtype = None
 
-    image_processing_tester_class = FuyuImageProcessingTester
+    image_processor_tester_class = FuyuImageProcessingTester
 
     def test_call_pil(self):
         """Override to handle Fuyu's custom output structure"""
