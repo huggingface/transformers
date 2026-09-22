@@ -263,9 +263,9 @@ class AutoImageProcessorTest(unittest.TestCase):
                         "image_processor_type": "CLIPImageProcessor",
                         "processor_class": "CLIPProcessor",
                     },
-                    open(processor_tmpfile, "w"),
+                    open(processor_tmpfile, "w", encoding="utf-8"),
                 )
-                json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
+                json.dump({"model_type": "clip"}, open(config_tmpfile, "w", encoding="utf-8"))
 
                 cv2_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="cv2")
                 torch_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")

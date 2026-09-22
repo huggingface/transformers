@@ -251,9 +251,9 @@ class AutoVideoProcessorTest(unittest.TestCase):
                         "video_processor_type": "LlavaOnevisionVideoProcessor",
                         "processor_class": "LlavaOnevisionProcessor",
                     },
-                    open(processor_tmpfile, "w"),
+                    open(processor_tmpfile, "w", encoding="utf-8"),
                 )
-                json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w"))
+                json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w", encoding="utf-8"))
 
                 cv2_processor = AutoVideoProcessor.from_pretrained(tmpdirname, backend="cv2")
                 torch_processor = AutoVideoProcessor.from_pretrained(tmpdirname, backend="torchvision")
