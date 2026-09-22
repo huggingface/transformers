@@ -741,8 +741,7 @@ class AutoImageProcessor:
                 Dictionary mapping backend names to image processor classes. Allows registering custom backends.
                 Example: `{"pil": MyPilProcessor, "torchvision": MyTorchvisionProcessor, "custom": MyCustomProcessor}`
             exist_ok (`bool`, *optional*, defaults to `False`):
-                If `True`, allow overwriting existing registrations. Note that this will not overwrite anything if the config is
-                a local `transformers` class.
+                If `True`, allow overwriting existing registrations.
         """
         # Handle backward compatibility: convert old parameters to new format
         if image_processor_classes is None:

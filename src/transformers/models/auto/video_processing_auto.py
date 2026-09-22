@@ -479,8 +479,7 @@ class AutoVideoProcessor:
                 Dictionary mapping backend names to video processor classes. Allows registering custom backends.
                 Example: `{"pil": MyPilVideoProcessor, "torchvision": MyTorchvisionVideoProcessor, "custom": MyCustomVideoProcessor}`
             exist_ok (`bool`, *optional*, defaults to `False`):
-                If `True`, allow overwriting existing registrations. Note that this will not overwrite anything if the config is
-                a local `transformers` class.
+                If `True`, allow overwriting existing registrations.
         """
         if video_processor_classes is None:
             # Legacy registering would pass a single torch-based class
