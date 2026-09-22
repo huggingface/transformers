@@ -1508,12 +1508,12 @@ def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
     if "head_dim" in per_layer_attributes:
         head_dim = [config.per_layer_config[layer].head_dim for layer in layers]
     else:
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
     if "num_key_value_heads" in per_layer_attributes:
         num_heads = [config.per_layer_config[layer].num_key_value_heads for layer in layers]
     else:
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        num_heads = getattr(config, "num_key_value_heads", None) or config.num_attention_heads
 
     return num_heads, head_dim
 
