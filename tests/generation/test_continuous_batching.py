@@ -2413,6 +2413,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         num_attn_masks = handler.num_attention_masks
         num_output_rows = 2 if logprobs else 1
         elems_per_kv_token = head_dim * num_kv_heads
+        elems_per_cache_read_token = head_dim * handler.kv_heads_at_peak
         q_dim = num_attention_heads * head_dim
 
         # NUM_BLOCKS converts to a number of sectors, and reads are sized by the readable tokens those sectors hold
@@ -2444,9 +2445,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             fixed.append(torch.empty((num_groups, M), dtype=torch.int64, device=device))  # write_index
             fixed.append(torch.empty((num_groups, N + M), dtype=torch.int64, device=device))  # read_index
 
-        # Old K/V read from the whole readable cache: always reserved along with the sectors (not scaled by k)
-        fixed.append(torch.empty((N, elems_per_kv_token), dtype=dtype, device=device))
-        fixed.append(torch.empty((N, elems_per_kv_token), dtype=dtype, device=device))
+        # Old cache reads from the whole readable cache: always reserved along with the sectors (not scaled by k)
+        fixed.append(torch.empty((N, elems_per_cache_read_token), dtype=dtype, device=device))
 
         # M-proportional activation peaks: only one is live at a time, so the footprint reserves the largest
         peaks = {
@@ -2837,7 +2837,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def test_continuous_batching_tp_pause(self) -> None:
         """Test that `pause` keeps the TP ranks in the same pause window even when they request it at different
         iterations, and that pausing repeatedly mid-generation loses no request and does not make the ranks diverge."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_pause_generation_worker)(
+        _init_distributed(tp=self.tp_size, backend=self.distributed_backend)(_tp_pause_generation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="paged|sdpa",
             max_new_tokens=20,
