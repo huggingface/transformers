@@ -1,0 +1,11 @@
+naturev1
+Copyright 2026 Nathan
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Builds on `ihelix` (Apache-2.0), which in turn carries kernels from `helix-lm`
+and ultimately from HuggingFace Transformers (Apache-2.0).
+
+Data sources referenced by this package are public: NOAA GOES ABI imagery on
+AWS Open Data, and NOAA HURDAT2 best-track archives. This package is not
+affiliated with or endorsed by NOAA, NESDIS or the National Hurricane Center.
