@@ -39,7 +39,7 @@ def format_slack_message(failures_file, workflow_url, output_file=None):
         Dictionary with title, message, and workflow_url
     """
     # Read failures
-    with open(failures_file) as f:
+    with open(failures_file, encoding="utf-8") as f:
         failures = json.load(f)
 
     if not failures:
@@ -76,7 +76,7 @@ def format_slack_message(failures_file, workflow_url, output_file=None):
             sys.exit(1)
 
     # Write environment variables
-    with open(output_file, "a") as f:
+    with open(output_file, "a", encoding="utf-8") as f:
         f.write(f"SLACK_TITLE={title}\n")
         f.write(f"SLACK_WORKFLOW_URL={workflow_url}\n")
         # Use heredoc for multiline message

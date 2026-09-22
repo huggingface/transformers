@@ -5315,9 +5315,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             custom_generate_dir = Path(tmp_dir) / "custom_generate"
             custom_generate_dir.mkdir()
-            with open(custom_generate_dir / "generate.py", "w") as f:
+            with open(custom_generate_dir / "generate.py", "w", encoding="utf-8") as f:
                 f.write("from .helper import ret_success\ndef generate(*args, **kwargs):\n    return ret_success()\n")
-            with open(custom_generate_dir / "helper.py", "w") as f:
+            with open(custom_generate_dir / "helper.py", "w", encoding="utf-8") as f:
                 f.write('def ret_success():\n    return "success"\n')
             model = AutoModelForCausalLM.from_pretrained(
                 "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
@@ -5343,7 +5343,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             custom_generate_dir = Path(tmp_dir) / "custom_generate"
             custom_generate_dir.mkdir()
-            with open(custom_generate_dir / "generate.py", "w") as f:
+            with open(custom_generate_dir / "generate.py", "w", encoding="utf-8") as f:
                 f.write("def generate(*args, **kwargs):\n    return 'should_not_run'\n")
             with self.assertRaises(ValueError):
                 model.generate(
