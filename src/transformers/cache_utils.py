@@ -516,7 +516,7 @@ class StaticLayer(CacheLayerMixin):
         """Return the length and offset of the cache, used to generate the attention mask"""
         kv_offset = 0
         if self.buckets:
-            kv_length = self.compute_current_bucket(self.cumulative_length_int)
+            kv_length = self.compute_current_bucket(self.cumulative_length_int + query_length)
         else:
             kv_length = self.max_cache_len
         return kv_length, kv_offset
