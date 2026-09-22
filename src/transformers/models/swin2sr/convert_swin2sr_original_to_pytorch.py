@@ -62,23 +62,19 @@ def rename_key(name, config):
     if "residual_group.blocks" in name:
         name = name.replace("residual_group.blocks", "layers")
     if "attn.proj" in name:
-        name = name.replace("attn.proj", "attention.output.dense")
+        name = name.replace("attn.proj", "attention.o_proj")
     if "attn" in name:
-        name = name.replace("attn", "attention.self")
+        name = name.replace("attn", "attention")
     if "norm1" in name:
         name = name.replace("norm1", "layernorm_before")
     if "norm2" in name:
         name = name.replace("norm2", "layernorm_after")
-    if "mlp.fc1" in name:
-        name = name.replace("mlp.fc1", "intermediate.dense")
-    if "mlp.fc2" in name:
-        name = name.replace("mlp.fc2", "output.dense")
     if "q_bias" in name:
-        name = name.replace("q_bias", "query.bias")
+        name = name.replace("q_bias", "q_proj.bias")
     if "k_bias" in name:
-        name = name.replace("k_bias", "key.bias")
+        name = name.replace("k_bias", "k_proj.bias")
     if "v_bias" in name:
-        name = name.replace("v_bias", "value.bias")
+        name = name.replace("v_bias", "v_proj.bias")
     if "cpb_mlp" in name:
         name = name.replace("cpb_mlp", "continuous_position_bias_mlp")
     if "patch_embed.proj" in name:
@@ -134,25 +130,22 @@ def convert_state_dict(orig_state_dict, config):
             dim = config.embed_dim
 
             if "weight" in key:
-                orig_state_dict[
-                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.weight"
-                ] = val[:dim, :]
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.weight"] = (
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.q_proj.weight"] = (
+                    val[:dim, :]
+                )
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.k_proj.weight"] = (
                     val[dim : dim * 2, :]
                 )
-                orig_state_dict[
-                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.weight"
-                ] = val[-dim:, :]
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.v_proj.weight"] = (
+                    val[-dim:, :]
+                )
             else:
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.bias"] = (
-                    val[:dim]
-                )
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.bias"] = (
-                    val[dim : dim * 2]
-                )
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"] = (
-                    val[-dim:]
-                )
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.q_proj.bias"] = val[
+                    :dim
+                ]
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.v_proj.bias"] = val[
+                    -dim:
+                ]
         else:
             orig_state_dict[rename_key(key, config)] = val
 
