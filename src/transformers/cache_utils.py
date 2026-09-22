@@ -532,7 +532,7 @@ class StaticLayer(CacheLayerMixin):
     def compute_current_bucket(self, current_length: int) -> int:
         # Either 512, or next upper power of 2
         next_power_of_2 = 2 ** math.ceil(math.log2(max(1, current_length)))
-        return max(512, next_power_of_2)
+        return max(512, min(self.max_cache_len, next_power_of_2))
 
 
 class StaticSlidingWindowLayer(StaticLayer):
