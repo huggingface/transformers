@@ -21,7 +21,7 @@
 #     "sentencepiece != 0.1.92",
 #     "protobuf",
 #     "rouge-score",
-#     "nltk",
+#     "nltk >= 3.9",
 #     "py7zr",
 #     "torch >= 1.3",
 #     "evaluate",
@@ -80,15 +80,16 @@ require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summ
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
+# NLTK 3.9 replaced the pickled punkt data with punkt_tab, which is what sent_tokenize loads
 try:
-    nltk.data.find("tokenizers/punkt")
+    nltk.data.find("tokenizers/punkt_tab")
 except (LookupError, OSError):
     if is_offline_mode():
         raise LookupError(
             "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
         )
     with FileLock(".lock") as lock:
-        nltk.download("punkt", quiet=True)
+        nltk.download("punkt_tab", quiet=True)
 
 summarization_name_mapping = {
     "amazon_reviews_multi": ("review_body", "review_title"),
