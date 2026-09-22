@@ -319,14 +319,22 @@ class FineGrainedQuantize(_FineGrainedOp):
     power-of-two UE8M0 inverse scales); the group formats run the kernels' row-wise quantizers
     (``mxfp8_act_quant`` / ``mxfp4_act_quant`` / ``nvfp4_act_quant``), NVFP4 after normalizing by the
     canonical per-tensor / per-expert global ``amax / (6 * 448)``.
-    Tensors that are not a finegrained module's weight (1-D norms, biases, shapes that don't tile)
-    pass through. Without a model (direct invocation) it quantizes block-FP8 from the config."""
+    A tensor that is not a finegrained module's weight passes through — `_weight_holder` decides,
+    since rank alone does not (an expert bias is 2-D). Without a model, a direct invocation has
+    nothing to ask and quantizes block-FP8 from the config."""
 
     def convert(self, input_dict: dict[str, torch.Tensor], model=None, **kwargs) -> dict[str, torch.Tensor]:
         result: dict[str, torch.Tensor] = {}
         for key, value in input_dict.items():
             tensor = value[0] if isinstance(value, list) else value
-            result.update(self._quantize_one(key, tensor, self._weight_holder(model, key)))
+            holder = self._weight_holder(model, key)
+            if holder is None and model is not None:
+                # not a weight, whatever its rank: an expert bias is 2-D and would otherwise be
+                # quantized into a `<proj>_bias_scale_inv` no module holds. Only a direct
+                # invocation, with no model to ask, quantizes without a holder.
+                result[key] = tensor
+                continue
+            result.update(self._quantize_one(key, tensor, holder))
         return result
 
     @staticmethod
@@ -384,8 +392,12 @@ class FineGrainedQuantize(_FineGrainedOp):
                 if held_scale is not None
                 else self.hf_quantizer.quantization_config.scale_fmt == "ue8m0"
             )
-            quantized = self._quantize_block_fp8(value, block, ue8m0)
-            return {key: value} if quantized is None else {key: quantized[0], f"{prefix}_scale_inv": quantized[1]}
+            weight, scale = self._quantize_block_fp8(value, block, ue8m0)
+            return {
+                key: weight,
+                f"{prefix}_scale_inv": scale,
+                **self._identity_activation_scales(module, prefix, scale_name, value.device),
+            }
 
         if value.device.type not in ("cuda", "xpu"):
             # the kernels' quantizers are triton launches; the package builds for cuda, rocm
@@ -405,34 +417,53 @@ class FineGrainedQuantize(_FineGrainedOp):
             stem = scale_name.removesuffix("_scale_inv")
             suffix = "_global_scale" if hasattr(module, f"{stem}_global_scale") else "_weight_global_scale"
             out[f"{prefix}{suffix}"] = global_scale
-        # activations are quantized dynamically against the block scales alone here — there is no
-        # calibration pass — so the module's activation globals are the identity
-        held_input = getattr(module, scale_name.replace("_scale_inv", "_input_global_scale"), None)
-        if held_input is not None:
-            # on the weight's device, not the slot's: the module is still on meta here, and
-            # `ones_like` would inherit that and leave the parameter unmaterialized
-            out[f"{prefix}_input_global_scale"] = torch.ones(
-                held_input.shape, dtype=held_input.dtype, device=value.device
-            )
+        out.update(self._identity_activation_scales(module, prefix, scale_name, value.device))
+        return out
+
+    @staticmethod
+    def _identity_activation_scales(module, prefix: str, scale_name: str | None, device) -> dict:
+        """This module's activation-side scales, as the identity, because quantizing on the fly
+        is not a calibration pass. They have to be WRITTEN: the loader materializes a key no
+        checkpoint supplies with `torch.empty_like` and `_init_weights` has no branch for a
+        scale, so a slot left out here reaches the kernels as uninitialized memory."""
+        if module is None:
+            return {}
+        stem = scale_name.removesuffix("_scale_inv")
+        # the experts prefix each slot with the projection; a dense linear, whose stem IS
+        # `weight`, names them bare
+        proj = "" if stem == "weight" else f"{stem}_"
+        out = {}
+        for slot in (f"{proj}activation_scale", f"{proj}input_global_scale"):
+            held = getattr(module, slot, None)
+            if held is not None:
+                # on the weight's device, not the slot's: the module is still on meta here, and
+                # `ones_like` would inherit that and leave the parameter unmaterialized
+                out[prefix.removesuffix(stem) + slot] = torch.ones(held.shape, dtype=held.dtype, device=device)
         return out
 
     @staticmethod
     def _quantize_block_fp8(value: torch.Tensor, block: tuple[int, int], ue8m0: bool):
-        """``(E4M3 weight, inverse scale grid)`` for a ``(..., rows, cols)`` tensor at ``block``, or
-        ``None`` when the shape does not tile. UE8M0 rounds the inverse scale up to a power of two
-        before quantizing, so dequant multiplies by exactly the scale the weight was divided by."""
+        """``(E4M3 weight, inverse scale grid)`` for a ``(..., rows, cols)`` tensor at ``block``.
+
+        A trailing PARTIAL block is padded, not refused — DeepSeek-V3 ships `kv_a_proj_with_mqa`
+        as `(576, 7168)` against a 128x128 block with a `(5, 56)` grid, so the format's own
+        producers round up and the module allocates to match. The zeros cannot move a block's
+        amax, so the short block is scaled by its real values. UE8M0 rounds the inverse scale up
+        to a power of two before quantizing, so dequant multiplies by exactly what it divided by.
+        """
         block_m, block_n = block
         rows, cols = value.shape[-2], value.shape[-1]
-        if rows % block_m or cols % block_n:
-            return None
-        tiles = value.float().reshape(*value.shape[:-2], rows // block_m, block_m, cols // block_n, block_n)
+        padded = torch.nn.functional.pad(value.float(), (0, -cols % block_n, 0, -rows % block_m))
+        grid_m, grid_n = padded.shape[-2] // block_m, padded.shape[-1] // block_n
+        tiles = padded.reshape(*padded.shape[:-2], grid_m, block_m, grid_n, block_n)
         max_abs = tiles.abs().amax(dim=(-3, -1))
         inv_scale = torch.where(max_abs > 0, max_abs / _FP8_MAX, torch.ones_like(max_abs))
         if ue8m0:
             inv_scale = torch.pow(2.0, torch.ceil(torch.log2(inv_scale.clamp(min=torch.finfo(torch.float32).tiny))))
         scaled = tiles / inv_scale.unsqueeze(-1).unsqueeze(-3)
-        quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE).reshape(value.shape)
-        return quantized, inv_scale.to(_get_ue8m0_dtype() if ue8m0 else torch.float32)
+        quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE).reshape(padded.shape)
+        # a no-op slice on a shape that tiled, and `contiguous` then returns the tensor itself
+        return quantized[..., :rows, :cols].contiguous(), inv_scale.to(_get_ue8m0_dtype() if ue8m0 else torch.float32)
 
     @staticmethod
     def _quantize_group(value: torch.Tensor, format_spec: WeightFormat):

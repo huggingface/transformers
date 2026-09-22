@@ -504,6 +504,54 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
 
 
 @require_torch
+class FineGrainedScaleDtypeTest(unittest.TestCase):
+    """A scale's dtype is the format's, never the ambient default.
+
+    `from_pretrained` sets the default dtype to the checkpoint's for the duration of model
+    construction, so a scale allocated as `torch.ones(n)` comes out bf16 and the kernels read it
+    as fp32 — NaN logits, no error. Building under both defaults and comparing is what catches
+    that, whatever the format decides each scale should be.
+    """
+
+    def _dtypes(self, build, default):
+        previous = torch.get_default_dtype()
+        torch.set_default_dtype(default)
+        try:
+            with torch.device("meta"):
+                module = build()
+            return {name: p.dtype for name, p in module.named_parameters() if p is not None}
+        finally:
+            torch.set_default_dtype(previous)
+
+    def _assert_default_dtype_invariant(self, build):
+        under_fp32 = self._dtypes(build, torch.float32)
+        under_bf16 = self._dtypes(build, torch.bfloat16)
+        self.assertTrue(under_fp32)
+        # the weight and bias DO follow the model dtype; every scale beside them must not
+        scales = {name for name in under_fp32 if "scale" in name}
+        self.assertTrue(scales)
+        for name in sorted(scales):
+            self.assertEqual(under_bf16[name], under_fp32[name], f"{name} followed the default dtype")
+
+    def test_linear_scales_ignore_the_default_dtype(self):
+        for weight_format, scheme in (("fp8", "static"), ("fp8", "dynamic"), ("nvfp4", "dynamic")):
+            with self.subTest(weight_format=weight_format, activation_scheme=scheme):
+                self._assert_default_dtype_invariant(
+                    lambda f=weight_format, s=scheme: FineGrainedLinear(
+                        in_features=64, out_features=32, block_size=(4, 4), weight_format=f, activation_scheme=s
+                    )
+                )
+
+    def test_experts_scales_ignore_the_default_dtype(self):
+        for weight_format, scheme in (("fp8", "static"), ("fp8", "dynamic"), ("nvfp4", "dynamic")):
+            with self.subTest(weight_format=weight_format, activation_scheme=scheme):
+                self._assert_default_dtype_invariant(
+                    lambda f=weight_format, s=scheme: FineGrainedExperts(
+                        _Cfg(), block_size=(4, 4), weight_format=f, activation_scheme=s
+                    )
+                )
+
+
 class FineGrainedFusedNormGateTest(unittest.TestCase):
     """A norm the kernels can fuse must NOT be fused when a forward collective sits on it.
 
@@ -1327,6 +1375,74 @@ class FineGrainedOnTheFlyQuantizeTest(unittest.TestCase):
             tensors = op.convert(tensors, source_patterns=sources, target_patterns=["gate_up_proj"])
         self.assertEqual(len(tensors), 1)  # the scale is consumed, not passed down the chain
         torch.testing.assert_close(next(iter(tensors.values())).float(), reference.float(), rtol=0, atol=0)
+
+    def test_a_static_scheme_gets_its_activation_scales_written(self):
+        """A calibration-fed slot the checkpoint does not supply is still WRITTEN, as the identity.
+
+        The loader materializes a missing key with `torch.empty_like` and `_init_weights` has no
+        branch for a scale, so a slot this op leaves out reaches the kernels as uninitialized
+        memory: a zero divides the activations by zero and a negative flips their sign, which
+        showed up as NaN logits from one fixture and not another, run to run.
+        """
+        from transformers.integrations.finegrained_conversions import FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        model = torch.nn.Module()
+        model.experts = fg.FineGrainedExperts(
+            cfg, block_size=(128, 128), weight_format="fp8", activation_scheme="static"
+        )
+        model.proj = fg.FineGrainedLinear(
+            in_features=256,
+            out_features=256,
+            block_size=(128, 128),
+            weight_format="fp8",
+            activation_scheme="static",
+        )
+        op = FineGrainedQuantize(hf_quantizer=None)
+        for key, tensor, slot in (
+            ("experts.gate_up_proj", torch.randn(4, 256, 256), "experts.gate_up_proj_activation_scale"),
+            ("proj.weight", torch.randn(256, 256), "proj.activation_scale"),
+        ):
+            with self.subTest(key=key):
+                out = op.convert({key: tensor}, model=model)
+                self.assertIn(slot, out, f"{key}: the static activation scale was not written")
+                held = model.get_parameter(slot)
+                self.assertEqual((out[slot].shape, out[slot].dtype), (held.shape, held.dtype))
+                torch.testing.assert_close(out[slot], torch.ones_like(out[slot]), rtol=0, atol=0)
+
+    def test_an_expert_bias_is_passed_through_not_quantized(self):
+        """A GPT-OSS expert bias is `(E, rows)` — 2-D, like a dense weight — so the rank guard
+        alone lets it through. It has no scale slot, and emitting one gives the loader a
+        `<proj>_bias_scale_inv` no module holds."""
+        from transformers.integrations.finegrained_conversions import FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        model = torch.nn.Module()
+        model.experts = fg.FineGrainedExperts(cfg, block_size=(128, 128), weight_format="fp8", has_bias=True)
+        bias = torch.randn(4, 256)
+        out = FineGrainedQuantize(hf_quantizer=None).convert({"experts.down_proj_bias": bias}, model=model)
+        self.assertEqual(list(out), ["experts.down_proj_bias"])
+        self.assertIs(out["experts.down_proj_bias"], bias)
+
+    def test_a_partial_trailing_block_is_padded_not_refused(self):
+        """DeepSeek-V3 ships `kv_a_proj_with_mqa` as `(576, 7168)` against a 128x128 block with a
+        `(5, 56)` scale grid, so the format rounds the grid UP and quantizes the short block on
+        its own values. Refusing the shape instead left the weight full precision."""
+        from transformers.integrations.finegrained_conversions import FineGrainedQuantize
+
+        torch.manual_seed(0)
+        for rows, cols in ((576, 256), (192, 256), (256, 256)):
+            with self.subTest(shape=(rows, cols)):
+                weight, scale = FineGrainedQuantize._quantize_block_fp8(
+                    torch.randn(rows, cols), (128, 128), ue8m0=False
+                )
+                self.assertEqual(weight.shape, (rows, cols))
+                self.assertEqual(weight.dtype, torch.float8_e4m3fn)
+                self.assertEqual(scale.shape, (-(-rows // 128), -(-cols // 128)))
 
     def test_block_fp8_round_trips_within_its_floor(self):
         from transformers.integrations.finegrained_conversions import FineGrainedDequantize, FineGrainedQuantize
