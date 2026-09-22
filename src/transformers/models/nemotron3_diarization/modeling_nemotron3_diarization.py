@@ -470,7 +470,7 @@ class Nemotron3DiarizationMLP(nn.Module):
         return hidden_states
 
 
-class Nemotron3DiarizationEncoderLayer(GradientCheckpointingLayer):
+class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
     def __init__(self, config: Nemotron3DiarizationAudioConfig, layer_idx: int):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -508,7 +508,7 @@ class Nemotron3DiarizationPreTrainedModel(PreTrainedModel):
     config: Nemotron3DiarizationConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Nemotron3DiarizationEncoderLayer"]
+    _no_split_modules = ["Nemotron3DiarizationAudioLayer"]
     _skip_keys_device_placement = ["speaker_cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -517,7 +517,7 @@ class Nemotron3DiarizationPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Nemotron3DiarizationEncoderLayer,
+        "hidden_states": Nemotron3DiarizationAudioLayer,
         "attentions": Nemotron3DiarizationAttention,
     }
     main_input_name = "input_features"
@@ -549,7 +549,7 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
         self.feature_stacking = Nemotron3DiarizationFeatureStacking(config)
         self.input_layer_norm = nn.LayerNorm(config.hidden_size)
         self.layers = nn.ModuleList(
-            [Nemotron3DiarizationEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Nemotron3DiarizationAudioLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.rotary_emb = Nemotron3DiarizationRotaryEmbedding(config)

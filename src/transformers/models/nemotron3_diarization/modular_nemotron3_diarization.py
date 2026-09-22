@@ -454,7 +454,7 @@ class Nemotron3DiarizationAttention(GlmAsrAttention):
 class Nemotron3DiarizationMLP(CLIPMLP): ...
 
 
-class Nemotron3DiarizationEncoderLayer(CLIPEncoderLayer):
+class Nemotron3DiarizationAudioLayer(CLIPEncoderLayer):
     def __init__(self, config: Nemotron3DiarizationAudioConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = Nemotron3DiarizationAttention(config, layer_idx)
@@ -468,10 +468,10 @@ class Nemotron3DiarizationPreTrainedModel(PeAudioPreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = "audio"
-    _no_split_modules = ["Nemotron3DiarizationEncoderLayer"]
+    _no_split_modules = ["Nemotron3DiarizationAudioLayer"]
     _skip_keys_device_placement = ["speaker_cache"]
     _can_record_outputs = {
-        "hidden_states": Nemotron3DiarizationEncoderLayer,
+        "hidden_states": Nemotron3DiarizationAudioLayer,
         "attentions": Nemotron3DiarizationAttention,
     }
 
@@ -501,7 +501,7 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
         self.feature_stacking = Nemotron3DiarizationFeatureStacking(config)
         self.input_layer_norm = nn.LayerNorm(config.hidden_size)
         self.layers = nn.ModuleList(
-            [Nemotron3DiarizationEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Nemotron3DiarizationAudioLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.rotary_emb = Nemotron3DiarizationRotaryEmbedding(config)
