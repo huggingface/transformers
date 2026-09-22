@@ -2998,6 +2998,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool | str = False,
         tokenize: bool = True,
+        sanitize_special_tokens: bool = False,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
@@ -3041,6 +3042,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
+            sanitize_special_tokens (`bool`, defaults to `False`):
+                If set, special tokens that appear in message content or documents are encoded as ordinary text,
+                so that only the special tokens emitted by the chat template itself are encoded as special tokens.
+                Special tokens that are only formed when text is joined together (e.g. template text and message
+                text) are not caught.
+                Requires `tokenize=True` and is not compatible with `return_assistant_tokens_mask`.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3107,6 +3114,29 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
+        if sanitize_special_tokens:
+            if not tokenize or return_assistant_tokens_mask:
+                raise ValueError(
+                    "`sanitize_special_tokens=True` requires `tokenize=True` and is not compatible with "
+                    "`return_assistant_tokens_mask=True`."
+                )
+            # Wrap special tokens in user-supplied strings with private-use markers, so we can find them after rendering
+            special_tokens = sorted(self.all_special_tokens, key=len, reverse=True)
+            special_tokens_re = re.compile("|".join(map(re.escape, special_tokens)) or "(?!)")  # (?!) never matches
+            marked_tokens_re = re.compile(f"\U000f0000({special_tokens_re.pattern})\U000f0001")
+
+            def mark(obj):
+                if isinstance(obj, str):
+                    return special_tokens_re.sub("\U000f0000\\g<0>\U000f0001", obj)
+                if isinstance(obj, dict):
+                    return {key: mark(value) for key, value in obj.items()}
+                if isinstance(obj, (list, tuple)):
+                    return [mark(value) for value in obj]
+                return obj
+
+            conversations = [mark(getattr(chat, "messages", chat)) for chat in conversations]
+            documents = mark(documents)
+
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -3122,7 +3152,39 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if not is_batched:
             rendered_chat = rendered_chat[0]
 
-        if tokenize:
+        if tokenize and sanitize_special_tokens:
+            newline_ids = self.encode("\n", add_special_tokens=False)
+            input_ids = []
+            for chat in rendered_chat if is_batched else [rendered_chat]:
+                # Splitting on the markers gives [text, marked token, text, marked token, ..., text]
+                pieces = marked_tokens_re.split(chat)
+                ids = self.encode(pieces[0], add_special_tokens=False)
+                for i, piece in enumerate(pieces[1:], start=1):
+                    split = i % 2 == 1  # Odd pieces are marked special tokens, which we encode as plain text
+                    # Encode after a newline, so SentencePiece doesn't add the prefix space it adds at the start of a
+                    # string, then remove the newline again (or skip the trick, if the newline merged with the piece)
+                    piece_ids = self.encode("\n" + piece, add_special_tokens=False, split_special_tokens=split)
+                    if piece_ids[: len(newline_ids)] == newline_ids:
+                        piece_ids = piece_ids[len(newline_ids) :]
+                    else:
+                        piece_ids = self.encode(piece, add_special_tokens=False, split_special_tokens=split)
+                    if split and self.convert_tokens_to_ids(piece) in piece_ids:
+                        raise ValueError(f"Can't sanitize {piece!r}: `split_special_tokens=True` doesn't split it")
+                    ids += piece_ids
+                input_ids.append(ids)
+            if truncation:
+                max_length = max_length or self.model_max_length
+                input_ids = [
+                    ids[:max_length] if self.truncation_side == "right" else ids[-max_length:] for ids in input_ids
+                ]
+            out = self.pad(
+                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
+                padding=padding,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
+        elif tokenize:
             out = self(
                 rendered_chat,
                 padding=padding,
@@ -3132,6 +3194,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 return_tensors=return_tensors,
                 **tokenizer_kwargs,
             )
+
+        if tokenize:
             if return_dict:
                 if return_assistant_tokens_mask:
                     assistant_masks = []
