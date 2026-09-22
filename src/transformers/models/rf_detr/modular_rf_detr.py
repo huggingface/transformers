@@ -31,6 +31,8 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     center_to_corners_format,
+    group_images_by_shape,
+    reorder_images,
 )
 from ...image_utils import (
     AnnotationFormat,
@@ -103,6 +105,7 @@ class RfDetrImageProcessor(DetrImageProcessor):
         pad_size: SizeDict | None,
         format: str | AnnotationFormat | None,
         return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -132,13 +135,10 @@ class RfDetrImageProcessor(DetrImageProcessor):
 
         data = {}
 
-        processed_images = []
-        processed_annotations = []
-        pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-            # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
-            if annotations is not None:
-                annotation = self.prepare_annotation(
+        # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
+        if annotations is not None:
+            annotations = [
+                self.prepare_annotation(
                     image,
                     annotation,
                     format,
@@ -146,57 +146,64 @@ class RfDetrImageProcessor(DetrImageProcessor):
                     masks_path=masks_path,
                     input_data_format=ChannelDimension.FIRST,
                 )
-            # Rescale then resize like in the original RF-DETR implementation
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_resize:
-                resized_image = self.resize(image, size=size, resample=resample)
-                if annotations is not None:
-                    annotation = self.resize_annotation(
-                        annotation,
-                        orig_size=image.size()[-2:],
-                        target_size=resized_image.size()[-2:],
-                    )
-                image = resized_image
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, image.shape[-2:])
+                for image, annotation in zip(images, annotations)
+            ]
 
-            processed_images.append(image)
-            processed_annotations.append(annotation)
-        images = processed_images
-        annotations = processed_annotations if annotations is not None else None
+        grouped_images, grouped_annotations, grouped_images_index = group_images_by_shape(
+            images, annotations, disable_grouping=disable_grouping
+        )
+
+        for key, stacked_images in grouped_images.items():
+            stacked_annotations = grouped_annotations[key]
+            # Different from DETR: rescale then resize instead of resize then rescale
+            if do_rescale:
+                stacked_images = self.rescale(stacked_images, rescale_factor)
+            if do_resize:
+                orig_size = stacked_images.shape[-2:]
+                stacked_images = self.resize(stacked_images, size=size, resample=resample, antialias=False)
+                if stacked_annotations is not None:
+                    stacked_annotations = [
+                        self.resize_annotation(
+                            annotation,
+                            orig_size=orig_size,
+                            target_size=stacked_images.shape[-2:],
+                        )
+                        for annotation in stacked_annotations
+                    ]
+            if do_normalize:
+                stacked_images = self.normalize(stacked_images, image_mean, image_std)
+            if do_convert_annotations and stacked_annotations is not None:
+                image_size = stacked_images.shape[-2:]
+                stacked_annotations = [
+                    self.normalize_annotation(annotation, image_size) for annotation in stacked_annotations
+                ]
+            grouped_images[key] = stacked_images
+            grouped_annotations[key] = stacked_annotations
+        processed_images = reorder_images(grouped_images, grouped_images_index)
 
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
                 padded_size = (pad_size.height, pad_size.width)
             else:
-                padded_size = get_max_height_width(images)
+                padded_size = get_max_height_width(processed_images)
 
-            padded_images = []
-            padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-                # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-                if padded_size == image.size()[-2:]:
-                    padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
-                    padded_annotations.append(annotation)
-                    continue
-                image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+            grouped_masks = {}
+            for key, stacked_images in grouped_images.items():
+                grouped_images[key], grouped_masks[key], grouped_annotations[key] = self.pad(
+                    stacked_images,
+                    padded_size,
+                    annotation=grouped_annotations[key],
+                    update_bboxes=do_convert_annotations,
                 )
-                padded_images.append(image)
-                padded_annotations.append(annotation)
-                pixel_masks.append(pixel_mask)
-            images = padded_images
-            annotations = padded_annotations if annotations is not None else None
-            data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
 
-        data.update({"pixel_values": torch.stack(images, dim=0)})
+            processed_images = reorder_images(grouped_images, grouped_images_index)
+            data.update({"pixel_mask": torch.stack(reorder_images(grouped_masks, grouped_images_index), dim=0)})
+
+        data.update({"pixel_values": torch.stack(processed_images, dim=0)})
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
+            annotations = reorder_images(grouped_annotations, grouped_images_index)
             encoded_inputs["labels"] = [
                 BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
             ]
@@ -1183,12 +1190,6 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         **kwargs: Unpack[TransformersKwargs],
     ) -> RfDetrObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python
@@ -1480,13 +1481,6 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> dict[str, torch.Tensor]:
-        r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-        """
         image_size = pixel_values.shape[-2:]
 
         # Step 1.

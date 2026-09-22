@@ -262,13 +262,18 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.record_past:
             self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
             self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+            # Return the full states
+            return full_key_states, full_value_states
         # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
         else:
             self.keys = full_key_states
             self.values = full_value_states
-
-        # Return the full states
-        return full_key_states, full_value_states
+            # In theory, when we record the past we always have a call to `crop` after every `forward`, so returning the full states
+            # similar to the non-past case should be enough. However, in case several `forward` are run in a row without calling `crop`
+            # in-between (as is the case in some assisted decoding method, where the assistant itself calls `generate` with a past-aware
+            # Cache), we need to slice to only return the necesary states that are advertized to the mask by `get_mask_sizes`
+            num_visible = self.sliding_window - 1 + key_states.shape[-2]
+            return full_key_states[:, :, -num_visible:, :], full_value_states[:, :, -num_visible:, :]
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -1248,6 +1253,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": DynamicSlidingWindowLayer,
     "chunked_attention": DynamicSlidingWindowLayer,
+    "indexed_attention": DynamicIndexedLayer,
     # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
     # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
     "conv": LinearAttentionLayer,
@@ -1255,9 +1261,6 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
-    # More exotic implementations
-    "deepseek_sparse_attention": DynamicIndexedLayer,
-    "qwen_sparse_attention": DynamicIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1271,15 +1274,13 @@ STATIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": StaticSlidingWindowLayer,
     "chunked_attention": StaticSlidingWindowLayer,
+    "indexed_attention": StaticIndexedLayer,
     # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
     "conv": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
-    # More exotic implementations
-    "deepseek_sparse_attention": StaticIndexedLayer,
-    "qwen_sparse_attention": StaticIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices

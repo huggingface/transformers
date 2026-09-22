@@ -116,7 +116,7 @@ def prepare_config(size_config_url, size):
 def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path):
     config_filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json")
 
-    with open(config_filepath) as f:
+    with open(config_filepath, encoding="utf-8") as f:
         content = json.loads(f.read())
 
     size = content[checkpoint_config_filename]["short_size"]

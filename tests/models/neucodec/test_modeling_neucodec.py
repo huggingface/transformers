@@ -240,7 +240,7 @@ class NeuCodecIntegrationTest(unittest.TestCase):
     @slow
     def test_integration(self):
         results_path = self.fixtures_path / "expected_results.json"
-        with open(results_path, "r") as f:
+        with open(results_path, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         exp_code = torch.tensor(raw_data["audio_codes"][0])
         exp_recon = torch.tensor(raw_data["recon_wavs"][0])
@@ -279,7 +279,7 @@ class NeuCodecIntegrationTest(unittest.TestCase):
     @slow
     def test_batch_integration(self):
         results_path = self.fixtures_path / "expected_results.json"
-        with open(results_path, "r") as f:
+        with open(results_path, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         num_samples = len(raw_data["audio_codes"])
         exp_codes = [torch.tensor(c) for c in raw_data["audio_codes"]]
