@@ -568,6 +568,37 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
     @require_torch_accelerator
     @slow
+    def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
+        """
+        Integration counterpart of the same test in `CacheTest`, on a real Gemma4: its layers do not share a single
+        `head_dim`, so the static cache eagerly initialized for the chunked prefill must be given one per layer.
+        """
+        model_name = "google/gemma-4-E2B-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", dtype=torch.bfloat16)
+        inputs = tokenizer("Fun fact:", return_tensors="pt").to(model.device)
+
+        gen_out = model.generate(
+            **inputs,
+            max_new_tokens=10,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        self.assertEqual(gen_out.sequences.shape[-1], inputs.input_ids.shape[-1] + 10)
+        cache = gen_out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+
+        # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
+        text_config = model.config.get_text_config(decoder=True)
+        expected_head_dims = [text_config.per_layer_config[layer].head_dim for layer in range(len(cache.layers))]
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], expected_head_dims)
+        self.assertGreater(len(set(expected_head_dims)), 1)
+
+    @require_torch_accelerator
+    @slow
     def test_offloaded_cache_uses_less_memory_than_dynamic_cache(self):
         """Tests that offloading uses less memory than the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
