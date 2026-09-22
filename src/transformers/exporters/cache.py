@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
     from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
 
-    from ..cache_utils import DynamicCache, StaticLayer
+    from ..cache_utils import DynamicCache, kv_cache_geometry
 
 
 def _cache_tensors(past_key_values) -> list[torch.Tensor]:
@@ -104,17 +104,6 @@ def _self_attention_layers(cache) -> list:
     does it keep keys, which states exist)."""
     halves = _cache_halves(cache)
     return getattr(halves[0], "layers", []) if halves else []
-
-
-def _is_fixed_size(layer) -> bool:
-    """Whether this layer allocates its buffers once, at a size it keeps.
-
-    The layer's *kind*, not what `get_max_length()` reports: a `DynamicSlidingWindowLayer` grows and crops,
-    yet reports its window as a maximum length. Read the other way it goes through its own
-    `lazy_initialization`, ends up with the rank-1 empties a traced graph cannot index, and surfaces as
-    `IndexError: tuple index out of range` from inside the graph.
-    """
-    return isinstance(layer, StaticLayer)
 
 
 def keeps_write_once_state(layer) -> bool:
@@ -314,50 +303,8 @@ def _empty_container(container: str, config, batch_size: int, dtype, device, enc
 # trace lazy allocation, so the traced cache and the one the runtime builds must be materialized the same way.
 
 
-def _cache_kv_geometry(config: Any, layer_idx: int | None = None) -> tuple[int, int, int] | None:
-    """`(num_kv_heads, key_head_dim, value_head_dim)` of the KV cache a model writes, from its config.
-
-    `None` for a model with no attention at all (mamba, rwkv, …): its cache holds only recurrent states,
-    which the graph carries and the write-back fills in, so there is no key/value geometry to derive.
-
-    A heterogeneous config (gemma4, …) declares geometry fields like `head_dim` as *per-layer*, and
-    reading them off the global config raises rather than silently returning a value that may be wrong
-    for some layers. Pass `layer_idx` to read that layer's own config — the geometry is per layer, so
-    the callers that allocate or check a specific layer resolve it that way.
-    """
-    text_config = config.get_text_config()
-    if layer_idx is not None and getattr(text_config, "is_heterogeneous", False):
-        text_config = text_config.per_layer_config[layer_idx]
-    if getattr(text_config, "num_attention_heads", None) is None:
-        return None
-    # Latent attention (deepseek_v2/v3/v32, kimi_linear, minicpm3, glm_moe_dsa, axk, hy_v4, …) caches the
-    # *compressed* latent rather than one entry per KV head, and `kv_lora_rank` is what says so: every such
-    # model measured caches exactly `(1, kv_lora_rank, qk_rope_head_dim)`. A model that carries those fields
-    # and still caches decompressed keys would be caught by `check_cache_geometry` rather than silently
-    # mis-shaped, which is why this reads the config instead of keeping a list of model types that each new
-    # latent model has to be added to.
-    kv_lora_rank = getattr(text_config, "kv_lora_rank", None)
-    if kv_lora_rank is not None:
-        # one head holding the compressed latent as keys and the shared rope part as values — so the key
-        # and value head dims differ, unlike standard attention
-        num_kv_heads = 1
-        key_dim = kv_lora_rank
-        value_dim = getattr(text_config, "qk_rope_head_dim", None) or key_dim
-    else:
-        num_kv_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-        default_dim = (
-            getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-        )
-        # decompressed latent attention keys are `qk_nope + qk_rope` wide against `v_head_dim` values
-        qk_nope = getattr(text_config, "qk_nope_head_dim", None)
-        qk_rope = getattr(text_config, "qk_rope_head_dim", None)
-        key_dim = qk_nope + qk_rope if qk_nope and qk_rope else default_dim
-        value_dim = getattr(text_config, "v_head_dim", None) or default_dim
-    return num_kv_heads, key_dim, value_dim
-
-
 def check_cache_geometry(config: Any, cache: Any) -> None:
-    """Raise if the geometry `_cache_kv_geometry` derives disagrees with what the model really cached.
+    """Raise if the geometry `kv_cache_geometry` derives disagrees with what the model really cached.
 
     Called on a post-prefill cache, whose layers hold real tensors. What a model caches is not always what
     its config reads like — latent attention is the standing example — so this turns the mismatch into a
@@ -369,13 +316,12 @@ def check_cache_geometry(config: Any, cache: Any) -> None:
     failure: whatever the exporter would have materialized fits nothing the model actually writes.
     """
     cached, derived_any = [], None
+    by_layer = kv_cache_geometry(config) or []
     for cache_half in _cache_halves(cache):
         for layer_idx, layer in enumerate(cache_half.layers):
-            if getattr(layer, "keys", None) is None:
+            if getattr(layer, "keys", None) is None or layer_idx >= len(by_layer):
                 continue
-            derived = _cache_kv_geometry(config, layer_idx)
-            if derived is None:
-                continue
+            derived = by_layer[layer_idx]
             actual = (layer.keys.shape[1], layer.keys.shape[3], layer.values.shape[3])
             if actual == derived:
                 return
@@ -386,7 +332,7 @@ def check_cache_geometry(config: Any, cache: Any) -> None:
         raise ValueError(
             f"`{model_type}` caches (heads, key_dim, value_dim)={sorted(set(cached))} but the exporter "
             f"derives {derived_any} for every layer, so the runtime would build a cache the exported "
-            "graph rejects. `_cache_kv_geometry` needs to learn this model's layout."
+            "graph rejects. `kv_cache_geometry` needs to learn this model's layout."
         )
 
 
@@ -424,10 +370,9 @@ def materialize_cache_layers(
 ) -> None:
     """Give every lazily-uninitialized cache layer real tensors — `torch.export` can't trace lazy
     allocation, so both the traced (prefill) cache and the cache the runtime builds must be materialized,
-    and identically (dynamo bakes the cache pytree into the graph's input spec). Static layers allocate
-    their full buffers (the same `lazy_initialization` path `Cache.early_initialization` takes); growing
-    layers get rank-4 zero-length `[batch, kv_heads, 0, head_dim]` tensors the graph can `cat` onto — NOT
-    the 1-D empty tensor their own lazy init makes, which would bake a rank-1 guard into the graph.
+    and identically (dynamo bakes the cache pytree into the graph's input spec). Each layer does it through
+    its own `lazy_initialization`, from a `[batch, kv_heads, 0, head_dim]` hint: a static layer allocates
+    its full buffer from it, a growing one keeps it as the zero-length tensor to `cat` onto.
 
     `kv_geometry` is the per-layer geometry read off the graph (`ModelRunner.kv_geometry`) or off a cache the
     model filled (`kv_geometry_of`). It wins where present, because a config cannot always give it —
@@ -442,12 +387,13 @@ def materialize_cache_layers(
         # (xLSTM's `rnn_state`); there is nothing layer-shaped to fill in that case.
         if not hasattr(cache_half, "layers"):
             continue
-        # `Cache.early_initialization` is the API's own answer to "export needs everything in advance": it
-        # feeds each layer a rank-4 zero-length hint, which is exactly the shape a growing layer must be given
-        # (its own lazy init would make a rank-1 empty and bake a rank-1 guard). Let it do the layers, and let
-        # a cache with state of its own size that state by overriding it (`MiniMaxCache.linear_cache`).
+        # `Cache.early_initialization` is the API's own answer to "export needs everything in advance". Let
+        # it do the layers, and let a cache with state of its own size that state by overriding it
+        # (`MiniMaxCache.linear_cache`).
+        by_layer = kv_cache_geometry(config) or []
         geometry = [
-            kv_geometry.get(index) or _cache_kv_geometry(config, index) for index in range(len(cache_half.layers))
+            kv_geometry.get(index) or (by_layer[index] if index < len(by_layer) else None)
+            for index in range(len(cache_half.layers))
         ]
         if all(entry is not None for entry in geometry) and geometry:
             cache_half.early_initialization(
@@ -463,47 +409,23 @@ def materialize_cache_layers(
 
 def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry, indexer_layers) -> None:
     """`materialize_cache_layers` for one flat cache — see there."""
+    by_layer = kv_cache_geometry(config) or []
     for layer_idx, layer in enumerate(cache.layers):
-        # Every tensor the layer built in `__init__` goes to the target device first, before any skip
-        # below can `continue` past it. A layer relies on its own lazy initialization to move these, which
-        # either never runs (the growing branch below skips it — its rank-1 empties would bake a rank-1
-        # guard) or moves only the counters it knows about: `StaticLayer.lazy_initialization` moves
-        # `cumulative_length`, not a sparse-index layer's `idx_cumulative_length` (minimax_m3_vl), and
-        # `early_initialization` marks the layer initialized before either gets the chance. Left behind,
-        # they are cpu leaves among cuda ones and the graph's input spec mismatches on device. Dtypes stay
-        # as they are — those counters are `long`, not the cache dtype.
-        for attribute, value in vars(layer).items():
-            if isinstance(value, torch.Tensor) and attribute not in ("keys", "values"):
-                setattr(layer, attribute, value.to(device))
         # A sparse-indexer layer (deepseek_v32, axk2, glm_moe_dsa) caches a *third* tensor beside keys and
         # values, and it is a graph input like the others — leave it lazy and every later cache leaf shifts
         # by one. Its own `lazy_initialization` covers only the main K/V, so this cannot wait behind the
         # `is_initialized` skip below: `early_initialization` marks the layer initialized while the indexer
-        # (and its cpu `indexer_cumulative_length` counter) is still untouched. Rank-3 zero-length for the
-        # same reason the others are rank-4: the indexer's lazy init makes a 1-D empty, which would bake a
-        # rank-1 guard into the graph.
+        # (and its cpu `indexer_cumulative_length` counter) is still untouched.
         # Unless the trace says this layer had none: hy_v4's "shared" indexer layers reuse the last full
         # layer's tensor and never write their own, so filling one in here adds a leaf the graph never took.
         traced_indexer = indexer_layers.get(layer_idx, True) if indexer_layers else True
         if traced_indexer and hasattr(layer, "is_indexer_initialized") and not layer.is_indexer_initialized:
             index_head_dim = config.get_text_config().index_head_dim
             empty_indexer_keys = torch.zeros(batch_size, 0, index_head_dim, dtype=dtype, device=device)
-            if not _is_fixed_size(layer):
-                layer.indexer_dtype, layer.indexer_device = dtype, device
-                layer.indexer_keys = empty_indexer_keys
-                layer.is_indexer_initialized = True
-            else:
-                # allocates the full `[batch, max_cache_len, index_head_dim]` buffer from the hint's shape,
-                # and puts the layer's own `indexer_cumulative_length` counter on the right device
-                layer.lazy_initialization_indexer(empty_indexer_keys)
-        # `is_initialized` is not enough on its own: a layer whose own lazy init already ran holds a *rank-1*
-        # empty, and the graph was traced against the rank-4 `[batch, kv_heads, 0, head_dim]` form this
-        # helper builds. Feeding the rank-1 one indexes an axis that isn't there, inside the graph.
-        keys = getattr(layer, "keys", None)
-        rank_1_empty = keys is not None and keys.dim() < 4 and keys.numel() == 0
-        if getattr(layer, "is_initialized", True) and not rank_1_empty:
+            layer.lazy_initialization_indexer(empty_indexer_keys)
+        if getattr(layer, "is_initialized", True):
             continue
-        geometry = kv_geometry.get(layer_idx) or _cache_kv_geometry(config, layer_idx)
+        geometry = kv_geometry.get(layer_idx) or (by_layer[layer_idx] if layer_idx < len(by_layer) else None)
         if geometry is None:
             # This layer keeps no keys and values to size — a recurrent layer's conv / SSM buffers are its
             # own business, and its neighbours still need theirs (`continue`, like every other skip here).
@@ -516,9 +438,4 @@ def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry, i
             layer.num_heads = num_kv_heads
         empty_keys = torch.zeros(batch_size, num_kv_heads, 0, key_dim, dtype=dtype, device=device)
         empty_values = torch.zeros(batch_size, num_kv_heads, 0, value_dim, dtype=dtype, device=device)
-        if not _is_fixed_size(layer):
-            layer.dtype, layer.device = dtype, device
-            layer.keys, layer.values = empty_keys, empty_values
-            layer.is_initialized = True
-        else:
-            layer.lazy_initialization(empty_keys, empty_values)
+        layer.lazy_initialization(empty_keys, empty_values)

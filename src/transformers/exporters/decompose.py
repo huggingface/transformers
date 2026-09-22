@@ -32,7 +32,6 @@ from typing import Any, NamedTuple
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
 from .cache import (
-    _cache_kv_geometry,
     check_cache_geometry,
     indexer_layers_of,
     keeps_write_once_state,
@@ -59,7 +58,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-    from ..cache_utils import Cache, DynamicCrossAttentionLayer, EncoderDecoderCache
+    from ..cache_utils import Cache, DynamicCrossAttentionLayer, EncoderDecoderCache, kv_cache_geometry
     from ..modeling_utils import PreTrainedModel
 
 
@@ -344,14 +343,14 @@ def decompose_prefill_decode(
         with _capture_forward(model) as calls:
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
-        # A cache-shape error here means the geometry `_cache_kv_geometry` derived for the materialized
+        # A cache-shape error here means the geometry `kv_cache_geometry` derived for the materialized
         # cache disagrees with what the model writes into it — say so, rather than leaving an
         # `index_copy_()` slice error from deep inside the forward.
         if "slice shapes" in str(e) or "Sizes of tensors must match" in str(e):
             raise RuntimeError(
                 f"decompose_prefill_decode failed for {type(model).__name__}: the exporter materialized the "
-                f"cache as (heads, key_dim, value_dim)={_cache_kv_geometry(model.config, 0)}, which is not "
-                "what this model caches — `_cache_kv_geometry` needs to learn its layout."
+                f"cache as (heads, key_dim, value_dim)={(kv_cache_geometry(model.config) or [None])[0]}, which is not "
+                "what this model caches — `kv_cache_geometry` needs to learn its layout."
             ) from e
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "

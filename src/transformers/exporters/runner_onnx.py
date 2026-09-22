@@ -169,10 +169,6 @@ class OnnxModelRunner(ModelRunner):
         self._buffers: dict[str, torch.Tensor] = {}
         # A dtype numpy cannot spell cannot be bound at all (there is no public way to hand ORT an existing
         # pointer without an element type), so such a graph keeps the plain `run` path.
-        #
-        # Both devices. On CUDA this removes a device copy of every input and output per step; on CPU there
-        # was no copy to remove (a `.numpy()` view shares the buffer) but the sharing below still pays, since
-        # ORT stops allocating a full-size cache output on every step.
         if all(kind is not None for kind in self._element_types.values()):
             self._io_binding = session.io_binding()
             # A cache the graph mutates in place is declared as a matched `input.<name>`/`output.<name>` pair.
@@ -335,10 +331,7 @@ class OnnxModelRunner(ModelRunner):
                 if isinstance(dim, str) and axis < tensor.dim():
                     known_axes[dim] = tensor.shape[axis]
 
-        # Every output needs a size before anything is bound. An axis the exporter emitted as a form
-        # `_resolved_axis` will not guess at (a floor-div — a streamed modality's window folds its stride
-        # away like that) leaves nothing to allocate against, so the call goes through the host instead: the
-        # graph is the same, only where its outputs land differs.
+        # Every output needs a size before anything is bound.
         resolved = {
             name: tuple(_resolved_axis(dim, known_axes) for dim in declared)
             for name, declared in self._output_shapes.items()
@@ -397,9 +390,6 @@ class OnnxModelRunner(ModelRunner):
                 buffer = self._buffers[name] = torch.empty(shape, dtype=self._io_dtypes[name], device=device)
             # Exactly as declared — an output's shape is *verified* against what the node produces, where an
             # input's is merely sized from what it is given, so padding a rank-0 output to `[1]` is refused.
-            # An empty buffer has no address and binding refuses a null one, so it lends a scratch address;
-            # the shape still says zero, so the graph writes nothing through it (a cache entry at prefill
-            # holds zero positions, and a compressed-latent one holds several such buffers).
             self._io_binding.bind_output(
                 name,
                 device_type,

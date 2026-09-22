@@ -272,8 +272,7 @@ def _patch_sliding_window_length(original):
 
     def patch(self, *args, **kwargs):
         keys = getattr(self, "keys", None)
-        # A layer not yet given real tensors holds a rank-1 empty, which has no `-2` axis; nothing is cached.
-        cached = keys.shape[-2] if keys is not None and keys.dim() >= 2 else 0
+        cached = keys.shape[-2] if keys is not None else 0
         with patch_attributes([(self, "cumulative_length", lambda _original: cached)]):
             return original(self, *args, **kwargs)
 

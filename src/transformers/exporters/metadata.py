@@ -103,7 +103,7 @@ def _traced_cache_leaf_shapes(module) -> dict[int, tuple[int | None, ...]]:
     """`{leaf index: shape}` for the graph's cache inputs, keyed by the index in the placeholder's own name.
 
     Keyed, not positional: a cache tensor the trace folded into a constant (a static sliding layer's
-    `_sliding_window_tensor`) has no placeholder at all, so counting placeholders in order would shift
+    `sliding_window_tensor`) has no placeholder at all, so counting placeholders in order would shift
     every leaf after it — and the pytree context refers to leaves by index."""
     shapes = {}
     for node in getattr(getattr(module, "graph", None), "nodes", []):
@@ -295,11 +295,6 @@ class ExportMetadata:
         return {name: leaf.get("rank") for name, leaf in leaves.items()} if leaves else None
 
     @property
-    def cross_layer_classes(self) -> tuple[str, ...]:
-        """Class names of the traced cross-attention cache layers; empty when the trace had no cross half."""
-        return tuple((self.raw.get("cache") or {}).get("cross_layers") or ())
-
-    @property
     def cache_lengths(self) -> dict[int, int]:
         """`{layer index: length}` for the traced cache's fixed-size layers; empty for a growing cache."""
         layers = (self.raw.get("cache") or {}).get("layers") or []
@@ -411,13 +406,6 @@ def build_export_metadata(
                 # be called against anything else.
                 {"class": type(layer).__name__, **layout.get(index, {})}
                 for index, layer in enumerate(layers)
-            ],
-            # The cross half's layer kinds too: `generate` builds that half from the decoder's config, so
-            # a model whose decoder is sliding gets sliding layers where the trace had full ones, and the
-            # layer classes are part of the graph's input spec. Recording them lets the runtime compare
-            # rather than recognise a class by the end of its name.
-            "cross_layers": [
-                type(layer).__name__ for layer in getattr(getattr(cache, "cross_attention_cache", None), "layers", [])
             ],
         }
     return metadata

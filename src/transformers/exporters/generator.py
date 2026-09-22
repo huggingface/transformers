@@ -36,7 +36,6 @@ nothing is introspected from the graphs. Two public pieces:
 
 from __future__ import annotations
 
-import copy
 import dataclasses
 import re
 from dataclasses import dataclass
@@ -513,32 +512,8 @@ class ExportedGenerator(GenerationMixin):
                 if generation_config.cache_implementation == "static"
                 else DynamicCache(config=text_config),
             )
-        # Cross-attention caches the encoder's states in full, so it is never sliding — but `generate` builds
-        # both halves of an `EncoderDecoderCache` from the same decoder config, sliding `layer_types` and all,
-        # and each model that cares corrects it in its own `_prepare_cache_for_generation` (t5gemma). The
-        # runtime has no model to inherit that from, and the layer *classes* are part of the graph's input
-        # spec, so rebuild the cross half the way the traced cache had it.
         cache = model_kwargs.get("past_key_values")
         if isinstance(cache, EncoderDecoderCache):
-            cross = cache.cross_attention_cache
-            traced_classes = self._decode_runner.export_metadata.cross_layer_classes
-            built_classes = tuple(type(layer).__name__ for layer in cross.layers)
-            # Against the recorded classes when the artifact carries them; an older one that does not falls
-            # back to recognising the kind that is wrong here, which is what this did before it could ask.
-            needs_rebuild = (
-                built_classes != traced_classes
-                if traced_classes
-                else any(name.endswith("SlidingWindowLayer") for name in built_classes)
-            )
-            if needs_rebuild:
-                cross_config = copy.deepcopy(self.config.get_text_config(decoder=True))
-                cross_config.sliding_window = None
-                cross_config.layer_types = ["full_attention"] * cross_config.num_hidden_layers
-                cross_kwargs = {"config": cross_config}
-                if isinstance(cross, StaticCache):
-                    # A static cross cache is sized to the encoder sequence, not the decode length.
-                    cross_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
-                cache.cross_attention_cache = type(cross)(**cross_kwargs)
             self._seed_cross_cache(cache, batch_size)
 
         for cache_name in ("past_key_values", "cache_params"):

@@ -519,6 +519,17 @@ def sdpa_mask(
     q_arange = torch.arange(q_length, device=device) + q_offset
     kv_arange = torch.arange(kv_length, device=device) + kv_offset
 
+    # `vmap` is not traceable — `aot_autograd`'s `gen_vmap_plumbing` rejects the batched tensors, and no
+    # backend can lower what it produces — so an export takes the broadcast path below whatever was asked
+    # for. It is equivalent for the index-based mask functions the library ships; a custom one that is not
+    # index-based is the case `use_vmap` exists for, so say so rather than silently changing it.
+    if use_vmap and torch.compiler.is_exporting():
+        logger.warning_once(
+            "A custom mask function asked for `vmap`, which `torch.export` cannot trace; building the mask by "
+            "broadcasting instead. Index-based mask functions are unaffected."
+        )
+        use_vmap = False
+
     # Actual mask creation
     # Option 1: Fast non-vmap mask creation (default)
     if not use_vmap:

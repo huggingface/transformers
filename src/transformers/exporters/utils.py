@@ -209,28 +209,6 @@ def apply_fx_node_fixes(backend: str, graph_module) -> None:
 # definitions apiece that had drifted in wording and in one case in behaviour.
 
 
-@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
-@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion.
-
-    ONNX has no vmap lowering, and ExecuTorch's `aot_autograd` / `gen_vmap_plumbing` reject a vmap-built
-    mask under its lowering passes.
-    """
-    from ..masking_utils import _non_vmap_expansion_sdpa
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            broadcasted = _non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            return mask_function(*broadcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-
-        return _expanded
-
-    return patch
-
-
 @register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
 @register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
 def _patch_reshape(original):

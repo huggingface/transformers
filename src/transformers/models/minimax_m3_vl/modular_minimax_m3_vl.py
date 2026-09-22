@@ -291,7 +291,7 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
         super().__init__(max_cache_len)
         self.idx_keys: torch.Tensor | None = None
         # Tensor (not int) so it can be marked as a static address for cudagraphs, like `cumulative_length`.
-        self.idx_cumulative_length = torch.tensor([0], dtype=int)
+        self.idx_cumulative_length: torch.Tensor | None = None
 
     def update_index(self, idx_k: torch.Tensor) -> torch.Tensor:
         """Write the new token's `idx_k` into the static buffer in place and return the whole buffer.
@@ -306,7 +306,7 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
                 dtype=idx_k.dtype,
                 device=idx_k.device,
             )
-            self.idx_cumulative_length = self.idx_cumulative_length.to(idx_k.device)
+            self.idx_cumulative_length = torch.zeros(1, dtype=torch.long, device=idx_k.device)
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.idx_keys)
                 torch._dynamo.mark_static_address(self.idx_cumulative_length)

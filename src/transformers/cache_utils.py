@@ -95,7 +95,7 @@ class CacheLayerMixin(ABC):
             # It can either be an int for dynamic layers, or a tensor for static layers
             if isinstance(self.cumulative_length, int):
                 self.cumulative_length = 0
-            else:
+            elif self.cumulative_length is not None:
                 self.cumulative_length.zero_()
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
@@ -122,8 +122,10 @@ class DynamicLayer(CacheLayerMixin):
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
-        self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
-        self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.keys = torch.zeros(*key_states.shape[:-2], 0, key_states.shape[-1], dtype=self.dtype, device=self.device)
+        self.values = torch.zeros(
+            *value_states.shape[:-2], 0, value_states.shape[-1], dtype=self.dtype, device=self.device
+        )
         self.is_initialized = True
 
     def update(
@@ -234,8 +236,12 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().__init__()
         self.sliding_window = sliding_window
         self.cumulative_length = 0
-        self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
+        self.sliding_window_tensor: torch.Tensor | None = None
         self.record_past = False
+
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        super().lazy_initialization(key_states, value_states)
+        self.sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long, device=self.device)
 
     def activate_past_recording(self):
         """
@@ -243,10 +249,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         before restricting the size of the `k/v_states` to `sliding_window`, to be able to retrieve previous full states.
         """
         self.record_past = True
-
-    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        super().lazy_initialization(key_states, value_states)
-        self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -359,7 +361,13 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
-        self.indexer_keys = torch.tensor([], dtype=self.indexer_dtype, device=self.indexer_device)
+        self.indexer_keys = torch.zeros(
+            *indexer_key_states.shape[:-2],
+            0,
+            indexer_key_states.shape[-1],
+            dtype=self.indexer_dtype,
+            device=self.indexer_device,
+        )
         self.is_indexer_initialized = True
 
     def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
@@ -439,8 +447,8 @@ class StaticLayer(CacheLayerMixin):
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__()
         self.max_cache_len = max_cache_len
-        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
-        self.cumulative_length = torch.tensor(0, dtype=int)
+        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions.
+        self.cumulative_length: torch.Tensor | None = None
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -467,7 +475,7 @@ class StaticLayer(CacheLayerMixin):
             dtype=self.dtype,
             device=self.device,
         )
-        self.cumulative_length = self.cumulative_length.to(self.device)
+        self.cumulative_length = torch.zeros((), dtype=torch.long, device=self.device)
         # Note: `mark_static_address` is used to tag the tensors as a fixed data pointer, preventing compiled graph
         # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
         # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
@@ -672,7 +680,7 @@ class StaticIndexedLayer(StaticLayer):
         self.is_indexer_initialized: bool = False
         # The indexer update runs independently of (and after) the main K/V `update` in the attention
         # forward, so it tracks its own cumulative length rather than reusing `self.cumulative_length`.
-        self.indexer_cumulative_length = torch.tensor(0, dtype=int)
+        self.indexer_cumulative_length: torch.Tensor | None = None
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
@@ -682,7 +690,7 @@ class StaticIndexedLayer(StaticLayer):
             dtype=self.indexer_dtype,
             device=self.indexer_device,
         )
-        self.indexer_cumulative_length = self.indexer_cumulative_length.to(self.indexer_device)
+        self.indexer_cumulative_length = torch.zeros((), dtype=torch.long, device=self.indexer_device)
         # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.indexer_keys)
@@ -1761,6 +1769,49 @@ class Cache:
         return self.batch_size
 
 
+def kv_cache_geometry(config) -> list[tuple[int, int, int]] | None:
+    """`(num_kv_heads, key_head_dim, value_head_dim)` of the KV cache a model writes, one entry per cache
+    layer, from its config.
+
+    `None` for a model with no attention at all (mamba, rwkv, …): its cache holds only recurrent states, so
+    there is no key/value geometry to derive.
+
+    Per layer because a heterogeneous config (gemma4, …) declares geometry fields like `head_dim` as
+    per-layer and refuses to answer for the model as a whole; every other config answers the same for each.
+    `Cache.early_initialization` takes the three as lists for the same reason.
+    """
+    text_config = config.get_text_config()
+    layer_types, _ = get_layer_types_and_kwargs(text_config)
+    per_layer = (
+        getattr(text_config, "per_layer_config", None) if getattr(text_config, "is_heterogeneous", False) else None
+    )
+    geometry = []
+    for index in range(len(layer_types)):
+        layer_config = per_layer[index] if per_layer is not None else text_config
+        if getattr(layer_config, "num_attention_heads", None) is None:
+            return None
+        # Latent attention (deepseek_v2/v3/v32, kimi_linear, minicpm3, glm_moe_dsa, axk, hy_v4, …) caches the
+        # *compressed* latent rather than one entry per KV head, and `kv_lora_rank` is what says so: every
+        # such model measured caches exactly `(1, kv_lora_rank, qk_rope_head_dim)` — one head holding the
+        # latent as keys and the shared rope part as values, so the key and value dims differ. A model that
+        # carries those fields and still caches decompressed keys is caught by `check_cache_geometry` rather
+        # than silently mis-shaped, which is why this reads the config instead of keeping a list of models.
+        kv_lora_rank = getattr(layer_config, "kv_lora_rank", None)
+        if kv_lora_rank is not None:
+            geometry.append((1, kv_lora_rank, getattr(layer_config, "qk_rope_head_dim", None) or kv_lora_rank))
+            continue
+        num_kv_heads = getattr(layer_config, "num_key_value_heads", None) or layer_config.num_attention_heads
+        default_dim = (
+            getattr(layer_config, "head_dim", None) or layer_config.hidden_size // layer_config.num_attention_heads
+        )
+        # decompressed latent attention keys are `qk_nope + qk_rope` wide against `v_head_dim` values
+        qk_nope = getattr(layer_config, "qk_nope_head_dim", None)
+        qk_rope = getattr(layer_config, "qk_rope_head_dim", None)
+        key_dim = qk_nope + qk_rope if qk_nope and qk_rope else default_dim
+        geometry.append((num_kv_heads, key_dim, getattr(layer_config, "v_head_dim", None) or default_dim))
+    return geometry or None
+
+
 def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dict]:
     """
     From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize
@@ -1886,7 +1937,7 @@ class DynamicCache(Cache):
 
     def __iter__(self):
         for layer in self.layers:
-            yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)
+            yield layer.keys, layer.values, getattr(layer, "sliding_window_tensor", None)
 
 
 class StaticCache(Cache):
