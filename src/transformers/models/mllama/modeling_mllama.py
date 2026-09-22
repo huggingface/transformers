@@ -1578,9 +1578,15 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         # `cross_attention_mask` gains a row per decoded token: slice it down to the tokens being processed, otherwise
         # dynamo recompiles at every step. The `clone` gives the slice a consistent stride, which it also guards on.
         if next_sequence_length is not None and model_inputs.get("cross_attention_mask") is not None:
-            model_inputs["cross_attention_mask"] = model_inputs["cross_attention_mask"][
-                :, -next_sequence_length:
-            ].clone(memory_format=torch.contiguous_format)
+            cross_attention_mask = model_inputs["cross_attention_mask"]
+            padding_length = next_sequence_length - cross_attention_mask.shape[1]
+            if padding_length > 0:
+                cross_attention_mask = torch.cat(
+                    [cross_attention_mask, cross_attention_mask[:, -1:].expand(-1, padding_length, -1, -1)], dim=1
+                )
+            model_inputs["cross_attention_mask"] = cross_attention_mask[:, -next_sequence_length:].clone(
+                memory_format=torch.contiguous_format
+            )
 
         return model_inputs
 
