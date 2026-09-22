@@ -31,12 +31,12 @@ Based on the script [`run_object_detection.py`](https://github.com/huggingface/t
 
 The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transformers/main_classes/trainer) to automatically take care of the training for you, running on distributed environments right away.
 
-Here we show how to fine-tune a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset:
+Here we show how to fine-tune a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/rishitdagli/cppe-5) dataset:
 
 ```bash
 python run_object_detection.py \
     --model_name_or_path facebook/detr-resnet-50 \
-    --dataset_name cppe-5 \
+    --dataset_name rishitdagli/cppe-5 \
     --do_train true \
     --do_eval true \
     --output_dir detr-finetuned-cppe-5-10k-steps \
@@ -75,7 +75,7 @@ The resulting model can be seen here: https://huggingface.co/qubvel-hf/qubvel-hf
  - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
 
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with model or dataset from the [hub](https://huggingface.co/). 
-For dataset, make sure it provides labels in the same format as [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset and boxes are provided in [COCO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco).
+For dataset, make sure it provides labels in the same format as [CPPE-5](https://huggingface.co/datasets/rishitdagli/cppe-5) dataset and boxes are provided in [COCO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco).
 
 ![W&B report](https://i.imgur.com/ASNjamQ.png)
 
@@ -103,7 +103,7 @@ that will check everything is ready for training. Finally, you can launch traini
 ```bash
 accelerate launch run_object_detection_no_trainer.py \
     --model_name_or_path "facebook/detr-resnet-50" \
-    --dataset_name cppe-5 \
+    --dataset_name rishitdagli/cppe-5 \
     --output_dir "detr-resnet-50-finetuned" \
     --num_train_epochs 100 \
     --image_square_size 600 \
@@ -118,7 +118,7 @@ accelerate launch run_object_detection_no_trainer.py \
 
 and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username) 🤗
 
-With the default settings, the script fine-tunes a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset. The resulting model can be seen here: https://huggingface.co/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5-no-trainer. 
+With the default settings, the script fine-tunes a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/rishitdagli/cppe-5) dataset. The resulting model can be seen here: https://huggingface.co/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5-no-trainer. 
 
 
 ## Reload and perform inference
