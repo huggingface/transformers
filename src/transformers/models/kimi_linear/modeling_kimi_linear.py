@@ -27,7 +27,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN, SiTUActivation
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import (
@@ -152,15 +152,19 @@ class KimiLinearMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
         if config.hidden_act == "situ":
-            self.gate_act = SiTUActivation(beta=config.activation_situ_beta)
-            self.up_act = SiTUActivation(beta=config.activation_situ_linear_beta)
+            self.situ_gate_beta = config.activation_situ_beta
+            self.situ_up_beta = config.activation_situ_linear_beta
         else:
-            act = ACT2FN[config.hidden_act]
-            self.gate_act = act
-            self.up_act = act
+            self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        return self.down_proj(self.gate_act(self.gate_proj(x)) * self.up_act(self.up_proj(x)))
+        if self.config.hidden_act == "situ":
+            gate = self.gate_proj(x).float()
+            gate_out = self.situ_gate_beta * torch.tanh(gate / self.situ_gate_beta) * torch.sigmoid(gate)
+            up = self.up_proj(x).float()
+            up_out = self.situ_up_beta * torch.tanh(up / self.situ_up_beta)
+            return self.down_proj((gate_out * up_out).to(x.dtype))
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -637,7 +641,6 @@ class KimiLinearDeltaAttention(nn.Module):
         # Zero out padding
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
-        # Set up dimensions for reshapes later
         batch_size, seq_len = hidden_states.shape[:2]
         hidden_shape = (batch_size, seq_len, -1, self.head_dim)
 
@@ -650,14 +653,13 @@ class KimiLinearDeltaAttention(nn.Module):
             dim=-1,
         ).transpose(1, 2)
 
-        # Acts for normal prefill but also for multi-token prefill continue
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
         if use_precomputed_states:
             conv_state = cache_params.layers[self.layer_idx].conv_states[0]
             recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
-        # Single token decode path
-        if use_precomputed_states and seq_len == 1:
+        # Single token decode path — skip when record_past is set to avoid mutating cache during rollback
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -665,14 +667,11 @@ class KimiLinearDeltaAttention(nn.Module):
                 bias=self.conv1d.bias,
                 activation=self.activation,
             )
-        # Multi token prefill or simple "full" prefill
         else:
-            # Concatenated state for prefill
             if cache_params is not None:
                 mixed_qkv = cache_params.update_conv_state(
                     mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
-
             mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
                 weight=self.conv1d.weight.squeeze(1),
@@ -680,8 +679,6 @@ class KimiLinearDeltaAttention(nn.Module):
                 activation=self.activation,
                 **kwargs,
             )
-
-            # Cut out any tail
             mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         query, key, value = torch.split(
@@ -694,12 +691,11 @@ class KimiLinearDeltaAttention(nn.Module):
         key = key.view(hidden_shape)
         value = value.view(hidden_shape)
 
-        # Forget gate and input gate
         g = self.forget_gate(hidden_states)
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
-        # KDA
-        if use_precomputed_states and seq_len == 1:
+        # Single token decode path — same guard as conv to stay consistent
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
@@ -727,12 +723,9 @@ class KimiLinearDeltaAttention(nn.Module):
         if cache_params is not None:
             cache_params.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
 
-        # Final gated norm and proj
         gate = self.g_b_proj(self.g_a_proj(hidden_states)).view(hidden_shape)
         output = self.o_norm(core_attn_out, gate).reshape(batch_size, seq_len, -1)
-        output = self.o_proj(output)
-
-        return output
+        return self.o_proj(output)
 
 
 class KimiLinearTopkRouter(nn.Module):
@@ -800,33 +793,27 @@ class KimiLinearMoE(nn.Module):
         return hidden_states
 
 
-class KimiLinearAttnRes(nn.Module):
-    """Block Attention Residuals (Block AttnRes) from the Kimi K3 architecture.
+def _attn_res_forward(
+    proj: nn.Linear,
+    norm: "KimiLinearRMSNorm",
+    blocks: list[torch.Tensor],
+    partial_block: torch.Tensor,
+) -> torch.Tensor:
+    """Attend over completed block reps + current partial sum (Block AttnRes).
 
-    Replaces the standard additive residual with learned softmax attention over completed
-    block representations plus the current partial-block sum.  See arXiv:2603.15031.
+    Args:
+        proj:          Linear(hidden_size, 1) — learned pseudo-query weight.
+        norm:          RMSNorm for key normalisation.
+        blocks:        N completed block representations, each [B, T, D].
+        partial_block: current intra-block accumulator [B, T, D].
+    Returns:
+        Attended hidden state [B, T, D].
     """
-
-    def __init__(self, config: "KimiLinearConfig"):
-        super().__init__()
-        # Single learned pseudo-query weight per sub-layer projection
-        self.proj = nn.Linear(config.hidden_size, 1, bias=False)
-        self.norm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(self, blocks: list[torch.Tensor], partial_block: torch.Tensor) -> torch.Tensor:
-        """Attend over completed block reps + current partial sum.
-
-        Args:
-            blocks:        N completed block representations, each [B, T, D]
-            partial_block: current intra-block accumulator [B, T, D]
-        Returns:
-            Attended hidden state [B, T, D]
-        """
-        sources = torch.stack(blocks + [partial_block], dim=0)  # [N+1, B, T, D]
-        keys = self.norm(sources)
-        logits = torch.einsum("d,nbtd->nbt", self.proj.weight.squeeze(0), keys)  # [N+1, B, T]
-        weights = torch.softmax(logits, dim=0)
-        return torch.einsum("nbt,nbtd->btd", weights, sources)
+    sources = torch.stack(blocks + [partial_block], dim=0)  # [N+1, B, T, D]
+    keys = norm(sources)
+    logits = torch.einsum("d,nbtd->nbt", proj.weight.squeeze(0), keys)  # [N+1, B, T]
+    weights = torch.softmax(logits, dim=0)
+    return torch.einsum("nbt,nbtd->btd", weights, sources)
 
 
 class KimiLinearDecoderLayer(GradientCheckpointingLayer):
@@ -848,8 +835,11 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
         self.block_type = config.layer_types[layer_idx]
         self.attn_res_block_size = config.attn_res_block_size
         if self.attn_res_block_size > 0:
-            self.attn_res_attn = KimiLinearAttnRes(config)
-            self.attn_res_mlp = KimiLinearAttnRes(config)
+            # Named to match checkpoint weight keys directly.
+            self.self_attention_res_proj = nn.Linear(config.hidden_size, 1, bias=False)
+            self.self_attention_res_norm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.mlp_res_proj = nn.Linear(config.hidden_size, 1, bias=False)
+            self.mlp_res_norm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -872,7 +862,9 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
 
         # ---- Attention sub-layer ----
         if use_attn_res:
-            h = self.attn_res_attn(attn_res_blocks, attn_res_partial)
+            h = _attn_res_forward(
+                self.self_attention_res_proj, self.self_attention_res_norm, attn_res_blocks, attn_res_partial
+            )
             h_attn_in = self.input_layernorm(h)
         else:
             h_attn_in = self.input_layernorm(hidden_states)
@@ -902,7 +894,7 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
 
         # ---- MLP sub-layer ----
         if use_attn_res:
-            h = self.attn_res_mlp(attn_res_blocks, attn_res_partial)
+            h = _attn_res_forward(self.mlp_res_proj, self.mlp_res_norm, attn_res_blocks, attn_res_partial)
             mlp_out = self.mlp(self.post_attention_layernorm(h))
             attn_res_partial.add_(mlp_out)
             hidden_states = attn_res_partial
@@ -912,9 +904,9 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
     @property
-    def attn_res(self) -> "KimiLinearAttnRes | None":
-        """Convenience accessor: returns the pre-attention AttnRes module, or None when disabled."""
-        return self.attn_res_attn if self.attn_res_block_size > 0 else None
+    def attn_res(self) -> bool:
+        """Returns True when Block AttnRes is enabled for this layer."""
+        return self.attn_res_block_size > 0
 
 
 @auto_docstring
