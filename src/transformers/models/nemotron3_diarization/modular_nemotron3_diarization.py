@@ -27,6 +27,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
+from ...utils.type_validators import interval, positive_int_field
 from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..glmasr.configuration_glmasr import GlmAsrEncoderConfig
 from ..glmasr.modeling_glmasr import GlmAsrAttention
@@ -79,13 +80,8 @@ class Nemotron3DiarizationHeadConfig(PreTrainedConfig):
 
     base_config_key = "head_config"
 
-    hidden_size: int = 192
-    num_speakers: int = 8
-
-    def validate_architecture(self):
-        for name in ["hidden_size", "num_speakers"]:
-            if getattr(self, name) < 1:
-                raise ValueError(f"`{name}` must be a positive integer, got {getattr(self, name)}.")
+    hidden_size: int = positive_int_field(default=192)
+    num_speakers: int = positive_int_field(default=8)
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
@@ -119,25 +115,15 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
         non-positive (overlapped speech) frames excluded from the cache.
     """
 
-    fifo_length: int = 264
-    speaker_cache_update_period: int = 222
-    speaker_cache_length: int = 264
-    speaker_cache_silence_frames_per_speaker: int = 1
+    fifo_length: int = positive_int_field(default=264)
+    speaker_cache_update_period: int = positive_int_field(default=222)
+    speaker_cache_length: int = positive_int_field(default=264)
+    speaker_cache_silence_frames_per_speaker: int = interval(min=0)(default=1)
     prediction_score_threshold: float = 0.25
     latest_frames_score_boost: float = 0.05
     strong_boost_rate: float = 0.75
     weak_boost_rate: float = 1.5
     min_positive_scores_rate: float = 0.5
-
-    def validate_architecture(self):
-        for name in ["fifo_length", "speaker_cache_update_period", "speaker_cache_length"]:
-            if getattr(self, name) < 1:
-                raise ValueError(f"`{name}` must be a positive integer, got {getattr(self, name)}.")
-        if self.speaker_cache_silence_frames_per_speaker < 0:
-            raise ValueError(
-                "`speaker_cache_silence_frames_per_speaker` must be a non-negative integer, got "
-                f"{self.speaker_cache_silence_frames_per_speaker}."
-            )
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")

@@ -418,7 +418,6 @@ class Nemotron3DiarizationAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -440,7 +439,7 @@ class Nemotron3DiarizationAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask=attention_mask,
+            attention_mask=None,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
