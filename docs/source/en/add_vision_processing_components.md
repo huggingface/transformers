@@ -201,8 +201,10 @@ from ...test_image_processing_common import ImageProcessingTestMixin, ImageProce
 class MyModelImageProcessingTester(ImageProcessingTester):
     def __init__(self, **kwargs):
         # Random test inputs kwargs
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("max_resolution", 40)
+        kwargs.setdefault("batch_size", 2)          # default: 7     
+        kwargs.setdefault("num_channels", 4)        # default: 3
+        kwargs.setdefault("min_resolution", 20)     # default: 30
+        kwargs.setdefault("max_resolution", 100)    # default: 400
 
         # Image processor init kwargs
         kwargs.setdefault("size", {"shortest_edge": 20})
