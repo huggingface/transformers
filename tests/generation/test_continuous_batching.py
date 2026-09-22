@@ -1304,6 +1304,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
         compare_to_fp32_eager: bool = False,
+        generation_config_overrides: dict[str, Any] | None = None,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -1342,6 +1343,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
+        if generation_config_overrides is not None:
+            model.generation_config.update(**generation_config_overrides)
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
@@ -1368,6 +1371,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         _, model = get_tokenizer_and_model(model_id, non_paged_attn_implem, torch_device, dtype)
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
+        if generation_config_overrides is not None:
+            model.generation_config.update(**generation_config_overrides)
 
         # The fp32 eager reference stays a plain generate: flash + StaticCache (needed to compile a regular generate)
         # can flip an early greedy tie in bf16, whereas eager float32 tracks the true greedy path.
@@ -1498,12 +1503,25 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         manager.stop(block=True)
         self.assertEqual(model.config._attn_implementation, original_attn_impl)
 
+    @parameterized.expand(
+        [
+            ("control", 1.0, 0),
+            ("repetition_penalty", 1.1, 0),
+            ("no_repeat_ngram", 1.0, 2),
+        ]
+    )
     @slow
-    def test_continuous_batching_history_dependent_logits_processor(self) -> None:
+    def test_continuous_batching_history_dependent_logits_processor(
+        self, name: str, repetition_penalty: float, no_repeat_ngram_size: int
+    ) -> None:
         self._test_continuous_batching_parity(
             model_id="Qwen/Qwen2.5-0.5B-Instruct",
             continuous_batching_config=ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False),
             attn_implementation="sdpa",
+            generation_config_overrides={
+                "repetition_penalty": repetition_penalty,
+                "no_repeat_ngram_size": no_repeat_ngram_size,
+            },
         )
 
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
