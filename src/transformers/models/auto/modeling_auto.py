@@ -311,7 +311,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("llava_next_video", "LlavaNextVideoModel"),
         ("llava_onevision", "LlavaOnevisionModel"),
         ("llava_onevision1_5", "LlavaOnevision1_5Model"),
-        ("llava_onevision1_5_text", "LlavaOnevision1_5TextModel"),
         ("llava_onevision1_5_vision", "LlavaOnevision1_5VisionModel"),
         ("longcat_flash", "LongcatFlashModel"),
         ("longformer", "LongformerModel"),

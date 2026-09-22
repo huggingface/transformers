@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-09-29 and contributed to Hugging Face Transformers on 2026-09-20.*
+*This model was published in HF papers on 2025-09-29 and contributed to Hugging Face Transformers on 2026-09-22.*
 
 # LLaVA-OneVision-1.5
 
@@ -26,14 +26,11 @@ rendered properly in your Markdown viewer.
 
 LLaVA-OneVision-1.5 was proposed in [LLaVA-OneVision-1.5: Fully Open Framework for Democratized Multimodal Training](https://huggingface.co/papers/2509.23661) by the LLaVA-OneVision team.
 
-LLaVA-OneVision-1.5 is a Vision-Language Model that consists of a custom RICE (`Rice`) vision encoder and a
-[Qwen3](qwen3) language backbone. Unlike other Qwen-VL family models, LLaVA-OneVision-1.5 does not use multimodal
-rotary position embeddings (M-RoPE): position ids are computed the same way as in [Llava](llava), with image and
-video features scattered directly into the text embeddings at the placeholder token positions.
+LLaVA-OneVision-1.5 is a vision-language model with a Qwen-style vision encoder and a [Qwen3](qwen3) language
+backbone. It supports image, multi-image, and video understanding.
 
-The RICE vision encoder processes images as flattened patches (similarly to `Qwen2VLImageProcessor`), prepends a
-learnable `[CLS]`-like token per image before running through the transformer blocks, and removes it again before
-merging the vision tokens spatially and projecting them into the language model's hidden size.
+*We present LLaVA-OneVision-1.5, a fully open framework for large-scale multimodal training. The framework improves
+data, model, and training recipes while releasing the complete training code, datasets, and model weights.*
 
 The original code can be found [here](https://github.com/EvolvingLMMs-Lab/LLaVA-OneVision-1.5).
 
@@ -43,7 +40,7 @@ The original code can be found [here](https://github.com/EvolvingLMMs-Lab/LLaVA-
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model_id = "lmms-lab/LLaVA-OneVision-1.5-4B-Instruct"
-model = AutoModelForImageTextToText.from_pretrained(model_id, dtype="auto", device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [
@@ -67,18 +64,6 @@ print(processor.batch_decode(generated_ids[:, inputs["input_ids"].shape[1] :], s
 
 [[autodoc]] LlavaOnevision1_5Config
 
-## LlavaOnevision1_5ImageProcessor
-
-[[autodoc]] LlavaOnevision1_5ImageProcessor
-
-## LlavaOnevision1_5ImageProcessorPil
-
-[[autodoc]] LlavaOnevision1_5ImageProcessorPil
-
-## LlavaOnevision1_5VideoProcessor
-
-[[autodoc]] LlavaOnevision1_5VideoProcessor
-
 ## LlavaOnevision1_5TextConfig
 
 [[autodoc]] LlavaOnevision1_5TextConfig
@@ -90,11 +75,6 @@ print(processor.batch_decode(generated_ids[:, inputs["input_ids"].shape[1] :], s
 ## LlavaOnevision1_5VisionModel
 
 [[autodoc]] LlavaOnevision1_5VisionModel
-    - forward
-
-## LlavaOnevision1_5TextModel
-
-[[autodoc]] LlavaOnevision1_5TextModel
     - forward
 
 ## LlavaOnevision1_5Model

@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_llava_onevision1_5.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The LLaVA-OneVision team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The LLaVA-OneVision team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,28 +18,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
-    can_return_tuple,
+    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
@@ -48,11 +45,29 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import AutoModel
-from .configuration_llava_onevision1_5 import (
-    LlavaOnevision1_5Config,
-    LlavaOnevision1_5TextConfig,
-    LlavaOnevision1_5VisionConfig,
-)
+from .configuration_llava_onevision1_5 import LlavaOnevision1_5Config, LlavaOnevision1_5VisionConfig
+
+
+class LlavaOnevision1_5VisionPatchEmbed(nn.Module):
+    def __init__(self, config: LlavaOnevision1_5VisionConfig) -> None:
+        super().__init__()
+        self.patch_size = config.patch_size
+        self.in_channels = config.in_channels
+        self.embed_dim = config.hidden_size
+        kernel_size = [self.patch_size, self.patch_size]
+        self.proj = nn.Conv2d(
+            self.in_channels,
+            self.embed_dim,
+            kernel_size=kernel_size,
+            stride=kernel_size,
+            bias=False,
+        )
+
+    def forward(self, hidden_states) -> torch.Tensor:
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(-1, self.in_channels, self.patch_size, self.patch_size)
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
 
 
 class LlavaOnevision1_5VisionRotaryEmbedding(nn.Module):
@@ -121,48 +136,20 @@ class LlavaOnevision1_5VisionRotaryEmbedding(nn.Module):
         return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
-class LlavaOnevision1_5VisionPatchEmbed(nn.Module):
-    def __init__(self, config: LlavaOnevision1_5VisionConfig) -> None:
+class LlavaOnevision1_5VisionPatchMerger(nn.Module):
+    def __init__(self, dim: int, context_dim: int, spatial_merge_size: int, layer_norm_eps: float) -> None:
         super().__init__()
-        self.patch_size = config.patch_size
-        self.in_channels = config.in_channels
-        self.embed_dim = config.hidden_size
-
-        kernel_size = [config.patch_size, config.patch_size]
-        self.proj = nn.Conv2d(
-            self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False
+        self.hidden_size = context_dim * (spatial_merge_size**2)
+        self.ln_q = nn.LayerNorm(context_dim, eps=layer_norm_eps)
+        self.mlp = nn.Sequential(
+            nn.Linear(self.hidden_size, self.hidden_size),
+            nn.GELU(),
+            nn.Linear(self.hidden_size, dim),
         )
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(-1, self.in_channels, self.patch_size, self.patch_size)
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
-        return hidden_states
-
-
-class LlavaOnevision1_5VisionPatchMerger(nn.Module):
-    def __init__(self, config: LlavaOnevision1_5VisionConfig) -> None:
-        super().__init__()
-        self.hidden_size = config.hidden_size * (config.spatial_merge_size**2)
-        self.ln_q = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.hidden_size)
-        self.act_fn = nn.GELU()
-        self.linear_fc2 = nn.Linear(self.hidden_size, config.out_hidden_size)
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.ln_q(x).view(-1, self.hidden_size)
-        return self.linear_fc2(self.act_fn(self.linear_fc1(x)))
-
-
-class LlavaOnevision1_5VisionMlp(nn.Module):
-    def __init__(self, config: LlavaOnevision1_5VisionConfig) -> None:
-        super().__init__()
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+        x = self.mlp(self.ln_q(x).view(-1, self.hidden_size))
+        return x
 
 
 def rotate_half(x):
@@ -229,7 +216,7 @@ class LlavaOnevision1_5VisionAttention(nn.Module):
         self.dim = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.dim // self.num_heads
-        self.num_key_value_groups = 1
+        self.num_key_value_groups = 1  # needed for eager attention
         self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
         self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = self.head_dim**-0.5
@@ -306,13 +293,28 @@ class LlavaOnevision1_5VisionAttention(nn.Module):
         return attn_output
 
 
+class LlavaOnevision1_5VisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
 class LlavaOnevision1_5VisionBlock(GradientCheckpointingLayer):
     def __init__(self, config: LlavaOnevision1_5VisionConfig) -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attn = LlavaOnevision1_5VisionAttention(config=config)
-        self.mlp = LlavaOnevision1_5VisionMlp(config=config)
+        self.attn = LlavaOnevision1_5VisionAttention(config)
+        self.mlp = LlavaOnevision1_5VisionMLP(config)
 
     @auto_docstring
     def forward(
@@ -346,47 +348,51 @@ class LlavaOnevision1_5PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        std = self.config.get_text_config().initializer_range
-        if isinstance(module, LlavaOnevision1_5VisionModel):
-            init.normal_(module.class_embedding, mean=0.0, std=std)
-            init.normal_(module.class_pos_emb, mean=0.0, std=std)
 
 
 @auto_docstring
 class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
     config: LlavaOnevision1_5VisionConfig
-    input_modalities = ("image", "video")
-    main_input_name = "pixel_values"
     _no_split_modules = ["LlavaOnevision1_5VisionBlock"]
+    _input_embed_layer = "patch_embed"
     _can_record_outputs = {
         "hidden_states": LlavaOnevision1_5VisionBlock,
         "attentions": LlavaOnevision1_5VisionAttention,
     }
 
-    def __init__(self, config: LlavaOnevision1_5VisionConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: LlavaOnevision1_5VisionConfig, *inputs, **kwargs) -> None:
+        super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
+        self.fullatt_block_indexes = config.fullatt_block_indexes
+        self.window_size = config.window_size
+        self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
         self.patch_embed = LlavaOnevision1_5VisionPatchEmbed(config)
+        self.rotary_pos_emb = LlavaOnevision1_5VisionRotaryEmbedding(config)
+        self.blocks = nn.ModuleList([LlavaOnevision1_5VisionBlock(config) for _ in range(config.depth)])
+        self.merger = LlavaOnevision1_5VisionPatchMerger(
+            dim=config.out_hidden_size,
+            context_dim=config.hidden_size,
+            spatial_merge_size=config.spatial_merge_size,
+            layer_norm_eps=config.layer_norm_eps,
+        )
+        self.gradient_checkpointing = False
 
         head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = LlavaOnevision1_5VisionRotaryEmbedding(config)
-
-        scale = config.hidden_size**-0.5
-        self.class_embedding = nn.Parameter(scale * torch.randn(config.hidden_size))
-        self.class_pos_emb = nn.Parameter(torch.randn(1, head_dim // 2))
-
+        self.class_embedding = nn.Embedding(1, config.hidden_size)
+        self.class_pos_emb = nn.Embedding(1, head_dim // 2)
         self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.blocks = nn.ModuleList([LlavaOnevision1_5VisionBlock(config) for _ in range(config.depth)])
-        self.merger = LlavaOnevision1_5VisionPatchMerger(config)
 
-        self.gradient_checkpointing = False
         self.post_init()
+
+    def permute_input_for_window_attn(self, input_tensor: torch.Tensor, window_index: torch.Tensor, seq_len: int):
+        input_tensor = input_tensor.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        input_tensor = input_tensor[window_index, :, :]
+        input_tensor = input_tensor.reshape(seq_len, -1)
+        return input_tensor
 
     @merge_with_config_defaults
     @capture_outputs
@@ -394,10 +400,22 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
-        r"""
-        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-            The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+                The final hidden states of the model.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width of feature shape of each image in LLM.
+
+        Returns:
+            `torch.Tensor`: hidden_states.
+        """
+        expected_patches = grid_thw.prod(-1).sum()
+        torch_compilable_check(
+            expected_patches == hidden_states.shape[0],
+            f"Vision features and grid do not match, expected {expected_patches} patches but got "
+            f"{hidden_states.shape[0]}",
+        )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         hidden_states = self.patch_embed(hidden_states)
@@ -409,10 +427,10 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
         cls_mask[cls_indices] = True
 
         expanded_hidden_states = hidden_states.new_empty((cls_mask.shape[0], hidden_states.shape[-1]))
-        expanded_hidden_states[cls_mask] = self.class_embedding.to(hidden_states.dtype)
+        expanded_hidden_states[cls_mask] = self.class_embedding.weight.to(hidden_states.dtype)
         expanded_hidden_states[~cls_mask] = hidden_states
 
-        class_angles = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1)
+        class_angles = torch.cat((self.class_pos_emb.weight, self.class_pos_emb.weight), dim=-1)
         expanded_position_embeddings = []
         for patch_embeddings, class_embeddings in zip(position_embeddings, (class_angles.cos(), class_angles.sin())):
             expanded_embeddings = patch_embeddings.new_empty((cls_mask.shape[0], patch_embeddings.shape[-1]))
@@ -420,11 +438,9 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
             expanded_embeddings[~cls_mask] = patch_embeddings
             expanded_position_embeddings.append(expanded_embeddings)
 
-        hidden_states = expanded_hidden_states
+        hidden_states = self.pre_layernorm(expanded_hidden_states)
         position_embeddings = tuple(expanded_position_embeddings)
         cu_seqlens = cu_seqlens + torch.arange(cu_seqlens.shape[0], device=cu_seqlens.device)
-
-        hidden_states = self.pre_layernorm(hidden_states)
 
         for block in self.blocks:
             hidden_states = block(
@@ -436,461 +452,241 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
             )
 
         hidden_states = hidden_states[~cls_mask]
-        merged_hidden_states = self.merger(hidden_states)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
-            pooler_output=merged_hidden_states,
+            pooler_output=self.merger(hidden_states),
         )
 
 
 @auto_docstring
-class LlavaOnevision1_5TextPreTrainedModel(PreTrainedModel):
-    config: LlavaOnevision1_5TextConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _no_split_modules = ["LlavaOnevision1_5TextDecoderLayer"]
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class LlavaOnevision1_5TextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        LlavaOnevision1_5TextRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-@use_kernelized_func(apply_rotary_pos_emb)
-class LlavaOnevision1_5TextAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: LlavaOnevision1_5TextConfig, layer_idx: int):
-        super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.q_norm = LlavaOnevision1_5TextRMSNorm(
-            self.head_dim, eps=config.rms_norm_eps
-        )  # unlike olmo, only on the head dim!
-        self.k_norm = LlavaOnevision1_5TextRMSNorm(
-            self.head_dim, eps=config.rms_norm_eps
-        )  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,  # diff with Llama
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class LlavaOnevision1_5TextMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class LlavaOnevision1_5TextDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: LlavaOnevision1_5TextConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = LlavaOnevision1_5TextAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = LlavaOnevision1_5TextMLP(config)
-        self.input_layernorm = LlavaOnevision1_5TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlavaOnevision1_5TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
-
-
-class LlavaOnevision1_5TextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: LlavaOnevision1_5TextConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: LlavaOnevision1_5TextConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-@auto_docstring
-class LlavaOnevision1_5TextModel(LlavaOnevision1_5TextPreTrainedModel):
-    config: LlavaOnevision1_5TextConfig
-    _can_record_outputs = {
-        "hidden_states": LlavaOnevision1_5TextDecoderLayer,
-        "attentions": LlavaOnevision1_5TextAttention,
-    }
-
-    def __init__(self, config: LlavaOnevision1_5TextConfig):
-        super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [LlavaOnevision1_5TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = LlavaOnevision1_5TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = LlavaOnevision1_5TextRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
-        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
-        # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-            }
-            # The sliding window alternating layers are not always activated depending on the config
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for LLaVA-OneVision-1.5 outputs, with hidden states and attentions.
-    """
-)
 @dataclass
 class LlavaOnevision1_5ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
+    rope_deltas: torch.LongTensor | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for LLaVA-OneVision-1.5 causal language model (or autoregressive) outputs.
-    """
-)
-@dataclass
-class LlavaOnevision1_5CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
-
-
-@auto_docstring(
-    custom_intro="""
-    The LLaVA-OneVision-1.5 model which consists of a RICE vision backbone and a Qwen3 language model,
-    without a language modeling head.
-    """
-)
+@auto_docstring
 class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
-    input_modalities = ("image", "video", "text")
+    base_model_prefix = "model"
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+    config: LlavaOnevision1_5Config
+    _no_split_modules = ["LlavaOnevision1_5DecoderLayer", "LlavaOnevision1_5VisionBlock"]
 
     def __init__(self, config: LlavaOnevision1_5Config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
+        self.rope_deltas = None  # cache rope_deltas here
+
+        # Initialize weights and apply final processing
         self.post_init()
 
-    @merge_with_config_defaults
+    def get_vision_position_ids(
+        self,
+        start_position: int,
+        grid_thw: list[int, int, int] | torch.Tensor,
+        temp_merge_size: int = 1,
+        spatial_merge_size: int = 1,
+        time_interval: float | torch.Tensor = 1.0,
+        device: str | torch.device | None = None,
+    ):
+        """
+        Compute 3D positional indices for vision tokens derived from a single image or video input.
+
+        The positions are generated from the input grid defined by temporal (T), height (H), and
+        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
+        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+
+        Args:
+            start_position (`int`):
+                Offset added to all computed positional indices.
+            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
+                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
+            temp_merge_size (`int`, *optional*):
+                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
+                by this value. Defaults to 1.
+            spatial_merge_size (`int`, *optional*):
+                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
+                by this value. Defaults to 1.
+            time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+                Spacing factor applied before quantizing temporal position indices.
+            device (`str` or `torch.device`, *optional*):
+                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+
+        Returns:
+            torch.LongTensor of shape (3, sequence_length):
+                Positional indices for temporal, height, and width dimensions,
+                flattened into sequence form and offset by `start_position`.
+        """
+        llm_grid_t, llm_grid_h, llm_grid_w = (
+            grid_thw[0].item() // temp_merge_size,
+            grid_thw[1].item() // spatial_merge_size,
+            grid_thw[2].item() // spatial_merge_size,
+        )
+
+        position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
+        position_height = torch.arange(llm_grid_h, device=device) + start_position
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
+
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+        vision_position_ids[0] += start_position  # must be after time_interval multiply
+        return vision_position_ids
+
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        second_per_grid_ts: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
+        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
+        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
+        while text tokens use standard 1D RoPE.
+
+        Example:
+            Temporal patches: 3; Height patches: 2; Width patches: 2
+            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
+
+            Temporal position IDs are spaced by:
+                `interval = tokens_per_second * temporal_patch_size / fps`
+
+                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
+                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
+
+            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
+            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
+            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+        spatial_merge_size = self.config.vision_config.spatial_merge_size
+        tokens_per_second = self.config.vision_config.tokens_per_second
+
+        mrope_position_deltas = []
+        position_ids = torch.zeros(
+            3,
+            input_ids.shape[0],
+            input_ids.shape[1],
+            dtype=input_ids.dtype,
+            device=input_ids.device,
+        )
+        grid_iters = {
+            1: iter(image_grid_thw) if image_grid_thw is not None else None,
+            2: iter(video_grid_thw) if video_grid_thw is not None else None,
+        }
+        second_per_grid_ts = (
+            iter(second_per_grid_ts) if second_per_grid_ts is not None else iter([1] * input_ids.shape[1])
+        )
+        for batch_idx, current_input_ids in enumerate(input_ids):
+            input_token_type = mm_token_type_ids[batch_idx]
+            if attention_mask is not None:
+                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
+                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+
+            input_type_group = []
+            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+                group = list(group)
+                start_index = group[0][0]
+                end_index = group[-1][0] + 1
+                input_type_group.append((key, start_index, end_index))
+
+            current_pos = 0
+            llm_pos_ids_list = []
+            for modality_type, start_idx, end_idx in input_type_group:
+                # text == 0
+                if modality_type == 0:
+                    text_len = end_idx - start_idx
+                    llm_pos_ids_list.append(
+                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
+                    )
+                    current_pos += text_len
+                # image == 1, video == 2
+                else:
+                    grid_thw = next(grid_iters[modality_type])
+                    # Only apply temporal scaling for videos; still images have no
+                    # temporal dimension to space out (fixes #45325).
+                    if modality_type == 2:
+                        time_interval = tokens_per_second * next(second_per_grid_ts)
+                    else:
+                        time_interval = 1
+                    vision_position_ids = self.get_vision_position_ids(
+                        current_pos, grid_thw, 1, spatial_merge_size, time_interval, device=input_ids.device
+                    )
+                    llm_pos_ids_list.append(vision_position_ids)
+                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
+            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
+            if attention_mask is not None:
+                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
+            else:
+                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
+            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
+        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+        return position_ids, mrope_position_deltas
+
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = video_embeds
+
+        return vision_outputs
+
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor,
+        image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
-            The tensors corresponding to the input images.
-        """
-        expected_patches = image_grid_thw.prod(-1).sum()
-        torch_compilable_check(
-            expected_patches == pixel_values.shape[0],
-            f"Image features and image tokens do not match, expected {expected_patches} patches but got "
-            f"{pixel_values.shape[0]}",
-        )
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        expected_features = sum(split_sizes)
-        if vision_outputs.pooler_output.shape[0] != expected_features:
-            if expected_features % vision_outputs.pooler_output.shape[0] != 0:
-                raise ValueError(
-                    "Image features and image_grid_thw do not match, "
-                    f"expected {expected_features} features but got {vision_outputs.pooler_output.shape[0]}."
-                )
-            vision_outputs.pooler_output = vision_outputs.pooler_output.repeat_interleave(
-                expected_features // vision_outputs.pooler_output.shape[0], dim=0
-            )
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = image_embeds
+
         return vision_outputs
 
     def get_placeholder_mask(
@@ -921,20 +717,21 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                n_image_tokens == image_features.shape[0],
-                f"Image features and image tokens do not match, tokens: {n_image_tokens}, "
-                f"features: {image_features.shape[0]}",
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                n_video_tokens == video_features.shape[0],
-                f"Video features and video tokens do not match, tokens: {n_video_tokens}, "
-                f"features: {video_features.shape[0]}",
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
+
+    def compute_3d_position_ids(self, **kwargs) -> torch.Tensor | None:
+        return None
 
     @can_return_tuple
     @auto_docstring
@@ -945,56 +742,58 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.Tensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         second_per_grid_ts: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaOnevision1_5ModelOutputWithPast:
         r"""
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos,)`, *optional*):
-            The time interval for each temporal video grid. Accepted for processor compatibility and unused because
-            this model applies one-dimensional RoPE in the language model.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
         """
-        del mm_token_type_ids, second_per_grid_ts
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features = None
-        video_features = None
-
         if pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, image_grid_thw, **kwargs)
-            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
-
-            special_image_mask, _ = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_outputs = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-            _, special_video_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                second_per_grid_ts=second_per_grid_ts,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
-            attention_mask=attention_mask,
+            input_ids=None,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
             **kwargs,
         )
 
@@ -1003,75 +802,60 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features,
-            video_hidden_states=video_features,
+            rope_deltas=self.rope_deltas,
         )
 
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(num_patches, num_channels * temporal_patch_size * patch_size * patch_size)`):
-            The tensors corresponding to the input videos.
-        """
-        expected_patches = video_grid_thw.prod(-1).sum()
-        torch_compilable_check(
-            expected_patches == pixel_values_videos.shape[0],
-            f"Video features and video tokens do not match, expected {expected_patches} patches but got "
-            f"{pixel_values_videos.shape[0]}",
-        )
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        expected_features = sum(split_sizes)
-        if vision_outputs.pooler_output.shape[0] != expected_features:
-            if expected_features % vision_outputs.pooler_output.shape[0] != 0:
-                raise ValueError(
-                    "Video features and video_grid_thw do not match, "
-                    f"expected {expected_features} features but got {vision_outputs.pooler_output.shape[0]}."
-                )
-            vision_outputs.pooler_output = vision_outputs.pooler_output.repeat_interleave(
-                expected_features // vision_outputs.pooler_output.shape[0], dim=0
-            )
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        return vision_outputs
 
-
-@auto_docstring(
-    custom_intro="""
-    The LLAVA-OneVision-1.5 model which consists of a RICE vision backbone and a Qwen3 language model.
+@auto_docstring
+@dataclass
+class LlavaOnevision1_5CausalLMOutputWithPast(CausalLMOutputWithPast):
+    r"""
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
-)
+
+    rope_deltas: torch.LongTensor | None = None
+
+
+@auto_docstring
 class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    input_modalities = ("image", "video", "text")
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
 
-    def __init__(self, config: LlavaOnevision1_5Config):
+    def __init__(self, config):
         super().__init__(config)
         self.model = LlavaOnevision1_5Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
         self.post_init()
 
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor,
+        image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r""" """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1082,41 +866,77 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.Tensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         second_per_grid_ts: torch.Tensor | None = None,
-        labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaOnevision1_5CausalLMOutputWithPast:
         r"""
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos,)`, *optional*):
-            The time interval for each temporal video grid. Accepted for processor compatibility and unused because
-            this model applies one-dimensional RoPE in the language model.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, LlavaOnevision1_5ForConditionalGeneration
+
+        >>> model = LlavaOnevision1_5ForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+
+        >>> messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
+                    {"type": "text", "text": "Describe the image."},
+                ],
+            }
+        ]
+
+        >>> inputs = processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+
+        >>> # Generate
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=1024)
+        >>> generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
+        >>> output_text = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> print(output_text)
+        ```
         """
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
+            second_per_grid_ts=second_per_grid_ts,
+            mm_token_type_ids=mm_token_type_ids,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            mm_token_type_ids=mm_token_type_ids,
-            second_per_grid_ts=second_per_grid_ts,
+            use_cache=use_cache,
             **kwargs,
         )
 
-        hidden_states = outputs.last_hidden_state
+        hidden_states = outputs[0]
+
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -1132,21 +952,59 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            video_hidden_states=outputs.video_hidden_states,
+            rope_deltas=outputs.rope_deltas,
         )
 
-    @auto_docstring
-    def get_video_features(
+    def _get_image_nums_and_video_nums(
         self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r""" """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
-        )
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
+        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+        Returns:
+            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
+            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        """
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        vision_start_token_id = self.config.vision_start_token_id
+
+        if inputs_embeds is not None:
+            vision_start_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            image_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            video_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            vision_start_mask = input_ids == vision_start_token_id
+            image_mask = input_ids == image_token_id
+            video_mask = input_ids == video_token_id
+
+        vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
+        image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
+        video_nums = torch.sum(vision_first_mask & video_mask, dim=1)
+
+        return image_nums, video_nums
 
     def _expand_inputs_for_generation(
         self,
@@ -1154,97 +1012,97 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
         is_encoder_decoder: bool = False,
         input_ids: torch.LongTensor | None = None,
         **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict]:
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # Overwritten -- Support for expanding tensors without a batch size dimension
+        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
+        # pixel_values.shape[0] is sum(seqlen_images for samples)
+        # image_grid_thw.shape[0] is sum(num_images for samples)
+
         if expand_size == 1:
             return input_ids, model_kwargs
 
-        def get_token_counts(token_id):
-            if input_ids is not None:
-                return (input_ids == token_id).sum(dim=1).tolist()
-            inputs_embeds = model_kwargs["inputs_embeds"]
-            token_embed = self.get_input_embeddings()(
-                torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            return (inputs_embeds == token_embed).all(-1).sum(dim=1).tolist()
+        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
 
-        def get_grid_counts(grid_thw, token_counts):
-            if grid_thw is None:
-                return None
-            if sum(token_counts) == 0:
-                batch_size = len(token_counts)
-                if grid_thw.shape[0] % batch_size != 0:
-                    raise ValueError(
-                        f"Cannot distribute {grid_thw.shape[0]} vision grids across batch size {batch_size}."
+        def _expand_dict_for_generation_visual(dict_to_expand):
+            image_grid_thw = model_kwargs.get("image_grid_thw", None)
+            video_grid_thw = model_kwargs.get("video_grid_thw", None)
+            image_nums, video_nums = self._get_image_nums_and_video_nums(
+                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
+            )
+
+            def _repeat_interleave_samples(x, lengths, repeat_times):
+                samples = torch.split(x, lengths)
+                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
+                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
+                return result
+
+            for key in dict_to_expand:
+                if key == "pixel_values":
+                    # split images into samples
+                    samples = torch.split(image_grid_thw, list(image_nums))
+                    # compute the sequence length of images for each sample
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
-                return [grid_thw.shape[0] // batch_size] * batch_size
-            feature_lengths = (grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
-            grid_counts = []
-            offset = 0
-            for token_count in token_counts:
-                count = 0
-                features = 0
-                while offset + count < len(feature_lengths) and features < token_count:
-                    features += feature_lengths[offset + count]
-                    count += 1
-                grid_counts.append(count)
-                offset += count
-            return grid_counts
+                elif key == "image_grid_thw":
+                    # get the num of images for each sample
+                    lengths = list(image_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "pixel_values_videos":
+                    samples = torch.split(video_grid_thw, list(video_nums))
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "video_grid_thw":
+                    lengths = list(video_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "second_per_grid_ts":
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
+                    )
+            return dict_to_expand
 
-        def repeat_samples(tensor, lengths):
-            return torch.cat(
-                [sample.repeat((expand_size,) + (1,) * (tensor.ndim - 1)) for sample in torch.split(tensor, lengths)],
-                dim=0,
-            )
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                if key == "position_ids" and dict_to_expand[key].ndim == 3:
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
+                elif (
+                    dict_to_expand[key] is not None
+                    and isinstance(dict_to_expand[key], torch.Tensor)
+                    and key not in visual_keys
+                ):
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
 
-        image_grid_thw = model_kwargs.get("image_grid_thw")
-        video_grid_thw = model_kwargs.get("video_grid_thw")
-        image_grid_counts = get_grid_counts(image_grid_thw, get_token_counts(self.config.image_token_id))
-        video_grid_counts = get_grid_counts(video_grid_thw, get_token_counts(self.config.video_token_id))
-
-        visual_lengths = {}
-        for pixel_key, grid_key, grid_counts in (
-            ("pixel_values", "image_grid_thw", image_grid_counts),
-            ("pixel_values_videos", "video_grid_thw", video_grid_counts),
-        ):
-            pixels = model_kwargs.get(pixel_key)
-            grid = model_kwargs.get(grid_key)
-            if pixels is None or grid is None:
-                continue
-            raw_lengths = grid.prod(-1)
-            sample_raw_lengths = [int(chunk.sum().item()) for chunk in torch.split(raw_lengths, grid_counts)]
-            raw_total = sum(sample_raw_lengths)
-            if raw_total != pixels.shape[0]:
-                sample_raw_lengths = [length * pixels.shape[0] // raw_total for length in sample_raw_lengths]
-            visual_lengths[pixel_key] = sample_raw_lengths
-
-        visual_keys = {"pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"}
-        for key, value in model_kwargs.items():
-            if value is None or not isinstance(value, torch.Tensor):
-                continue
-            if key in visual_lengths:
-                model_kwargs[key] = repeat_samples(value, visual_lengths[key])
-            elif key == "image_grid_thw":
-                model_kwargs[key] = repeat_samples(value, image_grid_counts)
-            elif key == "video_grid_thw":
-                model_kwargs[key] = repeat_samples(value, video_grid_counts)
-            elif key not in visual_keys:
-                model_kwargs[key] = value.repeat_interleave(expand_size, dim=0)
+        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
 
         if input_ids is not None:
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
+
         if is_encoder_decoder:
-            model_kwargs["encoder_outputs"] = {
-                key: value.repeat_interleave(expand_size, dim=0) if isinstance(value, torch.Tensor) else value
-                for key, value in model_kwargs["encoder_outputs"].items()
-            }
+            if model_kwargs.get("encoder_outputs") is None:
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
+
         return input_ids, model_kwargs
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+        model_inputs["position_ids"] = None
+        return model_inputs
 
 
 __all__ = [
-    "LlavaOnevision1_5PreTrainedModel",
-    "LlavaOnevision1_5TextPreTrainedModel",
-    "LlavaOnevision1_5VisionModel",
-    "LlavaOnevision1_5TextModel",
-    "LlavaOnevision1_5Model",
     "LlavaOnevision1_5ForConditionalGeneration",
+    "LlavaOnevision1_5Model",
+    "LlavaOnevision1_5PreTrainedModel",
+    "LlavaOnevision1_5VisionModel",
 ]
