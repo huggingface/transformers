@@ -25,12 +25,13 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
+from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
+from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like, read_intervals
 from .distributed.utils import is_dtensor
 from .integrations.accelerate import get_device, offload_weight
 from .utils import is_env_variable_true
@@ -1233,40 +1234,40 @@ class WeightConverter(WeightTransform):
 GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
-def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
-    # This slicing is what actually loads the tensor from the safetensors slice object
-    tensor = tensor[...]
-    if dtype is not None or device is not None:
-        tensor = tensor.to(device=device, dtype=dtype)
-    return tensor
+@dataclass
+class TensorLoad:
+    """One checkpoint tensor, resolved: where it goes and which part of it this rank keeps."""
+
+    mapping: WeightRenaming | WeightConverter
+    target_key: str
+    source_key: str
+    source_pattern: str
+    tensor: Any  # a `torch.Tensor` or a `safe_open` slice
+    device: torch.device | str | int | None
+    dtype: torch.dtype | None
+    intervals: list[list[tuple[int, int]]] | None = None
+    owned: bool = True  # False for an expert this rank doesn't own
+    # set by prefetch; returns `None` when prefetch isn't running and the tensor should be read as usual
+    reader: Callable[[TensorLoad], torch.Tensor | None] | None = None
 
 
-def spawn_materialize(
-    thread_pool: ThreadPoolExecutor | None,
-    tensor: torch.Tensor,
-    device=None,
-    dtype=None,
-    sharding_op: DtensorShardOperation | None = None,
-    tensor_idx: int | None = None,
-) -> Future | Callable:
-    """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
+def read_tensor(load: TensorLoad) -> torch.Tensor:
+    return read_intervals(lambda index: load.tensor[index], load.intervals).to(device=load.device, dtype=load.dtype)
 
-    When ``sharding_op`` is given the tensor is sharded according to its DTensor placements;
-    otherwise it is simply copied to *device*/*dtype*. Without a thread pool a deferred callable
-    is returned instead of a Future.
-    """
+
+def spawn_materialize(thread_pool: ThreadPoolExecutor | None, load: TensorLoad) -> Future | Callable:
+    """Read a resolved tensor, in the thread pool if there is one, `None` if this rank doesn't keep any of it.
+    Without a pool we return a callable instead of a Future so loading stays lazy."""
 
     def _job():
-        if sharding_op is not None:
-            return sharding_op.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
-        return _materialize_copy(tensor, device, dtype)
+        if not load.owned:
+            return None
+        tensor = load.reader(load) if load.reader is not None else None
+        return read_tensor(load) if tensor is None else tensor
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
-    else:
-        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
-        # memory during Conversion
-        return _job
+    return _job
 
 
 def dot_natural_key(s: str):
@@ -1513,6 +1514,7 @@ def convert_and_load_state_dict_in_model(
     state_dict: dict[str, Any],
     load_config: LoadStateDictConfig,
     disk_offload_index: dict | None = None,
+    prefetch_handles: dict[str, Any] | None = None,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -1644,7 +1646,11 @@ def convert_and_load_state_dict_in_model(
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
+    # Resolve every tensor first, so prefetch knows exactly what to read, then start the reads
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
+    loads: list[TensorLoad] = []
+    stacked_counts: dict[tuple[WeightConverter, str], int] = {}
+    shard_ops: dict[str, DtensorShardOperation] = {}
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
@@ -1661,15 +1667,13 @@ def convert_and_load_state_dict_in_model(
             empty_param = meta_model_state_dict.get(renamed_key)
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
-                new_converter = deepcopy(pattern_to_converter[source_pattern])
-                # each target key gets its own converter instance
-                mapping = param_name_to_load.setdefault(renamed_key, new_converter)
-            # Otherwise, only potential renaming
+                mapping = param_name_to_load.get(renamed_key)
+                if mapping is None:  # one copy per target, not per source tensor
+                    mapping = param_name_to_load[renamed_key] = deepcopy(pattern_to_converter[source_pattern])
             else:
                 mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
                 source_pattern = original_key
 
-            # 3. Handle dtype casting
             needs_quantization = (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
@@ -1702,41 +1706,29 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
-            # distributed op selects whole experts. The signal is a `MergeModulelist`
-            # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
-            # prepends a scale-decode op), so scan the whole chain rather than just the head.
-            tensor_idx = (
-                len(mapping.collected_tensors.get(source_pattern, []))
-                if isinstance(mapping, WeightConverter)
-                and any(isinstance(op, MergeModulelist) for op in mapping.operations)
-                else None
-            )
+            tensor_idx = None
+            if isinstance(mapping, WeightConverter) and any(
+                isinstance(op, MergeModulelist) for op in mapping.operations
+            ):
+                tensor_idx = stacked_counts.get((mapping, source_pattern), 0)
+                stacked_counts[(mapping, source_pattern)] = tensor_idx + 1
 
-            # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-            sharding_op = None
+            intervals, owned = None, True
             if is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
-
-            # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
-            # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
-            # accelerate will take care of putting back on correct device after loading
-            # Note that we only do it with `device_map` but not with `tp_plan`, as tp will perform local sharding before, so memory
-            # spike during conversion ops should be fine
-            if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
+                shape = list(tensor.shape) if isinstance(tensor, torch.Tensor) else tensor.get_shape()
+                if renamed_key not in shard_ops:  # e.g. built once for all the experts of a stacked param
+                    shard_ops[renamed_key] = DtensorShardOperation(empty_param)
+                intervals = shard_ops[renamed_key].intervals(shape, tensor_idx)
+                owned = intervals is not None
+            elif isinstance(mapping, WeightConverter) and mapping.force_cpu:
                 param_device = "cpu"
 
-            future_or_tensor = spawn_materialize(
-                thread_pool,
-                tensor,
-                param_device,
-                _dtype,
-                sharding_op=sharding_op,
-                tensor_idx=tensor_idx,
+            loads.append(
+                TensorLoad(
+                    mapping, renamed_key, original_key, source_pattern, tensor, param_device, _dtype, intervals, owned
+                )
             )
-
-            mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
@@ -1748,7 +1740,17 @@ def convert_and_load_state_dict_in_model(
         else:
             _add_unmatched_checkpoint_key(renamed_key, model, loading_info)
 
+    prefetches = []
+    if prefetch_handles:
+        from .integrations.safetensors_prefetch import attach_prefetch
+
+        prefetches = attach_prefetch(loads, prefetch_handles, copy_full=load_config.device_mesh is not None)
+
     try:
+        for load in loads:
+            future_or_tensor = spawn_materialize(thread_pool, load)
+            load.mapping.add_tensor(load.target_key, load.source_key, load.source_pattern, future_or_tensor)
+
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
             try:
                 realized_value = mapping.convert(
@@ -1791,6 +1793,8 @@ def convert_and_load_state_dict_in_model(
         if thread_pool is not None:
             # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
             thread_pool.shutdown(wait=False, cancel_futures=True)
+        for prefetch in prefetches:
+            prefetch.close()
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user), but
     # only if it was used, i.e. it matched any weight from the checkpoints
