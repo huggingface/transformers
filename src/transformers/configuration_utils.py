@@ -227,9 +227,12 @@ class SubConfigSpec:
             return backbone_config
 
         model_type = subconfig.get("model_type", self.model_type) if subconfig is not None else self.model_type
-        if model_type is None:
-            raise ValueError(f"Cannot resolve `{key}`: no model_type given and no default in `sub_configs_defaults`.")
-        subconfig_cls = self.get_config_class(model_type)
+        if not model_type:
+            if not issubclass(self.config_class, PreTrainedConfig):
+                raise ValueError(f"Cannot resolve `{key}`: no `model_type` found inputs or in `sub_configs_defaults`.")
+            subconfig_cls = self.config_class
+        else:
+            subconfig_cls = self.get_config_class(model_type)
 
         # Copy the dict to not mutate it in-place
         if isinstance(subconfig, dict):
@@ -1434,9 +1437,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         if cls.sub_configs_defaults:
             for key, specs in cls.sub_configs_defaults.items():
-                # Backbone configs are special as they sometimes hold timm-configs
+                # Backbone configs are special as they sometimes hold timm-configs that can't be resolved via `AutoConfig`
                 if key != "backbone_config":
-                    default_subconfig_class = specs.get_config_class(specs.model_type)
+                    default_subconfig_class = (
+                        specs.get_config_class(specs.model_type)
+                        if not issubclass(specs.config_class, PreTrainedConfig)
+                        else specs.config_class
+                    )
                     subconfig_default_fields = default_subconfig_class.default_config_fields()
                     subconfig_default_fields.update(specs.init_kwargs)
                     default_config_fields[key] = subconfig_default_fields

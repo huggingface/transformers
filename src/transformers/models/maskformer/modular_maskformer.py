@@ -129,9 +129,9 @@ class MaskFormerConfig(PreTrainedConfig):
     output_auxiliary_logits: bool | None = None
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         self.num_attention_heads = self.decoder_config.encoder_attention_heads
         self.num_hidden_layers = self.decoder_config.num_hidden_layers
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()

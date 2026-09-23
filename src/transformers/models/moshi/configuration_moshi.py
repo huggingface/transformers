@@ -158,6 +158,19 @@ class MoshiConfig(PreTrainedConfig):
     depth_decoder_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
+        self.num_key_value_heads = (
+            self.num_key_value_heads if self.num_key_value_heads is not None else self.num_attention_heads
+        )
+        self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
+
+        if self.audio_encoder_config is not None:
+            encoder_codebook_size = (
+                self.audio_encoder_config["codebook_size"]
+                if isinstance(self.audio_encoder_config, dict)
+                else self.audio_encoder_config.codebook_size
+            )
+            self.audio_vocab_size = encoder_codebook_size if self.audio_vocab_size is None else self.audio_vocab_size
+
         if isinstance(self.depth_decoder_config, dict):
             self.depth_decoder_config.update(
                 {
@@ -168,13 +181,6 @@ class MoshiConfig(PreTrainedConfig):
                 }
             )
         super().__post_init__(**kwargs)
-        self.num_key_value_heads = (
-            self.num_key_value_heads if self.num_key_value_heads is not None else self.num_attention_heads
-        )
-        self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
-        self.audio_vocab_size = (
-            self.audio_encoder_config.codebook_size if self.audio_vocab_size is None else self.audio_vocab_size
-        )
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

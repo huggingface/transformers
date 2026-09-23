@@ -56,8 +56,6 @@ class EsmFold2AtomEncoderConfig(PreTrainedConfig):
         Base frequency for the space-UID half of the 3D rotary embedding.
     """
 
-    model_type = "esmfold2_atom_encoder"
-
     hidden_size: int | None = 128
     output_dim: int | None = 384
     num_hidden_layers: int | None = 3
@@ -115,7 +113,6 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
         is this module's `hidden_size`.
     """
 
-    model_type = "esmfold2_diffusion"
     sub_configs_defaults = {
         "atom_encoder": SubConfigSpec(config_class=EsmFold2AtomEncoderConfig, init_kwargs={"output_dim": 768})
     }
@@ -184,7 +181,6 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
         high-sigma tail above it is truncated and the cap re-prepended, so sampling starts from the cap.
     """
 
-    model_type = "esmfold2_structure_encoder"
     sub_configs_defaults = {"diffusion_module": SubConfigSpec(config_class=EsmFold2DiffusionModuleConfig)}
 
     diffusion_module: dict | EsmFold2DiffusionModuleConfig | None = None
@@ -226,8 +222,6 @@ class EsmFold2ConfidenceHeadConfig(PreTrainedConfig):
         Additive guard for masked-mean denominators (empty chains / all-padding rows).
     """
 
-    model_type = "esmfold2_confidence_head"
-
     num_hidden_layers: int | None = 4
     num_plddt_bins: int | None = 50
     num_pde_bins: int | None = 64
@@ -263,8 +257,6 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
         bit-exact in bf16, so it trades exactness for peak memory on long sequences.
     """
 
-    model_type = "esmfold2_mas_encoder"
-
     hidden_size: int | None = 128
     outer_hidden_size: int | None = 32
     num_hidden_layers: int | None = 4
@@ -285,8 +277,6 @@ class EsmFold2LmEncoderConfig(PreTrainedConfig):
     per_loop_lm_dropout (`bool`, *optional*, defaults to `True`):
         Whether to resample that dropout on every trunk loop rather than once per fold.
     """
-
-    model_type = "esmfold2_lm_encoder"
 
     num_hidden_layers: int | None = 4
     lm_dropout: float | None = 0.25
