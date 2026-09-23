@@ -52,9 +52,21 @@ class Track:
     status: np.ndarray          # (T,) two-letter classification
     rmw_nmi: np.ndarray         # (T,) radius of maximum wind -- the eyewall's radius
     wind_radii_nmi: np.ndarray  # (T, 3, 4) thresholds 34/50/64 kt by NE/SE/SW/NW quadrant
+    record: np.ndarray          # (T,) record identifier; "L" marks a landfall
 
     def __len__(self) -> int:
         return self.time.shape[0]
+
+    @property
+    def landfall(self) -> np.ndarray:
+        """
+        ``(T,)`` boolean: did the centre cross a coastline at this point.
+
+        HURDAT2 marks landfalls explicitly in its record-identifier column, so this is an observation
+        rather than something inferred from a land mask -- which would otherwise have to guess at
+        resolution the archive already settled.
+        """
+        return self.record == "L"
 
     @property
     def year(self) -> int:
@@ -99,6 +111,10 @@ def parse_hurdat2(path: str | Path) -> list[Track]:
     The format is a header line naming the storm and how many rows follow, then that many data rows. The
     trailing column is the radius of maximum wind, which is the one direct observation of eyewall size in
     the archive -- and is ``-999`` for most of the record, so treat its absence as the norm.
+
+    The third column is the record identifier, which carries an ``L`` at every landfall. It is the only
+    place the archive states landfall directly, so it is kept: inferring landfall from a land mask
+    instead means guessing at a resolution the archive has already settled.
     """
     tracks: list[Track] = []
     with open(path) as handle:
@@ -111,11 +127,12 @@ def parse_hurdat2(path: str | Path) -> list[Track]:
         rows = lines[index + 1 : index + 1 + count]
         index += 1 + count
 
-        times, lats, lons, winds, pressures, statuses, rmws, radii = [], [], [], [], [], [], [], []
+        times, lats, lons, winds, pressures, statuses, rmws, radii, records = [], [], [], [], [], [], [], [], []
         for row in rows:
             field = [part.strip() for part in row.split(",")]
             stamp = dt.datetime.strptime(field[0] + field[1], "%Y%m%d%H%M")
             times.append(np.datetime64(stamp, "s"))
+            records.append(field[2])
             statuses.append(field[3])
             lats.append(_parse_latitude(field[4]))
             lons.append(_parse_longitude(field[5]))
@@ -132,6 +149,7 @@ def parse_hurdat2(path: str | Path) -> list[Track]:
                 max_wind_kt=as_nan(winds), min_pressure_hpa=as_nan(pressures),
                 status=np.asarray(statuses), rmw_nmi=as_nan(rmws),
                 wind_radii_nmi=as_nan(np.asarray(radii, dtype=np.float32)),
+                record=np.asarray(records),
             )
         )
     return tracks

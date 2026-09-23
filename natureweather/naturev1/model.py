@@ -48,6 +48,26 @@ RI_THRESHOLDS_KT = (25.0, 30.0, 35.0)
 #: Wind-radius thresholds (kt) reported per quadrant NE/SE/SW/NW -- the storm's actual wind footprint.
 WIND_RADII_THRESHOLDS_KT = (34.0, 50.0, 64.0)
 
+#: Climatological anchors for the heads that predict physical quantities in physical units.
+#:
+#: A linear head starts out predicting roughly zero. Asked for central pressure in hPa, that is an error
+#: of about 1000, a squared error of a million, and a gradient norm in the hundreds of thousands -- the
+#: intensity term then dwarfs every other head and the run spends its first thousands of steps learning
+#: a constant the Atlantic already told us. Anchoring the output at the observed mean and scaling by the
+#: observed spread starts the head at climatology, which is both the right prior and a loss that begins
+#: near one instead of near a million. The numbers are Atlantic tropical-cyclone values from HURDAT2.
+#:
+#: These shift the *parameterization*, never the units: the head still reports m/s and absolute hPa, so
+#: :func:`naturev1.forecast.decode_intensity` is unaffected.
+WIND_ANCHOR_MS = (33.0, 15.0)        # mean, spread of maximum sustained wind
+PRESSURE_ANCHOR_HPA = (985.0, 20.0)  # mean, spread of minimum central pressure
+PEAK_WIND_ANCHOR_KT = (65.0, 30.0)   # mean, spread of peak eyewall wind
+RMW_ANCHOR_NMI = (25.0, 15.0)        # mean, spread of radius of maximum wind
+WIND_RADII_ANCHOR_NMI = (80.0, 60.0)  # mean, spread across thresholds and quadrants
+RI_DELTA_ANCHOR_KT = (5.0, 15.0)     # mean, spread of the 24-hour wind change
+#: Typical translation speed of a tropical cyclone, in degrees per hour -- about 11 knots.
+TRACK_SPEED_DEG_PER_HOUR = 0.1
+
 #: "Will it rain or be sunny" as a calibrated categorical, not a threshold on a regression.
 WEATHER_TYPES = ("clear", "partly_cloudy", "overcast", "light_rain", "heavy_rain", "thunderstorm", "snow")
 
@@ -243,12 +263,13 @@ class EyewallHead(nn.Module):
         rmw = self.rmw(summary).view(batch, self.leads, 2)
         radii = self.wind_radii(summary).view(batch, self.leads, self.thresholds, self.quadrants, 2)
         return {
-            "eyewall_peak_wind_kt": peak[..., 0],
+            # Anchored at climatology so the head starts where the Atlantic already is; still knots.
+            "eyewall_peak_wind_kt": peak[..., 0] * PEAK_WIND_ANCHOR_KT[1] + PEAK_WIND_ANCHOR_KT[0],
             "eyewall_peak_wind_log_var": peak[..., 1].clamp(-8.0, 8.0),
             # Softplus keeps a radius positive without a hard clamp that would kill its gradient.
-            "eyewall_rmw_nmi": F.softplus(rmw[..., 0]) + 1.0,
+            "eyewall_rmw_nmi": F.softplus(rmw[..., 0] * RMW_ANCHOR_NMI[1] + RMW_ANCHOR_NMI[0]) + 1.0,
             "eyewall_rmw_log_var": rmw[..., 1].clamp(-8.0, 8.0),
-            "wind_radii_nmi": F.softplus(radii[..., 0]),
+            "wind_radii_nmi": F.softplus(radii[..., 0] * WIND_RADII_ANCHOR_NMI[1] + WIND_RADII_ANCHOR_NMI[0]),
             "wind_radii_log_var": radii[..., 1].clamp(-8.0, 8.0),
         }
 
@@ -281,7 +302,7 @@ class RapidIntensificationHead(nn.Module):
         magnitude = self.magnitude(features)
         return {
             "ri_logits": self.classifier(features),
-            "ri_delta_wind_kt": magnitude[..., 0],
+            "ri_delta_wind_kt": magnitude[..., 0] * RI_DELTA_ANCHOR_KT[1] + RI_DELTA_ANCHOR_KT[0],
             "ri_delta_log_var": magnitude[..., 1].clamp(-8.0, 8.0),
             "ri_onset_logits": self.onset(features),
         }
@@ -340,12 +361,55 @@ class NatureV1(nn.Module):
         self.ri_head = RapidIntensificationHead(config)
 
         self.apply(self._init)
+        self._anchor_uncertainty()
         self._links: dict[tuple, GridLink] = {}
 
     def _init(self, module: nn.Module) -> None:
         from ihelix.model import init_weights
 
         init_weights(module, self.config.ihelix())
+
+    def _anchor_uncertainty(self) -> None:
+        """
+        Start every log-variance at the quantity's climatological spread instead of at one.
+
+        A freshly initialised linear layer emits about zero, so a head that reports a log-variance
+        begins by claiming a standard deviation of one -- one knot of uncertainty about peak wind, one
+        hectopascal about central pressure. That is a wildly overconfident prior, and a Gaussian
+        likelihood punishes it in proportion: the eyewall term alone opened at 438 against a total loss
+        of 718, purely because the model was certain and wrong. Starting at the observed spread opens
+        the same term near 5, and the head spends its gradient learning the storm rather than learning
+        how unsure it should have been.
+
+        Only biases are touched, so the weights still decide how the prediction varies with the input.
+        """
+        pairs = (
+            (self.intensity_head, [WIND_ANCHOR_MS[1], PRESSURE_ANCHOR_HPA[1]]),
+            (self.eyewall_head.peak_wind, [PEAK_WIND_ANCHOR_KT[1]]),
+            (self.eyewall_head.rmw, [RMW_ANCHOR_NMI[1]]),
+            (self.eyewall_head.wind_radii, [WIND_RADII_ANCHOR_NMI[1]]),
+            (self.ri_head.magnitude, [RI_DELTA_ANCHOR_KT[1]]),
+        )
+        with torch.no_grad():
+            for head, spreads in pairs:
+                bias = head.bias
+                # Every one of these layers lays its outputs out as (..., mean, log-variance), so the
+                # log-variance slots are the odd indices.
+                for index, spread in enumerate(spreads):
+                    target = min(2.0 * math.log(spread), 8.0)
+                    bias[index * 2 + 1 :: 2 * len(spreads)] = target
+
+            # The track head's spread is the one that must grow with lead time. Its mean starts at zero
+            # displacement -- the right prior, the storm is where it is -- so the scale that goes with
+            # that prior is how far a storm typically travels by then, not a constant. A tropical
+            # cyclone moves on the order of 0.1 degrees an hour, so the anchor tracks the lead directly:
+            # 0.6 degrees at +6 h out to 12 degrees at +120 h. Left at one degree for every lead, the
+            # +120 h term opened at 192 against a total of 203.
+            track_bias = self.track_head.parameters_head.bias.view(
+                self.config.track_modes, self.config.num_leads, 5
+            )
+            for lead, hours in enumerate(self.config.lead_times_hours):
+                track_bias[:, lead, 2:4] = math.log(max(TRACK_SPEED_DEG_PER_HOUR * hours, 1e-2))
 
     def link(self, target: FieldGrid, source: FieldGrid, num_neighbours: int) -> GridLink:
         """Cached geometric correspondence between two point sets."""
@@ -457,6 +521,9 @@ class NatureV1(nn.Module):
 
         landfall = self.landfall_head(summary).view(batch, leads, 2)
         intensity = self.intensity_head(summary).view(batch, leads, 2, 2)
+        # Wind in m/s and pressure in absolute hPa, anchored at climatology -- see the constants above.
+        anchor_mean = torch.tensor([WIND_ANCHOR_MS[0], PRESSURE_ANCHOR_HPA[0]], device=summary.device)
+        anchor_scale = torch.tensor([WIND_ANCHOR_MS[1], PRESSURE_ANCHOR_HPA[1]], device=summary.device)
         enso = self.enso_head(summary)
 
         return {
@@ -465,7 +532,7 @@ class NatureV1(nn.Module):
             "weather_type_logits": self.weather_type_head(decoded).view(batch, points, leads, len(WEATHER_TYPES)),
             "landfall_logit": landfall[..., 0],
             "landfall_time_log_var": landfall[..., 1].clamp(-10.0, 10.0),
-            "intensity_mean": intensity[..., 0],
+            "intensity_mean": intensity[..., 0] * anchor_scale + anchor_mean,
             "intensity_log_var": intensity[..., 1].clamp(-10.0, 10.0),
             "enso_mean": enso[..., 0],
             "enso_log_var": enso[..., 1].clamp(-10.0, 10.0),

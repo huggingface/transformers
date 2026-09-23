@@ -320,6 +320,24 @@ def era5_splits(dataset, val_years: int = 4, test_years: int = 2, steps_per_year
     }
 
 
+def lead_offsets(lead_times_hours, cadence_hours: float = 6.0) -> tuple[int, ...]:
+    """
+    Turn the model's forecast lead times into store-step offsets.
+
+    Supervising pretraining only at t+6h and then asking the model for t+120h trains one lead and hopes
+    for eight. A 6-hourly store already holds every lead the model forecasts, so all of them are free:
+    the default lead times (6..120 h) become offsets (1, 2, 3, 4, 6, 8, 12, 16, 20), and a window simply
+    reaches 20 steps further ahead for its targets.
+    """
+    offsets = []
+    for hours in lead_times_hours:
+        steps = hours / cadence_hours
+        if abs(steps - round(steps)) > 1e-6:
+            raise ValueError(f"lead time {hours}h is not a whole number of {cadence_hours}h steps")
+        offsets.append(int(round(steps)))
+    return tuple(offsets)
+
+
 def _target_index(variables) -> list[int]:
     """For each model surface field, which input channel supervises it, or -1 if ERA5 lacks it."""
     inverse = {target: source for source, target in ERA5_TO_SURFACE.items()}
@@ -332,9 +350,10 @@ def _build_window(
     normalizer: Normalizer,
     target_index: list[int],
     history: int,
+    offsets: tuple[int, ...],
     channels: int | None,
     shift: int | None,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Shared item construction: normalized ``(T, lat, lon, C)`` to ``(analysis, target)``.
 
@@ -360,14 +379,18 @@ def _build_window(
         # rather than one that says something false. The slots are there for real multi-level data.
         analysis = torch.nn.functional.pad(analysis, (0, channels - analysis.shape[-1]))
 
-    target = torch.full((points, len(SURFACE_FIELDS)), float("nan"))
-    final = flat[-1]
-    final_observed = torch.from_numpy(observed[-1].reshape(points, -1))
-    for field, source in enumerate(target_index):
-        if source >= 0:
-            column = final[:, source]
-            target[:, field] = torch.where(final_observed[:, source], column, torch.full_like(column, float("nan")))
-    return analysis, target
+    # Targets at every lead time, with a mask rather than NaN: the loss multiplies by the mask, and
+    # NaN times zero is still NaN, which would poison the whole batch.
+    target = torch.zeros(points, len(offsets), len(SURFACE_FIELDS))
+    mask = torch.zeros(points, len(offsets), len(SURFACE_FIELDS))
+    flat_observed = torch.from_numpy(observed.reshape(span, points, observed.shape[-1]))
+    for lead, offset in enumerate(offsets):
+        frame = history - 1 + offset
+        for field, source in enumerate(target_index):
+            if source >= 0:
+                target[:, lead, field] = flat[frame, :, source]
+                mask[:, lead, field] = flat_observed[frame, :, source].float()
+    return analysis, target, mask
 
 
 def _roll(augment: bool, seed: int, start: int, num_longitudes: int) -> int | None:
@@ -381,13 +404,15 @@ class ERA5Window(torch.utils.data.Dataset):
     """
     Windows of consecutive ERA5 states, streamed lazily from cloud storage.
 
-    Each item is ``history`` frames of input and one target frame ``lead_steps`` later. Nothing downloads
+    Each item is ``history`` frames of input and one target frame per forecast lead. Nothing downloads
     until an item is requested, so a run streams what it needs instead of staging terabytes first.
 
     Args:
         indices: window start positions -- pass one of :func:`era5_splits`' arrays.
         history: input frames. Six at 6-hourly cadence is a day and a half of context.
-        lead_steps: how far ahead the target sits, in store cadence units.
+        lead_steps: store-step offsets of the targets. Pass the model's lead times through
+            :func:`lead_offsets` to supervise every lead it forecasts, which a 6-hourly store gives
+            for free; an int is shorthand for a single lead that many steps ahead.
         augment: roll longitude by a random whole number of cells. Exact, free, 240 distinct variants.
         channels: pad the input to this width so one config serves both training stages.
     """
@@ -397,7 +422,7 @@ class ERA5Window(torch.utils.data.Dataset):
         dataset=None,
         indices: np.ndarray | None = None,
         history: int = 6,
-        lead_steps: int = 1,
+        lead_steps: int | tuple[int, ...] = 1,
         augment: bool = True,
         channels: int | None = None,
         variables: tuple[str, ...] = DEFAULT_VARIABLES,
@@ -410,10 +435,11 @@ class ERA5Window(torch.utils.data.Dataset):
         self._pid = os.getpid()
 
         self.variables = [name for name in self._variables if name in self._dataset]
-        self.history, self.lead_steps = history, lead_steps
+        self.history = history
+        self.offsets = (lead_steps,) if isinstance(lead_steps, int) else tuple(lead_steps)
         self.augment, self.channels, self.seed = augment, channels, seed
 
-        steps, span = self._dataset.sizes["time"], history + lead_steps
+        steps, span = self._dataset.sizes["time"], history + max(self.offsets)
         indices = np.arange(steps - span) if indices is None else np.asarray(indices)
         self.indices = indices[indices <= steps - span]
 
@@ -461,12 +487,12 @@ class ERA5Window(torch.utils.data.Dataset):
 
     def __getitem__(self, item: int) -> dict:
         start = int(self.indices[item])
-        span = self.history + self.lead_steps
+        span = self.history + max(self.offsets)
         raw = read_block(self.store, self.variables, slice(start, start + span))
 
-        analysis, target = _build_window(
-            self.normalizer.prepare(raw), self.normalizer, self.target_index, self.history, self.channels,
-            _roll(self.augment, self.seed, start, self.num_longitudes),
+        analysis, target, mask = _build_window(
+            self.normalizer.prepare(raw), self.normalizer, self.target_index, self.history, self.offsets,
+            self.channels, _roll(self.augment, self.seed, start, self.num_longitudes),
         )
         stamps = (self.store.time.values[start : start + self.history]
                   .astype("datetime64[s]").astype(np.int64))
@@ -474,6 +500,7 @@ class ERA5Window(torch.utils.data.Dataset):
             "analysis": analysis,
             "calendar": calendar_features(torch.tensor(stamps, dtype=torch.float64)),
             "field_target": target,
+            "field_mask": mask,
         }
 
     def denormalise(self, values, variable: str):
@@ -481,8 +508,31 @@ class ERA5Window(torch.utils.data.Dataset):
         return self.normalizer.decode(values, variable)
 
 
+@dataclass
+class GridCollate:
+    """
+    Stack a batch and attach the grids the model reads it onto.
+
+    This is a class at module level rather than the closure it obviously wants to be, because the
+    ``spawn`` start method pickles the collate function to every worker and a local function cannot be
+    pickled. The failure is late and unhelpful (``Can't pickle local object``), so the picklable version
+    ships here instead of being rediscovered in every notebook.
+    """
+
+    analysis_grid: object
+    output_grid: object | None = None
+
+    def __call__(self, batch: list[dict]) -> dict:
+        stacked = {key: torch.stack([item[key] for item in batch]) for key in batch[0]}
+        stacked["analysis_grid"] = self.analysis_grid
+        if self.output_grid is not None:
+            stacked["output_grid"] = self.output_grid
+        return stacked
+
+
 def era5_loader(dataset: torch.utils.data.Dataset, batch_size: int = 1, num_workers: int = 4,
-                shuffle: bool = True, **kwargs) -> torch.utils.data.DataLoader:
+                shuffle: bool = True, analysis_grid=None, output_grid=None,
+                **kwargs) -> torch.utils.data.DataLoader:
     """
     A :class:`~torch.utils.data.DataLoader` configured for this data, which is not the default one.
 
@@ -498,6 +548,9 @@ def era5_loader(dataset: torch.utils.data.Dataset, batch_size: int = 1, num_work
 
     A :class:`CachedERA5` reading a local memmap has neither problem, so it keeps the faster default --
     which is one more reason to :func:`materialise` before a real run.
+
+    Pass ``analysis_grid`` (and ``output_grid`` if it differs) and the batches come out ready for
+    :meth:`naturev1.Trainer.fit`, via :class:`GridCollate`.
 
     The one thing spawn asks of you: in a *script*, the code that builds the loader must sit behind
     ``if __name__ == "__main__":``, because each worker re-imports the main module and would otherwise
@@ -517,6 +570,8 @@ def era5_loader(dataset: torch.utils.data.Dataset, batch_size: int = 1, num_work
         options["prefetch_factor"] = 4
         if streamed:
             options["multiprocessing_context"] = "spawn"
+    if analysis_grid is not None:
+        options["collate_fn"] = GridCollate(analysis_grid, output_grid)
     options.update(kwargs)
     return torch.utils.data.DataLoader(dataset, **options)
 
@@ -595,7 +650,7 @@ class CachedERA5(torch.utils.data.Dataset):
         self,
         path: str | os.PathLike,
         history: int = 6,
-        lead_steps: int = 1,
+        lead_steps: int | tuple[int, ...] = 1,
         augment: bool = True,
         channels: int | None = None,
         stats_cache: str | os.PathLike | None = None,
@@ -607,11 +662,12 @@ class CachedERA5(torch.utils.data.Dataset):
         self.variables = list(meta["variables"])
         self.values = np.load(path, mmap_mode="r")
         self.times = np.array(meta.get("time") or [], dtype=np.int64)
-        self.history, self.lead_steps = history, lead_steps
+        self.history = history
+        self.offsets = (lead_steps,) if isinstance(lead_steps, int) else tuple(lead_steps)
         self.augment, self.channels, self.seed = augment, channels, seed
         self.num_longitudes = self.values.shape[2]
 
-        span = history + lead_steps
+        span = history + max(self.offsets)
         available = np.arange(max(len(self.values) - span, 0))
         self.indices = available if indices is None else np.asarray(indices)[np.asarray(indices) < len(available)]
 
@@ -638,11 +694,11 @@ class CachedERA5(torch.utils.data.Dataset):
 
     def __getitem__(self, item: int) -> dict:
         start = int(self.indices[item])
-        span = self.history + self.lead_steps
+        span = self.history + max(self.offsets)
         prepared = np.asarray(self.values[start : start + span], np.float32)
-        analysis, target = _build_window(
-            prepared, self.normalizer, self.target_index, self.history, self.channels,
-            _roll(self.augment, self.seed, start, self.num_longitudes),
+        analysis, target, mask = _build_window(
+            prepared, self.normalizer, self.target_index, self.history, self.offsets,
+            self.channels, _roll(self.augment, self.seed, start, self.num_longitudes),
         )
         if len(self.times):
             stamps = torch.tensor(self.times[start : start + self.history], dtype=torch.float64)
@@ -654,6 +710,7 @@ class CachedERA5(torch.utils.data.Dataset):
             "analysis": analysis,
             "calendar": calendar_features(stamps),
             "field_target": target,
+            "field_mask": mask,
         }
 
     def denormalise(self, values, variable: str):

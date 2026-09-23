@@ -29,6 +29,7 @@ from naturev1.era5 import (  # noqa: E402
     equiangular_weights,
     era5_source_grid,
     era5_splits,
+    lead_offsets,
     materialise,
     read_block,
 )
@@ -183,21 +184,68 @@ def test_gaps_get_a_mask_channel_rather_than_the_mean(store):
     assert values[mask == 0.0, sea].abs().max() == 0.0
 
 
-def test_unmeasured_model_fields_stay_nan(store):
-    """ERA5 carries no relative humidity or cloud here; the target must say so, not invent one."""
+def test_unmeasured_model_fields_are_masked_out(store):
+    """
+    ERA5 carries no relative humidity or cloud here, so the mask must zero them.
+
+    The mask, not NaN: the loss multiplies target by mask, and NaN times zero is still NaN, which would
+    poison every other field in the batch along with it.
+    """
     from naturev1.model import SURFACE_FIELDS
 
     window = ERA5Window(store, indices=np.arange(2), history=1, augment=False, variables=VARIABLES)
-    target = window[0]["field_target"]
+    item = window[0]
+    target, mask = item["field_target"], item["field_mask"]
+    assert torch.isfinite(target).all(), "targets must never carry NaN"
+
     # The fixture supplies temperature, pressure and precipitation. Humidity, cloud and the wind
     # components are absent from it, and absent must read as absent.
     supplied = {"t2m", "mslp", "precip_rate"}
     for index, field in enumerate(SURFACE_FIELDS):
-        column = target[:, index]
+        observed = mask[:, :, index]
         if field in supplied:
-            assert torch.isfinite(column).all(), f"{field} is measured and must be present"
+            assert (observed == 1.0).all(), f"{field} is measured and must be unmasked"
         else:
-            assert torch.isnan(column).all(), f"{field} is not measured and must not be filled in"
+            assert (observed == 0.0).all(), f"{field} is not measured and must be masked out"
+
+
+def test_every_forecast_lead_is_supervised(store):
+    """
+    A 6-hourly store already holds every lead the model forecasts, so all of them are free.
+
+    Training on t+6h alone and then asking for t+120h trains one lead and hopes for eight.
+    """
+    from naturev1.model import SURFACE_FIELDS
+
+    offsets = lead_offsets((6, 12, 18, 24), cadence_hours=6.0)
+    assert offsets == (1, 2, 3, 4)
+
+    window = ERA5Window(store, indices=np.arange(2), history=2, lead_steps=offsets,
+                        augment=False, variables=VARIABLES)
+    item = window[0]
+    assert item["field_target"].shape[1:] == (len(offsets), len(SURFACE_FIELDS))
+    assert item["field_mask"].shape == item["field_target"].shape
+
+    # Each lead must read the frame it names, not the same frame repeated.
+    raw = read_block(store, list(VARIABLES), slice(0, window.history + max(offsets)))
+    normalized = window.normalizer.prepare(raw)
+    temperature = list(VARIABLES).index("2m_temperature")
+    for lead, offset in enumerate(offsets):
+        frame = normalized[window.history - 1 + offset, :, :, temperature].reshape(-1)
+        assert np.allclose(item["field_target"][:, lead, 0].numpy(), frame, atol=1e-6)
+
+
+def test_lead_times_must_land_on_store_steps():
+    with pytest.raises(ValueError, match="not a whole number"):
+        lead_offsets((6, 9), cadence_hours=6.0)
+
+
+def test_window_reserves_room_for_the_longest_lead(store):
+    """The span a window needs is set by its furthest target, not its nearest."""
+    offsets = (1, 2, 4)
+    window = ERA5Window(store, indices=np.arange(100), history=3, lead_steps=offsets,
+                        variables=VARIABLES)
+    assert window.indices.max() + 3 + max(offsets) <= store.sizes["time"]
 
 
 # --------------------------------------------------------------------------------------------------
@@ -281,3 +329,24 @@ def test_augmentation_is_deterministic(store):
     assert torch.equal(window[2]["analysis"], window[2]["analysis"])
     other = ERA5Window(store, indices=np.arange(4), history=1, augment=True, seed=12, variables=VARIABLES)
     assert not torch.equal(window[2]["analysis"], other[2]["analysis"])
+
+
+def test_grid_collate_is_picklable(store):
+    """
+    The spawn start method pickles the collate function to every worker, and a local function or a
+    lambda cannot be pickled -- the failure is late and reads ``Can't pickle local object``.
+    """
+    from naturev1.era5 import GridCollate, era5_loader
+
+    grid, _, _ = era5_source_grid(store)
+    collate = pickle.loads(pickle.dumps(GridCollate(grid)))
+    window = ERA5Window(store, indices=np.arange(4), history=1, variables=VARIABLES)
+    batch = collate([window[0], window[1]])
+
+    assert batch["analysis"].shape[0] == 2
+    assert batch["analysis_grid"].num_points == grid.num_points
+    assert "output_grid" not in batch, "an output grid that was not asked for must not appear"
+
+    loader = era5_loader(window, batch_size=2, num_workers=0, analysis_grid=grid, output_grid=grid)
+    assert isinstance(loader.collate_fn, GridCollate)
+    assert next(iter(loader))["output_grid"].num_points == grid.num_points
