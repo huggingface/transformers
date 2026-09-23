@@ -231,3 +231,35 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         with self.assertRaises(ValueError):
             processor()
+
+    @require_torch
+    def test_video_token_count_matches_frames(self):
+        """Ragged batch: every row expands to its own frame count.
+
+        `pixel_values_videos` is a flat frame sequence, so indexing it by video index would silently
+        yield the wrong number of placeholders instead of raising.
+        """
+        processor = self.get_processor()
+        videos = [
+            [np.random.randint(0, 256, size=(2, 56, 56, 3), dtype=np.uint8)],
+            [np.random.randint(0, 256, size=(5, 56, 56, 3), dtype=np.uint8)],
+        ]
+        text = [f"{processor.video_token} What is this video?"] * 2
+
+        out = processor(text=text, videos=videos, do_sample_frames=False, padding=True, return_tensors="pt")
+
+        video_inputs = processor.video_processor(
+            [video[0] for video in videos], do_sample_frames=False, return_tensors="pt"
+        )
+        self.assertEqual([int(n) for n in video_inputs["num_frames_per_video"]], [2, 5])
+
+        video_token_id = processor.tokenizer.convert_tokens_to_ids(processor.video_token)
+        counts = [
+            int(num_frames) * int(num_soft_tokens)
+            for num_frames, num_soft_tokens in zip(
+                video_inputs["num_frames_per_video"], video_inputs["num_soft_tokens_per_video"]
+            )
+        ]
+        self.assertNotEqual(counts[0], counts[1], "the two rows must differ for this test to be meaningful")
+        for row, expected in enumerate(counts):
+            self.assertEqual((out["input_ids"][row] == video_token_id).sum().item(), expected)

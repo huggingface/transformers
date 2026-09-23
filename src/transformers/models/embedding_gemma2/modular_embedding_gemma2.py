@@ -619,6 +619,7 @@ class EmbeddingGemma2Model(Gemma4Model):
         inputs_embeds: torch.FloatTensor | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EmbeddingGemma2ModelOutput:
         r"""
@@ -627,9 +628,12 @@ class EmbeddingGemma2Model(Gemma4Model):
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
+            Number of frames belonging to each video. Required whenever `pixel_values_videos` is passed,
+            since the frames of all videos are concatenated along a single axis.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -662,7 +666,7 @@ class EmbeddingGemma2Model(Gemma4Model):
 
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
-                pixel_values_videos, video_position_ids, return_dict=True
+                pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
             ).pooler_output
             video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
@@ -903,7 +907,8 @@ class EmbeddingGemma2Processor(Gemma4Processor):
 
         # Visual-only mode: one block per frame, no timestamps
         if not add_timestamps:
-            num_frames = video_inputs["pixel_values_videos"][video_idx].shape[0]
+            # `pixel_values_videos` is a flat frame sequence, so its leading axis indexes frames, not videos
+            num_frames = int(video_inputs["num_frames_per_video"][video_idx])
             frame_str = f"{self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
             return "".join([frame_str] * num_frames)
 

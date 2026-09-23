@@ -186,7 +186,8 @@ class EmbeddingGemma2Processor(ProcessorMixin):
 
         # Visual-only mode: one block per frame, no timestamps
         if not add_timestamps:
-            num_frames = video_inputs["pixel_values_videos"][video_idx].shape[0]
+            # `pixel_values_videos` is a flat frame sequence, so its leading axis indexes frames, not videos
+            num_frames = int(video_inputs["num_frames_per_video"][video_idx])
             frame_str = f"{self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
             return "".join([frame_str] * num_frames)
 
