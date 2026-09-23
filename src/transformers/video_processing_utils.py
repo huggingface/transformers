@@ -25,7 +25,7 @@ from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
 from .image_processing_backends import TorchvisionBackend
-from .image_processing_utils import BatchFeature
+from .image_processing_utils import BaseImageProcessor, BatchFeature
 from .image_utils import (
     ChannelDimension,
     SizeDict,
@@ -76,27 +76,9 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("vision", "torchvision"))
-class BaseVideoProcessor(TorchvisionBackend):
-    _auto_class = None
-
-    resample = None
-    image_mean = None
-    image_std = None
-    size = None
-    size_divisor = None
+class VideoProcessorMixin(BaseImageProcessor):
     default_to_square = True
-    crop_size = None
-    do_resize = None
-    do_center_crop = None
-    do_rescale = None
     rescale_factor = 1 / 255
-    do_normalize = None
-    do_convert_rgb = None
-    do_sample_frames = None
-    fps = None
-    num_frames = None
-    video_metadata = None
     return_metadata = False
     valid_kwargs = VideosKwargs
     model_input_names = ["pixel_values_videos"]
@@ -107,159 +89,17 @@ class BaseVideoProcessor(TorchvisionBackend):
     def __call__(self, videos, **kwargs) -> BatchFeature:
         return self.preprocess(videos, **kwargs)
 
-    def convert_to_rgb(
-        self,
-        video: "torch.Tensor",
-    ) -> VideoInput:
-        """
-        Converts a video to RGB format.
+    def _prepare_input_videos(self, *args, **kwargs):
+        raise NotImplementedError
 
-        Args:
-            video (`"torch.Tensor"`):
-                The video to convert.
+    def sample_frames(self, *args, **kwargs):
+        raise NotImplementedError
 
-        Returns:
-            `torch.Tensor`: The converted video.
-        """
-
-        video = tvF.grayscale_to_rgb(video)
-        if video.shape[-3] == 3 or not (video[..., 3, :, :] < 255).any():
-            return video[..., :3, :, :]
-
-        # There is a transparency layer, blend it with a white background.
-        # Calculate the alpha proportion for blending.
-        alpha = video[..., 3, :, :] / 255.0
-        video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., :3, :, :]
-        return video
-
-    def sample_frames(
-        self,
-        metadata: VideoMetadata,
-        num_frames: int | None = None,
-        fps: int | float | None = None,
-        **kwargs,
-    ):
-        """
-        Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
-        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
-        and `fps` are mutually exclusive.
-
-        Args:
-            metadata (`VideoMetadata`):
-                Metadata of the video containing information about total duration, fps and total number of frames.
-            num_frames (`int`, *optional*):
-                Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int` or `float`, *optional*):
-                Target frames to sample per second. Defaults to `self.fps`.
-
-        Returns:
-            np.ndarray:
-                Indices to sample video frames.
-        """
-        if fps is not None and num_frames is not None:
-            raise ValueError(
-                "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
-            )
-
-        num_frames = num_frames if num_frames is not None else self.num_frames
-        fps = fps if fps is not None else self.fps
-        total_num_frames = metadata.total_num_frames
-
-        # If num_frames is not given but fps is, calculate num_frames from fps
-        if num_frames is None and fps is not None:
-            if metadata is None or metadata.fps is None:
-                raise ValueError(
-                    "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
-                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
-                )
-            num_frames = int(total_num_frames / metadata.fps * fps)
-
-        if num_frames > total_num_frames:
-            raise ValueError(
-                f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
-            )
-
-        if num_frames is not None:
-            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
-        else:
-            indices = torch.arange(0, total_num_frames).int()
-        return indices
-
-    def _decode_and_sample_videos(
-        self,
-        videos: VideoInput,
-        video_metadata: VideoMetadata | dict,
-        do_sample_frames: bool | None = None,
-        sample_indices_fn: Callable | None = None,
-    ) -> list["torch.Tensor"]:
-        """
-        Decode input videos and sample frames if needed.
-        """
-        videos = make_batched_videos(videos)
-        video_metadata = make_batched_metadata(videos, video_metadata=video_metadata)
-
-        # Only sample frames if an array video is passed, otherwise first decode -> then sample
-        if is_valid_video(videos[0]) and do_sample_frames:
-            sampled_videos = []
-            sampled_metadata = []
-            for video, metadata in zip(videos, video_metadata):
-                indices = sample_indices_fn(metadata=metadata)
-                metadata.frames_indices = indices
-                sampled_videos.append(video[indices])
-                sampled_metadata.append(metadata)
-            videos = sampled_videos
-            video_metadata = sampled_metadata
-        elif not is_valid_video(videos[0]):
-            if isinstance(videos[0], list):
-                # Videos sometimes are passed as a list of image URLs, especially through templates
-                videos = [
-                    torch.stack([self.process_image(image) for image in images], dim=0)
-                    for images in self.fetch_images(videos)
-                ]
-                if do_sample_frames:
-                    raise ValueError(
-                        "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`."
-                    )
-            else:
-                videos, video_metadata = self.fetch_videos(videos, sample_indices_fn=sample_indices_fn)
-
-        return videos, video_metadata
-
-    def _prepare_input_videos(
-        self,
-        videos: VideoInput,
-        input_data_format: str | ChannelDimension | None = None,
-        device: str | None = None,
-    ) -> list["torch.Tensor"]:
-        """
-        Prepare the input videos for processing.
-        """
-        processed_videos = []
-        for video in videos:
-            # `make_batched_videos` always returns a 4D array per video
-            if isinstance(video, np.ndarray):
-                # not using tvF.to_tensor as it doesn't handle (C, H, W) numpy arrays
-                video = torch.from_numpy(video).contiguous()
-
-            # Infer the channel dimension format if not provided
-            if input_data_format is None:
-                input_data_format = infer_channel_dimension_format(video)
-
-            if input_data_format == ChannelDimension.LAST:
-                video = video.permute(0, 3, 1, 2).contiguous()
-
-            if device is not None:
-                video = video.to(device)
-
-            processed_videos.append(video)
-        return processed_videos
+    def _decode_and_sample_videos(self, *args, **kwargs):
+        raise NotImplementedError
 
     @auto_docstring
-    def preprocess(
-        self,
-        videos: VideoInput,
-        **kwargs: Unpack[VideosKwargs],
-    ) -> BatchFeature:
+    def preprocess(self, videos: VideoInput, **kwargs: Unpack[VideosKwargs]) -> BatchFeature:
         validate_kwargs(
             captured_kwargs=kwargs.keys(),
             valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
@@ -298,51 +138,6 @@ class BaseVideoProcessor(TorchvisionBackend):
         if return_metadata:
             preprocessed_videos["video_metadata"] = video_metadata
         return preprocessed_videos
-
-    def _preprocess(
-        self,
-        videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        return_tensors: str | TensorType | None = None,
-        **kwargs,
-    ) -> BatchFeature:
-        # Group videos by size for batched resizing
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
-        resized_videos_grouped = {}
-        for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
-            if do_resize:
-                stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
-            resized_videos_grouped[shape] = stacked_videos
-        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
-
-        # Group videos by size for further processing
-        # Needed in case do_resize is False, or resize returns videos with different sizes
-        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
-        processed_videos_grouped = {}
-        for shape, stacked_videos in grouped_videos.items():
-            if do_center_crop:
-                stacked_videos = self.center_crop(stacked_videos, crop_size)
-            # Fused rescale and normalize
-            stacked_videos = self.rescale_and_normalize(
-                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_videos_grouped[shape] = stacked_videos
-
-        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-
-        return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors)
 
     @classmethod
     def from_pretrained(
@@ -788,8 +583,203 @@ class BaseVideoProcessor(TorchvisionBackend):
             return load_video(video_url_or_urls, backend=backend, sample_indices_fn=sample_indices_fn)
 
 
-BaseVideoProcessor.push_to_hub = copy_func(BaseVideoProcessor.push_to_hub)
-if BaseVideoProcessor.push_to_hub.__doc__ is not None:
-    BaseVideoProcessor.push_to_hub.__doc__ = BaseVideoProcessor.push_to_hub.__doc__.format(
+@requires(backends=("vision", "torchvision"))
+class BaseVideoProcessor(VideoProcessorMixin, TorchvisionBackend):
+    def convert_to_rgb(
+        self,
+        video: "torch.Tensor",
+    ) -> VideoInput:
+        """
+        Converts a video to RGB format.
+
+        Args:
+            video (`"torch.Tensor"`):
+                The video to convert.
+
+        Returns:
+            `torch.Tensor`: The converted video.
+        """
+
+        video = tvF.grayscale_to_rgb(video)
+        if video.shape[-3] == 3 or not (video[..., 3, :, :] < 255).any():
+            return video[..., :3, :, :]
+
+        # There is a transparency layer, blend it with a white background.
+        # Calculate the alpha proportion for blending.
+        alpha = video[..., 3, :, :] / 255.0
+        video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., :3, :, :]
+        return video
+
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
+        **kwargs,
+    ):
+        """
+        Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
+        and `fps` are mutually exclusive.
+
+        Args:
+            metadata (`VideoMetadata`):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            num_frames (`int`, *optional*):
+                Maximum number of frames to sample. Defaults to `self.num_frames`.
+            fps (`int` or `float`, *optional*):
+                Target frames to sample per second. Defaults to `self.fps`.
+
+        Returns:
+            np.ndarray:
+                Indices to sample video frames.
+        """
+        if fps is not None and num_frames is not None:
+            raise ValueError(
+                "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
+            )
+
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        fps = fps if fps is not None else self.fps
+        total_num_frames = metadata.total_num_frames
+
+        # If num_frames is not given but fps is, calculate num_frames from fps
+        if num_frames is None and fps is not None:
+            if metadata is None or metadata.fps is None:
+                raise ValueError(
+                    "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
+                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
+                )
+            num_frames = int(total_num_frames / metadata.fps * fps)
+
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
+            )
+
+        if num_frames is not None:
+            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
+        else:
+            indices = torch.arange(0, total_num_frames).int()
+        return indices
+
+    def _decode_and_sample_videos(
+        self,
+        videos: VideoInput,
+        video_metadata: VideoMetadata | dict,
+        do_sample_frames: bool | None = None,
+        sample_indices_fn: Callable | None = None,
+    ) -> list["torch.Tensor"]:
+        """
+        Decode input videos and sample frames if needed.
+        """
+        videos = make_batched_videos(videos)
+        video_metadata = make_batched_metadata(videos, video_metadata=video_metadata)
+
+        # Only sample frames if an array video is passed, otherwise first decode -> then sample
+        if is_valid_video(videos[0]) and do_sample_frames:
+            sampled_videos = []
+            sampled_metadata = []
+            for video, metadata in zip(videos, video_metadata):
+                indices = sample_indices_fn(metadata=metadata)
+                metadata.frames_indices = indices
+                sampled_videos.append(video[indices])
+                sampled_metadata.append(metadata)
+            videos = sampled_videos
+            video_metadata = sampled_metadata
+        elif not is_valid_video(videos[0]):
+            if isinstance(videos[0], list):
+                # Videos sometimes are passed as a list of image URLs, especially through templates
+                videos = [
+                    torch.stack([self.process_image(image) for image in images], dim=0)
+                    for images in self.fetch_images(videos)
+                ]
+                if do_sample_frames:
+                    raise ValueError(
+                        "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`."
+                    )
+            else:
+                videos, video_metadata = self.fetch_videos(videos, sample_indices_fn=sample_indices_fn)
+
+        return videos, video_metadata
+
+    def _prepare_input_videos(
+        self,
+        videos: VideoInput,
+        input_data_format: str | ChannelDimension | None = None,
+        device: str | None = None,
+    ) -> list["torch.Tensor"]:
+        """
+        Prepare the input videos for processing.
+        """
+        processed_videos = []
+        for video in videos:
+            # `make_batched_videos` always returns a 4D array per video
+            if isinstance(video, np.ndarray):
+                # not using tvF.to_tensor as it doesn't handle (C, H, W) numpy arrays
+                video = torch.from_numpy(video).contiguous()
+
+            # Infer the channel dimension format if not provided
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(video)
+
+            if input_data_format == ChannelDimension.LAST:
+                video = video.permute(0, 3, 1, 2).contiguous()
+
+            if device is not None:
+                video = video.to(device)
+
+            processed_videos.append(video)
+        return processed_videos
+
+    def _preprocess(
+        self,
+        videos: list["torch.Tensor"],
+        do_convert_rgb: bool,
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        # Group videos by size for batched resizing
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        resized_videos_grouped = {}
+        for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
+            if do_resize:
+                stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
+            resized_videos_grouped[shape] = stacked_videos
+        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+
+        # Group videos by size for further processing
+        # Needed in case do_resize is False, or resize returns videos with different sizes
+        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
+        processed_videos_grouped = {}
+        for shape, stacked_videos in grouped_videos.items():
+            if do_center_crop:
+                stacked_videos = self.center_crop(stacked_videos, crop_size)
+            # Fused rescale and normalize
+            stacked_videos = self.rescale_and_normalize(
+                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_videos_grouped[shape] = stacked_videos
+
+        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
+
+        return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors)
+
+
+VideoProcessorMixin.push_to_hub = copy_func(VideoProcessorMixin.push_to_hub)
+if VideoProcessorMixin.push_to_hub.__doc__ is not None:
+    VideoProcessorMixin.push_to_hub.__doc__ = VideoProcessorMixin.push_to_hub.__doc__.format(
         object="video processor", object_class="AutoVideoProcessor", object_files="video processor file"
     )

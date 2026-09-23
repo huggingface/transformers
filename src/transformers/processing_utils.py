@@ -135,7 +135,7 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
     "feature_extractor": "FeatureExtractionMixin",
     "image_processor": "ImageProcessingMixin",
-    "video_processor": "BaseVideoProcessor",
+    "video_processor": "VideoProcessorMixin",
 }
 
 
