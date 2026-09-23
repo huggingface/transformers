@@ -525,10 +525,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_features = mm_encoder_outputs["video"].pooler_output
-            image_newline = (
-                self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
-            )
-            video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1).to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
@@ -601,7 +597,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         video_features = self.apply_pooling(video_features)
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
-        vision_outputs.pooler_output = video_features
+        image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
+        vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
 
         return vision_outputs
 
@@ -707,10 +704,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             Aspect ratio used when processing image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

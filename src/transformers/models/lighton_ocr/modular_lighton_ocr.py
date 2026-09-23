@@ -119,6 +119,9 @@ class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "images_kwargs": {
+            "do_pad": True,
+        },
         "common_kwargs": {
             "return_tensors": "pt",
         },

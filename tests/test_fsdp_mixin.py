@@ -184,7 +184,7 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
         status = "FAIL" if any_failed else "PASS"
         output_stream = sys.stderr if any_failed else sys.stdout
         print(f"[FSDP] {status} test: {test_name} ({elapsed:.1f}s)", file=output_stream, flush=True)
-        with open(results_file, "w") as f:
+        with open(results_file, "w", encoding="utf-8") as f:
             json.dump({"error": error or ("Failed on another rank" if any_failed else None)}, f)
 
     backend_empty_cache(_get_distributed_device_type())
@@ -673,7 +673,7 @@ class FSDPTesterMixin(ABC):
                 nprocs=world_size,
             )
 
-            with open(results_file) as f:
+            with open(results_file, encoding="utf-8") as f:
                 result = json.load(f)
         finally:
             if os.path.exists(results_file):

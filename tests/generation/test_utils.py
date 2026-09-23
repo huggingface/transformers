@@ -78,6 +78,8 @@ if is_torch_available():
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
+        LlamaConfig,
+        LlamaForCausalLM,
         SpeechEncoderDecoderModel,
     )
     from transformers.cache_utils import (
@@ -1671,8 +1673,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # MoE routing accumulates FP noise across experts (different routing decisions
                     # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
-                else:
+                elif dtype == torch.float32:
                     atol = rtol = 1e-5
+                else:
+                    atol = rtol = 5e-5
                 assert_similar_generate_outputs(
                     dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
                 )
@@ -2966,17 +2970,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
         head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
-        # Check for MLA and DSA attributes: MLA models cache compressed latents, DSA does not yet
+        # Check for MLA and DSA attributes: Those models cache compressed latents
         kv_lora_rank = getattr(config, "kv_lora_rank", None)
         qk_rope_head_dim = getattr(config, "qk_rope_head_dim", None)
         uses_mla = kv_lora_rank is not None and qk_rope_head_dim is not None
-        uses_dsa = uses_mla and getattr(config, "index_topk", None) is not None
-
-        # DSA models expand the latents before caching, so their keys and values have distinct head dims.
-        if uses_dsa:
-            key_shape = (batch_size, num_attention_heads, seq_length, config.qk_nope_head_dim + qk_rope_head_dim)
-            value_shape = (batch_size, num_attention_heads, seq_length, config.v_head_dim)
-            return key_shape, value_shape
 
         # For MLA models, return the shape of "kv_nope" as key and "k_rot" as value
         if uses_mla:
@@ -3085,13 +3082,11 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ]
             ]
         )
-        last_assistant_token_is_eos = False
         validated_tokens, n_matches = _speculative_sampling(
             candidate_input_ids,
             candidate_logits,
             candidate_length,
             new_logits,
-            last_assistant_token_is_eos,
         )
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
@@ -3128,7 +3123,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ]
             ]
         )
-        last_assistant_token_is_eos = False
         last_validated_token = []
         for _ in range(10_000):
             validated_tokens, n_matches = _speculative_sampling(
@@ -3136,7 +3130,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                last_assistant_token_is_eos,
             )
             self.assertTrue(n_matches.item() == 2)
             self.assertTrue(validated_tokens.tolist()[0][0] == 1)
@@ -3177,7 +3170,6 @@ class UtilsFunctionsTest(unittest.TestCase):
             candidate_logits,
             candidate_length,
             new_logits,
-            False,
             assistant_ensemble_weight=None,
         )
         # Matches the parent test exactly (i.e. backward compatible with w=None)
@@ -3209,7 +3201,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                False,
                 assistant_ensemble_weight=None,
             )
         with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
@@ -3218,7 +3209,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_logits,
                 candidate_length,
                 new_logits,
-                False,
                 assistant_ensemble_weight=0.7,
             )
 
@@ -3251,7 +3241,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    False,
                     assistant_ensemble_weight=0.7,
                 )
 
@@ -3288,7 +3277,6 @@ class UtilsFunctionsTest(unittest.TestCase):
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    False,
                     assistant_ensemble_weight=0.5,
                 )
 
@@ -4064,6 +4052,61 @@ class GenerationIntegrationTests(unittest.TestCase):
             max_new_tokens=7,
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
+
+    def test_assisted_decoding_sliding_window_multi_token_draft(self):
+        """
+        Test that assisted decoding works correctly when the assistant model has sliding window and will draft several
+        tokens at once. Indeed, the assistant always activates past recording on its Cache, and it calls `generate` which
+        performs several calls to `forward` in a row without calling `crop` in-between, so the DynamicSlidingWindowLayer cache
+        must correctly handle returning the necessary tokens, even with past recording activated.
+        """
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=4,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            max_position_embeddings=512,
+            sliding_window=6,
+        )
+        set_seed(1)
+        model = LlamaForCausalLM(config).eval()
+        # Make sure we call several forwards in a row without crop in-between with the assistant
+        model.generation_config.num_assistant_tokens = 3
+
+        # Do it once with a prefill shorter than the sliding window
+        input_ids = torch.randint(1, 60, (1, 2))
+        attention_mask = torch.ones_like(input_ids)
+        reference = model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, do_sample=False, max_new_tokens=8
+        )
+        assisted = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            max_new_tokens=8,
+            assistant_model=model,
+        )
+        # It must not crash above, and be the same here
+        self.assertTrue(torch.equal(reference, assisted))
+
+        # And again with a prefill longer than sliding window
+        input_ids = torch.randint(1, 60, (1, 12))
+        attention_mask = torch.ones_like(input_ids)
+        reference = model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, do_sample=False, max_new_tokens=8
+        )
+        assisted = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            max_new_tokens=8,
+            assistant_model=model,
+        )
+        # It must not crash above, and be the same here
+        self.assertTrue(torch.equal(reference, assisted))
 
     def test_mtp_mask_creation_uses_per_layer_config(self):
         config = AutoConfig.for_model(
@@ -5348,9 +5391,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             custom_generate_dir = Path(tmp_dir) / "custom_generate"
             custom_generate_dir.mkdir()
-            with open(custom_generate_dir / "generate.py", "w") as f:
+            with open(custom_generate_dir / "generate.py", "w", encoding="utf-8") as f:
                 f.write("from .helper import ret_success\ndef generate(*args, **kwargs):\n    return ret_success()\n")
-            with open(custom_generate_dir / "helper.py", "w") as f:
+            with open(custom_generate_dir / "helper.py", "w", encoding="utf-8") as f:
                 f.write('def ret_success():\n    return "success"\n')
             model = AutoModelForCausalLM.from_pretrained(
                 "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
@@ -5376,7 +5419,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             custom_generate_dir = Path(tmp_dir) / "custom_generate"
             custom_generate_dir.mkdir()
-            with open(custom_generate_dir / "generate.py", "w") as f:
+            with open(custom_generate_dir / "generate.py", "w", encoding="utf-8") as f:
                 f.write("def generate(*args, **kwargs):\n    return 'should_not_run'\n")
             with self.assertRaises(ValueError):
                 model.generate(

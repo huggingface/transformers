@@ -50,11 +50,12 @@ env:
   CI_CPU_MEMORY_LIMIT_GB: 60
 
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   setup_check_new_failures:
+    permissions: {}
     name: "Setup matrix for finding commits"
     runs-on: ubuntu-22.04
     outputs:
@@ -120,6 +121,8 @@ jobs:
 
 
   check_new_failures:
+    permissions:
+      contents: read
     name: "Find commits for new failing tests"
     needs: setup_check_new_failures
     if: needs.setup_check_new_failures.outputs.process == 'true'
@@ -263,6 +266,8 @@ jobs:
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
 
   process_new_failures_with_commit_info:
+    permissions:
+      contents: read
     name: "process bad commit reports"
     needs: check_new_failures
     if: needs.check_new_failures.outputs.process == 'true'
