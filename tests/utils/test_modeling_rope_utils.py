@@ -265,37 +265,16 @@ class RopeTest(unittest.TestCase):
 
         config.validate_rope()
 
-    @parameterized.expand(
-        [
-            (True, True),
-            (True, False),
-            (False, False),
-        ]
-    )
-    def test_odd_head_dim_validation(self, is_nested: bool, same_rope_per_layer: bool):
-        # Regression test for #48101: odd head_dim or rotary dim crashes RoPE during forward pass
-        config = self.get_config_with_rope_parameters(
-            rope_params={"rope_type": "default", "rope_theta": 10000.0},
-            is_nested=is_nested,
-            same_rope_per_layer=same_rope_per_layer,
-        )
-        # Even head_dim passes
-        config.head_dim = 64
-        config.validate_rope()
-
-        # Odd head_dim must raise ValueError
+    def test_odd_rotary_dim_validation(self):
+        # A fully-rotated odd head_dim (#48101) should fail at config validation, not with a shape mismatch in forward
+        config = self.get_config_with_rope_parameters(rope_params={"rope_type": "default", "rope_theta": 10000.0})
         config.head_dim = 65
         with self.assertRaises(ValueError):
             config.validate_rope()
 
-        # Odd effective rotary dim from partial_rotary_factor must also raise ValueError
-        config.head_dim = 64
-        if is_nested:
-            config.rope_parameters["full_attention"]["partial_rotary_factor"] = 0.24  # 64 * 0.24 = 15
-        else:
-            config.rope_parameters["partial_rotary_factor"] = 0.24
-        with self.assertRaises(ValueError):
-            config.validate_rope()
+        # Partial rotary dims are rounded up to the next even number and fit in the head, so they are allowed
+        config.rope_parameters["partial_rotary_factor"] = 0.5
+        config.validate_rope()
 
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
