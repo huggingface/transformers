@@ -127,7 +127,7 @@ class LagunaRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -154,6 +154,7 @@ class LagunaMLP(nn.Module):
         return down_proj
 
 
+@use_kernel_forward_from_hub("SoftmaxTopKRouter")
 class LagunaTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()

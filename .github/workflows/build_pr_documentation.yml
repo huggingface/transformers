@@ -12,7 +12,36 @@ permissions:
   contents: read
 
 jobs:
+  check_links:
+    permissions:
+      contents: read
+    name: Check documentation links
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install doc-builder
+        run: |
+          uv pip install --system git+https://github.com/huggingface/doc-builder.git@main
+
+      - name: Check documentation links
+        run: |
+          uv run doc-builder check-links docs/source/en
+
   build:
+    needs: check_links
     if: github.event_name == 'pull_request'
     uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@e60a538eea9817ab312196d0d233604b01697265  # main (light installs, no custom container)
     with:
@@ -23,18 +52,21 @@ jobs:
 
   # Satisfy required check in merge queue without actually building docs
   skip_merge_queue:
+    permissions: {}
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - run: echo "Skipping doc build in merge queue"
 
   doc_build_status_check:
-    needs: [build, skip_merge_queue]
+    permissions: {}
+    needs: [build, check_links, skip_merge_queue]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - run: |
           if [[ "${{ needs.build.result }}" == "success" || "${{ needs.build.result }}" == "skipped" ]] && \
+             [[ "${{ needs.check_links.result }}" == "success" || "${{ needs.check_links.result }}" == "skipped" ]] && \
              [[ "${{ needs.skip_merge_queue.result }}" == "success" || "${{ needs.skip_merge_queue.result }}" == "skipped" ]]; then
             echo "OK"
           else

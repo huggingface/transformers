@@ -128,6 +128,7 @@ from .utils import (
     is_onnxruntime_available,
     is_onnxscript_available,
     is_openai_available,
+    is_openvino_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -640,6 +641,10 @@ def require_onnxruntime(test_case):
 
 def require_executorch(test_case):
     return unittest.skipUnless(is_executorch_available(), "test requires ExecuTorch")(test_case)
+
+
+def require_openvino(test_case):
+    return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
 
 
 def require_timm(test_case):
@@ -1222,7 +1227,7 @@ def get_cgroup_memory_limit_bytes() -> int | None:
     )
     for path, unlimited_marker in candidates:
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 raw = f.read().strip()
         except OSError:
             continue
@@ -1986,6 +1991,7 @@ def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
     target_names = (
         "LayerNorm",
+        "LayerNorm1P",
         "GroupNorm",
         "BatchNorm",
         "RMSNorm",
@@ -2650,7 +2656,7 @@ def pytest_terminal_summary_main(tr, id):
                 dlist.append(rep)
     if dlist:
         dlist.sort(key=lambda x: x.duration, reverse=True)
-        with open(report_files["durations"], "w") as f:
+        with open(report_files["durations"], "w", encoding="utf-8") as f:
             durations_min = 0.05  # sec
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
@@ -2680,25 +2686,25 @@ def pytest_terminal_summary_main(tr, id):
 
     # report failures with line/short/long styles
     config.option.tbstyle = "auto"  # full tb
-    with open(report_files["failures_long"], "w") as f:
+    with open(report_files["failures_long"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
     # config.option.tbstyle = "short" # short tb
-    with open(report_files["failures_short"], "w") as f:
+    with open(report_files["failures_short"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         summary_failures_short(tr)
 
     config.option.tbstyle = "line"  # one line per error
-    with open(report_files["failures_line"], "w") as f:
+    with open(report_files["failures_line"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
-    with open(report_files["errors"], "w") as f:
+    with open(report_files["errors"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_errors()
 
-    with open(report_files["warnings"], "w") as f:
+    with open(report_files["warnings"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_warnings()  # normal warnings
         tr.summary_warnings()  # final warnings
@@ -2712,11 +2718,11 @@ def pytest_terminal_summary_main(tr, id):
     #     tr._tw = create_terminal_writer(config, f)
     #     tr.summary_passes()
 
-    with open(report_files["summary_short"], "w") as f:
+    with open(report_files["summary_short"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.short_test_summary()
 
-    with open(report_files["stats"], "w") as f:
+    with open(report_files["stats"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_stats()
 
@@ -2863,7 +2869,7 @@ def nested_simplify(obj, decimals=3):
 
 
 def check_json_file_has_correct_format(file_path):
-    with open(file_path) as f:
+    with open(file_path, encoding="utf-8") as f:
         lines = f.readlines()
         if len(lines) == 1:
             # length can only be 1 if dict is empty
@@ -3885,13 +3891,13 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(actual_test_file) as fp:
+    with open(actual_test_file, encoding="utf-8") as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
 
     # Get the code context in the caller (to the patched function/method).
-    with open(caller_path) as fp:
+    with open(caller_path, encoding="utf-8") as fp:
         s = fp.read()
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
@@ -3981,7 +3987,7 @@ def _prepare_debugging_info(test_info, info):
     info = f"{test_info}\n\n{info}"
     p = os.path.join(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""), "captured_info.txt")
     # TODO (ydshieh): This is not safe when we use pytest-xdist with more than 1 worker.
-    with open(p, "a") as fp:
+    with open(p, "a", encoding="utf-8") as fp:
         fp.write(f"{info}\n\n{'=' * 120}\n\n")
 
     return info
@@ -4180,12 +4186,9 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
         # (This part is very unlikely what a user would be interest to know)
         call_argument_expressions["positional_args"] = ["self"] + call_argument_expressions["positional_args"]
 
-    # The expressions are parsed from the *source line of the call site*, so they only describe this
-    # call if the counts line up. They do not when a patched method is reached by delegation from
-    # another one: `assertListEqual(a, b)` calls `assertSequenceEqual(a, b, msg, seq_type=list)`, so
-    # `args` gains entries the caller's source line never mentioned. Indexing anyway raised
-    # `IndexError` and took the test down with it; indexing "safely" would be worse, silently
-    # attributing the wrong expression to a value. Report nothing instead.
+    # Source expressions only match direct calls. Delegation can add args (e.g. assertListEqual ->
+    # assertSequenceEqual), so counts may differ; indexing would misattribute expressions or crash.
+    # Report nothing instead.
     if len(args) != len(call_argument_expressions["positional_args"]):
         return ""
 
@@ -4250,7 +4253,7 @@ def patch_testing_methods_to_collect_info():
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: dict | None = None):
     """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+    with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w+", suffix=".py") as tmp:
         tmp.write(script)
         tmp.flush()
         tmp.seek(0)
@@ -4604,12 +4607,12 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
 
 
 def write_file(file, content):
-    with open(file, "w") as f:
+    with open(file, "w", encoding="utf-8") as f:
         f.write(content)
 
 
 def read_json_file(file):
-    with open(file, "r") as fh:
+    with open(file, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -4845,7 +4848,7 @@ def convert_all_safetensors_to_bins(folder: str):
         # Adapt the index as well
         elif file == SAFE_WEIGHTS_INDEX_NAME:
             new_path = os.path.join(folder, WEIGHTS_INDEX_NAME)
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 index = json.loads(f.read())
             os.remove(path)
             if "weight_map" in index.keys():
@@ -4854,7 +4857,7 @@ def convert_all_safetensors_to_bins(folder: str):
                 for k, v in weight_map.items():
                     new_weight_map[k] = v.replace(".safetensors", ".bin").replace("model", "pytorch_model")
             index["weight_map"] = new_weight_map
-            with open(new_path, "w") as f:
+            with open(new_path, "w", encoding="utf-8") as f:
                 f.write(json.dumps(index, indent=4))
 
 

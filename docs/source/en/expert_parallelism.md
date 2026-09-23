@@ -81,4 +81,6 @@ The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The w
 > [!WARNING]
 > Resuming from a checkpoint is not supported yet for models sharded at load time, so the [`Trainer`] only accepts `save_only_model=True` or `save_strategy="no"` for them.
 
+## API reference
+
 [[autodoc]] DistributedConfig
