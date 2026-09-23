@@ -43,6 +43,7 @@ if is_torch_available():
         Nemotron3DiarizationConfig,
         Nemotron3DiarizationForAudioFrameClassification,
         Nemotron3DiarizationHeadConfig,
+        Nemotron3DiarizationModel,
         Nemotron3DiarizationStreamingConfig,
     )
 
@@ -147,10 +148,10 @@ class Nemotron3DiarizationModelTester:
 
 @require_torch
 class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Nemotron3DiarizationForAudioFrameClassification,) if is_torch_available() else ()
+    all_model_classes = (
+        (Nemotron3DiarizationModel, Nemotron3DiarizationForAudioFrameClassification) if is_torch_available() else ()
+    )
     test_resize_embeddings = False
-    # the base model saves its `audio_config`, from which the head's `Nemotron3DiarizationConfig` cannot be rebuilt
-    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = Nemotron3DiarizationModelTester(self)
@@ -159,8 +160,16 @@ class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Nemotron3Diarization does not use inputs_embeds")
+    @unittest.skip(reason="Nemotron3Diarization has no input embedding layer")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="`inputs_embeds` are stacked spectrogram frames, there are no `input_ids` to embed")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="`inputs_embeds` are stacked spectrogram frames, there are no `input_ids` to embed")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     def test_modes(self):

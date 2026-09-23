@@ -373,7 +373,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
         ("nemotron3_5_asr", "Nemotron3_5AsrForRNNT"),
-        ("nemotron3_diarization", "Nemotron3DiarizationForAudioFrameClassification"),
+        ("nemotron3_diarization", "Nemotron3DiarizationModel"),
         ("nemotron3_diarization_audio", "Nemotron3DiarizationAudioModel"),
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),

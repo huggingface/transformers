@@ -37,18 +37,18 @@ from transformers.models.nemotron3_diarization.processing_nemotron3_diarization 
 
 # NeMo key regex -> HF key. The fused `attn.w_qkv` projection is split by `split_fused_qkv`.
 STATE_DICT_MAPPING = {
-    r"^encoder\.pre_encode\.proj\.": "model.feature_stacking.projection.",
-    r"^encoder\.embed_norm\.": "model.input_layer_norm.",
-    r"^encoder\.final_norm\.": "model.layer_norm.",
-    r"^encoder\.layers\.(\d+)\.norm1\.": r"model.layers.\1.layer_norm1.",
-    r"^encoder\.layers\.(\d+)\.norm2\.": r"model.layers.\1.layer_norm2.",
-    r"^encoder\.layers\.(\d+)\.attn\.out_proj\.": r"model.layers.\1.self_attn.o_proj.",
-    r"^encoder\.layers\.(\d+)\.ffn\.net\.0\.": r"model.layers.\1.mlp.fc1.",
-    r"^encoder\.layers\.(\d+)\.ffn\.net\.3\.": r"model.layers.\1.mlp.fc2.",
-    r"^sortformer_modules\.encoder_proj\.": "head.proj.",
-    r"^sortformer_modules\.subpixel_upsample\.": "head.upsampler.conv.",
-    r"^sortformer_modules\.first_hidden_to_hidden\.": "head.classifier.dense.",
-    r"^sortformer_modules\.single_hidden_to_spks\.": "head.classifier.out_proj.",
+    r"^encoder\.pre_encode\.proj\.": "model.audio_tower.embedder.projection.",
+    r"^encoder\.embed_norm\.": "model.audio_tower.input_layer_norm.",
+    r"^encoder\.final_norm\.": "model.audio_tower.layer_norm.",
+    r"^encoder\.layers\.(\d+)\.norm1\.": r"model.audio_tower.layers.\1.layer_norm1.",
+    r"^encoder\.layers\.(\d+)\.norm2\.": r"model.audio_tower.layers.\1.layer_norm2.",
+    r"^encoder\.layers\.(\d+)\.attn\.out_proj\.": r"model.audio_tower.layers.\1.self_attn.o_proj.",
+    r"^encoder\.layers\.(\d+)\.ffn\.net\.0\.": r"model.audio_tower.layers.\1.mlp.fc1.",
+    r"^encoder\.layers\.(\d+)\.ffn\.net\.3\.": r"model.audio_tower.layers.\1.mlp.fc2.",
+    r"^sortformer_modules\.encoder_proj\.": "model.proj.",
+    r"^sortformer_modules\.subpixel_upsample\.": "model.upsampler.conv.",
+    r"^sortformer_modules\.first_hidden_to_hidden\.": "classifier.dense.",
+    r"^sortformer_modules\.single_hidden_to_spks\.": "classifier.out_proj.",
     r"^sortformer_modules\.learnable_sil_emb$": "silence_embeds",
 }
 
@@ -74,7 +74,7 @@ def split_fused_qkv(state_dict: dict) -> dict:
             converted[key] = value
             continue
         query, key_weight, value_weight = value.chunk(3, dim=0)
-        prefix = f"model.layers.{match.group(1)}.self_attn."
+        prefix = f"model.audio_tower.layers.{match.group(1)}.self_attn."
         converted[prefix + "q_proj.weight"] = query
         converted[prefix + "k_proj.weight"] = key_weight
         converted[prefix + "v_proj.weight"] = value_weight
@@ -87,7 +87,7 @@ def convert_state_dict(state_dict: dict) -> dict:
     for key, value in state_dict.items():
         if any(re.match(pattern, key) for pattern in KEYS_TO_DROP):
             continue
-        if key.startswith("model.layers.") and ".self_attn." in key:
+        if key.startswith("model.audio_tower.layers.") and ".self_attn." in key:
             converted[key] = value
             continue
         new_key = None

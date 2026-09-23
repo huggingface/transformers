@@ -639,17 +639,44 @@ class Nemotron3DiarizationClassificationHead(nn.Module):
         return self.out_proj(self.act_fn(hidden_states))
 
 
-class Nemotron3DiarizationSpeakerHead(nn.Module):
-    """Turns encoder frames into per-speaker activity logits at the spectrogram frame rate."""
+@auto_docstring(
+    custom_intro="""
+    The Nemotron3Diarization model without the speaker classifier: encodes one chunk (with its cached frames) and
+    upsamples the encoder frames back to the spectrogram frame rate. It holds no streaming state, see
+    [`Nemotron3DiarizationForAudioFrameClassification`] for the chunked forward.
+    """
+)
+class Nemotron3DiarizationModel(Nemotron3DiarizationPreTrainedModel):
+    def __init__(self, config: Nemotron3DiarizationConfig):
+        super().__init__(config)
+        self.audio_tower = Nemotron3DiarizationAudioModel(config.audio_config)
+        self.proj = nn.Linear(config.head_config.audio_hidden_size, config.head_config.hidden_size)
+        self.upsampler = Nemotron3DiarizationSubpixelUpsampler(config.head_config)
+        self.post_init()
 
-    def __init__(self, config: Nemotron3DiarizationHeadConfig):
-        super().__init__()
-        self.proj = nn.Linear(config.audio_hidden_size, config.hidden_size)
-        self.upsampler = Nemotron3DiarizationSubpixelUpsampler(config)
-        self.classifier = Nemotron3DiarizationClassificationHead(config)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.classifier(self.upsampler(self.proj(hidden_states)))
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_features: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        audio_outputs: BaseModelOutput = self.audio_tower(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            **kwargs,
+        )
+        hidden_states = self.upsampler(self.proj(audio_outputs.last_hidden_state))
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=audio_outputs.hidden_states,
+            attentions=audio_outputs.attentions,
+        )
 
 
 @auto_docstring(
@@ -664,8 +691,8 @@ class Nemotron3DiarizationSpeakerHead(nn.Module):
 class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTrainedModel):
     def __init__(self, config: Nemotron3DiarizationConfig):
         super().__init__(config)
-        self.model = Nemotron3DiarizationAudioModel(config.audio_config)
-        self.head = Nemotron3DiarizationSpeakerHead(config.head_config)
+        self.model = Nemotron3DiarizationModel(config)
+        self.classifier = Nemotron3DiarizationClassificationHead(config.head_config)
         self.silence_embeds = nn.Parameter(torch.zeros(config.audio_config.hidden_size))
         self.post_init()
 
@@ -728,7 +755,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
             num_lookahead_frames = 0
 
         batch_size, num_frames, _ = input_features.shape
-        inputs_embeds = self.model.embedder(input_features)
+        inputs_embeds = self.model.audio_tower.embedder(input_features)
         num_embeds = inputs_embeds.shape[1]
         subsampling_factor = self.config.audio_config.subsampling_factor
 
@@ -767,15 +794,15 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
 
             # positions restart at every chunk
             position_ids = torch.arange(chunk_input_embeds.shape[1], device=chunk_input_embeds.device)[None, :]
-            encoder_outputs: BaseModelOutput = self.model(
+            outputs: BaseModelOutput = self.model(
                 inputs_embeds=chunk_input_embeds,
                 attention_mask=step_mask,
                 position_ids=position_ids,
                 **kwargs,
             )
-            all_hidden_states += encoder_outputs.hidden_states or ()
-            all_attentions += encoder_outputs.attentions or ()
-            chunk_logits = self.head(encoder_outputs.last_hidden_state)
+            all_hidden_states += outputs.hidden_states or ()
+            all_attentions += outputs.attentions or ()
+            chunk_logits = self.classifier(outputs.last_hidden_state)
             speaker_cache.update(
                 chunk_input_embeds, chunk_logits, self.silence_embeds, num_chunk_frames, mask=step_mask
             )
@@ -798,6 +825,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
 __all__ = [
     "Nemotron3DiarizationAudioModel",
     "Nemotron3DiarizationForAudioFrameClassification",
+    "Nemotron3DiarizationModel",
     "Nemotron3DiarizationOutput",
     "Nemotron3DiarizationPreTrainedModel",
     "Nemotron3DiarizationSpeakerCache",

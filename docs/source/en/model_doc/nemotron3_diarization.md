@@ -216,10 +216,15 @@ The streaming loop above then compiles once. The offline forward chunks the same
 [[autodoc]] Nemotron3DiarizationAudioModel
     - forward
 
+## Nemotron3DiarizationModel
+
+[[autodoc]] Nemotron3DiarizationModel
+    - forward
+
 ## Nemotron3DiarizationProcessor
 
 [[autodoc]] Nemotron3DiarizationProcessor
-    - **call**
+    - __call__
 
 ## Nemotron3DiarizationSpeakerCache
 
