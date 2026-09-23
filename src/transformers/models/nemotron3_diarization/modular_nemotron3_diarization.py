@@ -712,9 +712,8 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         >>> from transformers.audio_utils import load_audio
 
         >>> model_id = "nvidia/Nemotron-3-Diarization"
-        >>> revision = "refs/pr/1"
-        >>> processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-        >>> model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto", revision=revision)
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto")
 
         >>> sampling_rate = processor.feature_extractor.sampling_rate
         >>> audio = load_audio(

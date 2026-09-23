@@ -38,9 +38,8 @@ from transformers import AutoModelForAudioFrameClassification, AutoProcessor
 from transformers.audio_utils import load_audio
 
 model_id = "nvidia/Nemotron-3-Diarization"
-revision = "refs/pr/1"
-processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto", revision=revision)
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto")
 
 sampling_rate = processor.feature_extractor.sampling_rate
 audio = load_audio(
@@ -80,9 +79,8 @@ from transformers import AutoModelForAudioFrameClassification, AutoProcessor
 from transformers.audio_utils import load_audio
 
 model_id = "nvidia/Nemotron-3-Diarization"
-revision = "refs/pr/1"
-processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto", revision=revision)
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto")
 processor.set_streaming_mode("low_latency")  # the default, can also be "very_low_latency" and "ultra_low_latency"
 print(f"Streaming latency: {processor.streaming_latency_ms} ms")
 
