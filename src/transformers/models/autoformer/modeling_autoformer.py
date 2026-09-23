@@ -848,11 +848,17 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-        )
+        # Autoformer relies on autocorrelation rather than token-to-token attention, so the last
+        # dimension of its attention weights is the channel dimension and not the key length. A
+        # synthesized "everything is visible" mask is therefore both useless and shape-incompatible.
+        # Only build a mask when the caller actually asked for one: `create_bidirectional_mask`
+        # materializes such a mask while tracing, even though it is skipped in eager mode.
+        if attention_mask is not None:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         for idx, encoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
