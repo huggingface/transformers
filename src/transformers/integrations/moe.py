@@ -404,8 +404,15 @@ def grouped_mm_experts_forward(
     # using histc instead of bincount to avoid cuda graph issues
     # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
     # torch.histc() does not support integer dtypes on CPU and MPS.
-    histc_input = expert_ids_g.float() if device.type in ("cpu", "mps") else expert_ids_g.int()
-    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
+    if device.type == "mps":
+        # torch.histc costs ~0.17 ms per bin on MPS; count with scatter_add. Out-of-range ids (EP sentinels) land in
+        # an extra bin that is dropped, as histc(max=num_experts - 1) drops them.
+        tokens_per_expert = torch.zeros(self.num_experts + 1, device=device, dtype=torch.int32).scatter_add_(
+            0, expert_ids_g.clamp(max=self.num_experts), torch.ones_like(expert_ids_g, dtype=torch.int32)
+        )[:-1]
+    else:
+        histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
+        tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
