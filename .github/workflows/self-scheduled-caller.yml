@@ -64,3 +64,61 @@ jobs:
       subdirs: '["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]'
     secrets: inherit
 
+  # --- hf-mount bucket cache benchmark (test-only, not part of the real daily CI) ---
+  # Same model list as model-ci above (one slice, no splitting needed at this size)
+  # on 4 runner groups that differ only in HF_HOME's backing PVC, to isolate the
+  # cache backend as the only variable:
+  #   aws-g5-*-efs-test    -> EFS (today's hfCache, baseline)
+  #   aws-g5-*-hf-test     -> hf-mount-mounted HF Storage Bucket (glegendre/hf-cache)
+  # No runner_type/report_repo_id -> collated_reports/Slack/dataset upload are skipped,
+  # so this doesn't touch real CI reporting. See infra/projects/kube-runners/06-eks-utils
+  # (hf_csi_driver.tf, hf_bucket_cache_test.tf) and 10-github-runners/config/
+  # 05-runners-ci-aws-use1-public-80.yaml for the runner-side setup.
+  model-ci-cache-test-4xl-efs:
+    name: Model CI (cache test, 4xlarge, EFS baseline)
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@main
+    with:
+      folder_slices: '[["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]]'
+      machine_type: aws-g5-4xl-efs-test
+      slice_id: 0
+      docker: huggingface/transformers-all-latest-gpu
+      commit_sha: ${{ github.sha }}
+      report_name_prefix: run_models_gpu_cache_test
+    secrets: inherit
+
+  model-ci-cache-test-4xl-hfmount:
+    name: Model CI (cache test, 4xlarge, hf-mount bucket)
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@main
+    with:
+      folder_slices: '[["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]]'
+      machine_type: aws-g5-4xl-hf-test
+      slice_id: 0
+      docker: huggingface/transformers-all-latest-gpu
+      commit_sha: ${{ github.sha }}
+      report_name_prefix: run_models_gpu_cache_test
+    secrets: inherit
+
+  model-ci-cache-test-12xl-efs:
+    name: Model CI (cache test, 12xlarge, EFS baseline)
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@main
+    with:
+      folder_slices: '[["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]]'
+      machine_type: aws-g5-12xl-efs-test
+      slice_id: 0
+      docker: huggingface/transformers-all-latest-gpu
+      commit_sha: ${{ github.sha }}
+      report_name_prefix: run_models_gpu_cache_test
+    secrets: inherit
+
+  model-ci-cache-test-12xl-hfmount:
+    name: Model CI (cache test, 12xlarge, hf-mount bucket)
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@main
+    with:
+      folder_slices: '[["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]]'
+      machine_type: aws-g5-12xl-hf-test
+      slice_id: 0
+      docker: huggingface/transformers-all-latest-gpu
+      commit_sha: ${{ github.sha }}
+      report_name_prefix: run_models_gpu_cache_test
+    secrets: inherit
+
