@@ -250,18 +250,26 @@ class Nemotron3DiarizationSpeakerCache:
 
     Args:
         config (`Nemotron3DiarizationStreamingConfig`):
-            Speaker-cache policy.
-        fifo_length (`int`):
-            Capacity of the FIFO queue of the most recent encoder frames.
-        speaker_cache_update_period (`int`):
-            Number of encoder frames moved from the FIFO queue to the speaker cache when the queue overflows.
+            Speaker-cache policy, and the FIFO sizes of streaming mode.
+        fifo_length (`int`, *optional*):
+            Capacity of the FIFO queue of the most recent encoder frames. Defaults to `config.fifo_length`.
+        speaker_cache_update_period (`int`, *optional*):
+            Number of encoder frames moved from the FIFO queue to the speaker cache when the queue overflows. Defaults
+            to `config.speaker_cache_update_period`.
     """
 
     def __init__(
-        self, config: Nemotron3DiarizationStreamingConfig, fifo_length: int, speaker_cache_update_period: int
+        self,
+        config: Nemotron3DiarizationStreamingConfig,
+        fifo_length: int | None = None,
+        speaker_cache_update_period: int | None = None,
     ):
-        self.fifo_length = fifo_length
-        self.speaker_cache_update_period = speaker_cache_update_period
+        self.fifo_length = fifo_length if fifo_length is not None else config.fifo_length
+        self.speaker_cache_update_period = (
+            speaker_cache_update_period
+            if speaker_cache_update_period is not None
+            else config.speaker_cache_update_period
+        )
         self.speaker_cache_length = config.speaker_cache_length
         self.num_silence_frames = config.speaker_cache_silence_frames_per_speaker
         self.prediction_score_threshold = config.prediction_score_threshold
@@ -691,15 +699,14 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         """
         is_streaming = num_lookahead_frames is not None or speaker_cache is not None
         if speaker_cache is None:
-            fifo_length = self.config.streaming_config.fifo_length if is_streaming else self.config.fifo_length
-            speaker_cache_update_period = (
-                self.config.streaming_config.speaker_cache_update_period
-                if is_streaming
-                else self.config.speaker_cache_update_period
-            )
-            speaker_cache = Nemotron3DiarizationSpeakerCache(
-                self.config.streaming_config, fifo_length, speaker_cache_update_period
-            )
+            # the cache defaults to the streaming FIFO sizes, offline mode overrides them
+            offline_sizes = {}
+            if not is_streaming:
+                offline_sizes = {
+                    "fifo_length": self.config.fifo_length,
+                    "speaker_cache_update_period": self.config.speaker_cache_update_period,
+                }
+            speaker_cache = Nemotron3DiarizationSpeakerCache(self.config.streaming_config, **offline_sizes)
         if num_lookahead_frames is None:
             num_lookahead_frames = 0
 
@@ -709,7 +716,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         subsampling_factor = self.config.audio_config.subsampling_factor
 
         num_chunk_embeds = num_embeds - num_lookahead_frames
-        if num_lookahead_frames < 0 or num_chunk_embeds < 1:
+        if not is_torchdynamo_compiling() and (num_lookahead_frames < 0 or num_chunk_embeds < 1):
             raise ValueError(
                 f"`num_lookahead_frames` ({num_lookahead_frames}) must be between 0 and one less than the number of "
                 f"encoder frames of the input ({num_embeds})."
