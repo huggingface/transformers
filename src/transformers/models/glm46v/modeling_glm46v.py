@@ -64,13 +64,9 @@ class Glm46VModelOutputWithPast(BaseModelOutputWithPast):
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -444,13 +440,9 @@ class Glm46VCausalLMOutputWithPast(CausalLMOutputWithPast):
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
 
 
 class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):

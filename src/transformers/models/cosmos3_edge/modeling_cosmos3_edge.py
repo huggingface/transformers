@@ -768,13 +768,9 @@ class Cosmos3EdgeModelOutputWithPast(BaseModelOutputWithPast):
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -1149,7 +1145,6 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
-            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -1160,13 +1155,9 @@ class Cosmos3EdgeCausalLMOutputWithPast(CausalLMOutputWithPast):
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -1300,7 +1291,6 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
-            image_hidden_states=outputs.image_hidden_states,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

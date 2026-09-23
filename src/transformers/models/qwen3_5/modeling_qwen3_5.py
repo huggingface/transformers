@@ -1212,13 +1212,9 @@ class Qwen3_5ModelOutputWithPast(BaseModelOutputWithPast):
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
 
 
 class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
@@ -1664,7 +1660,6 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
-            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -1761,13 +1756,9 @@ class Qwen3_5CausalLMOutputWithPast(CausalLMOutputWithPast):
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
 
 
 class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):

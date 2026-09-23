@@ -1158,7 +1158,7 @@ class GlmImageProcessor(ProcessorMixin):
         )
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
-        if text is None:  # early exit if cond only on text
+        if text is None:  # early exit if cond only on image
             return model_inputs
 
         target_h = output_kwargs["images_kwargs"].get("target_h")

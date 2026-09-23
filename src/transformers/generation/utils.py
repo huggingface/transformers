@@ -943,7 +943,7 @@ class GenerationMixin(ContinuousMixin):
     def _maybe_prepare_encoder_kwargs_for_generation(
         self: "GenerativePreTrainedModel",
         inputs_tensor: torch.Tensor,
-        model_kwargs,
+        model_kwargs: dict[str, Any],
         model_input_name: str | None,
         generation_config: GenerationConfig,
     ) -> dict[str, Any]:
@@ -961,7 +961,9 @@ class GenerationMixin(ContinuousMixin):
                 generation_config=generation_config,
             )
         # multimodal encoding before prefill used only for vision models, early exit if not VLM
-        elif not any(key in self.input_modalities for key in ["image", "video"]):
+        elif not self._supports_mm_encoder_outputs or not any(
+            key in self.input_modalities for key in ["image", "video"]
+        ):
             return model_kwargs
         else:
             return self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
@@ -969,7 +971,7 @@ class GenerationMixin(ContinuousMixin):
     def _prepare_text_encoder_decoder_kwargs_for_generation(
         self: "GenerativePreTrainedModel",
         inputs_tensor: torch.Tensor,
-        model_kwargs,
+        model_kwargs: dict[str, Any],
         model_input_name: str | None,
         generation_config: GenerationConfig,
     ) -> dict[str, Any]:
@@ -1008,7 +1010,7 @@ class GenerationMixin(ContinuousMixin):
         return model_kwargs
 
     def _prepare_multimodal_encoder_kwargs_for_generation(
-        self: "GenerativePreTrainedModel", model_kwargs
+        self: "GenerativePreTrainedModel", model_kwargs: dict[str, Any]
     ) -> torch.FloatTensor:
         """Prepares image/video hidden states if model support this modality"""
         model_kwargs.setdefault("mm_encoder_outputs", {})
@@ -2314,6 +2316,13 @@ class GenerationMixin(ContinuousMixin):
         to save memory. Checking it in this way allows to avoid using a new model attribute.
         """
         return "logits_to_keep" in set(inspect.signature(self.forward).parameters.keys())
+
+    def _supports_mm_encoder_outputs(self: "GenerativePreTrainedModel") -> bool:
+        """
+        Return True if the current model supports the keyword argument `mm_encoder_outputs` in forward()
+        to pre-encoder multimodal data before prefill.
+        """
+        return "mm_encoder_outputs" in set(inspect.signature(self.forward).parameters.keys())
 
     def _prepare_special_tokens(
         self: "GenerativePreTrainedModel",

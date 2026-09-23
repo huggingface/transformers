@@ -960,13 +960,9 @@ class Qwen3VLMoeModelOutputWithPast(BaseModelOutputWithPast):
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
 
 
@@ -977,13 +973,9 @@ class Qwen3VLMoeCausalLMOutputWithPast(CausalLMOutputWithPast):
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     rope_deltas: torch.LongTensor | None = None
-    image_hidden_states: torch.FloatTensor | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
     aux_loss: torch.FloatTensor | None = None
 
@@ -1304,7 +1296,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+            video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
@@ -1319,7 +1311,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            deepstack_video_embeds = mm_encoder_outputs["video"].deepstack_features
+            deepstack_video_embeds = video_outputs.deepstack_features
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
