@@ -329,11 +329,7 @@ class EmbeddingGemma2Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        # Only FA2 reads this attribute (eager/sdpa/flex take the geometry from the mask instead, which
-        # `create_bidirectional_sliding_window_mask` builds straight from `config.sliding_window`). FA2's
-        # bounds are inclusive — `_flash_attention_forward` maps the value to `window_size=(w-1, w-1)` —
-        # so the `+1` lands it on the same radius the mask uses. Without it FA2 would be one token
-        # narrower per side than every other backend.
+        # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
         self.sliding_window = (
             config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
         )

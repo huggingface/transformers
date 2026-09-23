@@ -92,6 +92,7 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.v_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -316,11 +317,7 @@ class EmbeddingGemma2Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        # Only FA2 reads this attribute (eager/sdpa/flex take the geometry from the mask instead, which
-        # `create_bidirectional_sliding_window_mask` builds straight from `config.sliding_window`). FA2's
-        # bounds are inclusive — `_flash_attention_forward` maps the value to `window_size=(w-1, w-1)` —
-        # so the `+1` lands it on the same radius the mask uses. Without it FA2 would be one token
-        # narrower per side than every other backend.
+        # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
         self.sliding_window = (
             config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
         )
@@ -598,10 +595,7 @@ class EmbeddingGemma2Model(Gemma4Model):
 
     def __init__(self, config: EmbeddingGemma2Config):
         super().__init__(config)
-        # Converter directive, not a runtime statement: it drops the parent's
-        # `self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input` from the
-        # generated `__init__`, and is itself not emitted. Our text config has no such field, so the
-        # inherited line would raise on every instantiation.
+        # Drop inherited `vocab_size_per_layer_input` (no token-identity PLE in EmbeddingGemma 2)
         del self.vocab_size_per_layer_input
         self._keys_to_ignore_on_load_unexpected = set(getattr(self, "_keys_to_ignore_on_load_unexpected", None) or [])
         if config.vision_config is None:
