@@ -17,10 +17,10 @@ import inspect
 import os
 from typing import TYPE_CHECKING, Any
 
-from ..integrations.tensor_parallel import replace_layer_number_by_wildcard
-from ..utils import is_torch_available, is_torch_greater_or_equal, logging, strtobool
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .utils import _is_torch_distributed_initialized, _torch_distributed_available
+from .tensor_parallel import replace_layer_number_by_wildcard
+from .utils import _is_torch_distributed_initialized
 
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_available() and is_torch_greater_or_equal("2.6"):
+if is_torch_distributed_available() and is_torch_greater_or_equal("2.6"):
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 
@@ -49,7 +49,7 @@ def is_fsdp_enabled() -> bool:
 
 def is_fsdp_managed_module(module: nn.Module) -> bool:
     """Check if a module is managed by FSDP (1 or 2)."""
-    if not _torch_distributed_available:
+    if not is_torch_distributed_available():
         return False
 
     # FSDP2: attribute set by apply_fsdp2()
@@ -191,7 +191,7 @@ def apply_fully_sharded_data_parallelism(
     Apply FSDP2 (fully_shard) to a model.
 
     Torch availability, distributed initialization and the version requirement
-    are asserted upstream by `initialize_fully_sharded_data_parallelism`.
+    are asserted upstream by `initialize_distributed_mesh`.
     """
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:

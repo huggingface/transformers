@@ -29,7 +29,9 @@ import torch
 from torch import nn
 
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     BartConfig,
@@ -71,6 +73,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import align_special_tokens
 
 from .trainer_test_utils import (
     ATOL,
@@ -223,6 +226,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         gas_batch_size,
         gas_steps,
         loss_tolerance,
+        grad_norm_tolerance=0.1,
         model_accepts_loss_kwargs=True,
         compute_loss_func=None,
         label_smoothing_factor=0.0,
@@ -267,7 +271,10 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         for step, (base_gn, gas_gn) in enumerate(zip(base_grad_norms, gas_grad_norms)):
             ratio = gas_gn / base_gn if base_gn > 0 else float("inf")
             self.assertAlmostEqual(
-                ratio, 1.0, delta=0.1, msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected"
+                ratio,
+                1.0,
+                delta=grad_norm_tolerance,
+                msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected",
             )
         loss_diff = [abs(b - g) for b, g in zip(base_callback.losses, gas_callback.losses)]
         self.assertLess(max(loss_diff), loss_tolerance, f"Loss difference {max(loss_diff)} exceeds {loss_tolerance}")
@@ -288,13 +295,17 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         itself. Grad norms and losses must still match between a large-batch
         baseline and an equivalent GAS run.
         """
-        # Looser tolerance: without num_items_in_batch each micro-batch is independently
-        # mean-reduced, so losses won't match as tightly.
+        # Looser tolerances: without num_items_in_batch each micro-batch is independently
+        # mean-reduced over its own valid label count, so regrouping the same samples into
+        # smaller micro-batches shifts both the loss and the grad norm. `DataParallel` splits
+        # every micro-batch again across replicas, which regroups them more finely still and
+        # pushes the grad norm ratio to ~1.11. A real GAS leak shows a ratio near `gas_steps`.
         self._check_gradient_accumulation(
             base_batch_size=8,
             gas_batch_size=4,
             gas_steps=2,
             loss_tolerance=0.1,
+            grad_norm_tolerance=0.2,
             model_accepts_loss_kwargs=False,
         )
 
@@ -1326,6 +1337,52 @@ class TrainerIntegrationTest(TestCasePlus):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_special_token_alignment_composite_config(self):
+        """
+        Tests that a composite model whose special tokens live on its text sub-config is left alone. The top-level
+        config does not forward attribute lookups to the sub-config, so reading it there reports a mismatch on
+        every run and rewrites the ids the model already agrees with.
+        """
+        model = AutoModelForImageTextToText.from_config(
+            AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # The ids the model already agrees with, on the text sub-config only.
+        text_config = model.config.get_text_config()
+        text_config.eos_token_id = tokenizer.eos_token_id
+        text_config.bos_token_id = tokenizer.bos_token_id
+        text_config.pad_token_id = tokenizer.pad_token_id
+        model.generation_config.eos_token_id = tokenizer.eos_token_id
+        model.generation_config.bos_token_id = tokenizer.bos_token_id
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(text_config.eos_token_id, tokenizer.eos_token_id)
+        self.assertEqual(text_config.bos_token_id, tokenizer.bos_token_id)
+        self.assertEqual(text_config.pad_token_id, tokenizer.pad_token_id)
+
+    def test_special_token_alignment_keeps_tokens_the_tokenizer_does_not_define(self):
+        """
+        Tests that a special token the tokenizer does not define is left untouched on the model configs, rather than
+        being removed from them. `_special_tokens_map` is initialized with `None` for every special token, so a
+        tokenizer that never declared one is indistinguishable from a tokenizer whose token was deliberately cleared.
+        Dropping the value in that case would silently remove an id the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        model.config.bos_token_id = 1
+        model.generation_config.bos_token_id = 1
+        tokenizer.bos_token = None
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.bos_token_id, 1)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
     def test_trainer_works_without_model_config(self):
         """

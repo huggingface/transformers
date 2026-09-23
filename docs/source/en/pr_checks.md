@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -72,11 +72,38 @@ The repository consistency check is similar to `make check-repo`, except it stop
 
 | Category | What it validates | Auto-fixed? |
 |---|---|---|
-| Init files | Every new public object must appear in both `_import_structure` (lazy loading) and the `if TYPE_CHECKING` block (type checker imports) in `__init__.py` | Manual |
+| Init files | `src/transformers/models/__init__.py` matches the import structure on disk, so the `if TYPE_CHECKING` block (type checker imports) exposes the same models as the lazy runtime half | `make fix-repo` |
 | Copies and modular | `# Copied from` blocks match their source and modular-generated files are up to date | `make fix-repo` |
 | Docstrings and docs | Argument docstrings match function signatures and documentation table of contents | `make fix-repo` |
 | Auto-generated files | Dummies, pipeline typing, doctest list, metadata, dependency table | `make fix-repo` |
 | Config validation | Config classes have valid checkpoints in docstrings and config attributes match modeling file | Manual |
+| Reviewer assignment | Every model directory, and every rule in the reviewer file, still reaches a reviewer | Manual |
+
+## Reviewer assignment
+
+When a pull request is marked ready for review, the `Assign PR Reviewers` workflow requests up to two reviewers, ranked by how many lines the pull request changes in the files they own. A draft pull request gets no reviewers until it leaves draft. The workflow itself lives in [huggingface/transformers-ci](https://github.com/huggingface/transformers-ci) and this repository calls it; what stays here is the ownership data it reads.
+
+Ownership is resolved per file, most specific first.
+
+| Where | Looks like | Use it for |
+|---|---|---|
+| The model file | `# Reviewers: @login` in the leading comment block of `modular_<model>.py` or `modeling_<model>.py` | a model that needs someone other than its modality owner. The modular converter copies the header into the generated modeling file, so the tag survives regeneration |
+| A path rule | `/src/transformers/<area>/ @login` in `.github/scripts/codeowners_for_review_action` | anything that is not a model |
+| The modality table | `@@modality/vision @login`, in the same file | every model whose doc page sits in that section of `docs/source/en/_toctree.yml` |
+| The catch-all | `* @Rocketknight1 @ArthurZucker` | whatever nothing else claims |
+
+A new model needs no entry anywhere: adding its documentation page to `_toctree.yml`, which the documentation table of contents check already requires, places it in a modality, and the modality table covers it from there.
+
+A review can only be requested from a repository collaborator. The workflow requests each reviewer in a separate call and skips anyone it cannot ask, so an entry naming someone who has left costs one reviewer instead of all of them, and every skip is reported as a warning on the workflow run.
+
+A pull request cannot re-route its own review. `.github/scripts/codeowners_for_review_action` is read from the base branch, never from the pull request's head, and the PR CI security gate blocks a pull request that is not from a collaborator from touching anything outside `src/`, `tests/`, `docs/` and `utils/` — which is why that file lives where it does. The `# Reviewers:` tag is read from the head, since a new model arrives with it, so every login it names still goes through the collaborator check before anyone is asked.
+
+`make check-repository-consistency` runs `utils/check_reviewers.py`, which fails when a model reaches nobody but the catch-all, when a rule matches no file any more, or when the modality table disagrees with the table of contents. It shares its resolver with the assignment workflow, so the two cannot disagree. That resolver is not a dependency of `transformers`; it is listed in `utils/checkers-requirements.txt`, which the checker runner installs on its first run in an environment. If the install cannot happen — offline, say — the check reports it and passes rather than blocking you.
+ Paths outside `src/transformers/models` that have no owner are reported as a note; list them with:
+
+```bash
+python utils/check_reviewers.py --strict
+```
 
 ## Tests
 

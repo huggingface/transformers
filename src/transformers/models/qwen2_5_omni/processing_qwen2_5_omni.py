@@ -164,7 +164,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
 
-            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
+            fps = output_kwargs["videos_kwargs"].get("fps")
+            fps = fps if fps is not None else 2.0  # default fps not saved in official ckpt, hardcode
             video_grid_thw = videos_inputs["video_grid_thw"]
             second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
             videos_inputs["video_second_per_grid"] = second_per_grid_ts
@@ -341,7 +342,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
+            `list[Union[str, np.ndarray]]`: The decoded text or generated audio.
         """
         if generation_mode is None or generation_mode == "text":
             return self.post_process_image_text_to_text(
@@ -349,9 +350,12 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             )
 
         elif generation_mode == "audio":
-            # model supports only bs=1, so we will never get several audio outputs
-            audio = generated_outputs[1].reshape(-1).detach().cpu().numpy()
-            return [audio]
+            # Batched generation returns one waveform per sample, while a single sample comes back as a lone
+            # `(num_samples,)` tensor that return as a list
+            audio_outputs = generated_outputs[1]
+            if not isinstance(audio_outputs, (list, tuple)):
+                audio_outputs = [audio_outputs]
+            return [audio.reshape(-1).detach().cpu().numpy() for audio in audio_outputs]
 
         else:
             raise ValueError(

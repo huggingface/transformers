@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Prompt engineering or prompting, uses natural language to improve large language model (LLM) performance on a variety of tasks. A prompt can steer the model towards generating a desired output. In many cases, you don't even need a [fine-tuned](#finetuning) model for a task. You just need a good prompt.
+Prompt engineering or prompting, uses natural language to improve large language model (LLM) performance on a variety of tasks. A prompt can steer the model towards generating a desired output. In many cases, you don't even need a [fine-tuned](#fine-tuning) model for a task. You just need a good prompt.
 
 Try prompting a LLM to classify some text. When you create a prompt, it's important to provide very specific instructions about the task and what the result should look like.
 
@@ -26,7 +26,7 @@ Try prompting a LLM to classify some text. When you create a prompt, it's import
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(task="text-generation", model="mistralai/Mistal-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(task="text-generation", model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Classify the text into neutral, negative or positive.
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:
@@ -66,7 +66,7 @@ This guide covers prompt engineering best practices, techniques, and examples fo
 
 7. Lead the model to generate the correct output by writing the first word or even the first sentence.
 
-8. Try other techniques like [few-shot](#few-shot) and [chain-of-thought](#chain-of-thought) to improve results.
+8. Try other techniques like [few-shot](#few-shot-prompting) and [chain-of-thought](#chain-of-thought) to improve results.
 
 9. Test your prompts with different models to assess their robustness.
 
@@ -166,7 +166,7 @@ If you eat 6 muffins, how many are left?
 Answer: 6
 ```
 
-Like [few-shot](#few-shot) prompting, the downside of CoT is that it requires more effort to design a series of prompts that help the model reason through a complex task and prompt length increases latency.
+Like [few-shot](#few-shot-prompting) prompting, the downside of CoT is that it requires more effort to design a series of prompts that help the model reason through a complex task and prompt length increases latency.
 
 ## Fine-tuning
 

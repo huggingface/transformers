@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -88,6 +88,11 @@ message, final_events = parser.finalize()
 for event in final_events:
     render(event)
 ```
+
+If the request includes tools, pass them through as well (`get_response_parser(..., tools=tools)`).
+Tool-call arguments are then typed from the calling tool's JSON Schema as each region closes, so
+streaming consumers see schema-typed arguments on `region_close` rather than only after `finalize()`.
+See [Typing tool-call arguments](#typing-tool-call-arguments) for details.
 
 The parser will emit **events** as text from the generation process is fed in. This indicates which region is currently being generated. When
 the region is complete, it will be emitted in a separate event with the fully parsed content. At the end of generation,
@@ -250,6 +255,7 @@ Each field supports several keys. We can divide these into two types. First, the
 | `close`         | str or list[str]   | Literal string (or list of strings) that closes this region. Omit to run to end-of-stream.    |
 | `close_pattern` | str (regex)        | Regex alternative to `close`. Named groups become capture variables available to `transform`. |
 | `repeats`       | bool               | If true, the field is a list and each match appends. Default `false`.                         |
+| `join`          | str                | With `repeats`, concatenate matches into one string with this separator instead of a list.    |
 | `optional`      | bool               | If false and the region never matches, we raise an error. Default `true`.                     |
 
 A field should have **either** `open` or `open_pattern`, but not both, and the same is true for `close` and `close_pattern`.
@@ -269,6 +275,20 @@ multiple tool calls simultaneously:
 '<tool_call>{"name": "a", ...}</tool_call><tool_call>{"name": "b", ...}</tool_call>'
 # Returns `"tool_calls": [{... "a" ...}, {... "b" ...}]` in a template with repeats: true
 ```
+
+Not every repeated field should become a list, though. Some models emit several `thinking` or `content`
+blocks in a single message, and the natural output for those is one concatenated string. Setting `join`
+(a separator string, often just `""`) switches a `repeats` field from collecting a list to concatenating
+its matches:
+
+```python
+field = {"thinking": {"open": "<think>", "close": "</think>", "repeats": True, "join": "\n"}}
+input = "<think>first</think>...<think>second</think>"
+# Returns: {"thinking": "first\nsecond"}
+```
+
+Each match of a `join` field must parse to a string. When streaming, `region_close` still carries each
+block's own value; the separator only appears in the final message dict.
 
 Finally, you can specify `optional: false` for fields that must be present. If such a field is missing,
 we raise an error instead of just returning a message dict without it.
@@ -389,6 +409,36 @@ input = "<meta>name: alice\nage: 30</meta>"
 
 Note `age` keeps `"30"` as a string; add a `value_parser` of `{"name": "int"}` to parse it to `30`.
 
+### Typing tool-call arguments
+
+Sometimes, the response parser may parse model outputs with the wrong type. For example,
+it might parse the float `1.5` as "1.50". This can cause problems with tool calling, if tools expect
+an argument in one type but receive it in another. To avoid this,
+you can pass the request's `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
+[`~utils.chat_parsing.ResponseParser`] to cast them using each tool's JSON Schema `parameters`.
+Tools are accepted in the same format as [`~PreTrainedTokenizerBase.apply_chat_template`]: JSON
+schemas, or Python functions with type hints and docstrings that are auto-converted to schemas.
+
+```python
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "set_alarm",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "hour": {"type": "integer"},
+                "enabled": {"type": "boolean"},
+                "label": {"type": "string"},
+            },
+        },
+    },
+}]
+message = parse_response(model_out, template, prefix="", tools=tools)
+# message["tool_calls"][0]["function"]["arguments"] ==
+# {"hour": 7, "enabled": True, "label": "wake up"}
+```
+
 
 ### Transform
 
@@ -426,6 +476,23 @@ becomes (note `repeats: True` makes `tool_calls` a list):
 A whole-string placeholder like `"{content}"` returns the looked-up value with its type preserved — so above, the
 parsed JSON dict slots in directly as the value of `function`. A placeholder must be the entire string: mixing
 text and placeholders (`"abc {name} def"`) is not permitted. They're not f-strings!
+
+Placeholders can also take a dotted path like `"{content.args}"`, which looks up `content` and then descends into
+the `args` key of the parsed dict. This is how you reshape tool-call bodies whose key names don't match our
+standard format. For example, a model that emits `{"name": ..., "args": ...}` needs `args` renamed to `arguments`:
+
+```python
+"tool_calls": {
+    "open": "<tool>",
+    "close": "</tool>",
+    "repeats": True,
+    "content": "json",
+    "transform": {"type": "function", "function": {"name": "{content.name}", "arguments": "{content.args}"}},
+},
+```
+
+A path that doesn't resolve (here, a tool call whose body lacks `args`) raises an error rather than emitting a
+malformed tool call.
 
 `transform` is quite versatile, which becomes necessary when the model output has a wildly different format
 to our standard API. GPT-OSS is a good example - it embeds the function name in the channel header rather than in

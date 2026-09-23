@@ -29,9 +29,11 @@ from ...image_utils import (
     make_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
 
+
+logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
     import torch
@@ -209,6 +211,7 @@ class FuyuImageProcessorPil(PilBackend):
                 "image_unpadded_heights": image_unpadded_heights,
                 "image_unpadded_widths": image_unpadded_widths,
                 "image_scale_factors": image_scale_factors,
+                "image_sizes": original_image_sizes,
             },
             tensor_type=return_tensors,
             skip_tensor_conversion=["overflowing_values"],
@@ -351,6 +354,10 @@ class FuyuImageProcessorPil(PilBackend):
         """
         requires_backends(self, ["torch"])
         import torch
+
+        logger.warning(
+            "`image_processor.preprocess_with_tokenizer_info` is deprecated and will be removed in future versions."
+        )
 
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):

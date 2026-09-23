@@ -141,7 +141,7 @@ class NemotronHConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # Backward compatibility; configs expect different names for these fields when init
-        # but they have to be re-names when creating/saving the config.
+        # but they have to be renamed when creating/saving the config.
         self.n_groups = kwargs.pop("mamba_n_groups") if "mamba_n_groups" in kwargs else self.n_groups
         self.conv_kernel = kwargs.pop("mamba_d_conv") if "mamba_d_conv" in kwargs else self.conv_kernel
         self.expand = kwargs.pop("mamba_expand") if "mamba_expand" in kwargs else self.expand
@@ -163,9 +163,6 @@ class NemotronHConfig(PreTrainedConfig):
         elif self.layer_types is None:
             # Default layers_block_type if not provided
             self.layer_types = ["linear_attention", "moe", "full_attention", "mlp"]
-        else:
-            # Migrate legacy names from configs stored on the Hub.
-            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         # Note: num_hidden_layers is deprecated and ignored if layers_block_type is explicitly provided
         # It's only kept for backward compatibility when loading old configs

@@ -51,7 +51,7 @@ class QuantoHfQuantizer(HfQuantizer):
             "int4": 0.5,
             "int2": 0.25,
         }
-        self.quantized_param_size = map_to_param_size.get(self.quantization_config.weights, None)
+        self.quantized_param_size = map_to_param_size.get(self.quantization_config.weights)
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_quanto_available():

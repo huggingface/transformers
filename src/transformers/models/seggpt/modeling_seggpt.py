@@ -663,7 +663,7 @@ class SegGptModel(SegGptPreTrainedModel):
         ```python
         >>> from transformers import SegGptImageProcessor, SegGptModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
@@ -866,7 +866,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         ```python
         >>> from transformers import SegGptImageProcessor, SegGptForImageSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"

@@ -28,6 +28,7 @@ class ExportFormat(Enum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
 
     EXECUTORCH = "executorch"
+    OPENVINO = "openvino"
     DYNAMO = "dynamo"
     ONNX = "onnx"
 
@@ -99,8 +100,8 @@ class DynamoConfig(ExportConfigMixin):
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
-    dynamic: bool = False
 
+    dynamic: bool = False
     strict: bool = False
     dynamic_shapes: dict[str, Any] | None = None
     prefer_deferred_runtime_asserts_over_guards: bool = False
@@ -141,7 +142,6 @@ class OnnxConfig(DynamoConfig):
     export_format: ExportFormat = ExportFormat.ONNX
 
     output_path: str | PathLike | None = None
-    dynamic_shapes: dict[str, Any] | None = None
     opset_version: int | None = None
     external_data: bool = True
     optimize: bool = True
@@ -163,8 +163,54 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
+        alloc_graph_input (`bool`, *optional*, defaults to `True`):
+            Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
+            the runtime uses the caller-provided input buffers directly instead of copying into the
+            arena — so an in-place `USER_INPUT_MUTATION` (e.g. a `StaticCache` write) lands in the
+            caller's tensor rather than an arena copy.
+        alloc_graph_output (`bool`, *optional*, defaults to `True`):
+            Whether the memory-planning pass reserves arena memory for graph outputs. When `False`,
+            the caller must bind output buffers at runtime (`Method::set_output_data_ptr`); binding an
+            output to its mutated input's buffer avoids the copy-out roundtrip.
+        alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
+            Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
+            state). Passed through to the `MemoryPlanningPass`.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
+    alloc_graph_input: bool = True
+    alloc_graph_output: bool = True
+    alloc_mutable_buffers: bool = True
+
+
+@dataclass
+class OpenVINOConfig(DynamoConfig):
+    """
+    Configuration class for exporting models to OpenVINO IR via ``openvino.convert_model``.
+
+    Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`, `dynamic_shapes`,
+    `prefer_deferred_runtime_asserts_over_guards`).
+
+    Args:
+        output_path (`str` or `PathLike`, *optional*):
+            Output path for the `.xml` file (the matching `.bin` is written alongside). When
+            `None` (default) the converted model is kept in memory as an ``openvino.Model``.
+        compress_to_fp16 (`bool`, *optional*, defaults to `True`):
+            Compress floating-point weights to FP16 when saving — halves on-disk size with
+            negligible accuracy impact on most models. Only applied when ``output_path`` is set.
+        stateful (`bool`, *optional*, defaults to `True`):
+            Fold round-tripped state tensors (KV cache, SSM states, …) into internal OV
+            variables (``ReadValue``/``Assign``). The runtime then carries state across
+            ``infer()`` calls instead of marshalling cache tensors through inputs/outputs on
+            every step, and a fused ``beam_idx`` input reorders state in-graph for beam search.
+            No-op for models without round-tripped state (encoders, prefill-only exports). Set it
+            to `False` for targets that take no stateful model, such as the NPU plugin.
+    """
+
+    export_format: ExportFormat = ExportFormat.OPENVINO
+
+    output_path: str | PathLike | None = None
+    compress_to_fp16: bool = True
+    stateful: bool = True

@@ -116,6 +116,13 @@ class MiniMaxM2Config(PreTrainedConfig):
     router_jitter_noise: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        # Released MiniMax-M2 checkpoints express partial RoPE through a legacy `rotary_dim` field instead of `partial_rotary_factor`
+        rotary_dim = kwargs.get("rotary_dim", getattr(self, "rotary_dim", None))
+        if rotary_dim is not None:
+            kwargs.setdefault("partial_rotary_factor", rotary_dim / self.head_dim)
+        return super().convert_rope_params_to_dict(**kwargs)
+
 
 class MiniMaxM2TopKRouter(MixtralTopKRouter):
     def forward(self, hidden_states, e_score_correction_bias):
@@ -138,9 +145,9 @@ class MiniMaxM2Experts(MixtralExperts):
 class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
     def __init__(self, config):
         super().__init__()
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)

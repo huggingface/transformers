@@ -330,7 +330,7 @@ class QianfanOCRProcessor(InternVLProcessor):
         **kwargs: Unpack[QianfanOCRProcessorKwargs],
     ):
         # remove video from signature as well because the modality isn't supported
-        # some tests pass all modalities from signature, and stuble upon `ValueError`
+        # some tests pass all modalities from signature, and stumble upon `ValueError`
         return ProcessorMixin.__call__(images=images, text=text, **kwargs)
 
     def get_text_with_replacements(

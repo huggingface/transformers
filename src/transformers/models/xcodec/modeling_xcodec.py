@@ -225,10 +225,10 @@ class XcodecEuclideanCodebook(nn.Module):
         super().__init__()
         embed = torch.zeros(config.codebook_size, config.codebook_dim)
         self.codebook_size = config.codebook_size
-        self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
+        self.inited = nn.Buffer(torch.Tensor([True]))
+        self.cluster_size = nn.Buffer(torch.zeros(config.codebook_size))
+        self.embed = nn.Buffer(embed)
+        self.embed_avg = nn.Buffer(embed.clone())
 
     # Copied from transformers.models.encodec.modeling_encodec.EncodecEuclideanCodebook.quantize
     def quantize(self, hidden_states):
@@ -299,7 +299,7 @@ class XcodecResidualVectorQuantization(nn.Module):
     def encode(self, embeddings: torch.Tensor, bandwidth=None) -> torch.Tensor:
         """
         Encode the input tensor into discrete indices using RVQ, with the number of quantizers selected based on the given bandwidth.
-        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidian distance.
+        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidean distance.
         """
         num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
         residual = embeddings

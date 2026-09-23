@@ -197,7 +197,7 @@ class EdgeTamTwoWayAttentionBlock(GradientCheckpointingLayer):
         Arguments:
             config (`EdgeTamMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -534,7 +534,7 @@ class EdgeTamPositionalEmbedding(nn.Module):
         super().__init__()
         self.scale = config.scale
         positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
+        self.positional_embedding = nn.Buffer(positional_embedding)
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -1122,7 +1122,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
@@ -1237,6 +1237,9 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         pixel_values (`torch.FloatTensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
+        # original_sizes is returned by the processor for post-processing only and must not
+        # reach the timm backbone (FeatureListNet) which does not accept it.
+        kwargs.pop("original_sizes", None)
         vision_outputs: EdgeTamVisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states

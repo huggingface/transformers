@@ -20,7 +20,7 @@ from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_S
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -30,7 +30,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Gemma3ImageProcessingTester:
+class Gemma3ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -82,21 +82,6 @@ class Gemma3ImageProcessingTester:
             "pan_and_scan_max_num_crops": self.pan_and_scan_max_num_crops,
             "pan_and_scan_min_ratio_to_activate": self.pan_and_scan_min_ratio_to_activate,
         }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch

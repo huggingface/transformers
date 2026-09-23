@@ -62,11 +62,7 @@ class RecurrentGemmaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->RecurrentGemma
 class RecurrentGemmaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    # Ignore copy
     def __init__(self, config: RecurrentGemmaConfig, device=None):
         super().__init__()
         self.config = config
@@ -79,8 +75,8 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
             )
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -97,7 +93,9 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
@@ -106,13 +104,14 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward with Llama->RecurrentGemma
     def forward(self, x, position_ids):
         inv_freq_expanded = (
             self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -517,7 +516,7 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         raw_activations = activations
-        inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
+        inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight differences
 
         hidden_states, _ = self.temporal_block(
             inputs_normalized,
@@ -617,14 +616,6 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
                 layer.temporal_block._setup_cache(batch, device, dtype)
 
 
-def _get_seq_length(self, layer_idx: int = 0) -> int:
-    return self.layers[self.first_attention_layer].get_seq_length()
-
-
-def _get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
-    return self.layers[self.first_attention_layer].get_mask_sizes(query_length)
-
-
 @auto_docstring
 class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     def __init__(self, config: RecurrentGemmaConfig):
@@ -639,9 +630,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        self.register_buffer(
-            "normalizer", torch.tensor(self.config.hidden_size**0.5, dtype=torch.bfloat16), persistent=False
-        )
+        self.normalizer = nn.Buffer(torch.tensor(self.config.hidden_size**0.5, dtype=torch.bfloat16), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -669,14 +658,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if use_cache and past_key_values is None:
             self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
             past_key_values = DynamicCache(config=self.config)
-
-        # Hack because the mamba layer indices will stay empty in `past_key_values`, and we want `get_seq_length` and
-        # `get_mask_sizes` to use the first attention layer by default for the mask function to create correct masks
-        if past_key_values is not None:
-            past_key_values.first_attention_layer = self.config.layers_block_type.index("attention")
-            # bound new methods to this instance only
-            past_key_values.get_seq_length = _get_seq_length.__get__(past_key_values)
-            past_key_values.get_mask_sizes = _get_mask_sizes.__get__(past_key_values)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -735,11 +716,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

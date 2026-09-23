@@ -2,12 +2,12 @@ name: Nvidia CI with nightly torch
 
 on:
   repository_dispatch:
-  # triggered when the daily scheduled Nvidia CI is completed.
-  # This way, we can compare the results more easily.
-  workflow_run:
-    workflows: ["Nvidia CI"]
-    branches: ["main"]
-    types: [completed]
+  # The daily run is disabled. It used to be triggered when the daily scheduled Nvidia CI completed, so that the
+  # results could be compared more easily. Re-enable by uncommenting the `workflow_run` trigger below.
+  # workflow_run:
+  #   workflows: ["Nvidia CI"]
+  #   branches: ["main"]
+  #   types: [completed]
   push:
     branches:
       - run_ci_with_nightly_torch*

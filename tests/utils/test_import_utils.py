@@ -1,14 +1,17 @@
 import sys
 from contextlib import contextmanager
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import DEFAULT, MagicMock, patch
 
 from packaging.version import parse as parse_version
 from parameterized import parameterized
 
-from transformers.testing_utils import run_test_using_subprocess
+from transformers import logging
+from transformers.testing_utils import CaptureLogger, LoggingLevel, require_torch, run_test_using_subprocess
 from transformers.utils.import_utils import (
+    _candidate_distribution_names,
     _is_package_available,
+    _LazyModule,
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
@@ -59,6 +62,60 @@ def test_is_package_available_edge_cases():
             assert _is_package_available(pkg_name, return_version=True) == expected
 
 
+def test_lazy_module_error_points_to_debug_log():
+    logger = logging.get_logger("transformers.utils.import_utils")
+    lazy_module = _LazyModule(
+        "transformers.test_lazy_module",
+        __file__,
+        {"broken_module": ["BrokenObject"]},
+    )
+
+    original_error = RuntimeError("simulated broken dependency")
+
+    with CaptureLogger(logger) as captured_logs:
+        with LoggingLevel(logging.DEBUG), patch.object(lazy_module, "_get_module", side_effect=original_error):
+            try:
+                lazy_module.BrokenObject
+            except ModuleNotFoundError as error:
+                assert "Could not import module 'BrokenObject'" in str(error)
+                assert "Set the logging verbosity to DEBUG for the original import error." in str(error)
+                assert "simulated broken dependency" not in str(error)
+                assert (
+                    "Original import error for 'BrokenObject': simulated broken dependency"
+                    in captured_logs.io.getvalue()
+                )
+            else:
+                raise AssertionError("Expected ModuleNotFoundError")
+
+
+def test_is_package_available_unmapped_distribution_does_not_import():
+    """A package missing from `packages_distributions()` must be versioned from metadata, not by importing it.
+
+    `torch` >= 2.14 ships no `top_level.txt`, so on Python < 3.12 it is absent from the mapping. Falling back
+    to `importlib.import_module` there pulls all of torch into every `import transformers`.
+    """
+    pkg_name = "definitely_not_a_real_pkg_xyz"
+
+    with (
+        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
+        patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {}),
+        patch("transformers.utils.import_utils.importlib.metadata.version", return_value="1.2.3") as version,
+        patch("transformers.utils.import_utils.importlib.import_module") as import_module,
+    ):
+        assert _is_package_available(pkg_name, return_version=True) == (True, "1.2.3")
+        version.assert_called_once_with(pkg_name.replace("_", "-"))
+        import_module.assert_not_called()
+
+
+def test_candidate_distribution_names():
+    with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {"PIL": ["pillow"]}):
+        # A mapped import name prefers its distribution, but keeps the import name as a fallback.
+        assert _candidate_distribution_names("PIL") == ["pillow", "PIL"]
+        # An unmapped import name falls back on itself, normalized first, without duplicates.
+        assert _candidate_distribution_names("torch") == ["torch"]
+        assert _candidate_distribution_names("torch_xla") == ["torch-xla", "torch_xla"]
+
+
 @contextmanager
 def mock_flash_attn_env(
     installed_packages: dict[str, str] | None = None,
@@ -99,6 +156,7 @@ def mock_flash_attn_env(
             patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", fake_distribution_mapping),
             patch("transformers.utils.import_utils.is_torch_cuda_available", return_value=cuda_available),
             patch("transformers.utils.import_utils.is_torch_mlu_available", return_value=False),
+            patch("transformers.utils.import_utils.is_torch_musa_available", return_value=False),
             patch("transformers.utils.import_utils.is_kernels_available", return_value=kernels_available),
             patch.dict(sys.modules, {"kernels": fake_kernels_module}),
         ):
@@ -137,6 +195,7 @@ def test_flash_attn_3_available_with_package():
     [(2, False, False), (2, True, False), (2, True, True), (3, False, False), (3, True, False), (3, True, True)]
 )
 def test_flash_attn_cuda_kernels_fallback(fa_version: int, kernels_available: bool, download_fails: bool):
+    from transformers.integrations.hub_kernels import get_attn_kernel_version
     from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
     # Test is expected to pass only if the kernels library is available and the kernel download does not fail
@@ -167,8 +226,8 @@ def test_flash_attn_cuda_kernels_fallback(fa_version: int, kernels_available: bo
 
         # Check the number of calls to get_kernel
         if kernels_available:
-            key = f"flash_attention_{fa_version}"
-            get_kernel.assert_called_once_with(FLASH_ATTN_KERNEL_FALLBACK[key], version=1)
+            repo_id = FLASH_ATTN_KERNEL_FALLBACK[f"flash_attention_{fa_version}"]
+            get_kernel.assert_called_once_with(repo_id, version=get_attn_kernel_version(repo_id))
         else:
             get_kernel.assert_not_called()
 
@@ -211,8 +270,15 @@ def test_broken_torchaudio_does_not_break_import():
     # Importing loss_rnnt (and thus transformers) must succeed regardless of torchaudio's state, and must
     # not have imported torchaudio at module scope.
     from transformers.loss import loss_rnnt
+    from transformers.utils import import_utils
 
     assert not hasattr(loss_rnnt, "torchaudio"), "torchaudio must be imported lazily, not at module scope"
+
+    # ``rnnt_loss`` is guarded by ``@requires(backends=("torchaudio",))``, which resolves availability
+    # through ``BACKENDS_MAPPING`` at call time, so that is what has to be patched here.
+    def patch_torchaudio_available(available: bool):
+        error_message = import_utils.BACKENDS_MAPPING["torchaudio"][1]
+        return patch.dict(import_utils.BACKENDS_MAPPING, {"torchaudio": (lambda: available, error_message)})
 
     def _call_rnnt_loss():
         loss_rnnt.rnnt_loss(
@@ -237,7 +303,7 @@ def test_broken_torchaudio_does_not_break_import():
             del sys.modules[name]
 
     with (
-        patch.object(loss_rnnt, "is_torchaudio_available", return_value=True),
+        patch_torchaudio_available(True),
         patch.object(builtins, "__import__", failing_import),
     ):
         try:
@@ -248,10 +314,108 @@ def test_broken_torchaudio_does_not_break_import():
             raise AssertionError("rnnt_loss must surface the torchaudio OSError at call time")
 
     # torchaudio genuinely absent: rnnt_loss raises a clean ImportError.
-    with patch.object(loss_rnnt, "is_torchaudio_available", return_value=False):
+    with patch_torchaudio_available(False):
         try:
             _call_rnnt_loss()
         except ImportError:
             pass
         else:
             raise AssertionError("rnnt_loss must raise ImportError when torchaudio is unavailable")
+
+
+@require_torch
+@run_test_using_subprocess
+def test_import_without_torch_distributed():
+    """
+    Checks that Transformers can still be imported and used when PyTorch was built with USE_DISTRIBUTED=0
+    (e.g. AMD's Windows ROCm 7.2.1 wheels). This make sure that distributed guarding works correctly.
+    """
+
+    import torch
+
+    # Forget transformers, so that importing it below actually re-runs its module-scope imports.
+    for name in list(sys.modules):
+        if name.startswith("transformers"):
+            del sys.modules[name]
+
+    # Emulate USE_DISTRIBUTED=0 by temporarily faking torch.distributed availability to False.
+    dist_modules_to_remove = [
+        name
+        for name in list(sys.modules)
+        if name.startswith(
+            (
+                "torch.distributed.tensor",
+                "torch.distributed.checkpoint",
+                "torch.distributed.fsdp",
+                "torch.distributed._composable",
+            )
+        )
+    ]
+
+    with (
+        patch.object(torch.distributed, "is_available", return_value=False),
+        patch.dict(sys.modules, {"torch._C._distributed_c10d": None}),
+        patch.dict(sys.modules, dict.fromkeys(dist_modules_to_remove, DEFAULT)),
+    ):
+        # If transformers import errors out, it means that the distributed guarding is not working correctly.
+        from transformers import AutoImageProcessor  # noqa: F401
+
+
+def _compile_constant_helpers():
+    """Every helper carrying `@_make_compile_constant`, as (name, args) for the test below.
+
+    Derived from the marker rather than hand-listed: marking a helper opts it into verification, so the
+    two can never drift. Helpers needing arguments get them here; the rest are called with none.
+    """
+    import inspect
+
+    import transformers.utils.import_utils as import_utils
+
+    with_args = {"is_torch_greater_or_equal": ("2.5",), "is_torch_less_or_equal": ("99.0",)}
+    cases = []
+    for name in sorted(dir(import_utils)):
+        fn = getattr(import_utils, name)
+        if not getattr(fn, "_dynamo_marked_constant", False):
+            continue
+        if name in with_args:
+            cases.append((name, with_args[name]))
+            continue
+        try:
+            inspect.signature(fn).bind()  # skip anything needing args we have not supplied
+        except (TypeError, ValueError):
+            continue
+        cases.append((name, ()))
+    return cases
+
+
+@require_torch
+@parameterized.expand(_compile_constant_helpers())
+def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
+    """
+    These helpers get called from inside `torch.compile`d regions — e.g. `is_dtensor`, which every MoE
+    kernel integration reaches through `to_local`. Each carries `@_make_compile_constant`, so dynamo evaluates
+    it once at trace time and never enters the body; this checks the marker actually takes effect.
+
+    Folding rather than keeping the bodies traceable is deliberate. Most bottom out in
+    `_is_package_available`, whose `importlib.metadata` lookup dynamo cannot follow — and follows
+    differently per Python version, so a body that traces on one interpreter breaks on another. An
+    untraced body cannot break on any of them. `@lru_cache` is no protection either: dynamo steps past
+    cache wrappers and traces the wrapped function, which is why the marker sits underneath the cache —
+    above it, the marker is a silent no-op.
+
+    Add a helper here when compiled code starts calling it. Two are deliberately excluded and must never
+    be marked: `is_cuda_stream_capturing` and `is_torch_deterministic` genuinely change answer during a
+    process, so folding a transient into the graph would be worse than the graph break.
+    """
+    import torch
+
+    import transformers.utils.import_utils as import_utils
+
+    helper = getattr(import_utils, helper_name)
+    torch.compiler.reset()
+
+    @torch.compile(fullgraph=True)
+    def run(x):
+        return x + 1 if helper(*args) else x - 1
+
+    run(torch.zeros(3))  # a graph break inside the helper would raise here

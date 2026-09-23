@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import typing
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
@@ -61,6 +62,7 @@ from .utils import (
     is_torch_available,
     list_repo_templates,
     logging,
+    resolve_revision,
 )
 from .utils.chat_template_utils import _get_template_variables, render_jinja_template
 from .utils.type_validators import (
@@ -200,6 +202,8 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
         return_mm_token_type_ids (`bool`, *optional*):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
+        return_text_replacement_offsets (`bool`, *optional*):
+            Whether to return character offsets for each mm placeholder and its replacement.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -225,6 +229,7 @@ class TextKwargs(TypedDict, total=False):
     verbose: bool | None
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
+    return_text_replacement_offsets: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
@@ -239,7 +244,8 @@ class ImagesKwargs(TypedDict, total=False):
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
-            Resize the shorter side of the input to `size["shortest_edge"]`.
+            Resize using one of the supported size dictionaries. Pixel-area bounds use
+            `{"min_pixels": int, "max_pixels": int}`.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
             Whether to default to a square when resizing, if size is an int.
         crop_size (`dict[str, int]`, *optional*):
@@ -406,6 +412,9 @@ class AudioKwargs(TypedDict, total=False):
             If set, will pad the sequence to a multiple of the provided value.
         return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        device (`str` or `torch.device`, *optional*):
+            The device to compute the audio features on (e.g. "cpu", "cuda"), only relevant for feature
+            extractors that compute them with torch.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -422,6 +431,7 @@ class AudioKwargs(TypedDict, total=False):
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
     pad_to_multiple_of: Annotated[int | None, positive_int()]
     return_attention_mask: bool | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     load_audio_backend: str | None
 
@@ -670,7 +680,7 @@ class ProcessorMixin(PushToHubMixin):
             processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
         if videos is not None and hasattr(self, "video_processor"):
             processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
-        if audio is not None and hasattr(self, "feature_extractor"):
+        if audio is not None and self._audio_processor is not None:
             processed_audio, audio_replacements = self._process_audio(audio, **merged_kwargs["audio_kwargs"])
 
         text_inputs = {}
@@ -725,9 +735,9 @@ class ProcessorMixin(PushToHubMixin):
             # avoid in-place updates on text
             text = list(text).copy()
 
-        if audio is not None and hasattr(self, "feature_extractor"):
-            sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
-            audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
+        if audio is not None and self._audio_processor is not None:
+            sampling_rate = kwargs.get("sampling_rate", self._audio_processor.sampling_rate)
+            audio = self._audio_processor.fetch_audio(audio, sampling_rate=sampling_rate)
             audio = make_list_of_audio(audio)
 
         if images is not None and hasattr(self, "image_processor"):
@@ -782,8 +792,13 @@ class ProcessorMixin(PushToHubMixin):
 
         return processed_videos, video_replacements
 
+    @property
+    def _audio_processor(self):
+        # TODO: To be replaced with `audio_processor`
+        return getattr(self, "audio_processor", getattr(self, "feature_extractor", None))
+
     def _process_audio(self, audio: AudioInput, **kwargs):
-        processed_audio = self.feature_extractor(audio, **kwargs)
+        processed_audio = self._audio_processor(audio, **kwargs)
 
         audio_replacements = []
         if getattr(self, "audio_token", None) is not None:
@@ -793,7 +808,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return processed_audio, audio_replacements
 
-    # To be overriden by each model's processor if they need to add placeholder tokens
+    # To be overridden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
@@ -852,7 +867,7 @@ class ProcessorMixin(PushToHubMixin):
                     - `"text"` (`str`): the original placeholder token string that was matched
                     - `"replacement"` (`str`): the string it was replaced with
         """
-        # Early exit if no special tokens found, nothing to replace
+        # Early exit if no special tokens found, nothing to replace or if text is not a list
         if not self.all_special_multimodal_tokens:
             return text, []
 
@@ -1222,7 +1237,8 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
-        # holding a copy for optionally loading the audio tokenizer (if available)
+        # holding a copy for optionally loading the audio tokenizer (if available). It keeps the revision requested by
+        # the user, as the audio tokenizer usually lives in another repository.
         audio_tokenizer_kwargs = copy.deepcopy(kwargs)
 
         cache_dir = kwargs.pop("cache_dir", None)
@@ -1232,6 +1248,15 @@ class ProcessorMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+
+        # Resolve the revision once, so that the template listing and all the files below come from the same repo state
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -1712,7 +1737,14 @@ class ProcessorMixin(PushToHubMixin):
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
+        # Resolve the revision once, so the processor config and all its sub-processors come from the same repo state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         if token is not None:
             kwargs["token"] = token
@@ -2068,15 +2100,21 @@ class ProcessorMixin(PushToHubMixin):
                     True  # force offset mapping so we can infer token boundaries
                 )
 
-        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
-        sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
+        audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
+        sampling_rate = kwargs.get(
+            "sampling_rate", processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
+        )
         if sampling_rate is None:
-            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
-                sampling_rate = self.feature_extractor.sampling_rate
+            if hasattr(self._audio_processor, "sampling_rate"):
+                sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 
-        load_audio_backend = kwargs.get("load_audio_backend", processor_kwargs.get("load_audio_backend"))
+        load_audio_backend = kwargs.get(
+            "load_audio_backend",
+            processor_kwargs.get("load_audio_backend", audio_kwargs_from_user.get("load_audio_backend")),
+        )
         if load_audio_backend is None:
             default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
             load_audio_backend = default_audio_kwargs.get("load_audio_backend", "auto")
@@ -2198,6 +2236,14 @@ class ProcessorMixin(PushToHubMixin):
             if return_tensors:
                 processor_kwargs["return_tensors"] = return_tensors
 
+            # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
+            # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
+            if batch_audios:
+                if "sampling_rate" in audio_kwargs_from_user:
+                    processor_kwargs["audio_kwargs"] = {**audio_kwargs_from_user, "sampling_rate": sampling_rate}
+                else:
+                    processor_kwargs["sampling_rate"] = sampling_rate
+
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
@@ -2247,6 +2293,7 @@ class ProcessorMixin(PushToHubMixin):
         schema: dict | None = None,
         *,
         prefix: "str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None" = None,
+        tools: list[dict | Callable] | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
@@ -2266,10 +2313,13 @@ class ProcessorMixin(PushToHubMixin):
                 The prompt that came before generation. Many chat templates pre-write part of the message, so
                 this is needed to parse correctly. For a batched `response`, pass either a single prefix
                 (broadcast to every item) or one prefix per item. Only supported with new-style templates.
+            tools (`list[Union[Dict, Callable]]`, *optional*):
+                Tools available to the model, in the same format as `apply_chat_template` accepts.
+                Tool-call arguments are cast using the calling tool's JSON schema.
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError("Can't use parse_response on a processor class without a tokenizer!")
-        return self.tokenizer.parse_response(response, schema, prefix=prefix)
+        return self.tokenizer.parse_response(response, schema, prefix=prefix, tools=tools)
 
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs

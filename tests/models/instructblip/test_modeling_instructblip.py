@@ -791,7 +791,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             attn_implementation="eager",
         )
 
-        url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/lavis_confusing_pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
@@ -802,18 +802,14 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 1623, 263, 19587, 4272, 11952, 29889],
-                ("xpu", 5): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 372, 338, 19500, 1623, 263, 19587, 4272],
-                ("cuda", None): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889],
+                (None, None): [32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 278, 10122, 310, 263, 767, 13407, 373, 2246, 310, 263, 8818, 29875, 7776, 29892, 607, 338, 19500, 1623, 263, 19587, 4272, 11952, 29889],
             }
         )  # fmt: off
         expected_output = expected_outputs.get_expectation()
 
         expected_texts = Expectations(
             {
-                ("xpu", 3): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving down a busy city street.",
-                ("xpu", 5): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while it is driving down a busy city",
-                ("cuda", None): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
+                (None, None): 'What is unusual about this image? The unusual aspect of this image is the presence of a man standing on top of a taxi cab, which is driving down a busy city street.',
             }
         )  # fmt: off
         expected_text = expected_texts.get_expectation()
@@ -829,7 +825,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             dtype=torch.bfloat16,
         ).to(torch_device)
 
-        url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/lavis_confusing_pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
@@ -852,16 +848,14 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                (None, None): [0, 37, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 3, 9, 4459, 6177, 6, 11, 3, 88, 19, 3609, 46, 3575, 53, 1476, 16, 80, 609, 11, 3, 9, 10428, 8235, 16, 8, 119, 5, 37, 1023, 19, 7225, 16, 24, 34, 1267, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 1],
-                ("xpu", 5): [0, 37, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 46, 3575, 53, 1476, 5223, 12, 8, 223, 13, 8, 4049, 6, 15495, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 5, 37, 1023, 19, 7225, 16, 24, 34, 1267, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 6, 84, 164, 3130, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 5, 1],
+                (None, None): [0, 37, 7225, 1023, 9850, 7, 3, 9, 388, 4125, 30, 420, 13, 3, 9, 9256, 10891, 16, 8, 2214, 13, 3, 9, 690, 2815, 5, 37, 388, 19, 6771, 3, 9, 508, 1464, 2689, 6, 15495, 24, 3, 88, 164, 36, 464, 30, 3, 9, 1449, 516, 42, 3, 26564, 3, 9, 1689, 5, 37, 1023, 92, 753, 3, 9, 4459, 9256, 10891, 28, 3, 9, 1320, 24, 608, 7, 96, 382, 8606, 121, 16, 8, 4548, 18, 3535, 2752, 13, 8, 1023, 5, 37, 1320, 9379, 24, 8, 568, 19, 3, 9, 9256, 2535, 6, 84, 164, 6360, 24, 8, 568, 19, 3, 9, 1449, 10416, 5, 1],
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(outputs[0].tolist(), expected_outputs)
 
         expected_text = Expectations(
             {
-                (None, None): "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with a yellow tie, and he is holding an ironing board in one hand and a laundry basket in the other. The image is unusual in that it shows a man ironing clothes on the back of a van in the middle of a busy city street.",
-                ("xpu", 5): "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with an ironing board attached to the back of the van, suggesting that he is doing his own laundry at home. The image is unusual in that it shows a man ironing clothes on the back of a van in the middle of a busy city street, which may suggest that he is doing his own laundry at home.",
+                (None, None): 'The unusual image depicts a man standing on top of a taxicab in the middle of a city street. The man is carrying a large toolbox, suggesting that he may be working on a construction project or repairing a vehicle. The image also features a yellow taxicab with a sign that reads "Taxi" in the upper-right corner of the image. The sign indicates that the person is a taxi driver, which may indicate that the person is a construction worker.',
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, expected_text)

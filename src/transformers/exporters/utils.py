@@ -55,11 +55,13 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+    from torch._prims_common import is_contiguous_or_false
 
+    from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
     from ..vision_utils import (
         get_vision_attention_seqlens,
-        get_vision_bilinear_indices_and_weights,
+        get_vision_interpolation_indices_and_weights,
         get_vision_merged_shape,
         get_vision_nearest_position_ids,
         get_vision_position_ids,
@@ -433,9 +435,10 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     `window_index`/`cu_window_seqlens`/`max_window_seqlen` (XNet-style window attn) and
     `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
 
-    Optional helpers are gated by the presence of their config attribute on the encoder
-    (`window_size`+`patch_size` for window attention, `num_grid_per_side` for bilinear),
-    so a model that doesn't use that feature won't get its kwarg injected.
+    Optional helpers are gated by a submodule attribute (`window_size`+`patch_size` for window
+    attention, `num_grid_per_side` for bilinear) or, for model-specific ones, by the encoder's
+    modeling module defining the helper (`get_vision_frame_index` / `get_vision_temporal_merge_index`
+    for kimi_k25) — so a model that doesn't use a feature won't get its kwarg injected.
     """
     grid_thw = inputs["grid_thw"]
     spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
@@ -444,9 +447,14 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         # none (its encoder hard-codes `1` because spatial merging happens in the projector).
         spatial_merge_size = inputs.get("merge_sizes", 1)
 
-    cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, model.config, kwargs=inputs)
-    inputs["cu_seqlens"] = cu_seqlens
-    inputs["max_seqlen"] = max_seqlen
+    # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
+    # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
+    # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
+    module = sys.modules[type(model).__module__]
+    temporal_encoder = hasattr(module, "get_vision_frame_index")
+    inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
+        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
+    )
     # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
     # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
     include_temporal = _find_submodule_attr(model, "axis_dim") is not None
@@ -464,9 +472,38 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
-        inputs["bilinear_indices"], inputs["bilinear_weights"] = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side, spatial_merge_size
+        # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
+        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear, muse_glimmer uses a
+        # grid_sample-style zeros padding); read the flags rather than inferring, so the precomputed
+        # tensors match exactly what the model computes.
+        mode = _find_submodule_attr(model, "interpolation_mode") or "bilinear"
+        padding = _find_submodule_attr(model, "interpolation_padding") or "border"
+        align_corners = _find_submodule_attr(model, "interpolation_align_corners") is True
+        inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side,
+            mode=mode,
+            align_corners=align_corners,
+            spatial_merge_size=spatial_merge_size,
+            padding=padding,
         )
+
+    # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.
+    if temporal_encoder:
+        inputs["frame_index"] = module.get_vision_frame_index(grid_thw)
+
+    # Temporal-pooling spatial merger (kimi_k25): one gather index replaces its per-clip merge loop.
+    if hasattr(module, "get_vision_temporal_merge_index"):
+        merge_kernel_size = _find_submodule_attr(model, "merge_kernel_size")
+        kernel_height, kernel_width = (
+            merge_kernel_size if not isinstance(merge_kernel_size, int) else (merge_kernel_size, merge_kernel_size)
+        )
+        inputs["temporal_merge_index"] = module.get_vision_temporal_merge_index(grid_thw, kernel_height, kernel_width)
+
+    # Pixel-shuffle spatial merger (muse_glimmer): one gather index replaces its per-image merge loop.
+    if hasattr(module, "get_vision_pixel_shuffle_index"):
+        merge_size = _find_submodule_attr(model, "merge_size")
+        inputs["pixel_shuffle_index"] = module.get_vision_pixel_shuffle_index(grid_thw, merge_size)
 
 
 @register_export_input_preparer("target_sizes")
@@ -490,6 +527,23 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
         )
         inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
+
+
+@register_export_input_preparer("image_sizes")
+def _prepare_image_sizes_as_ints(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Replace a tensor `image_sizes` with a python list of `(h, w)` int-tuples (the `.tolist()` runs here,
+    outside the traced graph).
+
+    `image_sizes` is per-image geometry, and encoders crop/split each image by it — e.g.
+    `image_sizes[i] // patch_size` (Pixtral) or `int(image_sizes[i] / factor)` (Emu3 VQVAE). As a tensor
+    those bounds become unbacked symints under `torch.export`; as python ints they stay static (matching
+    each encoder's own `image_sizes is None` fallback, which already builds int-tuples). Models that route
+    `image_sizes` around the traced graph (e.g. LLaVA-NeXT resolves anyres before tracing) never hit this.
+    """
+    image_sizes = inputs["image_sizes"]
+    if not torch.is_tensor(image_sizes):
+        return
+    inputs["image_sizes"] = [tuple(int(v) for v in row) for row in image_sizes.tolist()]
 
 
 @register_export_input_preparer("input_features", "feature_lens")
@@ -615,22 +669,119 @@ def _capture_forward(module: torch.nn.Module):
         module.forward = original
 
 
+def _merge_decode_calls(decode_calls: list[dict]) -> dict:
+    """Merge consecutive single-token decode captures into one multi-token decode input.
+
+    Each `model.generate` decode step feeds a single new token, so `torch.export` (with `Dim.AUTO`)
+    sees a query-sequence axis of length 1 and specializes it to a constant — the exported decode can
+    then only ever run one token. Concatenating `N` consecutive decode steps along that axis yields a
+    genuine `N`-token decode input: the traced graph is identical (a KV-cache forward), but the sequence
+    axis now has hint `N > 1` so it stays dynamic. The exported decode then handles both a single token
+    (ordinary decoding) and many (continuation-from-past for multi-turn, or a plain prefill when the cache is empty).
+
+    The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill, before
+    the chunk). The per-token tensors are concatenated along their sequence axis; `attention_mask` is
+    handled below (its layout depends on the cache).
+    """
+    first = decode_calls[0]
+    merged = copy.copy(first)
+
+    # Concatenation assumes single-token decode steps. When `use_cache` is off the steps re-run the whole
+    # growing sequence (query length > 1) — each is already a valid multi-token forward, so take the last.
+    def query_length(call: dict) -> int | None:
+        for key in ("input_ids", "inputs_embeds"):
+            value = call.get(key)
+            if value is not None:
+                return value.shape[1]
+        return None
+
+    if any(query_length(call) != 1 for call in decode_calls):
+        return copy.copy(decode_calls[-1])
+
+    def concat_along(key: str, dim: int) -> None:
+        values = [call[key] for call in decode_calls if call.get(key) is not None]
+        if len(values) == len(decode_calls):
+            merged[key] = torch.cat(values, dim=dim)
+
+    concat_along("input_ids", 1)
+    concat_along("inputs_embeds", 1)
+    concat_along("cache_position", 0)
+    # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
+    # last in both, so a negative dim concatenates it correctly either way.
+    concat_along("position_ids", -1)
+
+    # `attention_mask` is either a 2D padding mask `[batch, kv]` (a growing `DynamicCache`: the model
+    # rebuilds the causal mask from `position_ids` / `cache_position` internally, so the last step's
+    # mask — spanning the most positions — is all it needs) or a 4D causal mask `[batch, heads, query,
+    # kv]` (a static cache passes the mask in explicitly). For the 4D case each single-token step is one
+    # causal query row against the fixed-size cache, so concatenating along the query axis rebuilds the
+    # correct `N`-token causal mask; taking just the last step would freeze the query axis at 1 and the
+    # exported decode could never run more than one token. Hybrid-attention models pass a dict
+    # `{attention_type: 4D mask}` instead of a single tensor — merge each entry the same way.
+    masks = [call.get("attention_mask") for call in decode_calls]
+    if all(mask is not None for mask in masks):
+        merged["attention_mask"] = _merge_step_masks(masks)
+
+    return merged
+
+
+def _merge_step_masks(masks: list[Any]) -> Any:
+    """Merge one attention mask per decode step into a single multi-token mask.
+
+    A 4D causal mask `[batch, heads, query, kv]` is concatenated along the query axis (each step is one
+    causal row against the fixed cache); a 2D padding mask keeps the last step (it already spans the most
+    positions). A dict `{attention_type: mask}` (hybrid-attention models) is merged entry by entry, and a
+    `None` mask (an attention type the model leaves unmasked) is preserved as `None`.
+    """
+    last_mask = masks[-1]
+    if last_mask is None:
+        return None
+    if isinstance(last_mask, dict):
+        return {key: _merge_step_masks([mask[key] for mask in masks]) for key in last_mask}
+    if last_mask.dim() == 4 and all(mask.shape[3] == last_mask.shape[3] for mask in masks):
+        return torch.cat(masks, dim=2)
+    return last_mask
+
+
 def decompose_prefill_decode(
     model: PreTrainedModel,
     inputs: dict[str, Any],
+    generation_config: Any = None,
+    multi_token_decode: bool = False,
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Run `model.generate()` for 2 tokens and capture prefill and decode inputs.
+    """Run `model.generate()` and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
 
+    `generation_config` is forwarded to `generate()` (defaulting to the model's own), so the captured
+    inputs use whatever cache `generate()` would build. Pass one with `cache_implementation="static"`
+    and `max_cache_len=N` to capture a **statically sized** cache in the decode inputs — the basis for
+    a static-cache export. `max_cache_len` sizes the cache independently of the capture, so the
+    exported decode takes a fixed `[..., N, ...]` cache rather than a growing one.
+
+    When `multi_token_decode`, the `decode` component is captured as a **multi-token** decode — two
+    consecutive decode steps merged (see `_merge_decode_calls`) so its query-sequence axis stays
+    symbolic (a single-token decode would specialize that axis to 1). It then handles both one token
+    (ordinary decoding) and many (continuation-from-past, or a plain prefill when the cache is empty). Otherwise `decode` is the
+    classic single-token decode.
+
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`:
-        `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`
+        `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`.
     """
+    # 1 prefill forward + 1 decode (or 2 decode steps merged, when `multi_token_decode`) forward to capture.
+    # Set the capture window on the config itself, not as generate() kwargs — passing a
+    # `generation_config` alongside generation kwargs is deprecated. Base it on the model's own config
+    # when none is given (preserving its defaults), and deep-copy into a distinct `capture_config` so
+    # the caller's `generation_config` is never mutated.
+    num_new_tokens = 3 if multi_token_decode else 2
+    capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
+    capture_config.max_new_tokens = num_new_tokens
+    capture_config.min_new_tokens = num_new_tokens
     try:
         with _capture_forward(model) as calls:
-            model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
+            model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "
@@ -638,17 +789,28 @@ def decompose_prefill_decode(
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
 
-    if len(calls) < 2:
+    if len(calls) < num_new_tokens:
         raise RuntimeError(
-            f"decompose_prefill_decode expected at least 2 calls to {type(model).__name__}.forward() "
-            f"during generate(max_new_tokens=2), but captured {len(calls)}. This likely means "
-            "generate() bypasses the top-level forward() (e.g. delegates to an inner model), "
-            "so prefill/decode decomposition is not supported for this architecture."
+            f"decompose_prefill_decode expected at least {num_new_tokens} calls to "
+            f"{type(model).__name__}.forward() during generate(max_new_tokens={num_new_tokens}), but "
+            f"captured {len(calls)}. This likely means generate() bypasses the top-level forward() "
+            "(e.g. delegates to an inner model), so prefill/decode decomposition is not supported "
+            "for this architecture."
         )
 
+    # Remove `logits_to_keep` from the captured calls — it's a generation-time hint for the model's
+    # internal top-k pruning, not a forward input. The export graph should not depend on it.
+    for call in calls:
+        call.pop("logits_to_keep", None)
+
+    # A single-token decode specializes its query-sequence axis to 1 (never dynamic). When
+    # `multi_token_decode`, merge the two decode steps into one multi-token decode so that axis stays
+    # symbolic (continuation-from-past, or a plain prefill when the cache is empty, and it still covers seq == 1).
+    prefill_inputs = calls[0]
+    decode_inputs = _merge_decode_calls(calls[1:num_new_tokens]) if multi_token_decode else calls[1]
     return {
-        "prefill": (copy.copy(model), calls[0]),
-        "decode": (copy.copy(model), calls[1]),
+        "prefill": (copy.copy(model), prefill_inputs),
+        "decode": (copy.copy(model), decode_inputs),
     }
 
 
@@ -695,9 +857,13 @@ def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Mo
     return found
 
 
-def is_multimodal(model: PreTrainedModel) -> bool:
-    """Returns `True` if the model is multi-modal with modal encoders and a language model."""
-    return bool(_find_multimodal_submodules(model))
+def is_multimodal(model: PreTrainedModel | torch.nn.Module) -> bool:
+    """Returns `True` if the model is multi-modal with modal encoders and a language model.
+
+    A non-`PreTrainedModel` (e.g. a bare `nn.Module`) has no canonical `get_encoder`/`get_decoder`
+    accessors and is trivially not multi-modal, so it short-circuits to `False`.
+    """
+    return isinstance(model, PreTrainedModel) and bool(_find_multimodal_submodules(model))
 
 
 def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
@@ -745,7 +911,7 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
 
 
 def decompose_for_generation(
-    model: PreTrainedModel, inputs: dict[str, Any]
+    model: PreTrainedModel, inputs: dict[str, Any], generation_config: Any = None, multi_token_decode: bool = False
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Decompose a generative model into independently exportable `(model, forward_inputs)` pairs.
 
@@ -757,13 +923,21 @@ def decompose_for_generation(
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
         inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
+        generation_config: Optional `GenerationConfig` forwarded to `generate()` during capture. Pass
+            one with `cache_implementation="static"` + `max_cache_len=N` to export against a statically
+            sized cache (see `decompose_prefill_decode`).
+        multi_token_decode: When `True`, capture the `decode` component as a multi-token decode (dynamic
+            query sequence axis: multiple tokens at once — continuation-from-past, or a plain prefill when the cache is empty); a
+            single-token decode can't stay dynamic (see `decompose_prefill_decode`).
 
     Returns:
         `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
         plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
         `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
     """
-    stages = decompose_prefill_decode(model, inputs)
+    stages = decompose_prefill_decode(
+        model, inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
+    )
     prefill_model, prefill_inputs = stages["prefill"]
 
     if not is_multimodal(prefill_model):
@@ -772,3 +946,290 @@ def decompose_for_generation(
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
     return components
+
+
+# ── Cross-backend patches ───────────────────────────────────────────────────
+# Registered against every backend that needs them, so a workaround lives in one place even when the
+# backends break the op for different reasons.
+
+
+@register_patch("onnx", "transformers.models.blt.modeling_blt.byte_group_hash_function")
+@register_patch("openvino", "transformers.models.blt.modeling_blt.byte_group_hash_function")
+def _patch_byte_group_hash(original):
+    """Evaluate BLT's rolling hash in base-256 limbs, which both backends need for different reasons.
+
+    The hash multiplies each byte of a group by ``prime ** k`` and relies on int64 semantics. ONNX
+    Runtime multiplies int64 exactly but reduces through a float: ``sum`` turns `7000000049` into
+    `7000000000`, losing everything below fp32's mantissa. OpenVINO's CPU plugin is narrower still —
+    it executes every internal node in `i32`, so `1000000007 ** 2` saturates at `2147483647`. Either
+    way the hash reads the wrong embedding rows.
+
+    The powers are compile-time constants and the hash reaches the model only as ``hash % max_hash``,
+    so it is computed here as a sum of 8-bit limbs: the single pass below carries each lane and folds
+    it into the running remainder, keeping every intermediate small enough to be exact in both
+    backends. Each limb is taken with `BitwiseAnd`, the only division is by 256 of a value already a
+    multiple of it, and dropping the last carry is the int64 wraparound.
+    """
+    limb_bits = 8
+    limb = 1 << limb_bits
+    limb_count = 64 // limb_bits
+
+    def patch(token_ids, group_size: int = 2, prime: int = 1000000007, max_hash: int = 30000):
+        # Beyond a 16-bit table the limb products leave the window where the plugin's `%` is exact
+        if max_hash > (1 << 16):
+            return original(token_ids, group_size=group_size, prime=prime, max_hash=max_hash)
+
+        powers = [pow(prime, index, 1 << 64) for index in range(group_size)]
+        limbs = torch.tensor(
+            [[(power >> (limb_bits * position)) % limb for power in powers] for position in range(limb_count)],
+            dtype=torch.int64,
+            device=token_ids.device,
+        )
+        padding = torch.zeros(token_ids.shape[0], group_size - 1, dtype=torch.int64, device=token_ids.device)
+        windows = torch.cat([padding, token_ids.to(torch.int64)], dim=1).unfold(1, group_size, 1)
+        lanes = (windows.unsqueeze(-2) * limbs).sum(-1)
+
+        value = carry = torch.zeros_like(lanes[..., 0])
+        for position in range(limb_count):
+            total = lanes[..., position] + carry
+            digit = torch.bitwise_and(total, limb - 1)
+            carry = (total - digit) // limb
+            value = (value + digit * ((1 << (limb_bits * position)) % max_hash)) % max_hash
+        # Those limbs spell the *unsigned* value; eager took the remainder of a signed int64, which
+        # is 2**64 lower whenever the top bit -- the last digit's -- is set.
+        negative = (digit >= limb // 2).to(torch.int64)
+        return (value - negative * ((1 << 64) % max_hash) + max_hash) % max_hash
+
+    return patch
+
+
+@register_patch("onnx", "torch.histc")
+@register_patch("openvino", "torch.histc")
+def _patch_histc(original):
+    """Replace `torch.histc` with a statically-shaped, deterministic `zeros` + `scatter_add_`.
+
+    torchlib's `aten_histc` rejects integer input and casting to float calls the nondeterministic
+    `_histc_cuda`; OV has no `aten.histc` lowering at all. `bincount`, the obvious replacement, has
+    an unbacked SymInt output that trips downstream meta-shape guards (grouped_mm's `offs` check).
+    """
+
+    def patch(input, bins=100, min=0, max=0, *, out=None):
+        flat = input.reshape(-1)
+        if max == min == 0:
+            min_val = flat.min().float()
+            max_val = flat.max().float()
+        else:
+            min_val = torch.tensor(float(min), device=flat.device)
+            max_val = torch.tensor(float(max), device=flat.device)
+        bin_width = (max_val - min_val) / bins
+        idx = ((flat.float() - min_val) / bin_width).long().clamp_(0, bins - 1)
+        out_dtype = input.dtype if input.is_floating_point() else torch.float
+        counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
+        return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
+
+    return patch
+
+
+@register_patch("onnx", "torch.searchsorted")
+@register_patch("openvino", "torch.searchsorted")
+@register_patch("executorch", "torch.searchsorted")
+def _patch_searchsorted(original):
+    """Decompose `searchsorted` into a broadcast comparison + sum — the insertion index into a sorted
+    sequence is the count of entries below. O(N*M) instead of O(M log N), but no backend has the op:
+    ONNX lacks it, OV rejects the node when `sorter`/`out` trace as `None`, and the portable runtime
+    ships no kernel.
+    """
+
+    def patch(sorted_sequence, values, *, out_int32=False, right=False, side=None, out=None, sorter=None):
+        if side is not None:
+            right = side == "right"
+        if right:
+            mask = sorted_sequence.unsqueeze(-1) <= values.unsqueeze(-2)
+        else:
+            mask = sorted_sequence.unsqueeze(-1) < values.unsqueeze(-2)
+        result = mask.sum(-2)
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.bucketize")
+@register_patch("executorch", "torch.bucketize")
+def _patch_bucketize(original):
+    """Decompose `bucketize` into a broadcast comparison + sum — `searchsorted` with the arguments the
+    other way round. ONNX's own decomposition materialises scalar constants that become
+    `alias`/`detach_` and break aot's functional-graph assertion; the portable runtime has no
+    `bucketize.Tensor_out` kernel.
+    """
+
+    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
+        if boundaries.numel() == 0:
+            result = torch.zeros_like(input, dtype=torch.int64)
+        else:
+            below = boundaries <= input.unsqueeze(-1) if right else boundaries < input.unsqueeze(-1)
+            result = below.sum(dim=-1)
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("openvino", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
+def _patch_broadcast_mask_expansion(_original):
+    """Replace vmap-based mask expansion with broadcast expansion.
+
+    No backend traces `torch.vmap`: OV's frontend sees inputs that "escaped" the vmap context,
+    and `aot_autograd`/`gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering.
+    """
+
+    def patch(mask_function):
+        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
+            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
+            return mask_function(*broadcasted).expand(
+                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
+            )
+
+        return _expanded
+
+    return patch
+
+
+@register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+def _patch_reshape(original):
+    """Materialise a non-contiguous input before `reshape`/`view`.
+
+    Both backends refuse the resulting `aten.view`, and both eat a plain `.contiguous()` (the ONNX
+    optimizer folds it, functionalization drops it) — a clone survives. `contiguous_format` is not
+    optional: a bare `.clone()` preserves a transposed dim-order ExecuTorch can't map to a
+    `torch.memory_format`.
+    """
+
+    def patch(input, *shape, **kwargs):
+        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
+            input = input.clone(memory_format=torch.contiguous_format)
+        return original(input, *shape, **kwargs)
+
+    return patch
+
+
+# ── Cross-backend FX fixes ──────────────────────────────────────────────────
+
+
+@register_fx_node_fix("onnx")
+@register_fx_node_fix("openvino")
+def _fix_scatter_reduce(gm, node):
+    """Lower ``aten.scatter_reduce.two`` at the FX level — OV's frontend has no translation,
+    and its ``ScatterElementsUpdate`` op can't accept the ``reduce`` string as a constant input.
+
+    Handles two patterns the MoE/SSM models use:
+      * ``reduce="sum", include_self=True`` → ``aten.scatter_add`` (BLT/JetMoe/NemotronH router).
+      * ``reduce="amax"/"amin", include_self=False`` → masked extremum over a one-hot expansion of
+        ``index`` (BLT byte-pooling, tapas segment reduction).
+      * ``reduce="sum"/"mean", include_self=False`` → ``scatter_add`` onto zeros, divided by a
+        scattered count for the mean (tapas segment reductions).
+
+    Other combinations fall through to the generic OpConversionFailure.
+    """
+    if node.target is not torch.ops.aten.scatter_reduce.two:
+        return False
+    if len(node.args) < 5:
+        return False
+    reduce = node.args[4]
+    include_self = node.kwargs.get("include_self", True)
+    self_arg, dim, index, src = node.args[0:4]
+
+    if reduce == "sum" and include_self is True:
+        with gm.graph.inserting_before(node):
+            new = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(self_arg, dim, index, src))
+            new.meta.update(node.meta)
+        node.replace_all_uses_with(new)
+        gm.graph.erase_node(node)
+        return True
+
+    if reduce in ("sum", "mean") and include_self is False:
+        # ``include_self=False``: a position that receives at least one source element reduces over
+        # *only* those elements, while a position nothing scatters to keeps ``self``. Scattering onto
+        # zeros gives the former, and scattering ones alongside counts the contributors — which both
+        # divides the mean and says which positions were touched at all.
+        self_val = self_arg.meta.get("val")
+        src_val = src.meta.get("val")
+        if self_val is None or src_val is None:
+            return False
+        with gm.graph.inserting_before(node):
+            zeros = gm.graph.call_function(torch.ops.aten.zeros_like.default, args=(self_arg,))
+            sums = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(zeros, dim, index, src))
+            ones = gm.graph.call_function(torch.ops.aten.ones_like.default, args=(src,))
+            counts = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(zeros, dim, index, ones))
+            values = sums
+            if reduce == "mean":
+                # clamped so untouched positions divide by 1 instead of 0 — `where` discards them anyway
+                divisor = gm.graph.call_function(torch.ops.aten.clamp_min.default, args=(counts, 1))
+                values = gm.graph.call_function(torch.ops.aten.div.Tensor, args=(sums, divisor))
+            # OV's frontend has no ``gt.Scalar`` translation, so compare against a 0-dim tensor
+            zero_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default,
+                args=(0,),
+                kwargs={"dtype": src_val.dtype, "device": src_val.device},
+            )
+            touched = gm.graph.call_function(torch.ops.aten.gt.Tensor, args=(counts, zero_tensor))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(touched, values, self_arg))
+            result.meta.update(node.meta)
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+
+    if reduce in ("amax", "amin") and include_self is False:
+        # ``amax``/``amin`` with ``include_self=False``: each source element competes for the extremum
+        # at ``index[j]``; positions no source scatters to keep ``self``'s original value. Decompose to
+        # a broadcast comparison + reduction: build a one-hot mask ``(index.unsqueeze(dim) ==
+        # arange(K))``, reduce ``src`` where the mask is set (the opposite extreme elsewhere, so it
+        # never wins), then fall back to ``self`` for positions with no scatter.
+        self_val = self_arg.meta.get("val")
+        src_val = src.meta.get("val")
+        if self_val is None or src_val is None or not src_val.dtype.is_floating_point:
+            return False
+        ndim = self_val.ndim
+        d = dim if dim >= 0 else dim + ndim
+        k_size = self_val.shape[d]
+        # the identity for the reduction: an element that never wins
+        finfo = torch.finfo(src_val.dtype)
+        fill_value = finfo.min if reduce == "amax" else finfo.max
+        reduction = torch.ops.aten.amax.default if reduce == "amax" else torch.ops.aten.amin.default
+        k_shape = [1] * (ndim + 1)
+        k_shape[d] = -1
+        with gm.graph.inserting_before(node):
+            # ``k_size`` is symbolic under dynamic shapes (e.g. BLT's ``max_num_patches``); baking
+            # the ``SymInt`` as an ``arange`` literal makes OV decode it as a malformed inlined
+            # constant. Feed the dimension through a ``sym_size`` node so it stays a real Range input.
+            arange_size = (
+                k_size
+                if isinstance(k_size, int)
+                else gm.graph.call_function(torch.ops.aten.sym_size.int, args=(self_arg, d))
+            )
+            arange = gm.graph.call_function(
+                torch.ops.aten.arange.default, args=(arange_size,), kwargs={"device": self_val.device}
+            )
+            k_range = gm.graph.call_function(torch.ops.aten.view.default, args=(arange, k_shape))
+            index_unsq = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(index, d))
+            mask = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(index_unsq, k_range))
+            src_unsq = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(src, d))
+            # OV's frontend has no ``where.ScalarOther`` translation, so materialise the scalar
+            # branches as 0-dim tensors and use ``where.self`` (broadcasts the same way).
+            scalar_kwargs = {"dtype": src_val.dtype, "device": src_val.device}
+            fill_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default, args=(fill_value,), kwargs=scalar_kwargs
+            )
+            masked = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, src_unsq, fill_tensor))
+            extrema = gm.graph.call_function(reduction, args=(masked, [d + 1]))
+            any_match = gm.graph.call_function(torch.ops.aten.any.dim, args=(mask, d + 1))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, extrema, self_arg))
+            result.meta.update(node.meta)
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+
+    return False
