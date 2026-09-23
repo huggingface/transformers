@@ -29,7 +29,7 @@ from ...utils import (
     is_vision_available,
 )
 from ...utils.import_utils import requires
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 
 
 if is_vision_available():
@@ -119,6 +119,13 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs,
     ):
+        # Unpack nested audio lists (e.g. [[aud1, aud2], [aud3]]) before `make_list_of_audio`
+        audio_per_sample = None
+        if isinstance(audio, (list, tuple)) and any(isinstance(el, (list, tuple)) for el in audio):
+            nested_audio = [list(el) if isinstance(el, (list, tuple)) else [el] for el in audio]
+            audio_per_sample = [len(el) for el in nested_audio]
+            audio = [item for sublist in nested_audio for item in sublist]
+
         images, text, videos, audio = super().prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
@@ -127,16 +134,43 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         if images is not None:
             images = make_nested_list_of_images(images)
 
-        # Normalize videos so len(videos) gives the number of videos, not frames
-        if videos is not None:
-            videos = make_batched_videos(videos)
+        if audio is not None and audio_per_sample is None:
+            audio_per_sample = [1] * len(audio)
 
-        if images and not text:
-            text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
-        if audio and not text:
-            text = [self.audio_token] * len(audio)
-        if videos is not None and not text:
-            text = [self.video_token] * len(videos)
+        # Normalize videos so len(videos) gives the number of videos, not frames (supporting nested per-sample lists)
+        videos_per_sample = None
+        if videos is not None:
+            if isinstance(videos, (list, tuple)) and not is_valid_video(videos):
+                nested_videos = [
+                    [] if isinstance(el, (list, tuple)) and not el else make_batched_videos(el) for el in videos
+                ]
+                videos_per_sample = [len(el) for el in nested_videos]
+                videos = [item for sublist in nested_videos for item in sublist]
+            else:
+                videos = make_batched_videos(videos)
+                videos_per_sample = [1] * len(videos)
+
+        if not text:
+            modality_counts = []
+            if images is not None:
+                modality_counts.append((self.image_token, [len(image_list) for image_list in images]))
+            if videos is not None:
+                modality_counts.append((self.video_token, videos_per_sample))
+            if audio is not None:
+                modality_counts.append((self.audio_token, audio_per_sample))
+
+            if modality_counts:
+                batch_sizes = {len(counts) for _, counts in modality_counts}
+                if len(batch_sizes) > 1:
+                    raise ValueError(
+                        f"Received inconsistently sized modality batches when `text` is None: "
+                        f"{[len(counts) for _, counts in modality_counts]}."
+                    )
+                batch_size = batch_sizes.pop()
+                text = [
+                    " ".join(token for token, counts in modality_counts for _ in range(counts[sample_idx]))
+                    for sample_idx in range(batch_size)
+                ]
 
         return images, text, videos, audio
 

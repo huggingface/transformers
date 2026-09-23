@@ -285,7 +285,10 @@ embedding = F.normalize((token_embeddings * mask).sum(dim=1) / mask.sum(dim=1).c
 
 ## Processor
 
-[`EmbeddingGemma2Processor`] bundles the tokenizer, the image processor, the audio feature extractor and the video processor. Each modality can be passed on its own, in which case the processor synthesizes the placeholder tokens, so no text is required.
+[`EmbeddingGemma2Processor`] bundles the tokenizer, the image processor, the audio feature extractor and the video processor. When `text` is omitted, the processor automatically synthesizes `<|image|>`, `<|video|>`, and `<|audio|>` placeholders for each sample in the batch (including nested per-sample lists such as `audio=[[audio_1, audio_2], [audio_3]]` or combined modalities).
+
+> [!TIP]
+> For batched multimodal inputs, we recommend passing per-sample dictionaries through **Sentence Transformers** (`model.encode([{"image": ..., "text": ...}, ...])`). For maximum control over exact modality ordering and interleaving, include `<|image|>`, `<|video|>`, and `<|audio|>` placeholders manually in `text`.
 
 ```python
 from transformers import AutoProcessor
@@ -298,15 +301,16 @@ IMAGE = "https://huggingface.co/datasets/huggingface/documentation-images/resolv
 # text only
 inputs = processor(text=["task: search result | query: Which planet is the Red Planet?"], return_tensors="pt")
 
-# media only, placeholders are synthesized
+# media only (text=None), placeholders are synthesized per batch sample
 inputs = processor(images=[IMAGE], return_tensors="pt")
 inputs = processor(videos=["path/to/video.mp4"], return_tensors="pt")
+inputs = processor(audio=[audio_array], return_tensors="pt")  # 1-D float array at 16 kHz
 
-# audio is passed as a raw waveform, a 1-D float array sampled at 16 kHz
-inputs = processor(audio=[audio_array], return_tensors="pt")
+# nested per-sample lists or combined modalities with text=None
+inputs = processor(images=[[IMAGE, IMAGE], [IMAGE]], audio=[[audio_array], [audio_array, audio_array]], return_tensors="pt")
 
-# text and media together, one placeholder token per media item
-inputs = processor(text=["<|image|> a photo of a cat"], images=[IMAGE], return_tensors="pt")
+# manual placeholders in text for full control over modality placement
+inputs = processor(text=["<|image|> a photo of a cat"], images=[[IMAGE]], return_tensors="pt")
 print(inputs.keys())
 # dict_keys(['input_ids', 'attention_mask', 'pixel_values', 'image_position_ids'])
 ```

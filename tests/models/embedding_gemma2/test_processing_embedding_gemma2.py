@@ -266,6 +266,52 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor()
 
     @require_torch
+    def test_multimodal_and_nested_inputs_without_text(self):
+        """Nested per-sample lists and combined modalities with `text=None` synthesize matching placeholders per row."""
+        processor = self.get_processor()
+        img1 = np.random.randint(0, 256, size=(56, 56, 3), dtype=np.uint8)
+        img2 = np.random.randint(0, 256, size=(56, 56, 3), dtype=np.uint8)
+        img3 = np.random.randint(0, 256, size=(56, 56, 3), dtype=np.uint8)
+        vid1 = np.random.randint(0, 256, size=(2, 56, 56, 3), dtype=np.uint8)
+        vid2 = np.random.randint(0, 256, size=(3, 56, 56, 3), dtype=np.uint8)
+        vid3 = np.random.randint(0, 256, size=(2, 56, 56, 3), dtype=np.uint8)
+        aud1 = np.zeros(1600, dtype=np.float32)
+        aud2 = np.zeros(3200, dtype=np.float32)
+        aud3 = np.zeros(1600, dtype=np.float32)
+
+        # 1. Nested audio list: batch size 2, sample 0 has 2 audios, sample 1 has 1 audio
+        out_aud = processor(audio=[[aud1, aud2], [aud3]], return_tensors="pt")
+        self.assertEqual(out_aud["input_ids"].shape[0], 2)
+        self.assertGreater(
+            (out_aud["input_ids"][0] == processor.audio_token_id).sum().item(),
+            (out_aud["input_ids"][1] == processor.audio_token_id).sum().item(),
+        )
+
+        # 2. Nested video list: batch size 2, sample 0 has 2 videos, sample 1 has 1 video
+        out_vid = processor(videos=[[vid1, vid2], [vid3]], do_sample_frames=False, return_tensors="pt")
+        self.assertEqual(out_vid["input_ids"].shape[0], 2)
+        self.assertGreater(
+            (out_vid["input_ids"][0] == processor.video_token_id).sum().item(),
+            (out_vid["input_ids"][1] == processor.video_token_id).sum().item(),
+        )
+
+        # 3. Combined image + audio batch with text=None
+        out_mixed = processor(
+            images=[[img1, img2], [img3]],
+            audio=[[aud1], [aud2, aud3]],
+            return_tensors="pt",
+        )
+        self.assertEqual(out_mixed["input_ids"].shape[0], 2)
+        self.assertGreater((out_mixed["input_ids"][0] == processor.image_token_id).sum().item(), 0)
+        self.assertGreater((out_mixed["input_ids"][0] == processor.audio_token_id).sum().item(), 0)
+        self.assertGreater((out_mixed["input_ids"][1] == processor.image_token_id).sum().item(), 0)
+        self.assertGreater((out_mixed["input_ids"][1] == processor.audio_token_id).sum().item(), 0)
+
+        # 4. Mismatched outer batch sizes across modalities with text=None raises ValueError
+        with self.assertRaisesRegex(ValueError, "inconsistently sized modality batches"):
+            processor(images=[[img1], [img2]], audio=[aud1], return_tensors="pt")
+
+    @require_torch
     def test_video_token_count_matches_frames(self):
         """Ragged batch: every row expands to its own frame count.
 
