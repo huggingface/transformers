@@ -457,7 +457,7 @@ class MaskFormerSwinLayer(nn.Module):
         self.intermediate = MaskFormerSwinIntermediate(config, dim)
         self.output = MaskFormerSwinOutput(config, dim)
 
-    def get_attn_mask(self, input_resolution, dtype=None, device=None):
+    def get_attn_mask(self, input_resolution, device=None, dtype=None):
         """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
         Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
@@ -514,7 +514,7 @@ class MaskFormerSwinLayer(nn.Module):
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
         attn_mask = self.get_attn_mask(
-            (height_pad, width_pad), dtype=hidden_states_windows.dtype, device=hidden_states_windows.device
+            (height_pad, width_pad), device=hidden_states_windows.device, dtype=hidden_states_windows.dtype
         )
 
         self_attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
