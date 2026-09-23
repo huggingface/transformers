@@ -235,3 +235,26 @@ class OpenVINOConfig(DynamoConfig):
     output_path: str | PathLike | None = None
     compress_to_fp16: bool = True
     stateful: bool = True
+
+
+@dataclass
+class ExecutorchQnnConfig(ExecutorchConfig):
+    """
+    Configuration for QNN Transformer export path
+    """
+
+    backend: str = "qnn"
+    backend_hardware: str = "htp"
+    model_id: str = "llama3_2-1b"
+    soc_model: str = "SM8750"
+    artifact_dir: str = "./qnn_hf_transformers"
+    use_fp16: bool = False
+
+
+@dataclass
+class ExecutorchQnnLlmConfig(ExecutorchQnnConfig):
+    """
+    Configuration for the QNN LLM export path.
+    """
+
+    max_seq_len: int = 128
