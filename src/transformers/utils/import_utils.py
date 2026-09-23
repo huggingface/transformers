@@ -2812,18 +2812,16 @@ class _LegacyModuleAliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loade
 
     def __init__(self, resolve: Callable[[str], str | None]):
         self.resolve = resolve  # legacy module name -> replacement module name, `None` if not an alias
-        self.replacements: dict[str, str] = {}
 
     def find_spec(self, fullname, path=None, target=None):
         replacement = self.resolve(fullname)
         if replacement is None or importlib.util.find_spec(replacement) is None:
             return None
-        self.replacements[fullname] = replacement
-        return importlib.util.spec_from_loader(fullname, self)
+        return importlib.machinery.ModuleSpec(fullname, self, loader_state=replacement)
 
     def exec_module(self, module):
         # Import the replacement first: a missing optional dependency fails right here, at the user's import statement.
-        replacement = importlib.import_module(self.replacements[module.__name__])
+        replacement = importlib.import_module(module.__spec__.loader_state)
         vars(module).update({k: v for k, v in vars(replacement).items() if k == "__all__" or not k.startswith("__")})
 
         def __getattr__(name):  # `XImageProcessorFast` classes were renamed `XImageProcessor`

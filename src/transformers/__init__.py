@@ -810,13 +810,13 @@ else:
     # Deprecated top-level module paths -> replacements. Declared here so the legacy names are also part of the lazy
     # import structure, keeping `transformers.tokenization_utils_fast` attribute access working.
     _LEGACY_MODULE_ALIASES = {
-        f"{__name__}.tokenization_utils_fast": f"{__name__}.tokenization_utils_tokenizers",
-        f"{__name__}.tokenization_utils": f"{__name__}.tokenization_utils_sentencepiece",
-        f"{__name__}.image_processing_utils_fast": f"{__name__}.image_processing_backends",
+        "tokenization_utils_fast": "tokenization_utils_tokenizers",
+        "tokenization_utils": "tokenization_utils_sentencepiece",
+        "image_processing_utils_fast": "image_processing_backends",
     }
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
     for _alias in _LEGACY_MODULE_ALIASES:
-        _import_structure.setdefault(_alias.rsplit(".", 1)[-1], set())
+        _import_structure.setdefault(_alias, set())
 
     import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
     import_structure[frozenset({})].update(_import_structure)
@@ -838,7 +838,10 @@ else:
     def _resolve_legacy_module_alias(fullname: str) -> str | None:
         if (match := _LEGACY_FAST_IMAGE_PROCESSOR_MODULE.fullmatch(fullname)) is not None:
             return f"{__name__}.models.{match[1]}.image_processing_{match[2]}"
-        return _LEGACY_MODULE_ALIASES.get(fullname)
+        package, _, name = fullname.rpartition(".")
+        if package == __name__ and name in _LEGACY_MODULE_ALIASES:
+            return f"{__name__}.{_LEGACY_MODULE_ALIASES[name]}"
+        return None
 
     if not any(isinstance(finder, _LegacyModuleAliasFinder) for finder in sys.meta_path):  # this init can run twice
         sys.meta_path.append(_LegacyModuleAliasFinder(_resolve_legacy_module_alias))
