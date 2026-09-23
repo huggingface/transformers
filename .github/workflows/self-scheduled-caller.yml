@@ -78,7 +78,7 @@ jobs:
     name: Model CI (cache test, 4xlarge, EFS baseline)
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@main
     with:
-      folder_slices: '[["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]]'
+      folder_slices: '[["models/bert_generation", "models/cohere2_vision", "models/cohere_asr", "models/colpali", "models/glm4v_moe", "models/hunyuan_v1_moe", "models/hunyuan_vl", "models/hy_v3", "models/hy_v4", "models/hyperclovax", "models/hyperclovax_vision_v2", "models/lfm2_vl", "models/lighton_ocr", "models/llama", "models/qwen3_5", "models/qwen3_5_moe", "models/rf_detr", "models/rwkv"]]'
       machine_type: aws-g5-4xl-efs-test
       slice_id: 0
       docker: huggingface/transformers-all-latest-gpu
@@ -90,7 +90,7 @@ jobs:
     name: Model CI (cache test, 4xlarge, hf-mount bucket)
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@main
     with:
-      folder_slices: '[["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]]'
+      folder_slices: '[["models/bert_generation", "models/cohere2_vision", "models/cohere_asr", "models/colpali", "models/glm4v_moe", "models/hunyuan_v1_moe", "models/hunyuan_vl", "models/hy_v3", "models/hy_v4", "models/hyperclovax", "models/hyperclovax_vision_v2", "models/lfm2_vl", "models/lighton_ocr", "models/llama", "models/qwen3_5", "models/qwen3_5_moe", "models/rf_detr", "models/rwkv"]]'
       machine_type: aws-g5-4xl-hf-test
       slice_id: 0
       docker: huggingface/transformers-all-latest-gpu
@@ -102,7 +102,7 @@ jobs:
     name: Model CI (cache test, 12xlarge, EFS baseline)
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@main
     with:
-      folder_slices: '[["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]]'
+      folder_slices: '[["models/bert_generation", "models/cohere2_vision", "models/cohere_asr", "models/colpali", "models/glm4v_moe", "models/hunyuan_v1_moe", "models/hunyuan_vl", "models/hy_v3", "models/hy_v4", "models/hyperclovax", "models/hyperclovax_vision_v2", "models/lfm2_vl", "models/lighton_ocr", "models/llama", "models/qwen3_5", "models/qwen3_5_moe", "models/rf_detr", "models/rwkv"]]'
       machine_type: aws-g5-12xl-efs-test
       slice_id: 0
       docker: huggingface/transformers-all-latest-gpu
@@ -114,7 +114,7 @@ jobs:
     name: Model CI (cache test, 12xlarge, hf-mount bucket)
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@main
     with:
-      folder_slices: '[["bert_generation", "cohere2_vision", "cohere_asr", "colpali", "glm4v_moe", "hunyuan_v1_moe", "hunyuan_vl", "hy_v3", "hy_v4", "hyperclovax", "hyperclovax_vision_v2", "lfm2_vl", "lighton_ocr", "llama", "qwen3_5", "qwen3_5_moe", "rf_detr", "rwkv"]]'
+      folder_slices: '[["models/bert_generation", "models/cohere2_vision", "models/cohere_asr", "models/colpali", "models/glm4v_moe", "models/hunyuan_v1_moe", "models/hunyuan_vl", "models/hy_v3", "models/hy_v4", "models/hyperclovax", "models/hyperclovax_vision_v2", "models/lfm2_vl", "models/lighton_ocr", "models/llama", "models/qwen3_5", "models/qwen3_5_moe", "models/rf_detr", "models/rwkv"]]'
       machine_type: aws-g5-12xl-hf-test
       slice_id: 0
       docker: huggingface/transformers-all-latest-gpu
