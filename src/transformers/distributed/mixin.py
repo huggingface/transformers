@@ -80,12 +80,10 @@ class DistributedMixin:
             if plan := getattr(module, "_fsdp_plan", None):
                 self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
-        # A tied lm_head IS the input embedding's parameter, so the `embedding_rowwise` entry
-        # `PretrainedConfig` adds for tied weights shards the tensor it reads — while lm_head
-        # itself sits outside any `base_model_tp_plan` and gets no style, leaving `F.linear` with
-        # a plain input against a DTensor weight. FSDP resolves the pair; TP had no equivalent.
-        # the CONFIG flag, not `head.weight is embed.weight`: tying happens later in `post_init`,
-        # so the parameters are still distinct here and the identity test silently misses
+        # A tied lm_head IS the embedding's parameter, so the `embedding_rowwise` entry shards
+        # the tensor it reads while lm_head itself gets no style — leaving `F.linear` a plain
+        # input against a DTensor weight. The CONFIG flag, not `head.weight is embed.weight`:
+        # tying happens later in `post_init`, so an identity test here silently misses.
         tied = getattr(self.config.get_text_config(), "tie_word_embeddings", False)
         if tied and "embedding_rowwise" in self._tp_plan.values():
             head = self.get_output_embeddings()

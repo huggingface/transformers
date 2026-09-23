@@ -2747,16 +2747,11 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
                             f"{label}/{mode}: experts were not sharded ({local} of {whole}) — "
                             f"this leg cannot catch a bad axis",
                         )
-                        # Sharding reorders reductions (a rowwise all-reduce sums the same terms
-                        # in another order), so the legs differ by BF16 rounding at the first
-                        # sharded op whatever the axes. What that becomes at the logits is the
-                        # MODEL's business: the NVFP4 fixture amplifies it ~100x across two MoE
-                        # layers (measured: a 1e-3 perturbation moves its logits by 0.99 on ONE
-                        # device), while the dense fixtures barely amplify at all. A fixed
-                        # tolerance therefore asks the impossible of one model and nothing of
-                        # another. Compare against the model's OWN floor instead: perturb the
-                        # unsharded run by the same rounding and take the resulting logit shift as
-                        # the budget. A wrong shard axis lands orders of magnitude above it.
+                        # Sharding reorders reductions, so the legs differ by BF16 rounding
+                        # whatever the axes — and how much that shows at the logits is the
+                        # model's own business (the NVFP4 fixture amplifies ~100x, the dense
+                        # ones barely). Hence each model's measured floor, not a fixed
+                        # tolerance. A wrong shard axis lands orders of magnitude above it.
                         budget = max(2e-2, noise_floor)
                         gap = (payload["logits"] - reference).abs().max().item()
                         self.assertLessEqual(
