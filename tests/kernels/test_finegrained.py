@@ -388,7 +388,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertIsNotNone(call.kwargs["gate_up_proj_weight_global_scale"])
 
     def test_post_expert_norm_rides_the_chain_and_the_eager_loop(self):
-        """A model whose experts norm the down output before the routing weights (Muse-Spark):
+        """A model whose experts norm the down output before the routing weights:
         the swap carries the norm over, the kernel chain runs it on the routed rows, and the
         eager loop applies it per expert application — the same place the reference forwards do.
         A form the kernels do not implement rides as the module's own ``post_expert_norm``."""
@@ -1528,7 +1528,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
 
     def test_both_modelopt_scale_layouts_have_converters(self):
         """modelopt ships the scales either as one tensor per expert per projection (GLM-5.2) or
-        as one already-stacked tensor per layer (the fused vLLM layout, Muse-Spark). Both are
+        as one already-stacked tensor per layer (the fused vLLM layout). Both are
         converted; the block scale takes the module's layout ops either way."""
         sources = {p for c in self._modelopt_conversions() for p in c.source_patterns}
         for suffix in ("weight_scale", "weight_scale_2", "input_scale"):
@@ -1727,7 +1727,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         torch.testing.assert_close(out[targets[2]], torch.tensor([0.5, 0.25]))
 
     def test_the_fused_layout_ships_both_halves_in_one_tensor(self):
-        """Muse-Spark's `(E, 2)` `weight_scale_2` is the same pair as the per-expert layout's two
+        """A stacked `(E, 2)` `weight_scale_2` is the same pair as the per-expert layout's two
         keys, and merges the same way."""
         from transformers.integrations.finegrained.conversions import FineGrainedWeightGlobals
 
@@ -1767,7 +1767,7 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
 
 
 class _InputScaledRMSNorm(torch.nn.Module):
-    """Muse-Spark's post-expert norm: scale by ``1 + weight`` BEFORE normalizing, so the row's
+    """A post-expert norm that scales by ``1 + weight`` BEFORE normalizing, so the row's
     mean square is taken on the scaled values (not the same function as normalizing first)."""
 
     def __init__(self, dim, eps=1e-6):
@@ -1905,7 +1905,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
     def _nvfp4_experts_modelopt_layout(self, cfg, activation_format=None, magnitudes=(8.0, 1.0)):
         """NVFP4 experts in the layout a modelopt checkpoint delivers: every (expert, half) of the
         gate|up stack quantized against its OWN global (``weight_scale_2`` is per projection, and
-        the two differ per expert on Muse-Spark), the down per expert, plus calibrated activation
+        the two can differ per expert), the down per expert, plus calibrated activation
         globals. Returns the module, the exact dequantized weights (so the reference is the
         quantization floor rather than the pre-quant weight), and the dequantization a reader that
         applied ONE of the two globals to both halves would get."""
@@ -1986,7 +1986,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         return out
 
     def test_modelopt_nvfp4_experts_merge_their_globals_and_fuse_the_post_norm(self):
-        """The Muse-Spark checkpoint shape end to end through the integration: a gate|up stack
+        """The stacked checkpoint shape end to end through the integration: a gate|up stack
         calibrated per half (merged at load), calibrated activation globals, and a per-expert
         output norm the binder fuses, on all three forwards. Weight-only pins the numbers against the dequantized weights (nothing else
         rounds); the W4A4 chain rides the 4-bit activation floor, so it is pinned by being far

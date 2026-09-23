@@ -63,7 +63,7 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
     def _nvfp4_conversions(self):
         """modelopt NVFP4 scales (`weight_scale`, `weight_scale_2`, `input_scale`), in both layouts
         a modelopt checkpoint ships them in: per expert per projection (GLM-5.2-NVFP4) or already
-        stacked per layer (the fused vLLM layout, Muse-Spark). A checkpoint matches one set and
+        stacked per layer (the fused vLLM layout). A checkpoint matches one set and
         the other never fires. Routed experts only — a generic `weight_scale*` rename would run
         before converter collection and mangle these keys."""
         # weight-only keeps activations bf16, so there is no activation global for a calibrated
@@ -124,7 +124,7 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
         return converters
 
     def _nvfp4_fused_conversions(self, calibrated: bool):
-        """Already stacked per layer, as the vLLM fused layout and Muse-Spark ship them — so no
+        """Already stacked per layer, as the vLLM fused layout ships them — so no
         `MergeModulelist`, and the expert weights need the packed uint8 -> int8 view the
         `.weight`-anchored rule gives the per-expert layout."""
         from ...core_model_loading import WeightConverter

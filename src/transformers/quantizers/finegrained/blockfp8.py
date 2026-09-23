@@ -62,7 +62,9 @@ class FineGrainedBlockFp8HfQuantizer(FineGrainedHfQuantizer):
                 target_patterns=f"experts.{proj}_activation_scale",
                 operations=[FineGrainedInputScales(self)],
             )
-            for proj in ("gate_up_proj", "down_proj")
+            # `up_proj` because an UNGATED experts module holds its scale under that name; the
+            # converter whose source no checkpoint has simply never fires
+            for proj in ("gate_up_proj", "up_proj", "down_proj")
         ]
         # a dense linear holds the one value itself; the lookahead keeps this off the expert keys
         dense = [
