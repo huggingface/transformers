@@ -1,25 +1,60 @@
 """
-NatureV1 on Colab — copy each block into its own cell.
+NatureV1 on Colab -- copy each block into its own cell.
 
-Cell 1 installs, Cell 2 builds the model, Cell 3 runs a live forecast from real GOES imagery,
-Cell 4 is the data adapter you must fill in with real training data, Cell 5 trains with
-minute checkpointing that survives a dead cell, Cell 6 is the hourly watcher.
+    1  install and check the card
+    2  build the 88M model
+    3  the data argument: why this trains twice
+    4  stage one data -- ERA5 reanalysis, 1.6e10 free labels
+    5  fill the card: benchmark, autotune the batch, price the run
+    6  stage one -- pretrain the backbone, checkpointing every minute
+    7  stage two data -- HURDAT2 best tracks paired with the same reanalysis
+    8  stage two -- fine-tune the storm heads with the backbone frozen
+    9  live forecast from real GOES imagery
+   10  hourly watcher
+
+Cells 1-6 are the long pole and need no storm data at all. Cells 7-8 are quick -- there are only 24,585
+paired storm points in the entire Atlantic record, which is the whole reason the backbone is frozen for
+them. Cell 9 runs on an untrained model too; it will produce confident nonsense until 6 and 8 have run.
 """
 
-# ══ CELL 1 ══ install ═════════════════════════════════════════════════════════
+# ══ CELL 1 ══ install and check the card ══════════════════════════════════════
 # !pip install -q "naturev1[all]"
-# !nvidia-smi --query-gpu=name,memory.total --format=csv
+# !nvidia-smi --query-gpu=name,memory.total,power.max_limit --format=csv
 
-# ══ CELL 2 ══ build the model ═════════════════════════════════════════════════
-import torch, numpy as np, datetime as dt, json, os
-from ihelix import fibonacci_sphere, Geometry, FieldGrid
-from naturev1 import (NatureConfig, NatureV1, calendar_features, build_forecast, fetch_latest,
-                      scene_from_netcdf, normalize_channels, Trainer, TrainSettings,
-                      SURFACE_FIELDS, WEATHER_TYPES, watch)
+from naturev1 import device_report
+
+
+DEV = device_report()
+print(DEV)
+# On an RTX 6000 Blackwell you should see ~95.6 GB and bf16_supported=True. If bf16 is False you are on
+# an older card: set precision="fp16" in cells 6 and 8, which needs loss scaling that the Trainer adds.
+
+# ══ CELL 2 ══ build the 88M model ═════════════════════════════════════════════
+import datetime as dt
+import json
+import os
+
+import numpy as np
+import torch
+from naturev1 import (
+    SURFACE_FIELDS,
+    WEATHER_TYPES,
+    NatureConfig,
+    NatureV1,
+    build_forecast,
+    calendar_features,
+    fetch_latest,
+    normalize_channels,
+    scene_from_netcdf,
+    watch,
+)
+
+from ihelix import FieldGrid, Geometry, fibonacci_sphere
+
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CFG = NatureConfig(
-    satellite_channels=6, analysis_channels=24,
+    satellite_channels=6, analysis_channels=24, environment_channels=8,
     hidden_size=512, num_layers=17, num_heads=8, num_kv_heads=4,
     head_dim=64, intermediate_size=2048,
     latent_points=4096, min_radius_km=120.0, max_radius_km=1600.0,
@@ -30,11 +65,191 @@ LATENT = fibonacci_sphere(CFG.latent_points, num_neighbours=CFG.latent_neighbour
 model = NatureV1(CFG, LATENT).to(DEVICE)
 print(f"NatureV1: {model.num_parameters()/1e6:.2f}M parameters on {DEVICE}")
 
-# ══ CELL 3 ══ live forecast from real GOES imagery ════════════════════════════
+# The heads start at Atlantic climatology rather than at zero, with the uncertainty that goes with it.
+with torch.no_grad():
+    prior = model.eyewall_head(torch.zeros(1, CFG.hidden_size, device=DEVICE))
+print(f"untrained prior: peak wind {float(prior['eyewall_peak_wind_kt'][0,0]):.0f} kt "
+      f"+/- {float(prior['eyewall_peak_wind_log_var'][0,0].mul(0.5).exp()):.0f} kt")
+
+# ══ CELL 3 ══ the data argument: why this trains twice ════════════════════════
+from naturev1 import catalogue, corpus_scale, open_weatherbench
+
+
+ERA5 = open_weatherbench()        # streams from cloud storage; nothing downloads yet
+print(corpus_scale(ERA5, parameters=model.num_parameters()))
+print()
+print(catalogue())
+
+# The number that matters is "values per parameter". Training an 88M model on the 55,230-row Atlantic
+# best-track archive gives 0.0006 of them, and produces a lookup table for storms that already happened.
+# Reanalysis gives 180, because the label is free: the target for the atmosphere now is the atmosphere
+# six hours from now. So the backbone learns here, and only the 0.96M storm-head parameters ever see
+# best tracks.
+
+# ══ CELL 4 ══ stage one data -- ERA5 reanalysis ═══════════════════════════════
+from naturev1 import ERA5Window, era5_source_grid, era5_splits, lead_offsets
+
+
+SRC, LAT, LON = era5_source_grid(ERA5)      # read-only grid: 29,040 points in ~5 ms
+SPLITS = era5_splits(ERA5, val_years=4, test_years=2)
+OFFSETS = lead_offsets(CFG.lead_times_hours)     # (1,2,3,4,6,8,12,16,20) at 6-hourly cadence
+STATS = "/content/era5_stats.json"
+
+for name, index in SPLITS.items():
+    print(f"  {name:5} {len(index):>7,} windows  "
+          f"{str(ERA5.time.values[index[0]])[:10]} -> {str(ERA5.time.values[index[-1]])[:10]}")
+print(f"\nlead times {CFG.lead_times_hours} h -> store offsets {OFFSETS}")
+print("split by TIME, not at random: weather is autocorrelated for days, and a random split lets the")
+print("model interpolate between two states it has already seen.")
+
+train_stream = ERA5Window(ERA5, indices=SPLITS["train"], history=CFG.history_frames,
+                          lead_steps=OFFSETS, channels=CFG.analysis_channels, stats_cache=STATS)
+print(f"\n{train_stream.normalizer.report()}")
+print(f"\nchannels produced {train_stream.input_channels} -> padded to {CFG.analysis_channels}")
+
+# ── Staging. Streaming costs ~550 ms per window against tens of ms of compute, so a cloud-backed epoch
+# ── is network-bound by an order of magnitude and the GPU idles through most of it. Staging is 105x.
+from naturev1 import CachedERA5, materialise
+
+
+STAGE_YEARS = 20                                 # ~10 GB at float16; raise it if you have the disk
+STAGE_STEPS = STAGE_YEARS * 1460
+CACHE = "/content/era5_cache.npy"
+
+if not os.path.exists(CACHE):
+    materialise(ERA5, SPLITS["train"][-STAGE_STEPS:], CACHE, normalizer=train_stream.normalizer)
+train_ds = CachedERA5(CACHE, history=CFG.history_frames, lead_steps=OFFSETS,
+                      channels=CFG.analysis_channels, augment=True)
+print(f"staged {len(train_ds):,} windows")
+
+# Augmentation is a longitude roll, which on an equiangular grid is exactly a rotation of the globe --
+# and this model is exactly equivariant to that, so all 240 rolls are real atmospheres, not approximations.
+
+# ══ CELL 5 ══ fill the card: benchmark, autotune, price the run ═══════════════
+from naturev1 import autotune_batch_size, benchmark_steps, era5_loader, format_plan, masked_gaussian_nll, training_plan
+
+
+GRAD_CKPT = True      # trades ~30% speed for a much larger batch; on 96 GB this is usually the win
+model.gradient_checkpointing_enable(GRAD_CKPT)
+
+
+def make_step(batch_size):
+    """A closure that runs one full training step at this batch size, for the autotuner."""
+    items = [train_ds[i] for i in range(batch_size)]
+    batch = {k: torch.stack([x[k] for x in items]).to(DEVICE) for k in items[0]}
+
+    def step():
+        with torch.autocast(DEVICE, dtype=torch.bfloat16, enabled=DEVICE == "cuda"):
+            out = model(analysis=batch["analysis"], analysis_grid=SRC,
+                        calendar=batch["calendar"], output_grid=SRC)
+            loss = masked_gaussian_nll(out["field_mean"], out["field_log_var"],
+                                       torch.where(batch["field_mask"] > 0, batch["field_target"],
+                                                   torch.nan))
+        loss.backward()
+        model.zero_grad(set_to_none=True)
+    return step
+
+
+BATCH = autotune_batch_size(make_step, start=1, target_fraction=0.85)
+print(f"largest batch that fits at 85% of VRAM: {BATCH}")
+
+mark = benchmark_steps(make_step(BATCH), BATCH, gradient_checkpointing=GRAD_CKPT)
+print(mark)
+
+PLAN = training_plan(mark.samples_per_second, corpus_samples=len(train_ds), epochs=8,
+                     watts=600.0, electricity_per_kwh=0.15, cloud_per_hour=2.50)
+print("\nstage one, 8 epochs:")
+print(format_plan(PLAN))
+print(f"\nsteps for the plan: {int(len(train_ds) * 8 / BATCH):,}  <- use this as max_steps in cell 6")
+
+# ══ CELL 6 ══ stage one -- pretrain, checkpointing every minute ═══════════════
+from naturev1 import Trainer, TrainSettings
+
+
+CKPT = "/content/drive/MyDrive/naturev1_ckpt"      # Drive outlives the VM
+pretrain = TrainSettings(
+    stage="pretrain",                    # everything trains; the label is the next state
+    learning_rate=3e-4, warmup_steps=1000,
+    max_steps=int(len(train_ds) * 8 / BATCH),
+    grad_accum=1, precision="bf16",      # bf16 on Blackwell: no loss scaling needed
+    checkpoint_dir=f"{CKPT}/stage1", checkpoint_seconds=60,
+    hub_repo="Sigmandndnns/NatureV1-500", hub_push_seconds=900,
+    ema_decay=0.999, log_every=25,
+)
+
+loader = era5_loader(train_ds, batch_size=BATCH, num_workers=4, shuffle=True,
+                     analysis_grid=SRC, output_grid=SRC)
+trainer = Trainer(model, pretrain, device=DEVICE)
+trainer.resume()          # picks up wherever the last cell died; pulls from the Hub on a fresh VM
+trainer.fit(loader, epochs=8)
+
+# ══ CELL 7 ══ stage two data -- best tracks paired with the same reanalysis ═══
+from naturev1 import (
+    StormWindow,
+    format_pairing,
+    pair_tracks_with_reanalysis,
+    parse_hurdat2,
+    rapid_intensification,
+    split_by_storm,
+)
+from naturev1.besttrack import download
+
+
+HURDAT = download("https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2024-040425.txt",
+                  "/content/hurdat2.txt")
+tracks = parse_hurdat2(HURDAT)
+print(f"HURDAT2: {len(tracks):,} storms, {sum(len(t) for t in tracks):,} points, "
+      f"{sum(int(t.landfall.sum()) for t in tracks):,} landfalls")
+
+walk = rapid_intensification(tracks, threshold_kt=30.0)
+print(f"rapid intensification: {walk['positives']:,} of {walk['eligible']:,} eligible points "
+      f"= {100*walk['base_rate']:.2f}%")
+print("  a classifier that always says 'no' scores 96% here and saves nobody, which is why the RI head")
+print("  is trained with a focal loss and judged on precision, recall and Brier score -- not accuracy.")
+
+GROUPS = split_by_storm(tracks)     # by SEASON: points from one storm are near-duplicates
+STORE_TIMES = ERA5.time.values.astype("datetime64[s]").astype(np.int64)
+
+
+def storm_split(which):
+    starts, targets, report = pair_tracks_with_reanalysis(
+        GROUPS[which], STORE_TIMES, OFFSETS, history=CFG.history_frames)
+    base = ERA5Window(ERA5, indices=starts, history=CFG.history_frames, lead_steps=OFFSETS,
+                      augment=False,        # a rolled globe would move the coastline the storm hit
+                      channels=CFG.analysis_channels, stats_cache=STATS)
+    return StormWindow(base, targets), report
+
+
+storm_train, report = storm_split("train")
+print(f"\npairing HURDAT2 against ERA5 1959-2021:\n{format_pairing(report)}")
+print(f"\n{storm_train.describe()}")
+
+# ══ CELL 8 ══ stage two -- fine-tune the heads, backbone frozen ═══════════════
+trainable, total = model.freeze_backbone(True)
+print(f"trainable: {trainable:,} of {total:,} ({100*trainable/total:.1f}%)")
+print("This is the answer to the overfitting problem. 24,585 storm points cannot fit 89M parameters,")
+print("but they can fit 0.96M -- and the backbone they sit on saw 1.6e10 values in stage one.")
+
+finetune = TrainSettings(
+    stage="finetune",
+    learning_rate=1e-4, warmup_steps=200, max_steps=20_000,
+    precision="bf16",
+    checkpoint_dir=f"{CKPT}/stage2", checkpoint_seconds=60,
+    hub_repo="Sigmandndnns/NatureV1-500", hub_push_seconds=900,
+    ema_decay=0.999, early_stopping_patience=10, log_every=25,
+)
+storm_loader = era5_loader(storm_train, batch_size=max(BATCH // 2, 1), num_workers=4, shuffle=True,
+                           analysis_grid=SRC, output_grid=SRC)
+storm_trainer = Trainer(model, finetune, device=DEVICE)
+storm_trainer.resume()
+storm_trainer.fit(storm_loader, epochs=50)
+
+# ══ CELL 9 ══ live forecast from real GOES imagery ════════════════════════════
 CHANNELS = ("C13", "C09")     # clean IR window + mid-level water vapour
-STORM    = (24.6, -78.2)      # current storm centre (lat, lon)
-CITY     = (25.77, -80.19)    # somewhere you want a local forecast
-DATA_DIR = "./test_data"
+STORM     = (24.6, -78.2)     # current storm centre (lat, lon)
+CITY      = (25.77, -80.19)   # somewhere you want a local forecast
+DATA_DIR  = "./test_data"
+
 
 def load_scene(paths, center, half_width_deg=9.0, stride=4):
     """Geolocated samples + true pixel footprints, cropped to a real box on the planet."""
@@ -54,14 +269,15 @@ def load_scene(paths, center, half_width_deg=9.0, stride=4):
         values = torch.cat([values, torch.zeros(values.shape[0], pad)], -1)
     return grid, values, scene
 
+
 @torch.no_grad()
 def forecast_now(storm=STORM, city=CITY):
     paths = fetch_latest(DATA_DIR, CHANNELS, satellite="east", product="conus")
     grid, values, scene = load_scene(paths, storm)
     print(scene)
-    T = CFG.history_frames
-    sat = values[None, None].expand(1, T, -1, -1).contiguous().to(DEVICE)
-    cal = calendar_features(torch.full((1, T), scene.timestamp.timestamp())).to(DEVICE)
+    frames = CFG.history_frames
+    sat = values[None, None].expand(1, frames, -1, -1).contiguous().to(DEVICE)
+    cal = calendar_features(torch.full((1, frames), scene.timestamp.timestamp())).to(DEVICE)
     out_grid = fibonacci_sphere(2000, num_neighbours=16, cluster_size=50)
     model.eval()
     out = model(satellite=sat, satellite_grid=grid, calendar=cal,
@@ -69,79 +285,21 @@ def forecast_now(storm=STORM, city=CITY):
     return build_forecast(out, CFG.lead_times_hours, scene.timestamp,
                           storm_center=storm, output_grid=out_grid, point_of_interest=city)
 
+
 fc = forecast_now()
 print(json.dumps({k: fc[k] for k in ("issued", "enso")}, indent=2))
 print("landfall:", {k: v for k, v in fc["landfall"].items() if k != "by_lead"})
 for s in fc["track_scenarios"][:4]:
     p = s["track"][5]
-    print(f"  {s['probability']:>5.0%}  +48h -> {p['latitude']:6.2f},{p['longitude']:7.2f}   95% cone {p['cone_radius_km_95']:.0f} km")
+    print(f"  {s['probability']:>5.0%}  +48h -> {p['latitude']:6.2f},{p['longitude']:7.2f}   "
+          f"95% cone {p['cone_radius_km_95']:.0f} km")
+for e in fc["eyewall"][:3]:
+    print(f"  +{e['lead_hours']:3d}h  peak {e['peak_wind_kt']:.0f} kt  RMW {e['rmw_nmi']:.0f} nmi")
+print(f"  rapid intensification (30 kt/24h): {fc['rapid_intensification']['probability_30kt']:.0%}")
 pf = fc["point_forecast"]["forecast"][3]
 print(f"  local +{pf['lead_hours']}h: {pf['weather']} ({pf['weather_confidence']:.0%})")
 
-# ══ CELL 4 ══ training data — YOU MUST FILL THIS IN ═══════════════════════════
-# The model above is UNTRAINED: its output is noise. To make it forecast you need
-# paired (inputs, verified outcome) samples. All of these are free:
-#
-#   HURDAT2 best tracks   https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2024-040425.txt
-#   ERA5 reanalysis       https://cds.climate.copernicus.eu  (ERA5 single+pressure levels)
-#   GFS analysis          s3://noaa-gfs-bdp-pds/   (anonymous, no account)
-#   GOES archive          s3://noaa-goes19/  s3://noaa-goes18/   (anonymous)
-#   IBTrACS (global)      https://www.ncei.noaa.gov/products/international-best-track-archive
-#
-# One training sample = satellite + analysis at time t (and the 5 steps before it),
-# with targets taken from what actually happened at t+6h ... t+120h.
-
-class WeatherDataset(torch.utils.data.Dataset):
-    """Replace the body with real loading. Shapes are what the model and losses expect."""
-    def __init__(self, samples, analysis_grid, target_grid):
-        self.samples, self.analysis_grid, self.target_grid = samples, analysis_grid, target_grid
-    def __len__(self):
-        return len(self.samples)
-    def __getitem__(self, i):
-        s, T, L = self.samples[i], CFG.history_frames, CFG.num_leads
-        N_ana, N_out = self.analysis_grid.num_points, self.target_grid.num_points
-        return {
-            "analysis":            torch.randn(T, N_ana, CFG.analysis_channels),   # <- real analysis
-            "calendar":            calendar_features(torch.full((T,), s["t"])),
-            "field_target":        torch.randn(N_out, L, len(SURFACE_FIELDS)),     # <- verified fields
-            "weather_type_target": torch.randint(0, len(WEATHER_TYPES), (N_out, L)),
-            "track_target":        torch.randn(L, 2),        # (dlat, dlon) from HURDAT2
-            "landfall_target":     torch.randint(0, 2, (L,)).float(),
-            "intensity_target":    torch.randn(L, 2),        # max wind m/s, min pressure hPa
-        }
-
-def collate(batch, analysis_grid, target_grid):
-    out = {k: torch.stack([b[k] for b in batch]) for k in batch[0]}
-    out["analysis_grid"], out["output_grid"] = analysis_grid, target_grid
-    return out
-
-# ══ CELL 5 ══ train, with checkpoints that survive the cell dying ═════════════
-from functools import partial
-ANALYSIS_GRID = fibonacci_sphere(2048, num_neighbours=32, cluster_size=64)
-TARGET_GRID   = fibonacci_sphere(2048, num_neighbours=32, cluster_size=64)
-
-settings = TrainSettings(
-    learning_rate=3e-4, warmup_steps=500, max_steps=100_000,
-    grad_accum=1, precision="bf16",                 # bf16: no loss scaling on Blackwell
-    checkpoint_dir="/content/drive/MyDrive/naturev1_ckpt",   # Drive outlives the VM
-    checkpoint_seconds=60,                          # a checkpoint every minute
-    hub_repo="Sigmandndnns/NatureV1-500",           # mirrored to the Hub
-    hub_push_seconds=900,
-    log_every=10,
-)
-
-def train():
-    ds = WeatherDataset([{"t": 1.7e9 + 3600*i} for i in range(512)], ANALYSIS_GRID, TARGET_GRID)
-    loader = torch.utils.data.DataLoader(
-        ds, batch_size=2, shuffle=True, num_workers=2,
-        collate_fn=partial(collate, analysis_grid=ANALYSIS_GRID, target_grid=TARGET_GRID))
-    trainer = Trainer(model, settings, device=DEVICE)
-    trainer.resume()          # picks up wherever the last cell died; pulls from the Hub on a fresh VM
-    trainer.fit(loader, epochs=1000)
-
-# train()   # <- uncomment once Cell 4 loads real data
-
-# ══ CELL 6 ══ hourly watcher ══════════════════════════════════════════════════
+# ══ CELL 10 ══ hourly watcher ═════════════════════════════════════════════════
 def on_new_scene(paths):
     result = forecast_now()
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M")
@@ -152,5 +310,6 @@ def on_new_scene(paths):
     print(f"  most likely ({top['probability']:.0%}): +120h -> "
           f"{top['track'][-1]['latitude']:.2f},{top['track'][-1]['longitude']:.2f}")
     print(f"  landfall peak probability {result['landfall']['peak_probability']:.0%}")
+
 
 # watch(on_new_scene, interval_seconds=3600, directory=DATA_DIR, channels=CHANNELS)

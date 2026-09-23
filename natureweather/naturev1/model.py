@@ -25,10 +25,10 @@ from dataclasses import asdict, dataclass, field, fields
 
 import torch
 import torch.nn.functional as F
+from ihelix.kernels import IHelixRMSNorm
 from torch import nn
 
-from ihelix import CrossAttention, FieldGrid, Geometry, GridLink, IHelixBlock, IHelixConfig
-from ihelix.kernels import IHelixRMSNorm
+from ihelix import CrossAttention, FieldGrid, Geometry, GradientCheckpointing, GridLink, IHelixBlock, IHelixConfig
 
 
 #: Gridded fields the model predicts everywhere, with a variance for each.
@@ -67,6 +67,13 @@ WIND_RADII_ANCHOR_NMI = (80.0, 60.0)  # mean, spread across thresholds and quadr
 RI_DELTA_ANCHOR_KT = (5.0, 15.0)     # mean, spread of the 24-hour wind change
 #: Typical translation speed of a tropical cyclone, in degrees per hour -- about 11 knots.
 TRACK_SPEED_DEG_PER_HOUR = 0.1
+#: Measured base rates of rapid intensification in the Atlantic record, per threshold in
+#: :data:`RI_THRESHOLDS_KT`. A classifier initialised at zero opens by saying every storm has a coin's
+#: chance of rapid intensification, which for a 4% event is not a neutral prior -- it is a loud wrong
+#: one, and the focal loss then spends its early gradient walking it back. Starting at the base rate
+#: means the untrained model says "probably not, and here is the climatological rate", which is both
+#: true and the right thing to update away from.
+RI_BASE_RATES = (0.0665, 0.0411, 0.0224)
 
 #: "Will it rain or be sunny" as a calibrated categorical, not a threshold on a regression.
 WEATHER_TYPES = ("clear", "partly_cloudy", "overcast", "light_rain", "heavy_rain", "thunderstorm", "snow")
@@ -308,10 +315,14 @@ class RapidIntensificationHead(nn.Module):
         }
 
 
-class NatureV1(nn.Module):
+class NatureV1(GradientCheckpointing, nn.Module):
     """
     The model. Reads any number of geolocated sources, forecasts fields and storm behaviour with
     uncertainty attached to everything.
+
+    Call :meth:`gradient_checkpointing_enable` to recompute block activations instead of storing them.
+    It costs roughly a third more time per step and buys back most of the activation memory, which on a
+    large card is how spare VRAM becomes a bigger batch -- usually worth far more than the time.
 
     Args:
         config: the model configuration.
@@ -398,6 +409,10 @@ class NatureV1(nn.Module):
                 for index, spread in enumerate(spreads):
                     target = min(2.0 * math.log(spread), 8.0)
                     bias[index * 2 + 1 :: 2 * len(spreads)] = target
+
+            # The rare-event heads open at the observed base rate rather than at even odds.
+            for index, rate in enumerate(RI_BASE_RATES[: len(RI_THRESHOLDS_KT)]):
+                self.ri_head.classifier.bias[index] = math.log(rate / (1.0 - rate))
 
             # The track head's spread is the one that must grow with lead time. Its mean starts at zero
             # displacement -- the right prior, the storm is where it is -- so the scale that goes with
@@ -495,8 +510,7 @@ class NatureV1(nn.Module):
         """
         latent = self.encode(satellite, satellite_grid, analysis, analysis_grid, calendar,
                              environment, environment_grid, neighbours)
-        for block in self.blocks:
-            latent = block(latent, self.latent_grid)
+        latent = self._run_blocks(latent, self.latent_grid)
         latent = self.norm(latent)
 
         # The last frame is "now"; the heads forecast forward from it.

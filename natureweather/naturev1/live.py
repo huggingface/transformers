@@ -27,6 +27,7 @@ from pathlib import Path
 
 from .satellite import GOES_BUCKETS, GOES_PRODUCTS, parse_goes_filename
 
+
 _NAMESPACE = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
 
 

@@ -14,7 +14,7 @@ import math
 
 import torch
 
-from .model import SURFACE_FIELDS, WEATHER_TYPES
+from .model import RI_THRESHOLDS_KT, SURFACE_FIELDS, WEATHER_TYPES, WIND_RADII_THRESHOLDS_KT
 
 
 def _ellipse(sigma_x: float, sigma_y: float, rho: float) -> tuple[float, float, float]:
@@ -148,6 +148,84 @@ def decode_intensity(
     return rows
 
 
+def decode_eyewall(
+    outputs: dict, lead_times_hours, issued, batch_index: int = 0
+) -> list[dict]:
+    """
+    The storm's core per lead: peak eyewall wind, the radius it sits at, and the wind footprint.
+
+    Radius of maximum wind is reported with a wide interval on purpose. It is observed on under 5% of
+    the best-track record, so the model has genuinely little to go on, and a head that reported it
+    confidently would be lying about what the archive contains. The wind radii -- how far 34, 50 and 64
+    kt winds reach into each quadrant -- are far better populated and describe the same structure from
+    the outside in, which is why they are predicted jointly and are worth more attention when RMW is
+    absent.
+    """
+    peak = outputs["eyewall_peak_wind_kt"][batch_index]
+    peak_sigma = outputs["eyewall_peak_wind_log_var"][batch_index].mul(0.5).exp()
+    rmw = outputs["eyewall_rmw_nmi"][batch_index]
+    rmw_sigma = outputs["eyewall_rmw_log_var"][batch_index].mul(0.5).exp()
+    radii = outputs["wind_radii_nmi"][batch_index]
+
+    entries = []
+    for index, hours in enumerate(lead_times_hours):
+        wind = float(peak[index])
+        entries.append({
+            "lead_hours": hours,
+            "valid_time": (issued + dt.timedelta(hours=hours)).isoformat(),
+            "peak_wind_kt": round(wind, 1),
+            "peak_wind_90pct": [round(wind - 1.645 * float(peak_sigma[index]), 1),
+                                round(wind + 1.645 * float(peak_sigma[index]), 1)],
+            "saffir_simpson": _category(wind / 1.94384),
+            "rmw_nmi": round(float(rmw[index]), 1),
+            "rmw_90pct": [round(max(float(rmw[index]) - 1.645 * float(rmw_sigma[index]), 0.0), 1),
+                          round(float(rmw[index]) + 1.645 * float(rmw_sigma[index]), 1)],
+            "wind_radii_nmi": {
+                f"{int(threshold)}kt": {
+                    quadrant: round(float(radii[index, group, corner]), 1)
+                    for corner, quadrant in enumerate(("NE", "SE", "SW", "NW"))
+                }
+                for group, threshold in enumerate(WIND_RADII_THRESHOLDS_KT)
+            },
+        })
+    return entries
+
+
+def decode_rapid_intensification(
+    outputs: dict, lead_times_hours, issued, batch_index: int = 0
+) -> dict:
+    """
+    Will this storm intensify rapidly, by how much, and when.
+
+    RI fires on about 4% of eligible track points at the 30-knot threshold. That base rate is why the
+    probability is reported directly rather than as a yes/no: a "no" is right 96% of the time and worth
+    nothing, while a calibrated 25% is the number a forecaster can act on. The expected 24-hour change
+    comes with it, because "probably not rapid, but +20 kt" is a materially different warning from
+    "probably not rapid, and steady".
+    """
+    probabilities = torch.sigmoid(outputs["ri_logits"][batch_index])
+    change = float(outputs["ri_delta_wind_kt"][batch_index])
+    change_sigma = float(outputs["ri_delta_log_var"][batch_index].mul(0.5).exp())
+    onset = torch.softmax(outputs["ri_onset_logits"][batch_index], dim=-1)
+    likeliest = int(onset.argmax())
+
+    bundle = {
+        f"probability_{int(threshold)}kt": round(float(probabilities[index]), 4)
+        for index, threshold in enumerate(RI_THRESHOLDS_KT)
+    }
+    bundle.update({
+        "window_hours": 24,
+        "expected_change_kt": round(change, 1),
+        "expected_change_90pct": [round(change - 1.645 * change_sigma, 1),
+                                  round(change + 1.645 * change_sigma, 1)],
+        "likeliest_onset_hours": lead_times_hours[likeliest],
+        "onset_probability": round(float(onset[likeliest]), 4),
+        "onset_by_lead": {int(hours): round(float(onset[index]), 4)
+                          for index, hours in enumerate(lead_times_hours)},
+    })
+    return bundle
+
+
 def _category(wind_ms: float) -> str:
     """Saffir-Simpson from 1-minute sustained wind in m/s."""
     knots = wind_ms * 1.94384
@@ -227,7 +305,8 @@ def build_forecast(
         lead_times_hours: the model's lead times.
         issued: analysis time, UTC.
         storm_center: ``(lat, lon)`` of the current centre. Omit for a non-storm run and the track,
-            landfall and intensity sections are left out rather than invented.
+            landfall, intensity, eyewall and rapid-intensification sections are left out rather than
+            invented.
         output_grid: the grid gridded fields were decoded onto, needed for a point forecast.
         point_of_interest: ``(lat, lon)`` to produce a local forecast for.
     """
@@ -247,6 +326,10 @@ def build_forecast(
         )
         bundle["landfall"] = decode_landfall(outputs, lead_times_hours, issued, batch_index)
         bundle["intensity"] = decode_intensity(outputs, lead_times_hours, issued, batch_index)
+        bundle["eyewall"] = decode_eyewall(outputs, lead_times_hours, issued, batch_index)
+        bundle["rapid_intensification"] = decode_rapid_intensification(
+            outputs, lead_times_hours, issued, batch_index
+        )
     if point_of_interest is not None and output_grid is not None:
         index = nearest_point(output_grid, *point_of_interest)
         bundle["point_forecast"] = {
