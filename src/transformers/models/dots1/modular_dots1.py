@@ -20,11 +20,12 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
+    DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
@@ -32,7 +33,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
-    Qwen3ForCausalLM,
     Qwen3Model,
     Qwen3RMSNorm,
     Qwen3RotaryEmbedding,
@@ -246,54 +246,29 @@ class Dots1Model(Qwen3Model):
         )
 
 
-class Dots1ForCausalLM(Qwen3ForCausalLM):
-    @can_return_tuple
-    @auto_docstring
+class Dots1ForCausalLM(DeepseekV3ForCausalLM):
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
+        **super_kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
+        r"""
+        Example:
 
-        outputs: MoeModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_router_logits=output_router_logits,
-            **kwargs,
-        )
+        ```python
+        >>> from transformers import AutoTokenizer, Dots1ForCausalLM
 
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        >>> model = Dots1ForCausalLM.from_pretrained("rednote-hilab/dots1.llm1.inst")
+        >>> tokenizer = AutoTokenizer.from_pretrained("rednote-hilab/dots1.llm1.inst")
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
 
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        return super().forward(**super_kwargs)
 
 
 __all__ = [

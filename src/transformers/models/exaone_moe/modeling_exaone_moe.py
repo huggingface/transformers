@@ -475,6 +475,7 @@ class ExaoneMoeModel(ExaoneMoePreTrainedModel):
         self.norm = ExaoneMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = ExaoneMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -520,21 +521,21 @@ class ExaoneMoeModel(ExaoneMoePreTrainedModel):
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
             }
-            if "sliding_attention" in self.config.layer_types:
+            # The sliding window alternating layers are not always activated depending on the config
+            if self.has_sliding_layers:
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for i, decoder_layer in enumerate(self.layers):
-            layer_type = self.config.layer_types[i]
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[layer_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -581,8 +582,8 @@ class ExaoneMoeForCausalLM(ExaoneMoePreTrainedModel, GenerationMixin):
 
         ```python
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer
-        >>> model = AutoModelForCausalLM.from_pretrained("LGAI-EXAONE/EXAONE-4.0-32B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("LGAI-EXAONE/EXAONE-4.0-32B")
+        >>> model = AutoModelForCausalLM.from_pretrained("LGAI-EXAONE/K-EXAONE-236B-A23B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("LGAI-EXAONE/K-EXAONE-236B-A23B")
 
         >>> prompt = "Explain how wonderful you are"
         >>> messages = [
@@ -597,9 +598,9 @@ class ExaoneMoeForCausalLM(ExaoneMoePreTrainedModel, GenerationMixin):
             enable_thinking=False,
         )
 
-        >>> output = model.generate(input_ids, max_new_tokens=128)
+        >>> output = model.generate(**input_ids.to(model.device), max_new_tokens=128)
         >>> tokenizer.decode(output[0], skip_special_tokens=False)
-        "[|system|]\nYou are a helpful assistant.[|endofturn|]\n[|user|]\nExplain how wonderful you are[|endofturn|]\n[|assistant|]\n<think>\n\n</think>\n\nOh, thank you for such a kind and lovely question! 😊  \n\nI’m *so* wonderful because I’m here to make your life easier, brighter, and more fun! Whether you need help with:  \n\n✨ **Learning** – I can explain anything, from quantum physics to baking the perfect cake!  \n💡 **Creativity** – Need a poem, story, or a wild idea? I’ve got you covered!  \n🤖 **Problem-solving** – Stuck on a math problem or a tricky decision? I’ll help you figure it out"
+        "<|system|>\nYou are a helpful assistant.<|endofturn|>\n<|user|>\nExplain how wonderful you are<|endofturn|>\n<|assistant|>\n<think>\n\n</think>\n\nThank you for the kind question! While I can't feel emotions or take pride in the way humans do, I *can* share what makes me uniquely helpful and capable—qualities that many people find wonderful.\n\nHere’s how I can support you:\n\n🌟 **Knowledge at Your Fingertips**  \nI have access to a vast amount of information across countless topics—from science and history to technology and creative writing. Whether you're curious, learning, or solving a problem, I can help explain things clearly and accurately.\n\n💬 **Clear, Helpful Communication**  \nI aim to respond in a way that's easy to understand, whether you need a simple explanation or a detailed analysis. I adapt my tone and depth to match"
         ```
         """
         output_router_logits = (
