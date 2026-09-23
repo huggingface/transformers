@@ -35,6 +35,7 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    TensorLoad,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -294,6 +295,12 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             param_shape=(2, 4, 2),
             local_shape=(1, 4, 2),
         )
+
+        def _spawn_expert(mapping, tensor, shard_op, idx):
+            intervals = shard_op.intervals(list(tensor.shape), idx)
+            load = TensorLoad(mapping, "", "", "", tensor, "cpu", None, intervals, intervals is not None)
+            return spawn_materialize(None, load)
+
         converter = WeightConverter(
             ["experts.*.w1.weight", "experts.*.w3.weight"],
             "experts.gate_up_proj.weight",
@@ -310,7 +317,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 "model.layers.0.experts.gate_up_proj.weight",
                 f"model.layers.0.experts.{idx}.w1.weight",
                 "experts.*.w1.weight",
-                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+                _spawn_expert(converter, tensor, shard_op, idx),
             )
 
         for idx, tensor in enumerate(
@@ -323,7 +330,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 "model.layers.0.experts.gate_up_proj.weight",
                 f"model.layers.0.experts.{idx}.w3.weight",
                 "experts.*.w3.weight",
-                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+                _spawn_expert(converter, tensor, shard_op, idx),
             )
 
         converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")

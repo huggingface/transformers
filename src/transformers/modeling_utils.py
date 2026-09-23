@@ -84,12 +84,7 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
-from .integrations.safetensors_prefetch import (
-    PrefetchedShard,
-    PrefetchedTensor,
-    is_prefetch_available,
-    prefetch_target_device,
-)
+from .integrations.safetensors_prefetch import should_prefetch
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .loss.loss_utils import LOSS_MAPPING
@@ -321,6 +316,25 @@ def _is_on_hf_mount(path: "str | os.PathLike") -> bool:
     except (OSError, ValueError):
         pass
     return False
+
+
+def _open_safetensors_shard(file: str, load_config: "LoadStateDictConfig"):
+    """Open one shard the way the default loader does: its `safe_open` handle, and a `get_slice` object per
+    tensor (nothing is read yet)."""
+    is_mps = load_config.device_map is not None and any(
+        (d.type if isinstance(d, torch.device) else d) == "mps" for d in load_config.device_map.values()
+    )
+    # mmap unless it's unwanted or costly: with `disable_mmap`, on hf-mount (mmap and parallel page faults can
+    # deadlock), on MPS (the page cache and MPS buffers share unified memory, so the footprint doubles) and on
+    # Windows (mmap reserves commit charge for the entire file, exhausting memory on large checkpoints).
+    if is_mps:
+        backend, device = "pread", "mps"
+    elif load_config.disable_mmap or _is_on_hf_mount(file) or sys.platform == "win32":
+        backend, device = "pread", "cpu"
+    else:
+        backend, device = "mmap", "cpu"
+    handle = safe_open(file, framework="pt", device=device, backend=backend)
+    return handle, {k: handle.get_slice(k) for k in handle.keys()}
 
 
 def load_state_dict(
@@ -4020,15 +4034,17 @@ class PreTrainedModel(
                 Whether to disable memory mapping when loading safetensors checkpoints. When `None` (default),
                 it is auto-detected to `True` when the checkpoint lives on an `hf-mount` FUSE filesystem
                 (used by HF Spaces/Endpoints), where mmap + parallel page-faults can deadlock. When `True`,
-                files are read fully into memory and parsed with `safetensors.torch.load`. When `False`, the
+                safetensors files are read with `pread` instead of being memory-mapped. When `False`, the
                 default memory-mapped loader is always used.
             prefetch (`bool`, *optional*):
-                Load safetensors shards straight into device memory with safetensors' prefetch engine.
-                Shards are read and copied to the device in the background while the weights are being
-                assigned, and parameters are created as zero-copy views of the loaded buffers. When `None`
-                (default) the engine is used whenever it applies: safetensors >= 0.9.0rc1 on Linux,
-                safetensors checkpoint files, no on-the-fly quantization, and every entry of `device_map`
-                resolving to the same CUDA device. Pass `False` to always use the default loader.
+                Read the checkpoint directly into GPU memory, in the background, instead of going through CPU
+                memory first. Loading is faster and the weights don't need extra memory once on the GPU, since
+                parameters use the loaded memory as is (unless their dtype changes). `None` (default) uses it
+                whenever it can, which currently means: safetensors >= 0.9.0rc1, Linux, a CUDA device in
+                `device_map` (weights going elsewhere load as usual), safetensors checkpoint files, and no
+                on-the-fly quantization. `False` always uses the default loader. That GPU memory is allocated by
+                safetensors, not torch's caching allocator: `torch.cuda.memory_allocated` doesn't count it and
+                `torch.cuda.empty_cache` doesn't release it, so set `False` if you rely on either.
             fusion_config (`dict[str, bool | dict[str, Any]]`, *optional*):
                 Optional fusion configuration applied before model instantiation. Each key enables a fusion family and
                 its value can either be `True` to enable that fusion with default options or a dictionary of
@@ -4404,29 +4420,12 @@ class PreTrainedModel(
                 load_config.weight_mapping,
             )
 
-        # safetensors' prefetch engine loads the shards into its own device allocations and hands them out
-        # as zero-copy tensors: with it, the caching-allocator warmup would only double the footprint
-        prefetch_device = None
-        if (
-            load_config.prefetch is not False
-            and state_dict is None
-            and checkpoint_files is not None
-            and checkpoint_files[0].endswith(".safetensors")
-            and (load_config.hf_quantizer is None or load_config.hf_quantizer.pre_quantized)
-            and is_prefetch_available()
-        ):
-            prefetch_device = prefetch_target_device(load_config.device_map)
-            if prefetch_device is not None:
-                logger.info(f"Loading safetensors shards with the CUDA prefetch engine on {prefetch_device}")
-        if load_config.prefetch and prefetch_device is None:
-            logger.warning(
-                "prefetch=True was requested but this checkpoint cannot be loaded with safetensors' CUDA "
-                "prefetch engine (it needs safetensors >= 0.9.0rc1 on Linux, safetensors files and a single "
-                "CUDA device); loading with the default loader."
-            )
+        use_prefetch = should_prefetch(load_config, state_dict, checkpoint_files)
 
         # Warmup cuda to load the weights much faster on devices
-        if load_config.device_map is not None and not is_hqq_or_quark and prefetch_device is None:
+        # skipped with prefetch: weights land in GPU memory safetensors allocates itself, outside torch's caching
+        # allocator, so warming the allocator up would only double memory use
+        if load_config.device_map is not None and not is_hqq_or_quark and not use_prefetch:
             expanded_device_map = expand_device_map(load_config.device_map, expected_keys)
             caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
 
@@ -4457,40 +4456,17 @@ class PreTrainedModel(
             )
         else:
             all_pointer = set()
+            prefetch_handles = {}
             if state_dict is not None:
                 merged_state_dict = state_dict
             elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
                 for file in checkpoint_files:
-                    if prefetch_device is not None:
-                        file_pointer = safe_open(file, framework="pt", device=str(prefetch_device), backend="pread")
-                        all_pointer.add(file_pointer)
-                        # a tensor-parallel rank keeps slices: no zero-copy views (see PrefetchedShard)
-                        shard = PrefetchedShard(file_pointer, copy_full=load_config.device_mesh is not None)
-                        for k in file_pointer.keys():
-                            merged_state_dict[k] = PrefetchedTensor(shard, k)  # loads on first indexing
-                        continue
-                    if load_config.disable_mmap or _is_on_hf_mount(file):
-                        with open(file, "rb") as _fh:
-                            merged_state_dict.update(_safe_load_bytes(_fh.read()))
-                        continue
-                    is_mps = load_config.device_map is not None and any(
-                        (d.type if isinstance(d, torch.device) else d) == "mps"
-                        for d in load_config.device_map.values()
-                    )
-                    # Use pread on MPS (mmap incompatible) and Windows (mmap reserves
-                    # copy-on-write commit charge for the entire file, exhausting memory
-                    # for large multi-shard checkpoints).
-                    if is_mps:
-                        backend, device = "pread", "mps"
-                    elif sys.platform == "win32":
-                        backend, device = "pread", "cpu"
-                    else:
-                        backend, device = "mmap", "cpu"
-                    file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
-                    all_pointer.add(file_pointer)
-                    for k in file_pointer.keys():
-                        merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                    handle, slices = _open_safetensors_shard(file, load_config)
+                    all_pointer.add(handle)
+                    merged_state_dict.update(slices)
+                    if use_prefetch:
+                        prefetch_handles.update(dict.fromkeys(slices, handle))
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}
@@ -4499,16 +4475,18 @@ class PreTrainedModel(
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
-            loading_info, disk_offload_index = convert_and_load_state_dict_in_model(
-                model=model,
-                state_dict=merged_state_dict,
-                load_config=load_config,
-                disk_offload_index=disk_offload_index,
-            )
-
-            # finally close all opened file pointers
-            for k in all_pointer:
-                k.__exit__(None, None, None)
+            try:
+                loading_info, disk_offload_index = convert_and_load_state_dict_in_model(
+                    model=model,
+                    state_dict=merged_state_dict,
+                    load_config=load_config,
+                    disk_offload_index=disk_offload_index,
+                    prefetch_handles=prefetch_handles,
+                )
+            finally:
+                # finally close all opened file pointers
+                for k in all_pointer:
+                    k.__exit__(None, None, None)
 
         return loading_info, disk_offload_index
 
