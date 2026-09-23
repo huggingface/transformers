@@ -54,6 +54,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
+from ..gemma4 import Gemma4Config
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 
 
@@ -118,7 +119,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
 
 
 class Gemma3MLP(nn.Module):
-    def __init__(self, config: Gemma3TextConfig):
+    def __init__(self, config: Gemma4Config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size

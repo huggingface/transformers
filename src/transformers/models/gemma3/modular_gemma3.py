@@ -53,6 +53,7 @@ from ..gemma2.modeling_gemma2 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..gemma4 import Gemma4Config
 from ..paligemma.modeling_paligemma import (
     PaliGemmaCausalLMOutputWithPast,
     PaliGemmaForConditionalGeneration,
@@ -257,7 +258,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
 
 
 class Gemma3MLP(Gemma2MLP):
-    def __init__(self, config: Gemma3TextConfig):
+    def __init__(self, config: Gemma4Config):
         super().__init__(config)
 
 
