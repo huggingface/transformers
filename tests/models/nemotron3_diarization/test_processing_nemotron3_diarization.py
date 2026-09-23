@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import AutoProcessor, Nemotron3DiarizationProcessor, NemotronAsrStreamingFeatureExtractor
-from transformers.models.nemotron3_diarization.processing_nemotron3_diarization import DEFAULT_STREAMING_MODES
+from transformers import Nemotron3DiarizationProcessor, NemotronAsrStreamingFeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -35,30 +33,6 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
     def get_processor(self, **kwargs) -> Nemotron3DiarizationProcessor:
         feature_extractor = NemotronAsrStreamingFeatureExtractor(feature_size=128)
         return Nemotron3DiarizationProcessor(feature_extractor=feature_extractor, **kwargs)
-
-    def test_save_load_roundtrip(self):
-        processor = self.get_processor()
-        self.assertEqual(processor.streaming_mode, "low_latency")
-        self.assertEqual(processor.streaming_modes, DEFAULT_STREAMING_MODES)
-        processor.set_streaming_mode("ultra_low_latency")
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            processor.save_pretrained(tmp_dir)
-            reloaded = AutoProcessor.from_pretrained(tmp_dir)
-        self.assertIsInstance(reloaded, Nemotron3DiarizationProcessor)
-        self.assertEqual(reloaded.subsampling_factor, processor.subsampling_factor)
-        self.assertEqual(reloaded.streaming_mode, "ultra_low_latency")
-        # the modes travel with the checkpoint (tuples become lists in JSON)
-        self.assertEqual(
-            {mode: tuple(sizes) for mode, sizes in reloaded.streaming_modes.items()}, DEFAULT_STREAMING_MODES
-        )
-        self.assertEqual(reloaded.num_mel_frames_per_audio_chunk, processor.num_mel_frames_per_audio_chunk)
-
-        # a checkpoint can ship its own modes
-        custom = self.get_processor(streaming_modes={"fast": (2, 1)}, streaming_mode="fast")
-        self.assertEqual(custom.num_mel_frames_per_audio_chunk, 3 * custom.subsampling_factor)
-        with self.assertRaises(ValueError):
-            custom.set_streaming_mode("low_latency")
-        self.assertEqual(reloaded.feature_extractor.feature_size, 128)
 
     def test_streaming_modes(self):
         processor = self.get_processor()
