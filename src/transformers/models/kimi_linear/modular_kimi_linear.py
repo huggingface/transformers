@@ -526,9 +526,7 @@ class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
         if use_attn_res:
             # partial_after_attn is local — no mutation of the caller's tensor
             partial_after_attn = attn_res_partial + attn_out
-            h_mlp = _attn_res_forward(
-                self.mlp_res_proj, self.mlp_res_norm, attn_res_blocks, partial_after_attn
-            )
+            h_mlp = _attn_res_forward(self.mlp_res_proj, self.mlp_res_norm, attn_res_blocks, partial_after_attn)
             mlp_out = self.mlp(self.post_attention_layernorm(h_mlp))
             updated_partial = partial_after_attn + mlp_out
             return updated_partial, updated_partial
