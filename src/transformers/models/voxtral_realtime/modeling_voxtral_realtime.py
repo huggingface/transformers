@@ -198,7 +198,7 @@ class VoxtralRealtimeRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -930,6 +930,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
 
         return audio_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1215,15 +1216,13 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
 
         # NOTE: we use the encoder prefix here this is not a classical encoder-decoder model - no cross-attention
         # the model is better seen as a VLM/ AudioLM, so with an encoder that can take psat_key_values for it's forward pass
-        if generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in ("static", "offloaded_static"):
-                model_kwargs["encoder_past_key_values"] = self._get_encoder_cache(
-                    cache_implementation=generation_config.cache_implementation,
-                    batch_size=batch_size,
-                    max_cache_len=self.config.audio_config.sliding_window,
-                )
-            else:
-                raise ValueError(f"{generation_config.cache_implementation} is not supported for VoxtralRealtime")
+        # Only static caches need pre-allocation here: dynamic ones are lazily initialized by the encoder itself.
+        if generation_config.cache_implementation in ("static", "offloaded_static"):
+            model_kwargs["encoder_past_key_values"] = self._get_encoder_cache(
+                cache_implementation=generation_config.cache_implementation,
+                batch_size=batch_size,
+                max_cache_len=self.config.audio_config.sliding_window,
+            )
 
     def _get_encoder_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int) -> Cache:
         offload_cache = "offloaded" in cache_implementation

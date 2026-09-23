@@ -14,7 +14,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, load_coco_image
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, load_coco_image
 
 
 if is_torch_available() and is_vision_available():
@@ -24,7 +24,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class FuyuImageProcessingTester:
+class FuyuImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -103,9 +103,6 @@ class FuyuImageProcessingTester:
             image_inputs = [torch.from_numpy(img) for img in image_inputs]
 
         return image_inputs
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
 
 
 @require_torch
@@ -186,9 +183,11 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
         backend_names = list(encodings.keys())
-        reference_encoding = encodings[backend_names[0]].images[0][0]
+        reference_backend = backend_names[0]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].images[0][0])
+            self._assert_encodings_equivalence(
+                encodings[reference_backend], encodings[backend_name], reference_backend, backend_name
+            )
 
     def test_backends_equivalence_batched(self):
         """Override to handle Fuyu's custom output structure"""

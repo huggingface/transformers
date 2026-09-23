@@ -14,8 +14,6 @@
 
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
     Ovis2Config,
@@ -33,6 +31,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -46,7 +45,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Ovis2VisionText2TextModelTester:
@@ -239,8 +238,8 @@ class Ovis2IntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        self.image = load_test_image(url)
         self.prompt_image = ""
         self.messages = [
             {
@@ -305,8 +304,8 @@ class Ovis2IntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
+        image = load_test_image(url)
         prompt = [
             {
                 "role": "user",
@@ -335,8 +334,8 @@ class Ovis2IntegrationTest(unittest.TestCase):
             "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
-        lowres_url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw).resize((320, 240))
+        lowres_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
+        lowres_img = load_test_image(lowres_url).resize((320, 240))
 
         inputs = self.processor(
             text=[self.text, self.text],
@@ -365,7 +364,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         )
 
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        lowres_img = load_test_image(lowres_url)
 
         inputs_batched = self.processor(
             text=[self.text, self.text],

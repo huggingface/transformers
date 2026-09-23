@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import inspect
 import json
 import os
@@ -19,12 +20,14 @@ import sys
 import tempfile
 import warnings
 from copy import deepcopy
+from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from transformers import AutoImageProcessor, BatchFeature
-from transformers.image_utils import AnnotationFormat
+from transformers.image_utils import AnnotationFormat, ImageInput
 from transformers.models.auto.image_processing_auto import (
     IMAGE_PROCESSOR_MAPPING_NAMES,
     get_image_processor_class_from_name,
@@ -37,11 +40,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import import_utils, is_torch_available, is_vision_available
 
 
 if is_torch_available():
     import torch
+
+    from transformers.modeling_outputs import SemanticSegmenterOutput
 
 if is_vision_available():
     from PIL import Image
@@ -55,6 +60,15 @@ from fetch_hub_objects_for_ci import url_to_local_path  # noqa: E402
 COCO_CATS_IMAGE_URL = (
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
 )
+
+ADE20K_IMAGE_URLS = [
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000002.jpg",
+]
+ADE20K_SEGMENTATION_MAP_URLS = [
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000002.png",
+]
 
 
 def load_test_image(url: str):
@@ -165,6 +179,87 @@ def prepare_video_inputs(
     return video_inputs
 
 
+class ImageProcessingTester:
+    """Base class for the `<Model>ImageProcessingTester` classes used by `ImageProcessingTestMixin`."""
+
+    def prepare_image_inputs(
+        self,
+        batch_size=None,
+        min_resolution=None,
+        max_resolution=None,
+        num_channels=None,
+        size_divisor=None,
+        equal_resolution=False,
+        numpify=False,
+        torchify=False,
+    ):
+        return prepare_image_inputs(
+            batch_size=self.batch_size if batch_size is None else batch_size,
+            num_channels=self.num_channels if num_channels is None else num_channels,
+            min_resolution=self.min_resolution if min_resolution is None else min_resolution,
+            max_resolution=self.max_resolution if max_resolution is None else max_resolution,
+            size_divisor=size_divisor,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
+    def prepare_semantic_segmentation_inputs_ade20k(self, batched: bool = False):
+        """Loads image/segmentation map pairs from ADE20k as PIL images."""
+        num_inputs = 2 if batched else 1
+        images = [load_test_image(url) for url in ADE20K_IMAGE_URLS[:num_inputs]]
+        # `load_test_image` converts the single channel label maps to RGB, duplicating the labels across channels
+        segmentation_maps = [
+            Image.fromarray(np.array(load_test_image(url))[..., 0])
+            for url in ADE20K_SEGMENTATION_MAP_URLS[:num_inputs]
+        ]
+        if batched:
+            return images, segmentation_maps
+        return images[0], segmentation_maps[0]
+
+    def expected_output_image_shape(self, images: list[ImageInput]) -> tuple[int, ...]:
+        crop_size = getattr(self, "crop_size", None)
+        if crop_size is not None:
+            return self.num_channels, crop_size["height"], crop_size["width"]
+
+        if "shortest_edge" in self.size:
+            # Images are resized so that their shortest edge matches `size["shortest_edge"]` while keeping the aspect
+            # ratio, then padded to the largest height and width in the batch.
+            shortest_edge = self.size["shortest_edge"]
+            expected_sizes = []
+            for image in images:
+                if isinstance(image, Image.Image):
+                    width, height = image.size
+                elif isinstance(image, np.ndarray):
+                    height, width = image.shape[0], image.shape[1]
+                else:
+                    height, width = image.shape[1], image.shape[2]
+                if width < height:
+                    expected_sizes.append((int(shortest_edge * height / width), shortest_edge))
+                elif width > height:
+                    expected_sizes.append((shortest_edge, int(shortest_edge * width / height)))
+                else:
+                    expected_sizes.append((shortest_edge, shortest_edge))
+            expected_height = max(expected_size[0] for expected_size in expected_sizes)
+            expected_width = max(expected_size[1] for expected_size in expected_sizes)
+            return self.num_channels, expected_height, expected_width
+
+        return self.num_channels, self.size["height"], self.size["width"]
+
+    def prepare_post_process_semantic_segmentation_inputs(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(self.batch_size, self.num_labels, self.size["height"], self.size["width"])
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.size["height"],
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
+
+
 class ImageProcessingTestMixin:
     test_cast_dtype = None
 
@@ -187,6 +282,52 @@ class ImageProcessingTestMixin:
         torch.testing.assert_close(tensor1, tensor2, atol=atol, rtol=rtol)
         self.assertLessEqual(torch.mean(torch.abs(tensor1 - tensor2)).item(), mean_atol)
 
+    def _assert_encodings_equivalence(
+        self, reference_encoding, encoding, reference_backend, backend_name, **tensor_kwargs
+    ):
+        """Assert that two backends return the same outputs, not just the same pixel values.
+
+        Float tensors are compared with tolerances because the backends resize differently (`tensor_kwargs` are passed
+        to `_assert_tensors_equivalence`); everything else (masks, sizes, lists of ints) must match exactly.
+        """
+        self.assertEqual(
+            set(reference_encoding.keys()),
+            set(encoding.keys()),
+            f"{backend_name} returns different keys than {reference_backend}",
+        )
+        for key in reference_encoding:
+            self._assert_values_equivalence(
+                reference_encoding[key], encoding[key], f"`{key}`", reference_backend, backend_name, **tensor_kwargs
+            )
+
+    def _assert_values_equivalence(
+        self, reference_value, value, name, reference_backend, backend_name, **tensor_kwargs
+    ):
+        if torch.is_tensor(reference_value) and torch.is_tensor(value):
+            self.assertEqual(
+                reference_value.dtype,
+                value.dtype,
+                f"{name} has dtype {value.dtype} in {backend_name} and {reference_value.dtype} in {reference_backend}",
+            )
+            self.assertEqual(
+                reference_value.shape,
+                value.shape,
+                f"{name} has shape {tuple(value.shape)} in {backend_name} and "
+                f"{tuple(reference_value.shape)} in {reference_backend}",
+            )
+            if reference_value.is_floating_point():
+                self._assert_tensors_equivalence(reference_value, value, **tensor_kwargs)
+            else:
+                self.assertTrue(torch.equal(reference_value, value), f"{name} differs from {reference_backend}")
+        elif isinstance(reference_value, (list, tuple)) and isinstance(value, (list, tuple)):
+            self.assertEqual(len(reference_value), len(value), f"{name} has a different length in {backend_name}")
+            for i, (reference_item, item) in enumerate(zip(reference_value, value)):
+                self._assert_values_equivalence(
+                    reference_item, item, f"{name}[{i}]", reference_backend, backend_name, **tensor_kwargs
+                )
+        else:
+            self.assertEqual(reference_value, value, f"{name} differs from {reference_backend}")
+
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
@@ -204,9 +345,11 @@ class ImageProcessingTestMixin:
         # Compare all backends to the first one (reference backend)
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_encoding = encodings[reference_backend].pixel_values
+        reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
+            self._assert_encodings_equivalence(
+                reference_encoding, encodings[backend_name], reference_backend, backend_name
+            )
 
     @require_vision
     @require_torch
@@ -225,9 +368,11 @@ class ImageProcessingTestMixin:
         # Compare all backends to the first one (reference backend)
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_encoding = encodings[reference_backend].pixel_values
+        reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
+            self._assert_encodings_equivalence(
+                reference_encoding, encodings[backend_name], reference_backend, backend_name
+            )
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -355,6 +500,47 @@ class ImageProcessingTestMixin:
                 self.assertEqual(
                     dict1_common, dict2_common, f"Backends {backend1} and {backend2} differ in common keys"
                 )
+
+    def test_pil_can_load_without_torchvision(self):
+        """Tests that we can init/load PIL-backend processors even when no torchvision is installed."""
+
+        if "pil" not in self.image_processing_classes:
+            self.skipTest("Skipping test: no PIL backend processor found!")
+
+        image_processing_class = self.image_processing_classes["pil"]
+        test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
+        model_name = test_file_path.parent.name
+
+        # Try to init, save and load back a PIL processor in an env with no torchvision
+        with patch.dict(
+            import_utils.BACKENDS_MAPPING,
+            {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
+        ):
+            module = importlib.import_module(f"transformers.models.{model_name}")
+
+            module_name = f"transformers.models.{model_name}.image_processing_pil_{model_name}"
+            module = importlib.import_module(module_name)
+
+            # Restore the real module state afterwards to not drag patches module into other tests
+            self.addCleanup(importlib.reload, module)
+
+            with patch.dict(
+                import_utils.BACKENDS_MAPPING,
+                {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
+            ):
+                importlib.reload(module)
+                image_processing_class = getattr(module, image_processing_class.__name__)
+
+                image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+                pil_processor = image_processing_class(**image_processor_dict)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pil_processor.save_pretrained(tmpdirname)
+                    reloaded_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
+
+                    # importlib.reload() creates a new class object, so we can't checl `isinstance`
+                    self.assertEqual(reloaded_processor.__class__.__name__, image_processing_class.__name__)
+                    self.assertEqual(reloaded_processor.__class__.__module__, image_processing_class.__module__)
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -759,7 +945,7 @@ class AnnotationFormatTestMixin:
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
         fixtures_path = pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
 
-        with open(fixtures_path / "coco_annotations.txt") as f:
+        with open(fixtures_path / "coco_annotations.txt", encoding="utf-8") as f:
             detection_target = json.loads(f.read())
 
         detection_annotations = {"image_id": 39769, "annotations": detection_target}
@@ -770,7 +956,7 @@ class AnnotationFormatTestMixin:
             "return_tensors": "pt",
         }
 
-        with open(fixtures_path / "coco_panoptic_annotations.txt") as f:
+        with open(fixtures_path / "coco_panoptic_annotations.txt", encoding="utf-8") as f:
             panoptic_target = json.loads(f.read())
 
         panoptic_annotations = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": panoptic_target}

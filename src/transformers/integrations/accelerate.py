@@ -23,6 +23,7 @@ import os
 import re
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
+from contextlib import contextmanager, nullcontext
 from typing import TYPE_CHECKING
 
 from safetensors import safe_open
@@ -300,7 +301,7 @@ def get_balanced_memory(
     # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
     # add which is the biggest of:
     # - the size of the biggest no split block (if applicable)
-    # - the mean of the layer sizes
+    # - the biggest leaf param (e.g. usually the embedding is a huge param compared to others)
     if no_split_module_classes is None:
         no_split_module_classes = []
     elif not isinstance(no_split_module_classes, (list, tuple, set)):
@@ -310,13 +311,13 @@ def get_balanced_memory(
     # may have different sizes depending on the layer idx, even if it's the same class (e.g. if we have either mlp or moe inside
     # the DecoderLayer depending on the layer idx). For this reason, we have to find ALL layers matching the _no_split_module class
     # and take the max, not just the first layer matching the class (as it may be smaller than future layers)
-    buffer = 0
+    biggest_no_split_module = 0
     if len(no_split_module_classes) > 0:
         all_no_split_modules = {k for k, v in model.named_modules() if v.__class__.__name__ in no_split_module_classes}
-        buffer = max(module_sizes[k] for k in all_no_split_modules)
+        biggest_no_split_module = max(module_sizes[k] for k in all_no_split_modules)
 
-    mean_leaves = int(sum(leave_modules_sizes.values()) / max(len(leave_modules_sizes), 1))
-    buffer = int(1.25 * max(buffer, mean_leaves))
+    biggest_leaf = max(leave_modules_sizes.values(), default=0)
+    buffer = int(1.25 * max(biggest_no_split_module, biggest_leaf))
     per_gpu += buffer
 
     # Sorted list of GPUs id (we may have some gpu ids not included in the our max_memory list - let's ignore them)
@@ -328,7 +329,7 @@ def get_balanced_memory(
         max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
-        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        min_zero = max(0, module_sizes[""] - sum(max_memory[i] for i in range(1, num_devices)))
         max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory
@@ -345,6 +346,7 @@ def _get_device_map(
     """
     if isinstance(device_map, str):
         no_split_modules = model._no_split_modules
+        no_placement_params = getattr(model, "_no_placement_params", None)
 
         if device_map != "sequential":
             inferred_max_memory = get_balanced_memory(
@@ -365,12 +367,33 @@ def _get_device_map(
             max_memory=inferred_max_memory,
             no_split_module_classes=no_split_modules,
             hf_quantizer=hf_quantizer,
+            no_placement_params=no_placement_params,
         )
 
         if hf_quantizer is not None:
             hf_quantizer.validate_environment(device_map=device_map)
 
     return device_map
+
+
+@contextmanager
+def skip_device_map_check():
+    """
+    Context manager to skip the `check_device_map` util in case we use `no_placement_params` which deliberately skips
+    some parameters from the device_map.
+    """
+    import accelerate.big_modeling
+
+    def empty_func(*args, **kwargs):
+        pass
+
+    try:
+        original_func = accelerate.big_modeling.check_device_map
+        accelerate.big_modeling.check_device_map = empty_func
+        yield
+    finally:
+        # Set back the original
+        accelerate.big_modeling.check_device_map = original_func
 
 
 def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers):
@@ -398,7 +421,11 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
         device_map_kwargs["offload_buffers"] = True
 
     if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-        dispatch_model(model, **device_map_kwargs)
+        context_manager = (
+            skip_device_map_check() if getattr(model, "_no_placement_params", None) is not None else nullcontext()
+        )
+        with context_manager:
+            dispatch_model(model, **device_map_kwargs)
 
 
 def expand_device_map(device_map: dict | None, param_names: list[str]):
@@ -621,6 +648,7 @@ def infer_auto_device_map(
     offload_buffers: bool = False,
     tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
+    no_placement_params: set[str] | None = None,
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -710,7 +738,7 @@ def infer_auto_device_map(
 
         # Then we keep track of all the parameters that are tied to the current module, but not in the current module
         tied_params = sum(
-            [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups], []
+            ([p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups), []
         )
 
         if verbose and len(tied_params) > 0:
@@ -821,9 +849,42 @@ def infer_auto_device_map(
                 f"{current_max_size - device_memory_used[device]}, module size {module_size})."
             )
         if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
+            # If we have a `no_placement_params` provided and we are one of the `no_split_module_classes`, try to escape completely
+            # the `no_placement_params` and place only the other parameters on accelerator. We first check if it would fit on the next device
+            # before doing it though, in case we have huge accelerators that could still fit the huge param without escaping
+            next_device = devices[current_device + 1]
+            next_max_size = max_memory[next_device] if next_device != "disk" else float("inf")
+            fits_on_next_device = device_memory_used[next_device] + module_size_with_ties <= next_max_size
+            # If it does not fit on the next fresh gpu, it would lead to offloading any following modules to cpu/disk without
+            # this workaround of `no_placement_params`
+            if (
+                no_placement_params is not None
+                and module.__class__.__name__ in no_split_module_classes
+                and any(name in no_placement_params for name, _ in module.named_parameters())
+                # Those 2 check that the next device is still a gpu, and that we cannot fit on it even when it's still empty
+                and next_device in gpus
+                and not fits_on_next_device
+            ):
+                if verbose:
+                    print(
+                        "This module cannot be split, but contains a `no_placement_params`. Trying to place all other params inside."
+                    )
+                modules_children = [
+                    (f"{name}.{child_name}", child)
+                    for child_name, child in module.named_parameters()
+                    if child_name not in no_placement_params
+                ]
+                modules_children += [
+                    (f"{name}.{child_name}", child)
+                    for child_name, child in module.named_buffers()
+                    if child_name not in no_placement_params
+                ]
+                modules_to_treat = modules_children + modules_to_treat
+                continue
             # -> no split, we go to the next device
-            if verbose:
-                print("This module cannot be split, going to the next device.")
+            else:
+                if verbose:
+                    print("This module cannot be split, going to the next device.")
 
         else:
             # -> split, we replace the module studied by its children + parameters
@@ -849,7 +910,7 @@ def infer_auto_device_map(
 
     device_memory_used = {device: mem for device, mem in device_memory_used.items() if mem > 0}
 
-    if clean_result:
+    if clean_result and no_placement_params is None:
         device_map = clean_device_map(device_map)
 
     non_gpu_buffer_size = device_buffer_sizes.get("cpu", 0) + device_buffer_sizes.get("disk", 0)

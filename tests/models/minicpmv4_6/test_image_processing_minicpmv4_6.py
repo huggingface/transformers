@@ -21,7 +21,7 @@ from transformers.image_utils import get_image_size
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -31,7 +31,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class MiniCPMV4_6ImageProcessingTester:
+class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -103,17 +103,6 @@ class MiniCPMV4_6ImageProcessingTester:
             total_L += best_height * best_width // self.patch_size
 
         return [self.num_channels, self.patch_size, total_L]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
@@ -230,3 +219,19 @@ class MiniCPMV4_6ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                     (ts_16x[0], ts_16x[1]) if not hasattr(ts_16x[0], "item") else (ts_16x[0].item(), ts_16x[1].item())
                 )
                 self.assertGreaterEqual(h4 * w4, h16 * w16)
+
+    def test_crop_to_patches_aspect_ratio(self):
+        """Test that row/column ordering is correct when cropping non-square images to patches"""
+        for image_processing_class in self.image_processing_classes.values():
+            patch_size = 14
+            image_processor = image_processing_class(slice_mode=True, max_slice_nums=7, scale_resolution=10)
+
+            for num_rows, num_cols in [(2, 3), (3, 2), (1, 6), (6, 1)]:
+                image_height = patch_size * num_rows  # 128
+                image_width = patch_size * num_cols  # 192
+                test_image = Image.new("RGB", (image_width, image_height))
+                result = image_processor(test_image, return_tensors="pt")
+
+                # Should produce 7 patches (6 grid patches + 1 thumbnail)
+                self.assertEqual(result.grids, [[num_rows, num_cols]])
+                self.assertEqual(tuple(result.pixel_values.shape), (1, 3, patch_size, 1568))

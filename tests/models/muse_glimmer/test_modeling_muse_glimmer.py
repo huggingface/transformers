@@ -25,7 +25,6 @@ from transformers import (
 )
 from transformers.models.muse_glimmer.configuration_muse_glimmer import MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -33,6 +32,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_image_processing_common import load_coco_image
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -117,7 +117,7 @@ class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
 # instead asks for all 55.5 GiB on one card and raises `torch.OutOfMemoryError` while materializing weights.
 @slow
 @require_torch_accelerator
-class MuseGlimmerIntegrationTest(unittest.TestCase):
+class MuseGlimmerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     EXPECTED_TEXT_PREFIX = " to find your gift. The purpose of life is to give it away."
     EXPECTED_IMAGE_PREFIX = " two cats sleeping on a pink"
 
@@ -125,6 +125,7 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.model = None
 
     @classmethod
@@ -137,18 +138,9 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
             )
         return cls.model
 
-    @classmethod
-    def tearDownClass(cls):
-        if hasattr(cls, "model"):
-            del cls.model
-        cleanup(torch_device, gc_collect=True)
-
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def test_text_generation_matches_reference(self):
         # The reference implementation tokenizes raw completions as [bos] + encode(prompt).

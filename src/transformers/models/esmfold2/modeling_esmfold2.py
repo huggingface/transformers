@@ -178,8 +178,8 @@ class EsmFold2FourierEmbedding(nn.Module):
 
     def __init__(self, embedding_dim: int) -> None:
         super().__init__()
-        self.register_buffer("frequencies", torch.randn(embedding_dim))
-        self.register_buffer("phases", torch.randn(embedding_dim))
+        self.frequencies = nn.Buffer(torch.randn(embedding_dim))
+        self.phases = nn.Buffer(torch.randn(embedding_dim))
 
     def forward(self, noise_level: Tensor) -> Tensor:
         # ``noise_level`` and the buffers are both fp32, so the angles are built in fp32.
@@ -1374,10 +1374,13 @@ class EsmFold2ConfidenceHead(nn.Module):
         super().__init__()
         self.eps = config.confidence_head.eps
 
-        boundaries = torch.linspace(
-            config.confidence_head.min_dist, config.confidence_head.max_dist, config.confidence_head.distogram_bins - 1
+        self.boundaries = nn.Buffer(
+            torch.linspace(
+                config.confidence_head.min_dist,
+                config.confidence_head.max_dist,
+                config.confidence_head.distogram_bins - 1,
+            )
         )
-        self.register_buffer("boundaries", boundaries)
         self.dist_bin_pairwise_embed = nn.Embedding(config.confidence_head.distogram_bins, config.pairwise_hidden_size)
 
         self.input_embedder = EsmFold2ConfidenceInputEmbedder(config)
@@ -1499,7 +1502,7 @@ class EsmFold2ConfidenceHead(nn.Module):
 
             complex_plddt = (plddt_per_atom * atom_mask_float).sum(dim=-1) / (atom_mask_float.sum(dim=-1) + self.eps)
 
-            is_ligand = (expanded_type == 4).float()  # 4 = non-polymer (ligand) molecule type
+            is_ligand = (expanded_type == 3).float()  # 3 = non-polymer (ligand) molecule type
             inter_chain = (expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)).float()
             near_contact = (rep_distances < 8).float()  # 8 Å: the conventional interface-contact cutoff
             interface_per_token = (near_contact * inter_chain * (1.0 - is_ligand).unsqueeze(-1)).amax(dim=-1)
@@ -1861,6 +1864,7 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         "norm_start",
         "norm_single",
         "boundaries",
+        "distogram_head",
     ]
     _supports_sdpa = True
 
@@ -2223,7 +2227,8 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         entity_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Entity ID grouping tokens that belong to the same molecular entity.
         mol_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
-            Molecule-type code for each token (``0`` = protein).
+            Molecule-type code for each token: ``0`` = protein, ``1`` = DNA, ``2`` = RNA,
+            ``3`` = non-polymer (ligand).
         res_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Residue-type (amino-acid identity) index for each token.
         token_bonds (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, 1)`):

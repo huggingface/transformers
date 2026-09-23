@@ -26,6 +26,7 @@ from transformers import GenerationConfig, set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
+from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -39,6 +40,7 @@ from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
     require_onnxscript,
+    require_openvino,
     require_torch_greater_or_equal,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -55,6 +57,12 @@ from transformers.testing_utils import (
 # ``_should_skip`` walks the scopes that match the current ``(backend, generate, dynamic)``
 # triple and returns ``True`` as soon as the model is found in any of them. Reasons live next
 # to the model name so the "why" travels with the entry.
+#
+# A scope may also carry an ``.exactness`` suffix (``"exactness"``, ``"openvino.exactness"``, …).
+# Those entries do not skip the test: the model is still exported and run, only the comparison
+# against eager is dropped. Use them when the comparison itself is meaningless — a forward that
+# draws its own randomness does not even agree with itself between two eager calls — so that a real
+# export break still fails instead of hiding behind a full skip.
 #
 # Adding a new skip: pick the most specific scope that applies and add a ``"Name": "reason"``
 # entry. Add a new scope key if the existing ones don't fit.
@@ -84,6 +92,16 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "model. TODO: revisit on demand."
         ),
         "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
+    },
+    # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
+    "exactness": {
+        "VibeVoiceAsrModel": (
+            "Its acoustic tokenizer is a VAE that samples inside the forward — `vae_std=0.625` of noise "
+            "over latents whose mean magnitude is 1.7e-06 — so two eager runs on the same inputs differ "
+            "by 0.037, more than the export gap itself. The exported graph returns the distribution's "
+            "mean, since the RNG traces as zeros."
+        ),
+        "VibeVoiceAsrForConditionalGeneration": "Same VAE sampling as `VibeVoiceAsrModel`.",
     },
     # Every backend, generate path only.
     "generate": {
@@ -119,13 +137,28 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
+        "VibeVoiceForConditionalGeneration": (
+            "Generation uses two forward calls with different input shapes (prefill + noise scheduler); "
+            "`decompose_prefill_decode` can't capture the full generate path reliably, causing flaky "
+            "CUDAGraphs / export failures. TODO: handle in a follow-up PR."
+        ),
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
+        "HieraForPreTraining": (
+            "With `bool_masked_pos` set, `HieraEncoder.reroll` reshapes on the mask's unbacked token count, so "
+            "dynamic shapes raise `GuardOnDataDependentSymNode` on `416*((u0//416)) < 2`. The other Hiera heads "
+            "export fine under dynamic shapes, and every one of them exports under static shapes."
+        ),
         "Sam2Model": (
             "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 10-minute "
             "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
             "agnostic — the torch.export step itself overruns, so every backend hits it."
+        ),
+        "Sam2VisionModel": (
+            "torch 2.13's constraint solver raises `NotImplementedError` from `solve_univariate_inequality` "
+            "on the Hiera window-partition guard `Eq(s/32 - (s/4)//8, 0)` (a `FloorDiv` in a rational "
+            "equation); tracing itself succeeds. ONNX + ORT also overrun the 1000s timeout at ~7.5 min."
         ),
         "SeamlessM4TForSpeechToSpeech": (
             "The Conformer speech encoder is non-causal, so `sdpa_attention_forward` evaluates "
@@ -153,6 +186,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). Single-token static generate is fine. "
             "Same chunked-attention limitation as the `onnx.generate` skip."
         ),
+        "VibeVoiceForConditionalGeneration": (
+            "Classifier-free guidance runs `forward()` twice per generated token — the conditional branch "
+            "and the unconditional one, each with its own cache of a different length — so the captured "
+            "calls interleave the two branches. `_merge_decode_calls` then merges a conditional decode step "
+            "with an unconditional call, mismatching the query and cache axes (`size 5 vs 3` in attention). "
+            "Single-token static generate is fine (it captures a conditional decode step). "
+            "TODO: make the capture branch-aware."
+        ),
     },
     # ONNX, every variant.
     "onnx": {
@@ -165,6 +206,77 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
     },
     # ONNX, generate path only.
+    # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
+    "onnx.exactness": {
+        "Wav2Vec2ForPreTraining": (
+            "`codevector_perplexity` and `projected_quantized_states` come out of a Gumbel-softmax draw "
+            "inside the forward, so the quantizer picks different codes each run and eager does not agree "
+            "with itself either."
+        ),
+        "UniSpeechForPreTraining": "Same Gumbel-softmax quantizer draw as `Wav2Vec2ForPreTraining`.",
+        "PatchTSTForPretraining": (
+            "The tiny config sets `random_mask_ratio=0.0`, so nothing is masked and the pretraining loss is "
+            "`0 / (0 + 1e-10)`: eager reports a clean `0.0` while ORT lands on `NaN`. The reconstruction it "
+            "is computed from matches. TODO: revisit if the tiny config ever masks anything."
+        ),
+        "BitModel": (
+            "ONNX Runtime's fp32 accumulation through this conv stack drifts ~0.0018 from torch, over the "
+            "1e-3 tolerance but far from structural."
+        ),
+        "BitBackbone": "Same ORT accumulation as `BitModel` (~0.0048 across the feature maps).",
+        "ClapModel": "Same ORT accumulation as `BitModel` (~0.0033 on the contrastive logits).",
+        "CLIPSegForImageSegmentation": "Same ORT accumulation as `BitModel` (~0.0059 on the decoder logits).",
+        "FlavaForPreTraining": "Same ORT accumulation as `BitModel` (~0.0039 on the contrastive logits).",
+        "Tipsv2DptForDensePrediction": "Same ORT accumulation as `BitModel` (~0.0052 across the dense heads).",
+        "Tipsv2DptForDepthEstimation": "Same ORT accumulation as `BitModel` (~0.0034).",
+        "Tipsv2DptForNormalEstimation": "Same ORT accumulation as `BitModel` (~0.0048).",
+        "Tipsv2DptForSemanticSegmentation": "Same ORT accumulation as `BitModel` (~0.0041).",
+        "DepthProForDepthEstimation": (
+            "`predicted_depth` differs by ~0.036 — the same ORT accumulation as `BitModel`, amplified by the "
+            "multi-scale depth head's upsampling and fusion."
+        ),
+        "OneFormerModel": (
+            "`task_token` differs by ~0.029. Everything else matches; the task MLP runs on a constant task "
+            "input, so ORT's accumulation shows up undamped there."
+        ),
+        "OneFormerForUniversalSegmentation": "Same `task_token` divergence as `OneFormerModel`.",
+        "TapasForQuestionAnswering": (
+            "It selects one column with an `argmax` over `column_logits`, and in the tiny config those are "
+            "tied: several rows have two columns at the maximum and one has all 32 (every column reads as "
+            "padding, so they all sit at `CLOSE_ENOUGH_TO_LOG_ZERO`). ONNX Runtime breaks the tie "
+            "differently from torch, so a different column is selected and the -10000 mask lands on "
+            "different cells — the same arbitrary-but-valid choice as the detection models above."
+        ),
+        "FlaubertForQuestionAnswering": (
+            "`end_top_index` is an index output chosen by `topk` over tied scores in the tiny test config, "
+            "so ONNX Runtime breaks the tie differently — an equally valid choice, the same way OpenVINO "
+            "does. `torch.export` still resolves it exactly as eager, so it stays compared there."
+        ),
+        "XLMForQuestionAnswering": "Same tied-`end_top_index` selection as `FlaubertForQuestionAnswering`.",
+        "DFineModel": (
+            "The tiny test config's classification head emits a constant, so the encoder's `topk` over "
+            "`enc_outputs_class` picks among *tied* scores and ONNX Runtime breaks the tie differently: "
+            "`enc_topk_bboxes` / `encoder_pred_boxes` hold the same boxes in another order."
+        ),
+        "DFineForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "Deimv2Model": "Same tied-`topk` selection as `DFineModel`.",
+        "Deimv2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrModel": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrV2Model": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
+        "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
+        "LwDetrModel": (
+            "The encoder's `topk` ranks proposals by scores that sit ~1e-4 apart in relative terms "
+            "(~9.39e-07 absolute) in the tiny test config, so ONNX Runtime's slightly different arithmetic "
+            "orders two of them the other way round: `enc_outputs_coord_logits` holds the same boxes, "
+            "swapped, matching the other proposal's coordinates exactly."
+        ),
+        "LwDetrForObjectDetection": "Same near-tied `topk` ordering as `LwDetrModel`.",
+    },
     "onnx.generate": {
         "ReformerModelWithLMHead": (
             "Chunked local attention exports a Constant idx that exceeds the cached-keys axis "
@@ -183,11 +295,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
-        "Sam2VisionModel": (
-            "`torch.export` of the Hiera vision backbone under dynamic shapes takes ~7.5 min "
-            "even after simplifying `window_partition`/`window_unpartition` (12 attention blocks "
-            "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
-        ),
         "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
@@ -276,7 +383,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
@@ -304,6 +410,73 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoModel": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
     },
+    "openvino.exactness": {
+        "FlaubertForQuestionAnswering": (
+            "`end_top_index` is an index output chosen by `topk` over tied scores in the tiny test config, so "
+            "OpenVINO's tie-break picks different — equally valid — indices."
+        ),
+        "XLMForQuestionAnswering": "Same tied-`end_top_index` selection as `FlaubertForQuestionAnswering`.",
+        "DFineModel": (
+            "The tiny test config's classification head emits a constant, so the encoder's `topk` over "
+            "`enc_outputs_class` picks 30 of 84 *tied* scores — an arbitrary choice that OpenVINO breaks "
+            "differently from torch. The selected boxes are the same set in a different order, and "
+            "`enc_topk_logits` matches exactly; a trained checkpoint has no such ties."
+        ),
+        "DFineForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "Deimv2Model": "Same tied-`topk` selection as `DFineModel`.",
+        "Deimv2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrModel": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrV2Model": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
+        "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
+    },
+    # OpenVINO, generate path only.
+    "openvino.generate": {},
+    # OpenVINO, dynamic-shape only.
+    "openvino.dynamic": {
+        "BigBirdModel": "OpenVINO conversion exceeds the 1000s test timeout under dynamic shapes.",
+        "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerModel": "Shifted-window (Swin) backbone exceeds the 1000s test timeout under dynamic shapes.",
+        "MaskFormerForInstanceSegmentation": "Same `timeout` as `MaskFormerModel`.",
+        "Mask2FormerModel": "Deformable-attention pixel decoder exceeds the 1000s test timeout under dynamic shapes.",
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` as `Mask2FormerModel`.",
+        "GroundingDinoModel": "Deformable-attention encoder exceeds the 1000s test timeout under dynamic shapes.",
+        "GroundingDinoForObjectDetection": "Same `timeout` as `GroundingDinoModel`.",
+        "MMGroundingDinoModel": "Same `timeout` as `GroundingDinoModel`.",
+        "MMGroundingDinoForObjectDetection": "Same `timeout` as `GroundingDinoModel`.",
+        "Xcodec2Model": (
+            "OpenVINO can't convert a rank-0 `aten.slice.Tensor` in the codec's dynamic-shape path "
+            "(`input_rank.get_length() > 0` fails in slice shape inference). Static export converts fine."
+        ),
+        "HieraModel": (
+            "OpenVINO export marks every input axis dynamic (`Dim.AUTO`), driving the Hiera mask-unit "
+            "backbone's data-dependent unroll into `GuardOnDataDependentSymNode` (`416*(u0//416) < 2`). "
+            "Pure `torch.export`/dynamo dynamic export passes (verified), so this is OpenVINO-specific. "
+            "Static export works."
+        ),
+        "HieraBackbone": "Same OpenVINO all-dynamic-axes Hiera-backbone guard as `HieraModel`.",
+        "HieraForImageClassification": "Same OpenVINO all-dynamic-axes Hiera-backbone guard as `HieraModel`.",
+        "HieraForPreTraining": "Same OpenVINO all-dynamic-axes Hiera-backbone guard as `HieraModel`.",
+    },
+    # OpenVINO, static-cache generate variants only (a `generation_config` requesting a static cache).
+    "openvino.static-cache": {
+        "MiniMaxM3SparseForConditionalGeneration": (
+            "Exports fine, but OpenVINO inference of the language-model component fails at runtime "
+            "(`Eltwise 'add_31' shape mismatch`): the sparse-MoE static cache (`MiniMaxM3VLSparseStaticCacheLayer`, "
+            "an `idx_keys` state of shape `[2,1,9,16]`) doesn't broadcast against the decode inputs. Its "
+            "non-static-cache generate variants pass."
+        ),
+    },
 }
 
 
@@ -316,8 +489,8 @@ ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
     # Disable for every variant.
     "all": {
         "LayoutLMv2Model": (
-            "Detectron2 FPN backbone — onnxscript optimizer drops initializers still referenced "
-            "by nodes, producing an invalid graph for ORT."
+            "Detectron2 FPN backbone — onnxscript optimizer drops initializers still referenced by nodes, "
+            "producing an invalid graph for ORT."
         ),
         "LayoutLMv2ForSequenceClassification": "Same as `LayoutLMv2Model`.",
         "LayoutLMv2ForTokenClassification": "Same as `LayoutLMv2Model`.",
@@ -333,10 +506,45 @@ ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
     },
     # Disable for dynamic-shape only — static benefits from optimisation.
     "dynamic": {
+        "Wav2Vec2Model": (
+            "The optimizer mis-folds the symbolic conv-length chain that sizes the feature-vector "
+            "attention mask: the `zeros` it builds comes out `{batch, -2}` and ORT fails the `Expand` with "
+            "`right operand cannot broadcast on dim 1`. `optimize=False` exports and matches eager to 2e-4."
+        ),
+        "Wav2Vec2ForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Data2VecAudioModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Data2VecAudioForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Data2VecAudioForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Data2VecAudioForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForPreTraining": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForPreTraining": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ForPreTraining": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
         "ProphetNetModel": (
-            "Onnxscript's `SplitToSequence` constant-folding trips `'NoneType' object has no "
-            "attribute 'ndim'` under dynamic shapes. Static works after the vectorized "
-            "`ngram_attention_bias` rewrite."
+            "Onnxscript's `SplitToSequence` constant-folding trips `'NoneType' object has no attribute 'ndim'` "
+            "under dynamic shapes. Static works after the vectorized `ngram_attention_bias` rewrite."
         ),
         "ProphetNetForConditionalGeneration": "Same `SplitToSequence` issue as `ProphetNetModel`.",
         "ProphetNetDecoder": "Same `SplitToSequence` issue as `ProphetNetModel`.",
@@ -427,12 +635,76 @@ def _clean_inputs_for_export(inputs_dict, config):
 
 
 def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a `{name: tensor}` dict."""
+    """Run an ONNX program and return outputs as a `{name: torch.Tensor}` dict.
+
+    ONNX Runtime hands back numpy arrays on CPU whatever device eager ran on; they come back as
+    torch tensors so callers compare outputs the same way across backends (with `check_device=False`).
+    """
     set_seed(1234)
     onnx_inputs = get_leaf_tensors(inputs)
     onnx_outputs = onnx_program(**onnx_inputs)
     onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
-    return dict(zip(onnx_names, onnx_outputs))
+    return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
+
+
+def _run_openvino_model(ov_model, inputs) -> dict:
+    """Compile an OpenVINO model and run it, returning outputs as a `{name: torch.Tensor}` dict.
+
+    Feeds the tensor leaves that survived as input ports (stateful folding removes cache
+    inputs), seeds folded state variables from the sample cache leaves so outputs correspond
+    to the same inputs eager saw, supplies the identity `beam_idx`, and passes scalar kwargs
+    through under their FX placeholder names.
+    """
+    import numpy as np
+    import openvino
+
+    set_seed(1234)
+    compiled = openvino.compile_model(ov_model, "AUTO")
+    request = compiled.create_infer_request()
+    leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(inputs).items()}
+    batch = next(iter(leaves.values())).shape[0] if leaves else 1
+
+    feed = {}
+    for port in compiled.inputs:
+        # Passthrough tensors carry both an input and an output name — check every alias.
+        for name in port.get_names():
+            path = re.sub(r"^input\.", "", name)
+            if path in leaves:
+                feed[name] = leaves[path]
+            elif name == "beam_idx":
+                feed[name] = np.arange(batch, dtype=np.int32)
+            elif name in inputs:
+                feed[name] = np.array(inputs[name])
+            else:
+                continue
+            break
+
+    # Folded state variables read zeros on the first infer — seed them from the sample leaves
+    # (cast to the variable's dtype: the exporter may retype state, e.g. i64 lengths to i32).
+    # The variable id is ``input.<path>output.<path>``.
+    def _state_path(state):
+        return state.name[len("input.") : (len(state.name) - len("input.output.")) // 2 + len("input.")]
+
+    for state in request.query_state():
+        path = _state_path(state)
+        if path in leaves:
+            state.state = openvino.Tensor(leaves[path].numpy().astype(state.state.data.dtype, copy=False))
+
+    results = request.infer(feed)
+    outputs = {}
+    for port in compiled.outputs:
+        # Compilation may merge a named output tensor with an intermediate that kept its
+        # numeric id — prefer the human-readable alias over ``get_any_name``'s sorted-first.
+        names = sorted(port.get_names())
+        name = next((n for n in names if not n.isdigit()), names[0])
+        outputs[re.sub(r"^output\.", "", name)] = torch.as_tensor(results[port])
+
+    # Folded state tensors are outputs too — read them back so the returned dict covers the
+    # same leaves eager returns.
+    for state in request.query_state():
+        outputs[_state_path(state)] = torch.as_tensor(state.state.data.copy())
+
+    return outputs
 
 
 def _run_executorch_program(program_manager, inputs):
@@ -546,6 +818,18 @@ def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
 # ──────────────────────────── mixins ────────────────────────────
 
 
+def _zero_padded_positions(outputs, attention_mask):
+    """Zero every output position that `attention_mask` masks out, for outputs shaped like the mask."""
+    keep = attention_mask.bool()
+    zeroed = {}
+    for key, value in outputs.items():
+        if torch.is_tensor(value) and value.dim() >= 2 and tuple(value.shape[:2]) == tuple(keep.shape):
+            mask = keep.reshape(keep.shape + (1,) * (value.dim() - 2)).to(value.device)
+            value = value * mask.to(value.dtype)
+        zeroed[key] = value
+    return zeroed
+
+
 class ExportTesterMixin:
     """Mixin providing non-generative export tests for Dynamo, ONNX, and ExecuTorch backends.
 
@@ -569,37 +853,62 @@ class ExportTesterMixin:
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not Dynamo exportable/traceable")
 
-        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
+        with open(inspect.getfile(self.all_model_classes[0]), "r", encoding="utf-8") as f:
             source_code = f.read()
             # TODO: add use_experts_implementation support to remaining MoE models
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
-        """Return True if this model class should be skipped for export tests.
+    def _export_scopes(self, generate=False, dynamic=False, backend=None, static_cache=False) -> list[str]:
+        """The ``EXPORT_SKIPS`` scopes matching the current test, broad to specific.
 
-        Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
-        ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
-        for generate tests, ``"dynamic"`` / ``"static"`` for that shape variant on every backend,
-        ``"generate.dynamic"`` for the multi-token decode path, ``"<backend>"`` for that backend, and
-        ``"<backend>.<variant>"`` for the more-specific intersections. Also skips static-cache variants
-        (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
-        support a static cache.
+        ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
+        for that shape variant on every backend, ``"generate.dynamic"`` for the multi-token decode path,
+        ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache,
+        ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` (including
+        ``"<backend>.static-cache"``) for the more-specific intersections.
         """
-        if _needs_static_cache(generation_config) and not model_class._can_compile_fullgraph:
-            return True
-        name = model_class.__name__
         scopes = ["all"]
         if generate:
             scopes.append("generate")
             if dynamic:
                 scopes.append("generate.dynamic")
         scopes.append("dynamic" if dynamic else "static")
+        if static_cache:
+            scopes.append("static-cache")
         if backend:
             scopes.append(backend)
             if generate:
                 scopes.append(f"{backend}.generate")
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
+            if static_cache:
+                scopes.append(f"{backend}.static-cache")
+        return scopes
+
+    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
+        """Return True if this model class should be skipped for export tests.
+
+        Walks the scopes from :meth:`_export_scopes` and returns ``True`` as soon as the model is
+        listed in any of them. Also skips static-cache variants on models that can't compile
+        fullgraph — they don't support a static cache at all.
+        """
+        name = model_class.__name__
+        static_cache = _needs_static_cache(generation_config)
+        if static_cache and not model_class._can_compile_fullgraph:
+            return True
+        scopes = self._export_scopes(generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache)
+        return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
+
+    def _should_skip_exactness(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
+        """Return True if this model exports and runs but its outputs can't be compared to eager.
+
+        Same scope walk as :meth:`_should_skip`, against the ``.exactness`` variant of each scope.
+        """
+        name = model_class.__name__
+        static_cache = _needs_static_cache(generation_config)
+        scopes = self._export_scopes(generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache)
+        # ``"all"`` narrows to a bare ``"exactness"``, the way ``"generate"`` and ``"dynamic"`` are spelled
+        scopes = ["exactness" if scope == "all" else f"{scope}.exactness" for scope in scopes]
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
@@ -610,7 +919,8 @@ class ExportTesterMixin:
         assert during tracing would otherwise poison the whole xdist worker's CUDA context).
 
         Returns:
-            Dict of `{name: (model, inputs)}` — one entry per component.
+            `{name: (model, inputs)}`: one entry per component (a whole model, or decomposed submodels
+            for a multimodal model), each paired with its forward inputs.
         """
         if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -639,8 +949,24 @@ class ExportTesterMixin:
                 assert eager_outputs[name], f"Eager outputs are empty for {name}."
         return eager_outputs
 
-    def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True):
-        """Assert outputs are close, allowing up to 5% element-level mismatch."""
+    def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True, inputs=None):
+        """Assert outputs are close, allowing up to 5% element-level mismatch.
+
+        When `inputs` carries an `attention_mask`, the positions it masks out are zeroed on both sides
+        first. A fully-masked row has no defined value -- attention over it is a softmax with nothing to
+        attend to -- so each runtime fills it differently and no caller reads it; comparing those
+        positions measures nothing.
+        """
+        # a model with per-layer masks passes a `dict` here, and a flex-attention one a `BlockMask`;
+        # only a plain 2D `(batch, seq)` tensor maps onto output positions. NaViT-style vision models
+        # (siglip2) mark their valid patches with `pixel_attention_mask` instead.
+        inputs = inputs or {}
+        attention_mask = inputs.get("attention_mask")
+        if not torch.is_tensor(attention_mask):
+            attention_mask = inputs.get("pixel_attention_mask")
+        if torch.is_tensor(attention_mask) and attention_mask.dim() == 2:
+            actual = _zero_padded_positions(actual, attention_mask)
+            expected = _zero_padded_positions(expected, attention_mask)
         try:
             torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol, check_device=check_device)
         except AssertionError as e:
@@ -682,7 +1008,8 @@ class ExportTesterMixin:
                         exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
                         self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
 
-                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                    if not self._should_skip_exactness(model_class, dynamic=dynamic):
+                        self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -694,8 +1021,8 @@ class ExportTesterMixin:
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_onnx_export(self, dynamic):
-        """Export each model class to ONNX and verify output names match eager."""
+    def test_onnx_export(self, dynamic, atol=1e-3, rtol=1e-3):
+        """Export each model class to ONNX, run it, and verify outputs match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_model_classes:
@@ -715,6 +1042,42 @@ class ExportTesterMixin:
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+                    if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx"):
+                        self._check_outputs_close(
+                            onnx_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
+                        )
+
+    # ──────────────────── OpenVINO tests ─────────────────────────
+
+    @slow
+    @DYNAMIC_EXPORT_PARAMS
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @disable_hub_kernels
+    def test_openvino_export(self, dynamic, atol=1e-3, rtol=1e-3):
+        """Export each model class to OpenVINO IR, run it, and verify outputs match eager."""
+        self._skip_if_not_exportable()
+        exporter = OpenVINOExporter()
+        config = OpenVINOConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
+                continue
+
+            components = self._prepare_export_model_and_inputs(model_class)
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_outputs = _run_openvino_model(ov_model, inputs)
+                    self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
+                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
+                    if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino"):
+                        self._check_outputs_close(
+                            ov_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
+                        )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -790,7 +1153,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         single-token step — see :func:`decompose_for_generation`.
 
         Returns:
-            Dict of `{name: (model, inputs)}` — one entry per component.
+            `{name: (model, inputs)}`: the components mapping (see `_prepare_export_model_and_inputs`).
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
@@ -839,7 +1202,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
                         self.assertTrue(exported_outputs, "Exported outputs are empty.")
 
-                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                    if not self._should_skip_exactness(
+                        model_class,
+                        generate=True,
+                        dynamic=dynamic,
+                        backend="dynamo",
+                        generation_config=generation_config,
+                    ):
+                        self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -877,6 +1247,38 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+
+    # ──────────────────── OpenVINO tests ─────────────────────────
+
+    @slow
+    @GENERATE_EXPORT_PARAMS
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @disable_hub_kernels
+    def test_openvino_export_generate(self, dynamic, generation_config):
+        """Export prefill and decode stages to OpenVINO IR and verify output names match eager."""
+        self._skip_if_not_exportable()
+        exporter = OpenVINOExporter()
+        config = OpenVINOConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="openvino", generation_config=generation_config
+            ):
+                continue
+
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, generation_config=generation_config, multi_token_decode=dynamic
+            )
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_outputs = _run_openvino_model(ov_model, inputs)
+                    self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
+                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 

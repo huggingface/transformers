@@ -17,6 +17,7 @@ import functools
 import inspect
 import os
 import warnings
+from collections import deque
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -33,6 +34,7 @@ from ..cache_utils import (
     QuantizedCache,
     StaticCache,
 )
+from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
 from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
@@ -47,6 +49,7 @@ from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     TransformersKwargs,
+    has_file,
     is_accelerate_available,
     logging,
 )
@@ -356,6 +359,127 @@ GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderO
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
+def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorded: "tuple | None") -> tuple:
+    """
+    Undo the last `num_steps` decoding steps, so that they leave no trace in what `generate` returns.
+    Note that the cache entries those steps wrote are dropped by `DeferredStopCheck.finish` instead.
+    """
+    # `[:-0]` is `[:0]`, which would empty everything rather than leave it alone
+    if num_steps == 0:
+        return (input_ids, *recorded)
+    return (input_ids[..., :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
+
+
+class StopCheck:
+    """
+    Decides when the decoding loop should stop, and hands each new token to a streamer.
+    """
+
+    def __init__(self, streamer: "BaseStreamer | None" = None):
+        self.streamer = streamer
+
+    def __call__(self, unfinished_sequences: torch.Tensor, tokens: torch.Tensor, length: int) -> bool:
+        if self.streamer is not None:
+            self.streamer.put(tokens.cpu())
+        return bool(unfinished_sequences.max() == 0)
+
+    def finish(self) -> int:
+        """Flush whatever is still held back, and report how many decoding steps have to be undone."""
+        return 0
+
+
+class DeferredStopCheck(StopCheck):
+    """
+    A deferred `StopCheck` that reports whether generation should stop, one step late, so the host never waits on the device.
+
+    Reading `unfinished_sequences.max() == 0` blocks the host until the device has caught up, every step, leaving it unable to queue
+    the next step meanwhile. Copying that flag asynchronously and reading it on the *following* step removes the stall. It costs one
+    extra `forward` pass, whose results the caller undoes using the count returned by `finish`.
+    Streaming needs the tokens themselves on the host, which is the same synchronization, so tokens are streamed one step behind.
+    The extra token is never streamed: it is still in flight when the loop breaks, and `finish` drops it.
+    """
+
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        max_length: int,
+        cache: "Cache | None",
+        cache_is_returned: bool,
+        streamer: "BaseStreamer | None" = None,
+    ):
+        super().__init__(streamer)
+        self.max_length = max_length
+        # We only need to care about rollbacking the cache if we are going to return the Cache, i.e. if the user requested additional
+        # outputs or if the user passed an explicit Cache object
+        self.cache = cache if cache_is_returned else None
+        if self.cache is not None:
+            self.cache.activate_past_recording()
+        pinned = input_ids.device.type == "cuda"
+        self.slots = deque(
+            (
+                torch.zeros((), dtype=torch.bool, pin_memory=pinned),
+                torch.zeros(input_ids.shape[0], dtype=torch.long, pin_memory=pinned),
+                torch.Event(device=input_ids.device, blocking=True),
+            )
+            for _ in range(2)
+        )
+        self.is_first_step = True
+        self.stop_reported = False
+
+    @staticmethod
+    def is_supported(device: torch.device, cache: "Cache | None", cache_is_returned: bool, is_assistant: bool) -> bool:
+        """
+        Whether the stop decision can safely be deferred by a step, in this decoding context.
+        In general, we do not defer unless the device is `"mps"`, and if the user requests to return the `Cache`, we need this
+        `Cache` to be able to rollback its states correctly, so that the last `forward` can be correctly reverted.
+        """
+        # Only mps for now, we should enable it for cuda if we observe perf gains - also skip if it's an assistant
+        if device.type != "mps" or is_assistant:
+            return False
+        # Since this is called after prefill, if we still do not have any cache, it means we'll never have one
+        if cache is None:
+            return True
+        # if we don't return the cache, we don't need to bother about activating past recording since it will be dropped anyway
+        else:
+            return cache.is_croppable or not cache_is_returned
+
+    def __call__(self, unfinished_sequences: torch.Tensor, tokens: torch.Tensor, length: int) -> bool:
+        should_stop, tokens_cpu, copy_done = self.slots[0]
+        should_stop.copy_(unfinished_sequences.max() == 0, non_blocking=True)
+        if self.streamer is not None:
+            tokens_cpu.copy_(tokens, non_blocking=True)
+        copy_done.record()
+
+        self.slots.rotate()
+        should_stop_before, tokens_cpu_before, copy_done_before = self.slots[0]
+        copy_done_before.synchronize()
+        if not self.is_first_step:
+            if self.streamer is not None:
+                self.streamer.put(tokens_cpu_before.clone())
+            self.stop_reported = bool(should_stop_before)
+        self.is_first_step = False
+        stopping = self.stop_reported or (self.max_length is not None and length >= self.max_length)
+        if not stopping and self.cache is not None:
+            self.cache.crop(0)
+        return stopping
+
+    def finish(self) -> int:
+        for *_, copy_done in self.slots:
+            copy_done.synchronize()
+        steps_to_undo = 1 if self.stop_reported else 0
+        if self.streamer is not None and not steps_to_undo:
+            _, tokens_cpu, _ = self.slots[1]
+            self.streamer.put(tokens_cpu.clone())
+        if self.cache is not None:
+            self.cache.crop(-steps_to_undo)
+            # We also need to deactivate past_recording, since we are giving the cache back to the user and it may lead to unneeded
+            # memory spike on the next prefill
+            for layer in self.cache.layers:
+                if hasattr(layer, "record_past"):
+                    layer.record_past = False
+        return steps_to_undo
+
+
 class GenerationMixin(ContinuousMixin):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
@@ -479,13 +603,16 @@ class GenerationMixin(ContinuousMixin):
         Returns:
             A callable that can be used to generate text.
         """
-        # Fetches the generate.py file from the model repo. If it doesn't exist, a file in `.no_exist` cache directory
-        # is created (preventing future hub requests), and an OSError is raised.
-        try:
-            module = get_cached_module_file(
-                pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
-            )
-        except OSError:
+        custom_generate_file = "custom_generate/generate.py"
+        custom_generate_requirements = "custom_generate/requirements.txt"
+
+        # Check for the existence of the file without actually downloading it
+        # (preventing unwanted downloads of files, even if not executed)
+        if not has_file(
+            pretrained_model_name_or_path,
+            custom_generate_file,
+            **kwargs,
+        ):
             raise OSError(
                 f"`{pretrained_model_name_or_path}` does not contain a `custom_generate` subdirectory with a "
                 "`generate.py` file, can't load the custom generate function."
@@ -509,9 +636,12 @@ class GenerationMixin(ContinuousMixin):
             error_message=error_message,
         )
 
+        # Load the remote generation module
+        module = get_cached_module_file(pretrained_model_name_or_path, module_file=custom_generate_file, **kwargs)
+
         # Load the custom generate function
         check_python_requirements(
-            pretrained_model_name_or_path, requirements_file="custom_generate/requirements.txt", **kwargs
+            pretrained_model_name_or_path, requirements_file=custom_generate_requirements, **kwargs
         )
         custom_generate_function = get_class_in_module("generate", module)
         return custom_generate_function
@@ -580,8 +710,7 @@ class GenerationMixin(ContinuousMixin):
         if (
             isinstance(past_key_values, Cache)
             and past_key_values.is_compileable
-            and attention_mask is not None
-            and attention_mask.ndim == 2
+            and (attention_mask is None or attention_mask.ndim == 2)
         ):
             # Some models may overwrite the general one
             causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
@@ -598,6 +727,10 @@ class GenerationMixin(ContinuousMixin):
                 mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
                 is_first_iteration=is_first_iteration,
             )
+            if isinstance(attention_mask, dict):
+                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
+            else:
+                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
@@ -1053,13 +1186,9 @@ class GenerationMixin(ContinuousMixin):
                 )
 
             candidate_generator = SinglePositionMultiTokenCandidateGenerator(
-                input_ids=input_ids,
                 assistant_model=assistant_model,
                 target_model_input_embeddings=self.get_input_embeddings(),
                 generation_config=generation_config,
-                model_kwargs=model_kwargs,
-                inputs_tensor=inputs_tensor,
-                logits_processor=logits_processor,
             )
         elif generation_config.speculation_type == "dflash":
             candidate_generator = DFlashTokenCandidateGenerator(
@@ -1835,25 +1964,31 @@ class GenerationMixin(ContinuousMixin):
 
         return generation_config, model_kwargs
 
-    def _get_static_cache_init_shape(self: "GenerativePreTrainedModel") -> tuple[int, int] | None:
+    def _get_static_cache_init_shape(
+        self: "GenerativePreTrainedModel",
+    ) -> tuple[int | list[int], int | list[int]] | None:
         """
         Returns the per-rank `(num_heads, head_dim)` to eagerly initialize a `StaticCache`, with the head count sharded
-        for tensor parallelism. Returns `None` when the cache cannot be early initialized.
+        for tensor parallelism. Either of them is a list with a value per layer if the layers differ in it. Returns
+        `None` when the cache cannot be early initialized.
         """
         if hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1:
             # The model layers are on different devices
             return None
         text_config = self.config.get_text_config(decoder=True)
-        tp_size = getattr(self, "_tp_size", None) or 1
-        num_key_value_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-        if num_key_value_heads % tp_size != 0:
-            # The model cannot be evenly sharded by head
-            return None
         if getattr(text_config, "qk_head_dim", None) is not None:
             # MLA models have distinct key (`qk_head_dim`) and value (`v_head_dim`) sizes.
             return None
-        head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-        return num_key_value_heads // tp_size, head_dim
+        num_heads, head_dim = get_head_shapes(text_config)
+        tp_size = getattr(self, "_tp_size", None) or 1
+        if tp_size > 1:
+            layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
+            if any(heads % tp_size for heads in layer_heads):
+                # The model cannot be evenly sharded by head
+                return None
+            # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
+            num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
+        return num_heads, head_dim
 
     def _prepare_static_cache(
         self: "GenerativePreTrainedModel",
@@ -1955,6 +2090,8 @@ class GenerationMixin(ContinuousMixin):
                 raise ValueError(
                     "Passing a tuple of `past_key_values` is not supported anymore. Please use a `Cache` instance."
                 )
+            # Marks the cache has user-defined for generate later on
+            user_defined_cache._is_user_defined = True
             return
 
         # Quick escape route 2: if the user specifies no cache is to be used. (conflicting arguments are handled in
@@ -2133,8 +2270,11 @@ class GenerationMixin(ContinuousMixin):
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
+        # Encoder-decoder models hold that cache in a subcache, so we unwrap it to check the cache the decoder actually generates with
+        decoder_cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
+        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
         # layers are, but we don't want to ALWAYS compile when calling `generate`, so we check the type
-        using_compilable_cache = cache is not None and cache.is_compileable and type(cache) is not DynamicCache
+        using_compilable_cache = cache is not None and cache.is_compileable and type(decoder_cache) is not DynamicCache
         can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation
@@ -2566,6 +2706,18 @@ class GenerationMixin(ContinuousMixin):
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
+        # We can drop the mask altogether if it's all 1s, i.e. no padding, to make downstream attention mask creation and inference
+        # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
+        # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
+        if (
+            not self.config.is_encoder_decoder
+            and accepts_attention_mask
+            and (model_kwargs["attention_mask"] == 1).all()
+        ):
+            # Record the length to slice correctly in `_prefill` if restarting from existing Cache
+            generation_config._mask_length = model_kwargs["attention_mask"].shape[1]
+            model_kwargs["attention_mask"] = None
+
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
@@ -2872,6 +3024,20 @@ class GenerationMixin(ContinuousMixin):
             is_first_iteration=not generation_config.is_assistant,
         )
 
+        # Decides whether we can defer the stopping criteria to avoid a synchronization point in between every `forward`.
+        # Note that it is very important to do this only after the prefill, as we may otherwise call `activate_past_recording` on the
+        # Cache, which will cause a huge unneeded memory spike if the prefill is huge and the model would otherwise drop most of the
+        # states, such as if it uses sliding window or linear attention
+        cache = next((outputs[name] for name in ALL_CACHE_NAMES if name in outputs), None)
+        # The cache outlives `generate` if the user asked to return it, or if it is one they passed in.
+        cache_is_returned = generation_config.return_dict_in_generate or getattr(cache, "_is_user_defined", False)
+        if DeferredStopCheck.is_supported(
+            input_ids.device, cache, cache_is_returned, is_assistant=generation_config.is_assistant
+        ):
+            stop_check = DeferredStopCheck(input_ids, stopping_criteria.max_length, cache, cache_is_returned, streamer)
+        else:
+            stop_check = StopCheck(streamer)
+
         with self._optimize_model_for_decode():
             while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
                 if prefill_consumed:
@@ -2930,15 +3096,28 @@ class GenerationMixin(ContinuousMixin):
 
                 # update generated ids, model inputs, and length for next step
                 input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-                if streamer is not None:
-                    streamer.put(next_tokens.cpu())
 
                 unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-                this_peer_finished = unfinished_sequences.max() == 0
+                this_peer_finished = stop_check(unfinished_sequences, next_tokens, input_ids.shape[1])
 
                 # This is needed to properly delete outputs.logits which may be very large for first iteration
                 # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
                 del outputs
+
+        steps_to_undo = stop_check.finish()
+        # We may need to remove the last output if we deferred the stop checks
+        if steps_to_undo:
+            input_ids, scores, raw_logits, decoder_attentions, cross_attentions, decoder_hidden_states = (
+                _undo_generation_steps(
+                    steps_to_undo,
+                    input_ids,
+                    scores,
+                    raw_logits,
+                    decoder_attentions,
+                    cross_attentions,
+                    decoder_hidden_states,
+                )
+            )
 
         if streamer is not None:
             streamer.end()
@@ -3084,8 +3263,8 @@ class GenerationMixin(ContinuousMixin):
         do_sample: bool,
         beams_to_keep: int,
         num_beams: int,
-        vocab_size: int,
         batch_size: int,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Get top-K continuations given the accumulated log probs on the next token.
@@ -3112,6 +3291,7 @@ class GenerationMixin(ContinuousMixin):
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
 
+        vocab_size = accumulated_log_probs.shape[-1] // num_beams
         # Gather K top beams, recover the beam index by floor division and token id by modulo division
         topk_current_beam_indices = topk_indices // vocab_size
         topk_running_beam_indices = self._gather_beams(running_beam_indices, topk_current_beam_indices)
@@ -3266,15 +3446,6 @@ class GenerationMixin(ContinuousMixin):
 
         batch_size_unflattened, cur_len = input_ids.shape[:2]
         batch_size = batch_size_unflattened // num_beams
-        # TODO (joao): standardize special cases
-        if self.__class__.__name__ == "MoshiDepthDecoder":
-            vocab_size = self.config.audio_vocab_size
-        elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
-            vocab_size = self.get_output_embeddings().out_features
-        elif self.__class__.__name__ == "BarkSemanticModel":
-            vocab_size = self.config.output_vocab_size
-        else:
-            vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
@@ -3417,7 +3588,7 @@ class GenerationMixin(ContinuousMixin):
 
             log_probs = self._unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]
-            log_probs = torch.reshape(log_probs, (batch_size, num_beams * vocab_size))
+            log_probs = torch.reshape(log_probs, (batch_size, -1))  # The -1 dim is `num_beams * vocab_size`
 
             # c. Retrieve top-K continuations, i.e. select the next token (greedy or sampling) and then keep the best
             # continuations among all beams based on the accumulated scores.
@@ -3430,7 +3601,6 @@ class GenerationMixin(ContinuousMixin):
                 do_sample=do_sample,
                 beams_to_keep=beams_to_keep,
                 num_beams=num_beams,
-                vocab_size=vocab_size,
                 batch_size=batch_size,
             )
 
@@ -3625,6 +3795,9 @@ class GenerationMixin(ContinuousMixin):
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
 
+        # Same tensor the stopping criteria are built from
+        eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
+
         # Make sure we can record past on the cache
         cache = model_kwargs.get("past_key_values")
         if cache is None:
@@ -3693,7 +3866,6 @@ class GenerationMixin(ContinuousMixin):
                 candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
-            is_done_candidate = stopping_criteria(candidate_input_ids, None)
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
@@ -3747,7 +3919,6 @@ class GenerationMixin(ContinuousMixin):
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    is_done_candidate,
                     assistant_ensemble_weight=assistant_ensemble_weight,
                 )
 
@@ -3772,18 +3943,24 @@ class GenerationMixin(ContinuousMixin):
 
                 candidate_new_tokens = candidate_input_ids[:, cur_len:]
                 n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
-
-                # Ensure we don't generate beyond max_len or an EOS token
-                if is_done_candidate and n_matches == candidate_length:
-                    n_matches -= 1
+                # Select all matching candidate tokens, + the new "bonus" token from the logits after the last validated token
                 valid_tokens = selected_tokens[:, : n_matches + 1]
 
-            # A partial acceptance plus the correction/bonus token can overshoot the length budget when the
-            # candidate generator does not cap its drafts (e.g. MTP always drafts `num_mtp_layers` tokens)
+            # Whenever we are drafting several tokens at once with the candidate without capping its draft (e.g. MTP), we need to
+            # make sure that we did not just validate tokens outside the max length, or outside an eos token
+            # Note that we should technically crop based on other stopping criteria as well in all generality, not only EOS and Length
             tokens_budget = generation_config.max_length - input_ids.shape[1]
+            # This is for the max length
             if valid_tokens.shape[1] > tokens_budget:
                 valid_tokens = valid_tokens[:, :tokens_budget]
-                n_matches = valid_tokens.shape[1] - 1
+            # This is for eos tokens
+            if eos_token_id is not None:
+                eos_positions = torch.isin(valid_tokens, eos_token_id.to(valid_tokens.device)).nonzero()
+                if eos_positions.numel() > 0:
+                    num_drafted = eos_positions[0].item() + 1
+                    valid_tokens = valid_tokens[:, :num_drafted]
+            # Recompute how many matches we accepted if we just cropped above due to length/eos
+            n_matches = valid_tokens.shape[1] - 1
 
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
@@ -3932,8 +4109,13 @@ class GenerationMixin(ContinuousMixin):
             else:
                 attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
                 attention_mask = model_kwargs.get(attention_mask_key)
+                mask_length = (
+                    attention_mask.shape[1]
+                    if attention_mask is not None
+                    else getattr(generation_config, "_mask_length", -1)
+                )
                 # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
-                if attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]:
+                if mask_length == input_ids.shape[1]:
                     # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
                     next_sequence_length = input_ids.shape[1] - past_length
 
@@ -3994,7 +4176,6 @@ def _speculative_sampling(
     candidate_logits,
     candidate_length,
     new_logits,
-    is_done_candidate,
     assistant_ensemble_weight: float | None = None,
 ):
     """
@@ -4028,37 +4209,30 @@ def _speculative_sampling(
     is_accepted = r_i <= probability_ratio
     n_matches = ((~is_accepted).cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
 
-    # Ensure we don't generate beyond max_len or an EOS token (not in algorithm 1, but needed for correct behavior)
-    if is_done_candidate and n_matches == candidate_length:
-        # Output length is assumed to be `n_matches + 1`. Since we won't generate another token with the target model
-        # due to acceptance on EOS we fix `n_matches`
-        n_matches -= 1
-        valid_tokens = new_candidate_input_ids[:, : n_matches + 1]
-    else:
-        # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
-        gamma = candidate_logits.shape[1]
-        p_n_plus_1 = p[:, n_matches, :]
-        if n_matches < gamma:
-            q_n_plus_1 = q[:, n_matches, :]
-            # Note: with ensemble weight w < 1, the fallback [v-q]+ = w*[p-q]+ normalizes to the same
-            # distribution as [p-q]+, so we compute the standard fallback directly for numerical stability.
-            p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
-            p_prime_sum = p_prime.sum()
-            if assistant_ensemble_weight is not None and p_prime_sum <= torch.finfo(p_prime.dtype).tiny:
-                # Ensemble-only fallback: when `p ≈ q` the residual is numerically zero, so we fall
-                # back to the target distribution. Standard (lossless) SD keeps its original behavior.
-                p_prime = p_n_plus_1
-            else:
-                p_prime.div_(p_prime_sum)
-        else:
+    # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
+    gamma = candidate_logits.shape[1]
+    p_n_plus_1 = p[:, n_matches, :]
+    if n_matches < gamma:
+        q_n_plus_1 = q[:, n_matches, :]
+        # Note: with ensemble weight w < 1, the fallback [v-q]+ = w*[p-q]+ normalizes to the same
+        # distribution as [p-q]+, so we compute the standard fallback directly for numerical stability.
+        p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
+        p_prime_sum = p_prime.sum()
+        if assistant_ensemble_weight is not None and p_prime_sum <= torch.finfo(p_prime.dtype).tiny:
+            # Ensemble-only fallback: when `p ≈ q` the residual is numerically zero, so we fall
+            # back to the target distribution. Standard (lossless) SD keeps its original behavior.
             p_prime = p_n_plus_1
-        t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
-
-        # The selected tokens include the matches (if any) plus the next sampled tokens
-        if n_matches > 0:
-            valid_tokens = torch.cat((new_candidate_input_ids[:, :n_matches], t), dim=-1)
         else:
-            valid_tokens = t
+            p_prime.div_(p_prime_sum)
+    else:
+        p_prime = p_n_plus_1
+    t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
+
+    # The selected tokens include the matches (if any) plus the next sampled tokens
+    if n_matches > 0:
+        valid_tokens = torch.cat((new_candidate_input_ids[:, :n_matches], t), dim=-1)
+    else:
+        valid_tokens = t
 
     return valid_tokens, n_matches
 

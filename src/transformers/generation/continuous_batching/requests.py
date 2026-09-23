@@ -116,7 +116,8 @@ class GenerationOutput:
     timestamps: list[float] | None = None  # Timestamps of the generated tokens
 
     def is_finished(self) -> bool:
-        return self.status == RequestStatus.FINISHED
+        """Whether the request reached a terminal state, either because it finished generating or because it failed."""
+        return self.status >= RequestStatus.FINISHED
 
 
 @dataclass
@@ -204,9 +205,11 @@ class RequestState:
 
     @status.setter
     def status(self, value: RequestStatus):
+        # Leaving the pending state means the request started: we stamp the start of its lifespan
         if self._status == RequestStatus.PENDING:
             self.lifespan = (time.perf_counter(), -1)
-        elif value == RequestStatus.FINISHED:
+        # Reaching a terminal state means the request is over: we stamp the end of its lifespan
+        if value >= RequestStatus.FINISHED:
             self.lifespan = (self.lifespan[0], time.perf_counter())
             if logger.isEnabledFor(logging.DEBUG):
                 self.log_end_of_request()
@@ -355,8 +358,22 @@ class FutureRequestState:
     # This makes instantiating this class faster
     __slots__ = ("state", "has_new_token", "complete_blocks", "query_length")
 
-    def __init__(self, state: RequestState, has_new_token: bool, complete_blocks: int, query_length: int) -> None:
+    def __init__(
+        self, state: RequestState, has_new_token: bool, complete_blocks: dict[str, int], query_length: int
+    ) -> None:
         self.state = state
         self.has_new_token = has_new_token
         self.complete_blocks = complete_blocks
         self.query_length = query_length
+
+
+class FutureBatch:
+    """A container to describe a batch to be scheduled."""
+
+    # This makes instantiating this class faster
+    __slots__ = ("requests", "token_budget", "cache_budget")
+
+    def __init__(self, requests: list[FutureRequestState], token_budget: int, cache_budget: int) -> None:
+        self.requests = requests
+        self.token_budget = token_budget
+        self.cache_budget = cache_budget
