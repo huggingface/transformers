@@ -170,7 +170,7 @@ def main(nemo_path: str | None, model_id: str, output_dir: str):
         nemo_path = hf_hub_download(model_id, f"{model_id.split('/')[-1]}.nemo")
     with tempfile.TemporaryDirectory() as extract_dir, tarfile.open(nemo_path) as archive:
         archive.extractall(extract_dir, filter="data")
-        with open(Path(extract_dir) / "model_config.yaml") as f:
+        with open(Path(extract_dir) / "model_config.yaml", encoding="utf-8") as f:
             nemo_config = yaml.safe_load(f)
         state_dict = torch.load(Path(extract_dir) / "model_weights.ckpt", map_location="cpu", weights_only=True)
 
