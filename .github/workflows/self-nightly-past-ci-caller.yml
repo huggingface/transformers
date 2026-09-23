@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   get_number:
+    permissions: {}
     name: Get number
     runs-on: ubuntu-22.04
     outputs:
