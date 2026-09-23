@@ -403,7 +403,7 @@ def make_list_of_audio(
     audio: list[AudioInput] | AudioInput,
 ) -> AudioInput:
     """
-    Ensure that the output is a list of audio.
+    Ensure that the output is a flat list of audio.
     Args:
         audio (`Union[list[AudioInput], AudioInput]`):
             The input audio.
@@ -418,7 +418,23 @@ def make_list_of_audio(
     if is_valid_audio(audio):
         return [audio]
 
-    raise ValueError("Invalid input type. Must be a single audio or a list of audio")
+    # If it's a nested list of audios (e.g. [[aud1, aud2], [aud3]]), flatten it
+    if (
+        isinstance(audio, (list, tuple))
+        and audio
+        and all(
+            is_valid_audio(audio_i)
+            or (isinstance(audio_i, (list, tuple)) and (is_valid_list_of_audio(audio_i) or not audio_i))
+            for audio_i in audio
+        )
+    ):
+        return [
+            aud
+            for audio_i in audio
+            for aud in (audio_i if isinstance(audio_i, (list, tuple)) and not is_valid_audio(audio_i) else [audio_i])
+        ]
+
+    raise ValueError("Invalid input type. Must be a single audio, a list of audio, or a nested list of audio")
 
 
 def make_list_of_audio_chat_template(

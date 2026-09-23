@@ -311,6 +311,20 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inconsistently sized modality batches"):
             processor(images=[[img1], [img2]], audio=[aud1], return_tensors="pt")
 
+        # 5. Nested audio and video lists also work when explicit text placeholders are provided
+        out_aud_with_text = processor(
+            text=["<|audio|> <|audio|>", "<|audio|>"], audio=[[aud1, aud2], [aud3]], return_tensors="pt"
+        )
+        self.assertTrue((out_aud["input_ids"] == out_aud_with_text["input_ids"]).all())
+
+        out_vid_with_text = processor(
+            text=["<|video|> <|video|>", "<|video|>"],
+            videos=[[vid1, vid2], [vid3]],
+            do_sample_frames=False,
+            return_tensors="pt",
+        )
+        self.assertTrue((out_vid["input_ids"] == out_vid_with_text["input_ids"]).all())
+
     @require_torch
     def test_video_token_count_matches_frames(self):
         """Ragged batch: every row expands to its own frame count.
