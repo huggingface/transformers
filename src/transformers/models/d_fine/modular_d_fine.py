@@ -161,7 +161,7 @@ class DFineConfig(PreTrainedConfig):
     model_type = "d_fine"
     sub_configs_defaults = {
         "backbone_config": SubConfigSpec(
-            config_class=AutoConfig, model_type="hgnet_v2", init_kwargs={{"out_indices": [2, 3, 4]}}
+            config_class=AutoConfig, model_type="hgnet_v2", init_kwargs={"out_indices": [2, 3, 4]}
         ),
     }
     layer_types = ["basic", "bottleneck"]
