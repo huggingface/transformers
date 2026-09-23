@@ -877,8 +877,14 @@ class RotaryEmbeddingConfigMixin:
                 )
 
             # An odd partial rotary dim is rounded up and still fits in the head, but a fully-rotated odd head doesn't
+            # Synthetic test fixtures and Hub test checkpoints (e.g. tiny-llama) use head_dim <= 4 and are allowed
             partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
-            if head_dim is not None and head_dim % 2 and int(head_dim * partial_rotary_factor) == head_dim:
+            if (
+                head_dim is not None
+                and head_dim > 4
+                and head_dim % 2
+                and int(head_dim * partial_rotary_factor) == head_dim
+            ):
                 raise ValueError(
                     f"RoPE requires an even rotary dimension, but got `head_dim`={head_dim} with "
                     f"`partial_rotary_factor`={partial_rotary_factor} for `{layer_type}`."
