@@ -31,6 +31,59 @@ Collapsing them to one line scores 116 under the mixture likelihood where keepin
 storm was never going. Fields carry per-point variance, landfall a probability per lead time, intensity a
 Saffir-Simpson category with an interval.
 
+## It trains twice, because the labels are 4 orders of magnitude too few
+
+An 88M-parameter model fitted to the Atlantic best-track archive is not a weather model. The archive is
+55,230 points — 1,167 landfalls, 1,839 rapid intensifications, 2,587 with a radius of maximum wind. That
+is **0.0006 supervised values per parameter**, and what you get back is an expensive lookup table for
+storms that already happened.
+
+So the backbone never sees it.
+
+**Stage one is self-supervised on ERA5 reanalysis**, where the label is free: given the atmosphere now,
+predict it at +6 through +120 hours. The WeatherBench 2 six-hourly store is 92,040 timesteps from 1959 to
+2021 — 1.6×10¹⁰ supervised values, **180 per parameter**, and nobody annotates anything.
+
+**Stage two fine-tunes the storm heads with the backbone frozen.** 0.96M parameters of 89M — 1.1% — ever
+see a best track. Those 24,585 paired storm points can fit 0.96M parameters; they cannot fit 89M.
+
+```python
+from naturev1 import ERA5Window, StormWindow, pair_tracks_with_reanalysis
+
+pretrain = ERA5Window(era5, indices=splits["train"], lead_steps=offsets)   # free labels
+starts, targets, _ = pair_tracks_with_reanalysis(tracks, store_times, offsets)
+finetune = StormWindow(ERA5Window(era5, indices=starts), targets)          # real outcomes
+model.freeze_backbone(True)
+```
+
+Longitude rotation is an **exact** augmentation here, not an approximation: on an equiangular grid,
+rotating the globe by a whole number of cells is a roll of the array, and this architecture is exactly
+equivariant to it. 240 valid atmospheres, free, nothing resampled.
+
+## Four things the obvious implementation gets wrong
+
+Each of these ran clean on shapes, ranges and a falling loss while the data was wrong, so the regression
+tests assert on physics and geometry instead:
+
+1. **Dimension order.** WeatherBench 2 stores `(time, longitude, latitude)`; the coordinate mesh is
+   latitude-major. Read untransposed you get the right point count, sane values, and every sample bound
+   to the wrong place on Earth. Correlation of temperature against its assigned latitude: ~0 → **−0.873**.
+2. **Cell weights.** `cos(latitude)` gives the pole row 6.1e-17 — zero in float32 — deleting the poles
+   from every area-weighted sum. True spherical cell area makes a pole cell 306× lighter, not 10¹⁶×.
+3. **Precipitation.** 15% of the grid is exactly zero and the max sits 30σ out, so a z-score trains the
+   model to predict zero everywhere. `log1p(x/0.1mm)` brings it to 4.5σ and inverts exactly.
+4. **Missing is not average.** Sea-surface temperature is absent over 27.9% of the grid; filling it with
+   the ocean mean asserts warm water over Kansas. Gappy variables get an observation channel.
+
+## Heads start at climatology, not at zero
+
+A linear head emits about zero, so asked for central pressure in hPa it opens 1000 off — a squared error
+of a million. Measured on a real fine-tuning step, the intensity term was 119,191 of a 60,565 total, with
+a gradient norm of 207,018. Anchoring each head at Atlantic climatology and starting each log-variance at
+the observed spread (rather than claiming ±1 kt about peak wind) brings the same step to **total 58,
+intensity 4, eyewall 5, gradient norm 13** — with no architecture change. The RI classifier opens at the
+measured 4.11% base rate, not at even odds.
+
 ## Built for a runtime that dies
 
 Checkpoints go down on a wall-clock interval, written to a temp file and renamed into place, so a killed
