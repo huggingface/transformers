@@ -102,7 +102,7 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("hidden_size", 48)
         kwargs.setdefault("intermediate_size", 16)
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("layer_types", ["linear_attention", "deepseek_sparse_attention"])
+        kwargs.setdefault("layer_types", ["linear_attention", "indexed_attention"])
         super().__init__(parent, **kwargs)
 
     def create_pixel_values(self):
@@ -316,7 +316,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             attentions = outputs.attentions
             self.assertEqual(
                 len(attentions),
-                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
             )
 
             # Check that output_attentions also works through config.
@@ -333,7 +333,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             attentions = outputs.attentions
             self.assertEqual(
                 len(attentions),
-                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
             )
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -356,7 +356,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             self.assertEqual(out_len + 1, len(outputs))
             self.assertEqual(
                 len(self_attentions),
-                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
             )
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),

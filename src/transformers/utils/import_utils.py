@@ -162,8 +162,8 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.16.0"
-KERNELS_MAX_VERSION = "0.17.0"
+KERNELS_MIN_VERSION = "0.17.0"
+KERNELS_MAX_VERSION = "0.18.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
@@ -1040,6 +1040,12 @@ def is_onnxscript_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
+def is_openvino_available() -> bool:
+    return _is_package_available("openvino")[0]
+
+
+@lru_cache
+@_make_compile_constant
 def is_onnxruntime_available() -> bool:
     return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
 
@@ -1194,7 +1200,7 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
     ]
 
     # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
-    if is_available and (is_torch_cuda_available() or is_torch_mlu_available()):
+    if is_available and (is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available()):
         try:
             return version.parse(flash_attn_version) >= version.parse("2.3.3")
         except packaging.version.InvalidVersion:
@@ -2509,6 +2515,10 @@ class _LazyModule(ModuleType):
         return result
 
     def __getattr__(self, name: str) -> Any:
+        import_error_message = (
+            f"Could not import module '{name}'. Are this object's requirements defined correctly? "
+            "Set the logging verbosity to DEBUG for the original import error."
+        )
         if name in self._objects:
             return self._objects[name]
         if name in self._object_missing_backend:
@@ -2637,25 +2647,22 @@ class _LazyModule(ModuleType):
                                             setattr(self, lookup_name, value)
                                         setattr(self, name, value)
                                         break
-                            except Exception as e:
-                                logger.debug(f"Could not create tokenizer alias: {e}")
+                            except Exception as alias_error:
+                                logger.debug(f"Could not create tokenizer alias: {alias_error}")
 
                         if value is None:
-                            raise ModuleNotFoundError(
-                                f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                            ) from e
+                            logger.debug(f"Original import error for '{name}': {e}")
+                            raise ModuleNotFoundError(import_error_message) from e
                 else:
-                    raise ModuleNotFoundError(
-                        f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                    ) from e
+                    logger.debug(f"Original import error for '{name}': {e}")
+                    raise ModuleNotFoundError(import_error_message) from e
 
         elif name in self._modules:
             try:
                 value = self._get_module(name)
             except (ModuleNotFoundError, RuntimeError) as e:
-                raise ModuleNotFoundError(
-                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                ) from e
+                logger.debug(f"Original import error for '{name}': {e}")
+                raise ModuleNotFoundError(import_error_message) from e
         else:
             # V5: If a *TokenizerFast symbol is requested but not present in the import structure,
             # try to resolve to the corresponding non-Fast symbol's module if available.
