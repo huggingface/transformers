@@ -490,3 +490,12 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         training_args = parser.parse_args_into_dataclasses()[0]
         self.assertEqual(training_args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)
+
+    def test_17_bare_list(self):
+        @dataclass
+        class BareListExample:
+            xs: list = field(default_factory=list)
+
+        parser = HfArgumentParser(BareListExample)
+        args = parser.parse_args(["--xs", "a", "b"])
+        self.assertEqual(args.xs, ["a", "b"])

@@ -218,7 +218,11 @@ class HfArgumentParser(ArgumentParser):
                 # This is the value that will get picked if we do --{field.name} (without value)
                 kwargs["const"] = True
         elif isclass(origin_type) and issubclass(origin_type, list):
-            kwargs["type"] = field.type.__args__[0]
+            # `list[int]` carries the element type in `__args__`. A bare `list` does not;
+            # reading `__args__` there raises AttributeError while the parser is built.
+            # CLI tokens are strings, so an unparameterized list parses as strings.
+            arg_types = getattr(field.type, "__args__", ())
+            kwargs["type"] = arg_types[0] if arg_types else str
             kwargs["nargs"] = "+"
             if field.default_factory is not dataclasses.MISSING:
                 kwargs["default"] = field.default_factory()
