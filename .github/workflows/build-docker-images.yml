@@ -18,11 +18,13 @@ concurrency:
   group: docker-images-builds
   cancel-in-progress: false
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   latest-docker:
+    permissions:
+      contents: read
     name: "Latest PyTorch [dev]"
     runs-on:
       group: aws-general-8-plus
@@ -61,6 +63,8 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   flash-attn-ci-image:
+    permissions:
+      contents: read
     name: "PyTorch with Flash Attn [dev]"
     runs-on:
       group: aws-general-8-plus
@@ -103,6 +107,8 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-torch-deepspeed-docker:
+    permissions:
+      contents: read
     name: "Latest PyTorch + DeepSpeed"
     runs-on:
       group: aws-general-8-plus
@@ -141,6 +147,8 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   doc-builder:
+    permissions:
+      contents: read
     name: "Doc builder"
     runs-on:
       group: aws-general-8-plus
@@ -177,6 +185,8 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-pytorch-amd:
+    permissions:
+      contents: read
     name: "Latest PyTorch (AMD) [dev]"
     runs-on:
       group: aws-highcpu-32-priv
@@ -215,6 +225,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   cache-latest-pytorch-amd:
+    permissions: {}
     name: "Cache Latest Pytorch (AMD) Image"
     needs: latest-pytorch-amd
     runs-on:
@@ -246,6 +257,8 @@ jobs:
           echo "Cache populated successfully at ${final_path}"
 
   latest-pytorch-deepspeed-amd:
+    permissions:
+      contents: read
     name: "PyTorch + DeepSpeed (AMD) [dev]"
     runs-on:
       group: aws-general-8-plus
@@ -284,6 +297,8 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-quantization-torch-docker:
+    permissions:
+      contents: read
     name: "Latest Pytorch + Quantization [dev]"
     runs-on:
       group: aws-general-8-plus

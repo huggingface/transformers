@@ -35,11 +35,14 @@ on:
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   send_results:
+    permissions:
+      actions: read
+      contents: read
     name: Send results to webhook
     runs-on:
       group: aws-general-8-plus
