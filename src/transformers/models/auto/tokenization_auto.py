@@ -375,7 +375,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 # These models will be forced to use TokenizersBackend.
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
-    "chameleon",
     "chatlm",
     "ernie4_5",
     "ernie4_5_moe",
@@ -386,7 +385,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "hyperclovax_vision_v2",
     "internlm2",
     "jamba",
-    "janus",
     "llava",
     "llava_next",
     "minicpm3",
@@ -405,7 +403,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phi3_v",
     "phimoe",
     "qwen2",
-    "step3p5",
     "step3_vl",
     "vipllava",
     "cohere_asr",

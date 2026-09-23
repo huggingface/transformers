@@ -88,11 +88,19 @@ class AutoTokenizerTest(unittest.TestCase):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     # Byte-level tokenizer.json + Hub tokenizer_class LlamaTokenizer/Fast
+    # needs to be loaded as TokenizersBackend to support decoding of byte-level tokens.
     BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS = [
         "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
         "deepseek-ai/deepseek-llm-7b-base",
         "deepseek-ai/DeepSeek-V2-Lite",
+        "deepseek-ai/DeepSeek-V3-Base",
         "deepseek-ai/DeepSeek-V3.2-Exp",
+        "deepseek-ai/deepseek-vl-1.3b-base",
+        "deepseek-ai/deepseek-vl2-tiny",
+        "deepseek-ai/DeepSeek-OCR",
+        "facebook/chameleon-7b",
+        "deepseek-community/Janus-Pro-1B",
+        "stepfun-ai/Step-3.5-Flash",
         "Salesforce/xLAM-1b-fc-r",
         "microsoft/wavecoder-ultra-6.7b",
         "LSX-UniWue/LLaMmlein_1B_prerelease",
