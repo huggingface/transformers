@@ -188,18 +188,17 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         outputs = dqa_pipeline(image=image, question=question, words=words, boxes=boxes, top_k=2)
         self.assertEqual(outputs, [])
 
-    # 	 TODO: Enable this once hf-internal-testing/tiny-random-donut is implemented
-    #    @require_torch
-    #    def test_small_model_pt_donut(self):
-    #        dqa_pipeline = pipeline("document-question-answering", model="hf-internal-testing/tiny-random-donut")
-    #        # dqa_pipeline = pipeline("document-question-answering", model="../tiny-random-donut")
-    #        image = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoicehome_template.png"
-    #        question = "How many cats are there?"
-    #
-    #        outputs = dqa_pipeline(image=image, question=question, top_k=2)
-    #        self.assertEqual(
-    #            nested_simplify(outputs, decimals=4), [{"score": 0.8799, "answer": "2"}, {"score": 0.296, "answer": "1"}]
-    #        )
+    @unittest.skip(reason="Enable this once hf-internal-testing/tiny-random-donut is implemented")
+    @require_torch
+    def test_small_model_pt_donut(self):
+        dqa_pipeline = pipeline("document-question-answering", model="hf-internal-testing/tiny-random-donut")
+        # dqa_pipeline = pipeline("document-question-answering", model="../tiny-random-donut")
+        image = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoicehome_template.png"
+        question = "How many cats are there?"
+        outputs = dqa_pipeline(image=image, question=question, top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4), [{"score": 0.8799, "answer": "2"}, {"score": 0.296, "answer": "1"}]
+        )
 
     @slow
     @require_torch

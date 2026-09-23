@@ -147,7 +147,7 @@ class HYV4Config(PreTrainedConfig):
                 self.num_hidden_layers - 1, 0
             )
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
         if self.indexer_types is None:
             self.indexer_types = [
                 "full" if layer_idx == 0 or (layer_idx - 1) % 4 == 0 else "shared"

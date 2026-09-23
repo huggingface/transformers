@@ -112,7 +112,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         backend = Tokenizer(models.WordLevel(vocabulary, unk_token="<unk>"))
         backend.pre_tokenizer = pre_tokenizers.Whitespace()
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as handle:
             backend.save(handle.name)
             return PreTrainedTokenizerFast(
                 tokenizer_file=handle.name,

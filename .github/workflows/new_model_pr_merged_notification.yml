@@ -8,11 +8,13 @@ on:
     paths:
       - 'src/transformers/models/*/modeling_*'
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   notify_new_model:
+    permissions:
+      contents: read
     name: Notify new model
     runs-on: ubuntu-22.04
     steps:
