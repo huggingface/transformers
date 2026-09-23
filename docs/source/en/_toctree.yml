@@ -1173,6 +1173,8 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/nemotron3_diarization
+        title: Nemotron 3 Diarization
       - local: model_doc/nemotron3_5_asr
         title: Nemotron 3.5 ASR
       - local: model_doc/nemotron_asr_streaming
