@@ -5875,7 +5875,7 @@ class ModelTesterMixin(ExportTesterMixin):
         A head that wraps a MoE backbone has to resolve the flag against the config like the backbone does, otherwise
         the config setting is silently ignored."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if not hasattr(config.get_text_config(), "output_router_logits"):
+        if not hasattr(config.get_text_config(decoder=True), "output_router_logits"):
             self.skipTest("This model has no `output_router_logits` in its config.")
 
         for model_class in self.all_model_classes:
@@ -5889,7 +5889,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 model = model_class(copy.deepcopy(config)).to(device=torch_device)
                 model.eval()
-                model.config.get_text_config().output_router_logits = False
+                model.config.get_text_config(decoder=True).output_router_logits = False
                 inputs = self._prepare_for_class(inputs_dict, model_class)
                 inputs.pop("output_router_logits", None)
 
@@ -5899,7 +5899,7 @@ class ModelTesterMixin(ExportTesterMixin):
                         self.skipTest(f"{model_class.__name__} was built without any sparse layer.")
                     self.assertFalse(model(**inputs).router_logits, "router logits returned with the flag off")
 
-                    model.config.get_text_config().output_router_logits = True
+                    model.config.get_text_config(decoder=True).output_router_logits = True
                     from_config = model(**inputs)
                     self.assertTrue(from_config.router_logits, "`config.output_router_logits=True` was ignored")
                     if getattr(explicit, "aux_loss", None) is not None:
