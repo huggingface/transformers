@@ -420,6 +420,9 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        # Keep the 2D padding mask around: the distillation conv layers halve the sequence length,
+        # so the attention mask has to be downsampled together with the hidden states.
+        padding_mask = attention_mask if attention_mask is None or attention_mask.dim() == 2 else None
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -442,6 +445,20 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
                 )
                 if conv_layer is not None:
                     hidden_states = conv_layer(hidden_states)
+                    if padding_mask is not None:
+                        # same pooling as `InformerConvLayer.maxPool`: a distilled position is valid
+                        # as soon as one of the positions it summarizes is valid
+                        padding_mask = nn.functional.max_pool1d(
+                            padding_mask[:, None, :].to(hidden_states.dtype),
+                            kernel_size=3,
+                            stride=2,
+                            padding=1,
+                        )[:, 0, :]
+                    attention_mask = create_bidirectional_mask(
+                        config=self.config,
+                        inputs_embeds=hidden_states,
+                        attention_mask=padding_mask,
+                    )
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
