@@ -456,7 +456,7 @@ class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
     config: EmbeddingGemma2Config
-    base_model_prefix = "model"
+    base_model_prefix = "language_model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
     _supports_flash_attn = True
@@ -492,6 +492,7 @@ class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
 class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
     config: EmbeddingGemma2TextConfig
     input_modalities = ("text",)
+    _keys_to_ignore_on_load_unexpected = [r"^vision_tower\.", r"^embed_vision\.", r"^audio_tower\.", r"^embed_audio\."]
     _can_record_outputs = {
         "hidden_states": EmbeddingGemma2EncoderLayer,
         "attentions": EmbeddingGemma2Attention,
@@ -672,6 +673,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             if config.audio_config is not None
             else None
         )
+        self._keys_to_ignore_on_load_unexpected = set(getattr(self, "_keys_to_ignore_on_load_unexpected", None) or [])
+        if config.vision_config is None:
+            self._keys_to_ignore_on_load_unexpected.update([r"(^|\.)vision_tower\.", r"(^|\.)embed_vision\."])
+        if config.audio_config is None:
+            self._keys_to_ignore_on_load_unexpected.update([r"(^|\.)audio_tower\.", r"(^|\.)embed_audio\."])
         self.post_init()
 
     @can_return_tuple
@@ -686,6 +692,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
+        if self.vision_tower is None:
+            raise ValueError(
+                "Image features were requested, but the model was initialized without a vision_config. "
+                "Cannot process images without a vision tower and vision embedder."
+            )
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             pixel_position_ids=image_position_ids,
@@ -906,6 +917,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
             Number of frames belonging to each video, used to split the flat frame sequence back per video.
         """
+        if self.vision_tower is None:
+            raise ValueError(
+                "Video features were requested, but the model was initialized without a vision_config. "
+                "Cannot process video without a vision tower and vision embedder."
+            )
         if num_frames_per_video is None:
             raise ValueError(
                 "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "

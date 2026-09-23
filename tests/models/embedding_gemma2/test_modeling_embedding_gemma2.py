@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch EmbeddingGemma2 model."""
 
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -352,31 +353,25 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
         self.assertEqual(cos.shape[0], 3)  # angles preserve batch
 
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_hidden_states(self):
-        pass
+    def _audio_features_prepare_config_and_inputs(self):
+        config = self.model_tester.get_config()
+        input_features = floats_tensor([self.model_tester.batch_size, 16, 8])
+        input_features_mask = torch.ones(self.model_tester.batch_size, 16, dtype=torch.bool, device=torch_device)
+        return config, {"input_features": input_features, "input_features_mask": input_features_mask}
 
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_output(self, return_dict: bool | None):
-        pass
+    def _video_features_prepare_config_and_inputs(self):
+        config, _, _ = self.model_tester.prepare_config_and_inputs()
+        # Use a (2, 2) patch grid per frame with pooling_kernel_size=2 so each frame produces 1 pooled patch row,
+        # matching `ModelTesterMixin.test_get_video_features_output`'s `last_hidden_state.shape[0] == batch_size`.
+        pixel_values_videos, video_position_ids = self._ragged_video_inputs(
+            config, [(2, 2)] * self.model_tester.batch_size
+        )
+        num_frames_per_video = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+        return config, {
+            "pixel_values_videos": pixel_values_videos,
+            "video_position_ids": video_position_ids,
+            "num_frames_per_video": num_frames_per_video,
+        }
 
     @parameterized.expand([True, False, None])
     def test_get_image_features_output(self, return_dict: bool | None):
@@ -544,3 +539,78 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
         model = EmbeddingGemma2Model(config).to(torch_device).eval()
         with self.assertRaisesRegex(ValueError, "num_frames_per_video"):
             model.get_video_features(pixel_values_videos=pixel_values_videos, video_position_ids=video_position_ids)
+
+    def test_dynamic_tower_loading_and_guards(self):
+        """Disabling vision_config or audio_config (or loading EmbeddingGemma2TextModel directly) loads cleanly with zero unexpected/missing keys and guards disabled feature extractors."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        full_model = EmbeddingGemma2Model(config).to(torch_device).eval()
+
+        text_input_ids = ids_tensor([2, 6], config.text_config.vocab_size - 1) + 1
+        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
+            text_input_ids[text_input_ids == token_id] = self.model_tester.pad_token_id
+
+        with torch.no_grad():
+            full_text_out = full_model(input_ids=text_input_ids).last_hidden_state
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            full_model.save_pretrained(tmpdir)
+
+            # 1. Text + vision only (audio_config=None)
+            vision_only_model, info = EmbeddingGemma2Model.from_pretrained(
+                tmpdir, audio_config=None, output_loading_info=True
+            )
+            self.assertEqual(len(info["missing_keys"]), 0)
+            self.assertEqual(len(info["unexpected_keys"]), 0)
+            self.assertIsNotNone(vision_only_model.vision_tower)
+            self.assertIsNone(vision_only_model.audio_tower)
+            self.assertIsNone(vision_only_model.embed_audio)
+            with self.assertRaisesRegex(ValueError, "without an audio"):
+                vision_only_model.get_audio_features(
+                    input_features=torch.zeros(1, 16, 8),
+                    input_features_mask=torch.ones(1, 16, dtype=torch.bool),
+                )
+
+            # 2. Text + audio only (vision_config=None)
+            audio_only_model, info = EmbeddingGemma2Model.from_pretrained(
+                tmpdir, vision_config=None, output_loading_info=True
+            )
+            self.assertEqual(len(info["missing_keys"]), 0)
+            self.assertEqual(len(info["unexpected_keys"]), 0)
+            self.assertIsNone(audio_only_model.vision_tower)
+            self.assertIsNone(audio_only_model.embed_vision)
+            self.assertIsNotNone(audio_only_model.audio_tower)
+            with self.assertRaisesRegex(ValueError, "without a vision"):
+                audio_only_model.get_image_features(
+                    pixel_values=inputs_dict["pixel_values"],
+                    image_position_ids=inputs_dict["image_position_ids"],
+                )
+            with self.assertRaisesRegex(ValueError, "without a vision"):
+                audio_only_model.get_video_features(
+                    pixel_values_videos=inputs_dict["pixel_values"],
+                    video_position_ids=inputs_dict["image_position_ids"],
+                    num_frames_per_video=torch.tensor([self.model_tester.batch_size]),
+                )
+
+            # 3. Text only via EmbeddingGemma2Model (vision_config=None, audio_config=None)
+            text_via_composite, info = EmbeddingGemma2Model.from_pretrained(
+                tmpdir, vision_config=None, audio_config=None, output_loading_info=True
+            )
+            self.assertEqual(len(info["missing_keys"]), 0)
+            self.assertEqual(len(info["unexpected_keys"]), 0)
+            self.assertIsNone(text_via_composite.vision_tower)
+            self.assertIsNone(text_via_composite.audio_tower)
+            text_via_composite = text_via_composite.to(torch_device).eval()
+            with torch.no_grad():
+                composite_text_out = text_via_composite(input_ids=text_input_ids).last_hidden_state
+            torch.testing.assert_close(composite_text_out, full_text_out)
+
+            # 4. Text only via EmbeddingGemma2TextModel directly
+            text_model, info = EmbeddingGemma2TextModel.from_pretrained(
+                tmpdir, config=config.text_config, output_loading_info=True
+            )
+            self.assertEqual(len(info["missing_keys"]), 0)
+            self.assertEqual(len(info["unexpected_keys"]), 0)
+            text_model = text_model.to(torch_device).eval()
+            with torch.no_grad():
+                direct_text_out = text_model(input_ids=text_input_ids).last_hidden_state
+            torch.testing.assert_close(direct_text_out, full_text_out)

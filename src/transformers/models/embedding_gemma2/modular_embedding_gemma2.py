@@ -28,13 +28,14 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
     is_vision_available,
     logging,
     torch_compilable_check,
@@ -432,6 +433,7 @@ class EmbeddingGemma2EncoderLayer(Gemma3DecoderLayer):
 
 class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     config: EmbeddingGemma2Config
+    base_model_prefix = "language_model"
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
     # Deletes the inherited attribute: both entries were KV-cache related, which we do not have.
     _skip_keys_device_placement = AttributeError()
@@ -470,6 +472,7 @@ class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     """
 )
 class EmbeddingGemma2TextModel(Gemma3TextModel):
+    _keys_to_ignore_on_load_unexpected = [r"^vision_tower\.", r"^embed_vision\.", r"^audio_tower\.", r"^embed_audio\."]
     _can_record_outputs = {
         "hidden_states": EmbeddingGemma2EncoderLayer,
         "attentions": EmbeddingGemma2Attention,
@@ -600,6 +603,62 @@ class EmbeddingGemma2Model(Gemma4Model):
         # generated `__init__`, and is itself not emitted. Our text config has no such field, so the
         # inherited line would raise on every instantiation.
         del self.vocab_size_per_layer_input
+        self._keys_to_ignore_on_load_unexpected = set(getattr(self, "_keys_to_ignore_on_load_unexpected", None) or [])
+        if config.vision_config is None:
+            self._keys_to_ignore_on_load_unexpected.update([r"(^|\.)vision_tower\.", r"(^|\.)embed_vision\."])
+        if config.audio_config is None:
+            self._keys_to_ignore_on_load_unexpected.update([r"(^|\.)audio_tower\.", r"(^|\.)embed_audio\."])
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        if self.vision_tower is None:
+            raise ValueError(
+                "Image features were requested, but the model was initialized without a vision_config. "
+                "Cannot process images without a vision tower and vision embedder."
+            )
+        return super().get_image_features(pixel_values=pixel_values, image_position_ids=image_position_ids, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
+            The frames of every video in the batch, concatenated along the frame axis rather than stacked
+            on a separate video axis, so that videos of different lengths can be batched together.
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
+            2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
+            Passed through to the vision encoder for positional embedding computation.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
+            Number of frames belonging to each video, used to split the flat frame sequence back per video.
+        """
+        if self.vision_tower is None:
+            raise ValueError(
+                "Video features were requested, but the model was initialized without a vision_config. "
+                "Cannot process video without a vision tower and vision embedder."
+            )
+        return super().get_video_features(
+            pixel_values_videos=pixel_values_videos,
+            video_position_ids=video_position_ids,
+            num_frames_per_video=num_frames_per_video,
+            **kwargs,
+        )
 
     def get_per_layer_input_embeddings(self):
         raise AttributeError("Deleted: EmbeddingGemma 2 has no `embed_tokens_per_layer` table.")
