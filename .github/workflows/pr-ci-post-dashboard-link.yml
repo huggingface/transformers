@@ -5,14 +5,15 @@ on:
     workflows: ["PR CI"]
     types: [completed]
 
-permissions:
-  actions: read
-  contents: read
-  issues: write
-  pull-requests: write
+
+permissions: {}
 
 jobs:
   post-link:
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
     if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-22.04
     steps:
@@ -36,6 +37,10 @@ jobs:
         run: python3 update_pr_ci_dashboard_recap.py
 
   post-mlinter-review:
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
     if: always() && github.event.workflow_run.event == 'pull_request'
     needs: post-link
     runs-on: ubuntu-22.04
