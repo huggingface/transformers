@@ -1552,7 +1552,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
 
-            original_inputs_dict = inputs_dict.copy()
             model = model_class(config).to(torch_device).eval()
             model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
 
@@ -1572,7 +1571,35 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             )
             self.assertListEqual(first_outputs.tolist(), second_output.tolist())
 
+    @pytest.mark.generate
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        """Tests that we can generate from precomputed `mm_encoder_outputs`."""
+        for model_class in self.all_generative_model_classes:
+            if "blip" in model_class.__name__.lower():
+                self.skipTest(reason="Won't fix: old model that adds image placeholders during `forward`")
+
+            if not any(
+                modality in model_class.input_modalities and hasattr(model_class, f"get_{modality}_features")
+                for modality in ["image", "video"]
+            ):
+                self.skipTest("Model is not a VLM and doesn't support mm-encoder-outputs")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
+
+            original_inputs_dict = inputs_dict.copy()
+            model = model_class(config).to(torch_device).eval()
+            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
+            generation_kwargs = {
+                "return_dict_in_generate": False,
+                "do_sample": False,
+                "use_cache": True,
+                "max_new_tokens": 10,
+            }
+
             # Passing both, pre-computed inputs and raw pixels will raise an error
+            inputs_dict_with_encoded_outputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
             mm_encoder_outputs = inputs_dict_with_encoded_outputs.pop("mm_encoder_outputs")
             with self.assertRaisesRegex(ValueError, "You cannot pass both: raw pixels and pre-computed embeddings"):
                 model.generate(
@@ -1581,7 +1608,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     **generation_kwargs,
                 )
 
-            # Also test that we still can pass inputs with no multimodal data - raw or precomputed
+            # We still can pass inputs with no multimodal data at all - raw or precomputed
             model.generate(**inputs_dict_with_encoded_outputs, **generation_kwargs)
 
     @pytest.mark.generate
