@@ -24,17 +24,18 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
     DeepseekV3Experts,
+    DeepseekV3ForCausalLM,
+    DeepseekV3Model,
     DeepseekV3MoE,
     apply_rotary_pos_emb_interleave,
 )
 from ..llama.modeling_llama import (
-    LlamaForCausalLM,
-    LlamaModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -197,6 +198,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Mistral4DecoderLayer,
         "attentions": Mistral4Attention,
+        "router_logits": OutputRecorder(Mistral4TopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = []
     _keys_to_ignore_on_load_unexpected = []
@@ -211,11 +213,11 @@ class Mistral4PreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
-class Mistral4Model(LlamaModel):
+class Mistral4Model(DeepseekV3Model):
     pass
 
 
-class Mistral4ForCausalLM(LlamaForCausalLM):
+class Mistral4ForCausalLM(DeepseekV3ForCausalLM):
     pass
 
 

@@ -114,6 +114,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     moe_intermediate_size: int = 1024
     num_experts: int = 64
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     num_shared_experts: int = 1
     norm_topk_prob: bool = True
     routed_scaling_factor: float = 2.5

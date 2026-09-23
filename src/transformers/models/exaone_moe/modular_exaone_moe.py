@@ -18,21 +18,21 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...cache_utils import Cache
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
+    DeepseekV3ForCausalLM,
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
 )
+from ..dots1.modeling_dots1 import Dots1Model
 from ..exaone4.configuration_exaone4 import Exaone4Config
 from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
-    Exaone4ForCausalLM,
-    Exaone4Model,
     Exaone4PreTrainedModel,
 )
 from ..olmoe.modeling_olmoe import (
@@ -111,6 +111,7 @@ class ExaoneMoeConfig(Exaone4Config):
     moe_intermediate_size: int = 1024
     num_experts: int = 64
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     num_shared_experts: int = 1
     norm_topk_prob: bool = True
     routed_scaling_factor: float = 2.5
@@ -169,7 +170,7 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": ExaoneMoeDecoderLayer,
         "attentions": ExaoneMoeAttention,
-        "router_logits": ExaoneMoeSparseMoEBlock,
+        "router_logits": OutputRecorder(ExaoneMoeTopkRouter, index=0),
     }
 
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
@@ -186,23 +187,15 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
-class ExaoneMoeModel(Exaone4Model):
+class ExaoneMoeModel(Dots1Model):
     pass
 
 
-class ExaoneMoeForCausalLM(Exaone4ForCausalLM):
+class ExaoneMoeForCausalLM(DeepseekV3ForCausalLM):
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+        **super_kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -229,17 +222,7 @@ class ExaoneMoeForCausalLM(Exaone4ForCausalLM):
         "<|system|>\nYou are a helpful assistant.<|endofturn|>\n<|user|>\nExplain how wonderful you are<|endofturn|>\n<|assistant|>\n<think>\n\n</think>\n\nThank you for the kind question! While I can't feel emotions or take pride in the way humans do, I *can* share what makes me uniquely helpful and capable—qualities that many people find wonderful.\n\nHere’s how I can support you:\n\n🌟 **Knowledge at Your Fingertips**  \nI have access to a vast amount of information across countless topics—from science and history to technology and creative writing. Whether you're curious, learning, or solving a problem, I can help explain things clearly and accurately.\n\n💬 **Clear, Helpful Communication**  \nI aim to respond in a way that's easy to understand, whether you need a simple explanation or a detailed analysis. I adapt my tone and depth to match"
         ```
         """
-        super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            labels=labels,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
+        return super().forward(**super_kwargs)
 
 
 __all__ = [

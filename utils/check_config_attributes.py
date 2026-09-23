@@ -52,7 +52,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],
     "Glm4MoeLiteConfig": ["n_routed_experts"],
-    "Glm4vMoeTextConfig": ["n_routed_experts"],
+    "Glm4vMoeTextConfig": ["n_routed_experts", "output_router_logits"],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
     "FunAsrNanoEncoderConfig": [

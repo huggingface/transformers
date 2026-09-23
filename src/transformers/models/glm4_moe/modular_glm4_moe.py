@@ -119,6 +119,7 @@ class Glm4MoeConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 1408
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     n_routed_experts: int = 128
     routed_scaling_factor: float = 1.0
