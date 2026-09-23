@@ -21,9 +21,6 @@ limitations under the License.
 
 # EmbeddingGemma2
 
-> [!WARNING]
-> This page is a work in progress. The examples are being revised while the model addition is under review, and the processor and multimodal sections will change once the processing feedback is addressed.
-
 ## Overview
 
 EmbeddingGemma 2 is a multimodal embedding model built on the [Gemma 4](./gemma4) backbone. It turns text, images, video and audio into a single dense vector space, and is meant to be used for retrieval, clustering, classification and semantic similarity rather than for generation.
@@ -33,8 +30,8 @@ The key differences from Gemma 4 are:
 - **No language modeling head.** There is no `ForCausalLM` and no `ForConditionalGeneration` class. [`EmbeddingGemma2Model`] returns a `last_hidden_state` of shape `(batch_size, sequence_length, embedding_dim)`, already projected by the embedding head.
 - **An embedding head on the text backbone.** [`EmbeddingGemma2TextModel`] owns `embedding_projection`, a bias-free `nn.Linear(hidden_size, embedding_dim)` applied after the final norm. Because a linear map commutes with averaging, projecting per token is equivalent to projecting the mean-pooled sentence embedding.
 - **Bidirectional attention.** The stack is an encoder: every layer attends bidirectionally, over the full sequence on `full_attention` layers and over a symmetric window on `sliding_attention` layers. There is no causal mask and no key-value cache.
-- **Projection-only Per-Layer Embeddings (PLE).** Gemma 4 sums a token-identity term (an `embed_tokens_per_layer` lookup table) with a context-aware projection of `inputs_embeds`. EmbeddingGemma 2 keeps only the context-aware half: `EmbeddingGemma2TextPLE` takes `inputs_embeds` alone, and neither `vocab_size_per_layer_input` nor the lookup table exists. The text model computes the per-layer embeddings once with `EmbeddingGemma2TextPLE`; each decoder layer then mixes its own slice into the residual stream with `EmbeddingGemma2TextPLEBlock`, after attention and the MLP.
-- **Reused Gemma 4 towers and processors.** `config.vision_config` is a [`Gemma4VisionConfig`] and `config.audio_config` is a [`Gemma4AudioConfig`]; the towers themselves are resolved through `AutoModel`, so they are a `Gemma4VisionModel` and a `Gemma4AudioModel`. The image processor ([`Gemma4ImageProcessor`]) and the audio feature extractor ([`Gemma4AudioFeatureExtractor`]) are reused as-is through the auto mappings. Only the video processor is specialized: [`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS (`fps=1`), caps a clip at 32 frames by uniformly subsampling anything longer (`max_frames=32`, `overflow_strategy="uniform"`), and leaves frame timestamps out of the prompt (`add_timestamps=False`).
+- **Projection-only Per-Layer Embeddings (PLE).** Gemma 4 sums a token-identity term (an `embed_tokens_per_layer` lookup table) with a context-aware projection of `inputs_embeds`. EmbeddingGemma 2 keeps only the context-aware half: `EmbeddingGemma2TextPLE` takes `inputs_embeds` alone, and neither `vocab_size_per_layer_input` nor the lookup table exists. The text model computes the per-layer embeddings once with `EmbeddingGemma2TextPLE`; each encoder layer then mixes its own slice into the residual stream with `EmbeddingGemma2TextPLEBlock`, after attention and the MLP.
+- **Reused Gemma 4 towers and processors.** `config.vision_config` is a [`Gemma4VisionConfig`] and `config.audio_config` is a [`Gemma4AudioConfig`]; the towers themselves are resolved through `AutoModel`, so they are a `Gemma4VisionModel` and a `Gemma4AudioModel`. The image processor ([`Gemma4ImageProcessor`]) and the audio feature extractor ([`Gemma4AudioFeatureExtractor`]) are reused as-is through the auto mappings. Only the video processor is specialized: by default, [`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS (`fps=1`), caps a clip at 32 frames by uniformly subsampling anything longer (`max_frames=32`, `overflow_strategy="uniform"`), and leaves frame timestamps out of the prompt (`add_timestamps=False`).
 
 You can find all the original EmbeddingGemma checkpoints under the [EmbeddingGemma](https://huggingface.co/collections/google/embeddinggemma) collection. The examples below use the `google/embeddinggemma-2` identifier.
 
@@ -123,7 +120,7 @@ embeddings = model.encode("How to train a neural network", prompt_name="Classifi
 | `QuestionAnswering` | `task: question answering \| query: ` |
 | `STS`, `SentenceSimilarity`, `PairClassification`, `Summarization` | `task: sentence similarity \| query: ` |
 
-For text, the prompt is prepended to the string. Inputs that carry media go through the chat template instead, where Sentence Transformers passes the prompt as a system message. The template ignores roles, emits the media placeholders first and then the text of each message in order, so the prompt lands between the media tokens and your own text. Pooling covers the prompt tokens in both cases.
+For text, the prompt is prepended to the string. Inputs that carry media go through the chat template instead, where Sentence Transformers passes the prompt as a system message. The template emits system messages first right after `<bos>`, then renders each message's content items in the order supplied (`{"image": ..., "text": ...}` vs `{"text": ..., "image": ...}`), unless manual `<|image|>`, `<|video|>`, or `<|audio|>` placeholders are already present in the text. Pooling covers the prompt tokens in both cases.
 
 ### Matryoshka embeddings
 
@@ -152,40 +149,38 @@ embeddings = F.normalize(sentence_embeddings[:, :256], p=2, dim=-1)
 
 ## Multimodal embeddings
 
-Text, images, video and audio are mapped into the same vector space, so embeddings from different modalities are directly comparable. Each modality can also be embedded on its own — [`EmbeddingGemma2Processor`] synthesizes the placeholder tokens when no text is given.
+Text, images, video and audio are mapped into the same vector space, so embeddings from different modalities are directly comparable. Each modality can be embedded on its own or combined with other modalities in a single input.
 
-<hfoptions id="usage">
+### Single and combined modalities
+
+Inputs in Sentence Transformers are dictionaries keyed by modality (`"text"`, `"image"`, `"audio"`, `"video"`). A key may hold a single item (PIL image, path, URL, or array) or a list of items of that modality, and several keys can be combined in one dictionary to produce a single joint embedding. A batch may also mix plain strings and multimodal dictionaries.
+
+<hfoptions id="multimodal-basic">
 <hfoption id="Sentence Transformers">
-
-Inputs are dictionaries keyed by modality. A key may hold a PIL image, a local path, a URL or an array, and several keys can be combined in one dictionary to produce a single embedding. A list may mix plain strings and dictionaries.
 
 ```python
 from sentence_transformers import SentenceTransformer
 
 
 model = SentenceTransformer("google/embeddinggemma-2")
-print(model.modalities)
-# ['text', 'image', 'audio', 'video', 'message']
-
 IMAGE = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 
-# one key per modality
+# single modality per input
 text_embedding = model.encode({"text": "A photo of a cat"})
 image_embedding = model.encode({"image": IMAGE})
 audio_embedding = model.encode({"audio": "path/to/audio.wav"})
 video_embedding = model.encode({"video": "path/to/video.mp4"})
 
-# several modalities in one dictionary give one embedding
-caption_embedding = model.encode({"text": "A photo of a cat", "image": IMAGE})
-narration_embedding = model.encode({"text": "A 440 Hz tone", "audio": "path/to/audio.wav"})
-scene_embedding = model.encode({"image": IMAGE, "audio": "path/to/audio.wav"})
+# multiple modalities combined into a single embedding
+caption_embedding = model.encode({"image": IMAGE, "text": "A photo of a cat"})
+scene_embedding = model.encode({"image": IMAGE, "audio": "path/to/audio.wav", "text": "A cat purring"})
 
-# a batch may mix modalities, and task prompts apply to dictionaries too
+# heterogeneous batch with a task prompt
 embeddings = model.encode(
     [
         "A photo of a cat",
         {"image": IMAGE},
-        {"text": "A photo of a cat", "image": IMAGE},
+        {"image": IMAGE, "text": "A photo of a cat"},
         {"audio": "path/to/audio.wav"},
     ],
     prompt_name="document",
@@ -194,12 +189,67 @@ print(embeddings.shape)
 # (4, 768)
 ```
 
-Video preprocessing flags are forwarded through `processing_kwargs`.
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
-video_embedding = model.encode(
-    {"video": "path/to/video.mp4"},
-    processing_kwargs={"video": {"add_timestamps": True, "fps": 2, "max_frames": 16}},
+import torch
+import torch.nn.functional as F
+from transformers import AutoModel, AutoProcessor
+
+
+model = AutoModel.from_pretrained("google/embeddinggemma-2", device_map="auto")
+processor = AutoProcessor.from_pretrained("google/embeddinggemma-2")
+
+IMAGE = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+
+# media-only (placeholder tokens are synthesized automatically when text is omitted)
+inputs = processor(images=IMAGE, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    token_embeddings = model(**inputs).last_hidden_state
+
+mask = inputs["attention_mask"].unsqueeze(-1).to(token_embeddings.dtype)
+image_embedding = (token_embeddings * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+image_embedding = F.normalize(image_embedding, p=2, dim=-1)
+print(image_embedding.shape)
+# torch.Size([1, 768])
+```
+
+</hfoption>
+</hfoptions>
+
+### Automatic ordering vs. manual placeholders
+
+When no placeholder tokens (`<|image|>`, `<|video|>`, `<|audio|>`) are written in the text, modalities are placed in the exact order their keys appear in the dictionary (after any system/task prompt). To interleave text and media at specific positions, include `<|image|>`, `<|video|>`, or `<|audio|>` directly in the text — automatic placeholder insertion is then disabled for that input, and the number of placeholders in the text must match the number of passed multimodal items.
+
+<hfoptions id="multimodal-placeholders">
+<hfoption id="Sentence Transformers">
+
+```python
+from sentence_transformers import SentenceTransformer
+
+
+model = SentenceTransformer("google/embeddinggemma-2")
+IMAGE_1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+IMAGE_2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+
+# 1. Automatic ordering: follows the dictionary's key order
+#    -> <bos> [prompt] <image_tokens> <text_tokens> <eos>
+image_first = model.encode({"image": IMAGE_1, "text": "A photo of a cat"}, prompt_name="document")
+
+#    -> <bos> [prompt] <text_tokens> <image_tokens> <eos>
+text_first = model.encode({"text": "A photo of a cat", "image": IMAGE_1}, prompt_name="document")
+
+# 2. Manual placeholders: interleave media at exact positions in the text
+#    No extra placeholders are inserted; counts must match the passed media inputs.
+interleaved = model.encode(
+    {
+        "text": "A jacket similar to <|image|> or <|image|> featured in <|audio|>",
+        "image": [IMAGE_1, IMAGE_2],
+        "audio": "path/to/audio.wav",
+    },
+    prompt_name="query",
 )
 ```
 
@@ -215,8 +265,13 @@ from transformers import AutoModel, AutoProcessor
 model = AutoModel.from_pretrained("google/embeddinggemma-2", device_map="auto")
 processor = AutoProcessor.from_pretrained("google/embeddinggemma-2")
 
+IMAGE_1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+IMAGE_2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+
+# Explicit `<|image|>` placeholders directly in `processor(...)`
 inputs = processor(
-    images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+    text=["task: search result | query: A jacket similar to <|image|> or <|image|>"],
+    images=[[IMAGE_1, IMAGE_2]],
     return_tensors="pt",
 ).to(model.device)
 
@@ -224,20 +279,43 @@ with torch.no_grad():
     token_embeddings = model(**inputs).last_hidden_state
 
 mask = inputs["attention_mask"].unsqueeze(-1).to(token_embeddings.dtype)
-image_embedding = (token_embeddings * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
-image_embedding = F.normalize(image_embedding, p=2, dim=-1)
-print(image_embedding.shape)
+embedding = F.normalize((token_embeddings * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9), p=2, dim=-1)
 ```
 
-`audio=` and `videos=` work the same way, and any combination of the four modalities can be passed in a single call.
+</hfoption>
+</hfoptions>
+
+### Video preprocessing controls
+
+Video sampling and timestamp flags (`fps`, `max_frames`, `overflow_strategy`, `add_timestamps`) can be customized per call.
+
+<hfoptions id="multimodal-video">
+<hfoption id="Sentence Transformers">
+
+```python
+video_embedding = model.encode(
+    {"video": "path/to/video.mp4"},
+    processing_kwargs={"video": {"add_timestamps": True, "fps": 2, "max_frames": 16}},
+)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+inputs = processor(
+    videos=["path/to/video.mp4"],
+    add_timestamps=True,
+    fps=2,
+    max_frames=16,
+    return_tensors="pt",
+).to(model.device)
+```
 
 </hfoption>
 </hfoptions>
 
 ## Processor
-
-> [!WARNING]
-> This section is a work in progress and will be revised once the processing review feedback is addressed.
 
 [`EmbeddingGemma2Processor`] bundles the tokenizer, the image processor, the audio feature extractor and the video processor. Each modality can be passed on its own, in which case the processor synthesizes the placeholder tokens, so no text is required.
 
@@ -265,7 +343,7 @@ print(inputs.keys())
 # dict_keys(['input_ids', 'attention_mask', 'pixel_values', 'image_position_ids'])
 ```
 
-The soft-token budget per image is configurable, and lowering it shortens the sequence. Supported values are 70, 140, 280, 560 and 1120.
+The soft-token budget (`max_soft_tokens`) is configurable per call; by default, the checkpoint uses 280 soft tokens per image and 140 soft tokens per video frame.
 
 ```python
 inputs = processor(images=[IMAGE], max_soft_tokens=70, return_tensors="pt")
@@ -273,7 +351,7 @@ print(inputs["input_ids"].shape, inputs["pixel_values"].shape)
 # torch.Size([1, 68]) torch.Size([1, 630, 768])
 ```
 
-[`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS, caps a clip at 32 frames, and leaves frame timestamps out of the prompt. Every knob is overridable per call.
+By default, [`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS, caps a clip at 32 frames, and leaves frame timestamps out of the prompt. Every knob is overridable per call.
 
 Rate-based sampling needs to know the source frame rate, which only comes from decoding a file. A pre-decoded array carries no `fps` or `duration`, so for those inputs the processor warns, skips FPS sampling, and applies the `max_frames` budget alone — pass a `VideoMetadata` with a valid `fps` and `duration` if you want the array sampled at a target rate. Timestamps have no such fallback: `add_timestamps=True` on an array with no `fps` raises, because a guessed rate would write wrong `mm:ss` labels into the prompt.
 
@@ -287,34 +365,23 @@ inputs = processor(
 )
 ```
 
-Chat-style messages are also accepted, which is what Sentence Transformers uses internally for media inputs. The template ignores roles: it emits the media placeholders first and then the text of every message in order.
+Chat-style messages are also accepted, which is what Sentence Transformers (`>=6.1.0`) uses internally for media inputs. The template renders any `system` messages first (where Sentence Transformers places the task prompt), then emits the remaining content entries in the order provided (or expands manual `<|image|>`, `<|video|>`, and `<|audio|>` markers in-place when present in the text).
 
 ```python
 messages = [
     [
+        {"role": "system", "content": "title: none | text: "},
         {
             "role": "user",
             "content": [
                 {"type": "image", "url": IMAGE},
-                {"type": "text", "text": "title: none | text: a photo of a cat"},
+                {"type": "text", "text": "a photo of a cat"},
             ],
-        }
+        },
     ]
 ]
 inputs = processor.apply_chat_template(messages, tokenize=True, return_dict=True, return_tensors="pt")
 ```
-
-## Notes
-
-- The model is an encoder: attention is bidirectional, there is no language modeling head and no key-value cache. `last_hidden_state` is already projected to `config.text_config.embedding_dim`, not `hidden_size`.
-
-- Pooling must be mask-aware. Averaging over padding tokens changes the embedding, which is why the examples above weight by `attention_mask`.
-
-- Use right padding, the tokenizer's default for this checkpoint. Positions default to `torch.arange(seq_len)`, which counts pad tokens.
-
-- Because `embedding_projection` is linear, projecting every token and then averaging is equivalent to averaging and then projecting. Pooling the model output is therefore the same as pooling the backbone's hidden states and projecting once.
-
-- Media inputs are expensive in tokens: an image costs 280 soft tokens by default, and a video costs `max_soft_tokens` per sampled frame, with up to `max_frames` (32) frames per clip.
 
 ## EmbeddingGemma2TextConfig
 

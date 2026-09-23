@@ -86,31 +86,38 @@ _EMBEDDING_PROJECTION = "transformer/default_projection/linear"
 _AUDIO_INPUT_EMBEDDING_EXTRA = "audio_input_embedding_extra"
 _MM_INPUT_EMBEDDING_EXTRA = "mm_input_embedding_extra"
 
-# An embedding-only chat template: it emits no turn markers or role prefixes. Each non-text part
-# becomes a bare `<|image|>` / `<|video|>` / `<|audio|>` placeholder, then all the text is
-# concatenated. The processor expands the placeholders into soft tokens.
+# An embedding-only chat template: it emits no turn markers or role prefixes. System messages
+# (e.g. Sentence Transformers task prompts) are emitted first right after `<bos>`, matching the
+# training distribution. Non-system content entries are rendered in the order the caller supplied
+# them (Sentence Transformers preserves the input dict's key order since v6.1.0). Each non-text
+# part becomes a bare `<|image|>` / `<|video|>` / `<|audio|>` placeholder unless the message's text
+# already specifies manual placeholders, in which case automatic insertion is disabled for that
+# message and the processor validates that placeholder counts match the passed multimodal inputs.
 _EMBEDDING_CHAT_TEMPLATE = (
-    "{%- for msg in messages -%}"
-    "{%- if msg.get('content') is not string -%}"
-    "{%- set existing_text = msg['content'] | selectattr('type', 'equalto', 'text') | map(attribute='text') | join -%}"
-    "{%- for item in msg['content'] -%}"
-    "{%- if item.get('type') == 'image' and '<|image|>' not in existing_text -%}"
-    "<|image|>"
-    "{%- elif item.get('type') == 'video' and '<|video|>' not in existing_text -%}"
-    "<|video|>"
-    "{%- elif item.get('type') == 'audio' and '<|audio|>' not in existing_text -%}"
-    "<|audio|>"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-    "{%- for msg in messages -%}"
+    "{%- for msg in messages if msg.get('role') == 'system' -%}"
     "{%- if msg.get('content') is string -%}"
     "{{ msg['content'] }}"
     "{%- else -%}"
+    "{%- for item in msg['content'] if item.get('type') == 'text' -%}"
+    "{{ item['text'] }}"
+    "{%- endfor -%}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+    "{%- for msg in messages if msg.get('role') != 'system' -%}"
+    "{%- if msg.get('content') is string -%}"
+    "{{ msg['content'] }}"
+    "{%- else -%}"
+    "{%- set existing_text = msg['content'] | selectattr('type', 'equalto', 'text') | map(attribute='text') | join -%}"
+    "{%- set has_manual_placeholders = ('<|image|>' in existing_text) or ('<|video|>' in existing_text) or ('<|audio|>' in existing_text) -%}"
     "{%- for item in msg['content'] -%}"
     "{%- if item.get('type') == 'text' -%}"
     "{{ item['text'] }}"
+    "{%- elif not has_manual_placeholders and item.get('type') == 'image' -%}"
+    "<|image|>"
+    "{%- elif not has_manual_placeholders and item.get('type') == 'video' -%}"
+    "<|video|>"
+    "{%- elif not has_manual_placeholders and item.get('type') == 'audio' -%}"
+    "<|audio|>"
     "{%- endif -%}"
     "{%- endfor -%}"
     "{%- endif -%}"
@@ -162,6 +169,19 @@ _TASK_PROMPTS = {
     "SentenceSimilarity": "task: sentence similarity | query: ",
     "STS": "task: sentence similarity | query: ",
     "Summarization": "task: sentence similarity | query: ",
+}
+
+# Declared in `config_sentence_transformers.json` and verified by SentenceTransformer before any module
+# is loaded (sentence-transformers >= 6.0.0). SentenceTransformers >= 6.1.0 is required for content-order
+# preservation and multiple items per modality in dict inputs.
+_ST_REQUIREMENTS = {
+    "sentence-transformers": {
+        "specifier": ">=6.1.0",
+        "reason": (
+            "Older versions ignore the order of multimodal dict inputs and cannot put several images "
+            "or texts into a single embedding."
+        ),
+    },
 }
 
 _VISION_CONFIG = Gemma4VisionConfig(
@@ -982,6 +1002,16 @@ def main(*args):
     st_model.save_pretrained(output_path)
     logging.info("Saved SentenceTransformer to %s", output_path)
     del st_model
+
+    # `requirements` is read but never written by SentenceTransformers, so it is patched in afterwards.
+    st_config_path = os.path.join(output_path, "config_sentence_transformers.json")
+    with open(st_config_path, encoding="utf-8") as f:
+        st_config = json.load(f)
+    st_config["requirements"] = _ST_REQUIREMENTS
+    with open(st_config_path, "w", encoding="utf-8") as f:
+        json.dump(st_config, f, indent=2, sort_keys=True)
+        f.write("\n")
+    logging.info("Declared SentenceTransformers requirements: %s", _ST_REQUIREMENTS)
 
 
 if __name__ == "__main__":

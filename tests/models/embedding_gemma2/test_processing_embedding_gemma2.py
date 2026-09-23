@@ -39,6 +39,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+        cls.audio_token = processor.audio_token
 
     @classmethod
     def _setup_video_processor(cls):
@@ -74,7 +75,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "video_token": "<|video|>",
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
-            "audio_token": "<audio_soft_token>",
+            "audio_token": "<|audio|>",
             "boa_token": "<start_of_audio>",
             "eoa_token": "<end_of_audio>",
         }
@@ -87,6 +88,37 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    _CHAT_TEMPLATE = (
+        "{%- for msg in messages if msg.get('role') == 'system' -%}"
+        "{%- if msg.get('content') is string -%}"
+        "{{ msg['content'] }}"
+        "{%- else -%}"
+        "{%- for item in msg['content'] if item.get('type') == 'text' -%}"
+        "{{ item['text'] }}"
+        "{%- endfor -%}"
+        "{%- endif -%}"
+        "{%- endfor -%}"
+        "{%- for msg in messages if msg.get('role') != 'system' -%}"
+        "{%- if msg.get('content') is string -%}"
+        "{{ msg['content'] }}"
+        "{%- else -%}"
+        "{%- set existing_text = msg['content'] | selectattr('type', 'equalto', 'text') | map(attribute='text') | join -%}"
+        "{%- set has_manual_placeholders = ('<|image|>' in existing_text) or ('<|video|>' in existing_text) or ('<|audio|>' in existing_text) -%}"
+        "{%- for item in msg['content'] -%}"
+        "{%- if item.get('type') == 'text' -%}"
+        "{{ item['text'] }}"
+        "{%- elif not has_manual_placeholders and item.get('type') == 'image' -%}"
+        "<|image|>"
+        "{%- elif not has_manual_placeholders and item.get('type') == 'video' -%}"
+        "<|video|>"
+        "{%- elif not has_manual_placeholders and item.get('type') == 'audio' -%}"
+        "<|audio|>"
+        "{%- endif -%}"
+        "{%- endfor -%}"
+        "{%- endif -%}"
+        "{%- endfor -%}"
+    )
 
     @staticmethod
     def prepare_processor_dict():
@@ -263,3 +295,105 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertNotEqual(counts[0], counts[1], "the two rows must differ for this test to be meaningful")
         for row, expected in enumerate(counts):
             self.assertEqual((out["input_ids"][row] == video_token_id).sum().item(), expected)
+
+    @require_torch
+    def test_validate_inputs_multimodal_placeholder_counts(self):
+        """Mismatched or orphan `<|image|>`, `<|video|>`, and `<|audio|>` placeholders raise `ValueError`."""
+        processor = self.get_processor()
+        img = np.random.randint(0, 256, size=(56, 56, 3), dtype=np.uint8)
+        vid = [np.random.randint(0, 256, size=(2, 56, 56, 3), dtype=np.uint8)]
+        aud = np.zeros(1600, dtype=np.float32)
+
+        # Too few or too many placeholders per modality
+        with self.assertRaisesRegex(ValueError, "image"):
+            processor(text=["one <|image|>"], images=[[img, img]], return_tensors="pt")
+        with self.assertRaisesRegex(ValueError, "image"):
+            processor(text=["two <|image|> <|image|>"], images=[[img]], return_tensors="pt")
+
+        with self.assertRaisesRegex(ValueError, "video"):
+            processor(text=["one <|video|>"], videos=[vid, vid], do_sample_frames=False, return_tensors="pt")
+        with self.assertRaisesRegex(ValueError, "video"):
+            processor(text=["two <|video|> <|video|>"], videos=[vid], do_sample_frames=False, return_tensors="pt")
+
+        with self.assertRaisesRegex(ValueError, "audio"):
+            processor(text=["one <|audio|>"], audio=[aud, aud], return_tensors="pt")
+        with self.assertRaisesRegex(ValueError, "audio"):
+            processor(text=["two <|audio|> <|audio|>"], audio=[aud], return_tensors="pt")
+
+        # Orphan placeholders when the corresponding modality input is None
+        for token, match in (("<|image|>", "image"), ("<|video|>", "video"), ("<|audio|>", "audio")):
+            with self.assertRaisesRegex(ValueError, match):
+                processor(text=[f"orphan {token}"], return_tensors="pt")
+
+    @require_torch
+    def test_chat_template_ordering_and_manual_placeholders(self):
+        """System prompts precede media, content order is preserved, and manual markers disable auto-insertion."""
+        processor = self.get_processor()
+        processor.chat_template = self._CHAT_TEMPLATE
+        img = np.random.randint(0, 256, size=(56, 56, 3), dtype=np.uint8)
+        aud = np.zeros(1600, dtype=np.float32)
+
+        # 1. System prompt goes first, then caller-supplied content order is preserved
+        msg_img_text = [
+            {"role": "system", "content": "title: none | text: "},
+            {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "a cat"}]},
+        ]
+        msg_text_img = [
+            {"role": "system", "content": "title: none | text: "},
+            {"role": "user", "content": [{"type": "text", "text": "a cat"}, {"type": "image"}]},
+        ]
+        self.assertEqual(
+            processor.apply_chat_template(msg_img_text, tokenize=False), "title: none | text: <|image|>a cat"
+        )
+        self.assertEqual(
+            processor.apply_chat_template(msg_text_img, tokenize=False), "title: none | text: a cat<|image|>"
+        )
+
+        # 2. Mixed and multiple same-type modalities follow content order
+        msg_multi = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "compare "},
+                    {"type": "image"},
+                    {"type": "image"},
+                    {"type": "audio"},
+                ],
+            }
+        ]
+        self.assertEqual(
+            processor.apply_chat_template(msg_multi, tokenize=False), "compare <|image|><|image|><|audio|>"
+        )
+
+        # 3. Manual placeholders in text suppress automatic placeholder insertion (all-or-nothing)
+        msg_manual = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "interleaved <|image|> and <|audio|> markers"},
+                    {"type": "image"},
+                    {"type": "audio"},
+                ],
+            }
+        ]
+        rendered_manual = processor.apply_chat_template(msg_manual, tokenize=False)
+        self.assertEqual(rendered_manual, "interleaved <|image|> and <|audio|> markers")
+        out_manual = processor(text=[rendered_manual], images=[[img]], audio=[aud], return_tensors="pt")
+        self.assertIn("input_ids", out_manual)
+
+        # Partial manual placeholders (manual <|image|> present, <|audio|> omitted) suppress auto <|audio|>
+        # and fail count validation in the processor.
+        msg_partial = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "manual <|image|> but forgot audio placeholder"},
+                    {"type": "image"},
+                    {"type": "audio"},
+                ],
+            }
+        ]
+        rendered_partial = processor.apply_chat_template(msg_partial, tokenize=False)
+        self.assertNotIn("<|audio|>", rendered_partial)
+        with self.assertRaisesRegex(ValueError, "audio"):
+            processor(text=[rendered_partial], images=[[img]], audio=[aud], return_tensors="pt")
