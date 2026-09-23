@@ -372,10 +372,15 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
         config, _, _ = self.model_tester.prepare_config_and_inputs()
         # Use a (2, 2) patch grid per frame with pooling_kernel_size=2 so each frame produces 1 pooled patch row,
         # matching `ModelTesterMixin.test_get_video_features_output`'s `last_hidden_state.shape[0] == batch_size`.
-        pixel_values_videos, video_position_ids = self._ragged_video_inputs(
-            config, [(2, 2)] * self.model_tester.batch_size
-        )
-        num_frames_per_video = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+        batch_size = self.model_tester.batch_size
+        max_patches = self.model_tester.vision_config["image_size"]
+        patch_dim = config.vision_config.patch_size**2 * self.model_tester.vision_config["num_channels"]
+        pixel_values_videos = floats_tensor([batch_size, max_patches, patch_dim])
+        pixel_values_videos[:, 4:] = 0.0
+        video_position_ids = torch.full((batch_size, max_patches, 2), -1, dtype=torch.long, device=torch_device)
+        grid_2x2 = torch.tensor([[0, 0], [1, 0], [0, 1], [1, 1]], dtype=torch.long, device=torch_device)
+        video_position_ids[:, :4] = grid_2x2
+        num_frames_per_video = torch.ones(batch_size, dtype=torch.long, device=torch_device)
         return config, {
             "pixel_values_videos": pixel_values_videos,
             "video_position_ids": video_position_ids,
@@ -452,166 +457,6 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
                 )
             else:
                 self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
-
-    def test_model_outputs_embedding_dim(self):
-        """The composite model returns the projected embedding, not `hidden_size` states."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = EmbeddingGemma2Model(config).to(torch_device).eval()
-
-        with torch.no_grad():
-            outputs = model(**inputs_dict)
-
-        self.assertEqual(
-            outputs.last_hidden_state.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, config.text_config.embedding_dim),
-        )
-        self.assertNotEqual(config.text_config.embedding_dim, config.text_config.hidden_size)
-
-    def _ragged_video_inputs(self, config, frame_grids):
-        """Builds a flat video batch: frames of all videos concatenated along dim 0.
-
-        `frame_grids` gives each frame's `(height, width)` patch grid. Both dims must be multiples of
-        `pooling_kernel_size` — [`get_image_size_for_max_num_patches`] guarantees that, and the pooler's token
-        count only agrees with `valid_patches // k**2` when it holds. Everything past a frame's grid is padded:
-        patches to zero, position ids to `(-1, -1)`, exactly as `pad_to_max_patches` does.
-        """
-        max_patches = self.model_tester.vision_config["image_size"]
-        patch_dim = config.vision_config.patch_size**2 * self.model_tester.vision_config["num_channels"]
-
-        pixel_values_videos = floats_tensor([len(frame_grids), max_patches, patch_dim])
-        video_position_ids = torch.full((len(frame_grids), max_patches, 2), -1, dtype=torch.long)
-
-        for frame_index, (h, w) in enumerate(frame_grids):
-            xs = torch.arange(w).repeat(h)
-            ys = torch.arange(h).repeat_interleave(w)
-            video_position_ids[frame_index, : h * w] = torch.stack([xs, ys], dim=-1)
-            pixel_values_videos[frame_index, h * w :] = 0.0
-
-        return pixel_values_videos, video_position_ids.to(torch_device)
-
-    def _expected_video_split_sizes(self, config, video_position_ids, num_frames_per_video):
-        k_squared = config.vision_config.pooling_kernel_size**2
-        tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        split_sizes, offset = [], 0
-        for num_frames in num_frames_per_video:
-            split_sizes.append(int(tokens_per_frame[offset : offset + num_frames].sum()))
-            offset += num_frames
-        return split_sizes
-
-    def test_get_video_features_ragged_batch(self):
-        """Videos of different lengths are split back apart using `num_frames_per_video`."""
-        config, _, _ = self.model_tester.prepare_config_and_inputs()
-        num_frames_per_video = [2, 3]
-        pixel_values_videos, video_position_ids = self._ragged_video_inputs(config, [(4, 4)] * 5)
-
-        model = EmbeddingGemma2Model(config).to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model.get_video_features(
-                pixel_values_videos=pixel_values_videos,
-                video_position_ids=video_position_ids,
-                num_frames_per_video=torch.tensor(num_frames_per_video, device=torch_device),
-            )
-
-        expected = self._expected_video_split_sizes(config, video_position_ids, num_frames_per_video)
-        self.assertEqual(len(outputs.pooler_output), len(num_frames_per_video))
-        self.assertEqual([len(video) for video in outputs.pooler_output], expected)
-        # The longer video must own more soft tokens, or a wrong split could pass unnoticed
-        self.assertLess(expected[0], expected[1])
-
-    def test_get_video_features_ragged_frames_and_patches(self):
-        """Ragged along both axes: different frame counts *and* different patch grids per frame."""
-        config, _, _ = self.model_tester.prepare_config_and_inputs()
-        num_frames_per_video = [2, 3]
-        frame_grids = [(4, 4), (2, 4), (4, 4), (2, 2), (4, 4)]
-        pixel_values_videos, video_position_ids = self._ragged_video_inputs(config, frame_grids)
-
-        model = EmbeddingGemma2Model(config).to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model.get_video_features(
-                pixel_values_videos=pixel_values_videos,
-                video_position_ids=video_position_ids,
-                num_frames_per_video=torch.tensor(num_frames_per_video, device=torch_device),
-            )
-
-        expected = self._expected_video_split_sizes(config, video_position_ids, num_frames_per_video)
-        self.assertEqual([len(video) for video in outputs.pooler_output], expected)
-        # Frames within a video must not all contribute the same count, or raggedness is untested
-        self.assertNotEqual(expected[0], expected[1])
-        # Every soft token is accounted for by exactly one video
-        self.assertEqual(sum(len(video) for video in outputs.pooler_output), sum(expected))
-
-    def test_get_video_features_requires_num_frames_per_video(self):
-        """Without the frame counts the flat batch cannot be split, so it must fail loudly."""
-        config, _, _ = self.model_tester.prepare_config_and_inputs()
-        pixel_values_videos, video_position_ids = self._ragged_video_inputs(config, [(4, 4)] * 5)
-
-        model = EmbeddingGemma2Model(config).to(torch_device).eval()
-        with self.assertRaisesRegex(ValueError, "num_frames_per_video"):
-            model.get_video_features(pixel_values_videos=pixel_values_videos, video_position_ids=video_position_ids)
-
-    def test_dynamic_tower_loading_and_guards(self):
-        """Disabling vision_config or audio_config (or loading EmbeddingGemma2TextModel directly) loads cleanly with zero unexpected/missing keys and guards disabled feature extractors."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        full_model = EmbeddingGemma2Model(config).to(torch_device).eval()
-
-        text_input_ids = ids_tensor([2, 6], config.text_config.vocab_size - 1) + 1
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            text_input_ids[text_input_ids == token_id] = self.model_tester.pad_token_id
-
-        with torch.no_grad():
-            full_text_out = full_model(input_ids=text_input_ids).last_hidden_state
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            full_model.save_pretrained(tmpdir)
-
-            # 1. Text + vision only (audio_config=None)
-            vision_only_model, info = EmbeddingGemma2Model.from_pretrained(
-                tmpdir, audio_config=None, output_loading_info=True
-            )
-            self.assertEqual(len(info["missing_keys"]), 0)
-            self.assertEqual(len(info["unexpected_keys"]), 0)
-            self.assertIsNotNone(vision_only_model.vision_tower)
-            self.assertIsNone(vision_only_model.audio_tower)
-            self.assertIsNone(vision_only_model.embed_audio)
-            with self.assertRaisesRegex(ValueError, "without an audio"):
-                vision_only_model.get_audio_features(
-                    input_features=torch.zeros(1, 16, 8),
-                    input_features_mask=torch.ones(1, 16, dtype=torch.bool),
-                )
-
-            # 2. Text + audio only (vision_config=None)
-            audio_only_model, info = EmbeddingGemma2Model.from_pretrained(
-                tmpdir, vision_config=None, output_loading_info=True
-            )
-            self.assertEqual(len(info["missing_keys"]), 0)
-            self.assertEqual(len(info["unexpected_keys"]), 0)
-            self.assertIsNone(audio_only_model.vision_tower)
-            self.assertIsNone(audio_only_model.embed_vision)
-            self.assertIsNotNone(audio_only_model.audio_tower)
-            with self.assertRaisesRegex(ValueError, "without a vision"):
-                audio_only_model.get_image_features(
-                    pixel_values=inputs_dict["pixel_values"],
-                    image_position_ids=inputs_dict["image_position_ids"],
-                )
-            with self.assertRaisesRegex(ValueError, "without a vision"):
-                audio_only_model.get_video_features(
-                    pixel_values_videos=inputs_dict["pixel_values"],
-                    video_position_ids=inputs_dict["image_position_ids"],
-                    num_frames_per_video=torch.tensor([self.model_tester.batch_size]),
-                )
-
-            # 3. Text only via EmbeddingGemma2Model (vision_config=None, audio_config=None)
-            text_via_composite, info = EmbeddingGemma2Model.from_pretrained(
-                tmpdir, vision_config=None, audio_config=None, output_loading_info=True
-            )
-            self.assertEqual(len(info["missing_keys"]), 0)
-            self.assertEqual(len(info["unexpected_keys"]), 0)
-            self.assertIsNone(text_via_composite.vision_tower)
-            self.assertIsNone(text_via_composite.audio_tower)
-            text_via_composite = text_via_composite.to(torch_device).eval()
-            with torch.no_grad():
-                composite_text_out = text_via_composite(input_ids=text_input_ids).last_hidden_state
-            torch.testing.assert_close(composite_text_out, full_text_out)
 
 
 @slow

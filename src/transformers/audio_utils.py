@@ -410,6 +410,14 @@ def make_list_of_audio(
     Returns:
         list: A list of audio.
     """
+    # If the input is a nested list of audios, we flatten it
+    if (
+        isinstance(audio, (list, tuple))
+        and all(isinstance(audio_i, (list, tuple)) for audio_i in audio)
+        and all(is_valid_list_of_audio(audio_i) or not audio_i for audio_i in audio)
+    ):
+        return [aud for audio_list in audio for aud in audio_list]
+
     # If it's a list of audios, it's already in the right format
     if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
         return audio
@@ -417,22 +425,6 @@ def make_list_of_audio(
     # If it's a single audio, convert it to a list of
     if is_valid_audio(audio):
         return [audio]
-
-    # If it's a nested list of audios (e.g. [[aud1, aud2], [aud3]]), flatten it
-    if (
-        isinstance(audio, (list, tuple))
-        and audio
-        and all(
-            is_valid_audio(audio_i)
-            or (isinstance(audio_i, (list, tuple)) and (is_valid_list_of_audio(audio_i) or not audio_i))
-            for audio_i in audio
-        )
-    ):
-        return [
-            aud
-            for audio_i in audio
-            for aud in (audio_i if isinstance(audio_i, (list, tuple)) and not is_valid_audio(audio_i) else [audio_i])
-        ]
 
     raise ValueError("Invalid input type. Must be a single audio, a list of audio, or a nested list of audio")
 

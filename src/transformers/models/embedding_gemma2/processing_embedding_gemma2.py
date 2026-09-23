@@ -119,8 +119,11 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs,
     ):
-        # When `text` is None, record per-sample counts before `make_list_of_audio` and
-        # `make_batched_videos` flatten 2D nested lists into a 1D list of total items.
+        # When `text` is None, record per-sample counts for `audio` and `videos` before
+        # `ProcessorMixin.prepare_inputs_layout` runs `make_list_of_audio` and `make_batched_videos`,
+        # which flatten 2D nested per-sample lists into a 1D list of total items and discard sample
+        # boundaries. `images` does not need this because `make_nested_list_of_images` preserves the
+        # outer per-sample list structure.
         if not text:
             audio_per_sample = (
                 [len(el) if isinstance(el, (list, tuple)) and not is_valid_audio(el) else 1 for el in audio]

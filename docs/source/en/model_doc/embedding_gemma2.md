@@ -562,10 +562,12 @@ print(embeddings.shape)
 
 ### 5. Disabling unused modality towers (memory optimization)
 
-If your workload only embeds a subset of modalities (for example, **text-only** or **text + images** without audio), you can skip instantiating and loading the unused vision or audio towers by passing `vision_config=None` and/or `audio_config=None`. The unused tower weights in the checkpoint are ignored cleanly without warnings:
+If your workload only embeds a subset of modalities (for example, **text-only** or **text + images** without audio), you can skip instantiating and loading the unused vision or audio towers by setting `vision_config=None` and/or `audio_config=None` on the config. The unused tower weights in the checkpoint are ignored cleanly without warnings, dropping the model from 744M to 439M parameters without the audio tower, or to 271M with neither tower.
 
 <hfoptions id="selective-towers">
 <hfoption id="Sentence Transformers">
+
+Pass these through `config_kwargs` (which reaches `AutoConfig.from_pretrained`), not `model_kwargs`:
 
 ```python
 from sentence_transformers import SentenceTransformer
@@ -574,13 +576,13 @@ from sentence_transformers import SentenceTransformer
 # Text-only deployment (skips both vision and audio towers)
 text_model = SentenceTransformer(
     "google/embeddinggemma-2",
-    model_kwargs={"vision_config": None, "audio_config": None},
+    config_kwargs={"vision_config": None, "audio_config": None},
 )
 
 # Vision + text deployment (skips audio tower)
 vision_text_model = SentenceTransformer(
     "google/embeddinggemma-2",
-    model_kwargs={"audio_config": None},
+    config_kwargs={"audio_config": None},
 )
 ```
 
@@ -649,7 +651,7 @@ IMAGE = "https://huggingface.co/datasets/huggingface/documentation-images/resolv
 
 inputs = processor(images=[IMAGE], max_soft_tokens=70, return_tensors="pt")
 print(inputs["input_ids"].shape, inputs["pixel_values"].shape)
-# torch.Size([1, 68]) torch.Size([1, 630, 768])
+# torch.Size([1, 67]) torch.Size([1, 630, 768])
 ```
 
 </hfoption>
@@ -731,8 +733,8 @@ inputs = processor(
 
 # Manual placeholders in text for direct processor calls
 inputs = processor(text=["<|image|> a photo of a cat"], images=[[IMAGE]], return_tensors="pt")
-print(inputs.keys())
-# dict_keys(['input_ids', 'attention_mask', 'pixel_values', 'image_position_ids'])
+print(list(inputs.keys()))
+# ['input_ids', 'attention_mask', 'pixel_values', 'image_position_ids']
 ```
 
 ## EmbeddingGemma2TextConfig

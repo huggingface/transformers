@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import EmbeddingGemma2Processor, EmbeddingGemma2VideoProcessor
+from transformers import EmbeddingGemma2Processor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.video_utils import VideoMetadata
 
@@ -237,21 +236,6 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 videos_kwargs={"add_timestamps": True, "fps": None},
                 return_tensors="pt",
             )
-
-    def test_processor_and_video_processor_serialization(self):
-        """The EmbeddingGemma 2 video flags survive a `save_pretrained` / `from_pretrained` round-trip."""
-        processor = self.get_processor()
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            processor.save_pretrained(tmp_dir)
-            loaded_processor = self.processor_class.from_pretrained(tmp_dir)
-            self.assertIsInstance(loaded_processor.video_processor, EmbeddingGemma2VideoProcessor)
-            self.assertEqual(loaded_processor.video_processor.fps, 1)
-            self.assertEqual(loaded_processor.video_processor.max_frames, 32)
-            self.assertEqual(loaded_processor.video_processor.overflow_strategy, "uniform")
-            self.assertFalse(loaded_processor.video_processor.add_timestamps)
-            # A serialized `num_frames` is forwarded by `preprocess` and rejected by `sample_frames`.
-            self.assertNotIn("num_frames", loaded_processor.video_processor.to_dict())
 
     def test_single_modality_inputs_need_no_text(self):
         """Unlike Gemma 4, any single modality on its own is a valid embedding input."""

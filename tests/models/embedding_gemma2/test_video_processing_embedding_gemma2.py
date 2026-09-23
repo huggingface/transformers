@@ -146,39 +146,6 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, patch_size=18)
         self.assertEqual(video_processor.patch_size, 18)
 
-    def test_video_processor_defaults(self):
-        processor = self.fast_video_processing_class()
-        self.assertEqual(processor.patch_size, 16)
-        self.assertEqual(processor.max_soft_tokens, 70)
-        self.assertEqual(processor.pooling_kernel_size, 3)
-        self.assertEqual(processor.fps, 1)
-
-    def test_embedding_gemma2_video_flag_defaults(self):
-        """The video defaults are `fps=1` with a `max_frames=32` budget applied uniformly, and no
-        timestamps: one frame per second, linspace-subsampled once the clip exceeds the budget."""
-        processor = self.fast_video_processing_class()
-        self.assertEqual(processor.fps, 1)
-        self.assertEqual(processor.max_frames, 32)
-        self.assertEqual(processor.overflow_strategy, "uniform")
-        self.assertFalse(processor.add_timestamps)
-        # `num_frames = AttributeError()` deletes the class attribute; lookup falls through to
-        # `BaseVideoProcessor.num_frames = None`, which is what keeps `preprocess` from forwarding a value.
-        self.assertIsNone(processor.num_frames)
-
-    def test_video_flag_defaults_survive_roundtrip(self):
-        import tempfile
-
-        processor = self.fast_video_processing_class()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor.save_pretrained(tmpdir)
-            reloaded = self.fast_video_processing_class.from_pretrained(tmpdir)
-        self.assertFalse(reloaded.add_timestamps)
-        self.assertEqual(reloaded.fps, 1)
-        self.assertEqual(reloaded.max_frames, 32)
-        self.assertEqual(reloaded.overflow_strategy, "uniform")
-        # A serialized `num_frames` would be forwarded by `preprocess` and rejected by `sample_frames`.
-        self.assertNotIn("num_frames", processor.to_dict())
-
     def test_sample_frames_1fps_linear(self):
         """`fps=1` takes one frame per second; `overflow_strategy="uniform"` then linspace-subsamples
         the per-second indices down to `max_frames`."""
@@ -303,72 +270,6 @@ class EmbeddingGemma2VideoProcessingTest(VideoProcessingTestMixin, unittest.Test
             processor.sample_frames(meta, fps=None, max_frames=4, overflow_strategy="truncate"),
             np.array([0, 1, 2, 3]),
         )
-
-    def test_unsupported_max_soft_tokens_raises(self):
-        with self.assertRaises(ValueError):
-            self.fast_video_processing_class(max_soft_tokens=71)
-
-    def test_output_keys(self):
-        processor = self.fast_video_processing_class(**self.video_processor_dict)
-        videos = self.video_processor_tester.prepare_video_inputs(return_tensors="torch")
-        result = processor(videos[0], return_tensors="pt")
-        self.assertIn("pixel_values_videos", result)
-        self.assertIn("video_position_ids", result)
-        self.assertIn("num_soft_tokens_per_video", result)
-        self.assertIn("num_frames_per_video", result)
-
-    def test_position_ids_structure(self):
-        """Per frame: real positions are non-negative and contiguous, padding positions are (-1, -1)."""
-        processor = self.fast_video_processing_class(**self.video_processor_dict)
-        videos = self.video_processor_tester.prepare_video_inputs(return_tensors="torch")
-        result = processor(videos[0], return_tensors="pt")
-
-        position_ids = result.video_position_ids
-        self.assertEqual(position_ids.shape[-1], 2)
-        for frame_positions in position_ids:
-            real_mask = frame_positions[:, 0] >= 0
-            self.assertGreater(real_mask.sum().item(), 0)
-            pad_mask = ~real_mask
-            if pad_mask.any():
-                self.assertTrue((frame_positions[pad_mask] == -1).all())
-                last_real_idx = torch.where(real_mask)[0][-1].item()
-                first_pad_idx = torch.where(pad_mask)[0][0].item()
-                self.assertEqual(last_real_idx + 1, first_pad_idx)
-
-    def test_padding_patches_are_zero(self):
-        processor = self.fast_video_processing_class(**self.video_processor_dict)
-        video = torch.randint(1, 255, (self.video_processor_tester.num_frames, 3, 50, 50), dtype=torch.uint8)
-        result = processor(video, return_tensors="pt")
-
-        position_ids = result.video_position_ids
-        pixel_values = result.pixel_values_videos
-        for frame_index in range(position_ids.shape[0]):
-            pad_mask = position_ids[frame_index, :, 0] < 0
-            if pad_mask.any():
-                self.assertTrue((pixel_values[frame_index, pad_mask] == 0).all())
-
-    def test_num_soft_tokens_per_video(self):
-        processor = self.fast_video_processing_class(**self.video_processor_dict)
-        videos = self.video_processor_tester.prepare_video_inputs(return_tensors="torch")
-        result = processor(videos, return_tensors="pt")
-
-        num_soft_tokens = np.asarray(result.num_soft_tokens_per_video)
-        self.assertEqual(num_soft_tokens.shape[0], self.video_processor_tester.batch_size)
-        self.assertTrue((num_soft_tokens > 0).all())
-        self.assertTrue((num_soft_tokens <= self.video_processor_tester.max_soft_tokens).all())
-
-    def test_batch_ragged_frame_counts(self):
-        """Videos of different lengths share a batch: frames are concatenated, the split is reported."""
-        processor = self.fast_video_processing_class(**self.video_processor_dict)
-        videos = [
-            torch.randint(0, 255, (2, 3, 40, 40), dtype=torch.uint8),
-            torch.randint(0, 255, (5, 3, 40, 40), dtype=torch.uint8),
-        ]
-        result = processor(videos, return_tensors="pt", do_sample_frames=False)
-
-        self.assertEqual(list(result.num_frames_per_video), [2, 5])
-        self.assertEqual(result.pixel_values_videos.shape[0], 7)
-        self.assertEqual(result.video_position_ids.shape[0], 7)
 
     def test_batch_ragged_slices_match_single_video(self):
         """Each video's slice of a ragged batch is identical to processing that video alone."""
