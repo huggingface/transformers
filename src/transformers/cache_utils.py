@@ -922,6 +922,9 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.device = None
         self.dtype = None
         self.record_past = False
+        # Snapshots of recurrent states, one entry per update_recurrent_state call while record_past is True.
+        # Consumed (LIFO) by crop() to undo the last forward pass.
+        self._recurrent_states_history: dict[int, list[torch.Tensor]] = {i: [] for i in range(number_of_states)}
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -977,28 +980,40 @@ class LinearAttentionCacheLayerMixin(ABC):
     @property
     def is_croppable(self) -> bool:
         """
-        Whether `crop` can put this layer back as it was. This is only supported when there are no recurrent states.
+        Whether `crop` can put this layer back as it was. For layers with recurrent states this requires
+        `activate_past_recording()` to have been called before the forward pass so that snapshots are available.
         """
-        if any(self.is_recurrent_states_initialized.values()):
+        if any(self.is_recurrent_states_initialized.values()) and not self.record_past:
             return False
         # If nothing is initialized, return False as we don't yet know whether we will have any recurrent states or no, so let's be
         # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
         # have any recurrent state (they are updated in the same forward)
-        return any(self.is_conv_states_initialized.values())
+        return any(self.is_conv_states_initialized.values()) or self.record_past
 
     def activate_past_recording(self):
         """
-        Calling this function will activate past state recording, meaning that a call to `update_conv_states` will
-        wait for a call to `crop` before restricting the size of the `conv_states` to `conv_kernel_size`, to be able
-        to retrieve previous full states.
+        Activate past state recording for this layer.
+
+        - Conv states: kept at full length until ``crop`` is called (instead of trimming to ``conv_kernel_size``
+          on every update), so the correct left context is available for rollback.
+        - Recurrent states: a snapshot is saved before each ``update_recurrent_state`` call, so ``crop`` can
+          restore to the state prior to the most recent forward pass.
+
+        Must be called before the first forward of the block you intend to roll back.
         """
         self.record_past = True
+        self._recurrent_states_history = {i: [] for i in range(self.number_of_states)}
 
     def crop(self, tokens_to_remove: int):
         """
         Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
         minimal working size, i.e. `conv_kernel_size`. This means that `crop(0)` will not necessarily always be a no-op, as it may
         still remove useless states (i.e. states that are not needed for the next `forward`).
+
+        For recurrent states the rollback granularity is one forward pass: ``crop`` restores the recurrent state
+        to the snapshot taken before the most recent ``update_recurrent_state`` call, regardless of how many tokens
+        are being removed. Sub-forward-pass granularity is not supported because recurrent kernels only expose the
+        final state after processing a chunk, not intermediate per-token states.
         """
         if not self.record_past:
             raise RuntimeError(
@@ -1009,17 +1024,27 @@ class LinearAttentionCacheLayerMixin(ABC):
             raise RuntimeError(
                 "Linear attention layers can only be cropped by passing a negative int, to specify how many tokens to remove"
             )
+        tokens_to_remove = abs(tokens_to_remove)
         for i in range(self.number_of_states):
-            tokens_to_remove = abs(tokens_to_remove)
-            # In this case, simply restrict the size back to `conv_kernel_size` without cropping
-            if tokens_to_remove == 0:
-                self.conv_states[i] = self.conv_states[i][..., -self.conv_kernel_size[i] :]
-            # This both crop the last `tokens_to_remove`, as well as resize the conv states to `conv_kernel_size` as we never
-            # need more for the next forward
-            else:
-                self.conv_states[i] = self.conv_states[i][
-                    ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
-                ]
+            # Roll conv states back by slicing off the rejected tokens, then trim to kernel size
+            if self.is_conv_states_initialized[i]:
+                if tokens_to_remove == 0:
+                    self.conv_states[i] = self.conv_states[i][..., -self.conv_kernel_size[i] :]
+                else:
+                    self.conv_states[i] = self.conv_states[i][
+                        ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
+                    ]
+
+            # Restore recurrent state from the snapshot saved before the last forward pass.
+            # No per-token granularity here — we can only undo the whole last update.
+            if self.is_recurrent_states_initialized[i] and tokens_to_remove > 0:
+                if self._recurrent_states_history[i]:
+                    self.recurrent_states[i].copy_(self._recurrent_states_history[i].pop())
+                else:
+                    logger.warning_once(
+                        "crop() was called but no recurrent state snapshot is available. "
+                        "Call activate_past_recording() before the forward pass you want to roll back."
+                    )
 
     def get_max_length(self) -> int:
         # LinearAttention layer have no sequence length dimension, so simply return -1 here
@@ -1112,7 +1137,11 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         """
         if not self.is_recurrent_states_initialized[state_idx]:
             self.lazy_initialization(recurrent_states=recurrent_states, state_idx=state_idx)
-        # Note that we copy instead of assigning, to preserve the static address for cudagraphs
+        # When recording is active, snapshot the current state before overwriting so crop() can restore it.
+        # The copy is intentional: recurrent_states[state_idx] is a static-address tensor for cudagraphs.
+        if self.record_past:
+            self._recurrent_states_history[state_idx].append(self.recurrent_states[state_idx].clone())
+        # Copy instead of assign to keep the static address for cudagraphs
         self.recurrent_states[state_idx].copy_(recurrent_states)
         return self.recurrent_states[state_idx]
 
@@ -1630,10 +1659,14 @@ class Cache:
 
     def crop(self, tokens_to_remove: int) -> None:
         """
-        Remove `tokens_to_remove` tokens from the current Cache. For layers that do not need to keep all the past states in memory,
-        such as sliding window layers or linear attention layers, this will also restrict the size of the cached states back to their
-        minimal working size. This means that `crop(0)` will not necessarily always be a no-op, as it may still remove useless states
-        (i.e. states that are not needed for the next `forward`) from the Cache.
+        Remove `tokens_to_remove` tokens from the current Cache. For layers that do not need to keep all the past
+        states in memory, such as sliding window layers, this will also restrict the size of the cached states back
+        to their minimal working size. This means that `crop(0)` will not necessarily always be a no-op, as it may
+        still remove useless states (i.e. states that are not needed for the next `forward`) from the Cache.
+
+        For linear attention (recurrent) layers, ``activate_past_recording`` must be called before the forward pass
+        you want to roll back. Conv states are rolled back with per-token granularity; recurrent states are restored
+        to the snapshot taken before the most recent forward pass (not per-token).
         """
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].crop(tokens_to_remove)
