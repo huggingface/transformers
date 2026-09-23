@@ -693,7 +693,8 @@ def collect_findings(
     files = _iter_python_files(targets, excludes)
     if diff_only:
         files = _filter_files_to_patch(files)
-        print(f"Restricting noisy comment scan to {len(files)} Python file(s) changed in this patch.", flush=True)
+        if _patch_added_lines() is not None:
+            print(f"Restricting noisy comment scan to {len(files)} Python file(s) changed in this patch.", flush=True)
 
     if progress:
         _show_progress(0, len(files))
