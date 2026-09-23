@@ -641,17 +641,18 @@ class FrozenFp8ShimTest(unittest.TestCase):
         from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
         from transformers.utils.quantization_config import FineGrainedFP8Config
 
-        # the notice fires when someone actually asks for the frozen scheme, not on import:
-        # importing is what every `transformers.integrations` consumer does
+        # the whole FILE is deprecated, so importing anything out of it is what warns. Safe to
+        # do at module scope only because `_LazyModule` never executes these unless asked: a
+        # plain `import transformers` does not reach them.
         with warnings.catch_warnings(record=True) as raised:
             warnings.simplefilter("always")
             importlib.reload(frozen)
-        self.assertEqual([w for w in raised if "frozen" in str(w.message)], [])
-
-        # ...and it rides the library logger, so it honours transformers' verbosity settings
-        with self.assertLogs("transformers.quantizers.quantizer_finegrained_fp8", level="WARNING") as captured:
-            FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
-        self.assertTrue(any("frozen for backward compatibility" in line for line in captured.output))
+        self.assertTrue(
+            [w for w in raised if issubclass(w.category, DeprecationWarning) and "frozen" in str(w.message)],
+            [str(w.message) for w in raised],
+        )
+        # the quantizer is still constructible — frozen means no new recipes, not removed
+        FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
         # distinct machinery: the frozen classes are not the live ones
         self.assertIsNot(frozen.FP8Linear, FineGrainedLinear)
 
