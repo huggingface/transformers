@@ -583,7 +583,7 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_grayscale_image(self):
         """Test that grayscale (1-channel) images are converted to RGB."""
-        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False)
+        image_processing = self.image_processing_classes["torchvision"](do_image_splitting=False, do_convert_rgb=True)
 
         # Create grayscale image
         grayscale_image = Image.new("L", (256, 256), color=128)

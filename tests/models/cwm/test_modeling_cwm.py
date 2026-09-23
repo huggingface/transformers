@@ -17,15 +17,14 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -87,13 +86,7 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 @slow
-class CwmIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class CwmIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_cwm_integration(self):
