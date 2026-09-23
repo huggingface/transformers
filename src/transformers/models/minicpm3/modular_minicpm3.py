@@ -152,6 +152,22 @@ class MiniCPM3MLP(LlamaMLP):
     pass
 
 
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
+def yarn_apply_mscale(rope_parameters, scaling):
+    if rope_parameters.get("rope_type", "default") != "default":
+        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
+        if mscale_all_dim:
+            scaling_factor = rope_parameters["factor"]
+            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            scaling = scaling * mscale * mscale
+    return scaling
+
+
 class MiniCPM3Attention(DeepseekV2Attention):
     """
     Multi-head Latent Attention (MLA), structurally identical to `DeepseekV2Attention`.
