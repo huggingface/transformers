@@ -66,15 +66,13 @@ adds `num_lookahead_frames`, the number of trailing look-ahead frames the model 
 they open the next chunk. The forward returns the `speaker_cache` to pass to the next call. The last chunk of a
 session is extracted with `is_last_audio_chunk=True`: it has no look-ahead, so every remaining frame is scored.
 
-
-| `streaming_mode`          | Latency* |
+| `streaming_mode`          | Latency¹ |
 | ------------------------- | -------- |
 | `"low_latency"` (default) | 1.04 s   |
 | `"very_low_latency"`      | 0.64 s   |
 | `"ultra_low_latency"`     | 0.32 s   |
 
-
-\* Audio to wait for before the model runs on a chunk: the chunk plus its look-ahead, excluding compute time.
+¹ Audio to wait for before the model runs on a chunk: the chunk plus its look-ahead, excluding compute time.
 
 ```python
 import torch
