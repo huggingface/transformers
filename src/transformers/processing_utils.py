@@ -2265,46 +2265,20 @@ class ProcessorMixin(PushToHubMixin):
                     replacement_offsets = out.pop("text_replacement_offsets", None)
                     if replacement_offsets is None or len(replacement_offsets) == 0:
                         replacement_offsets = [[]] * len(input_ids)
-                    attention_mask = out.get("attention_mask")
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        offsets = offset_mapping[i]
-                        # Padding tokens have `(0, 0)` offsets, which breaks the sorted order `bisect` relies on when
-                        # padding on the right. Restrict the search to the non-padding positions
-                        first, last = 0, len(offsets)
-                        if attention_mask is not None:
-                            kept = [pos for pos, keep in enumerate(attention_mask[i]) if keep]
-                            if kept:
-                                first, last = kept[0], kept[-1] + 1
-                        offset_starts = [start for start, end in offsets[first:last]]
                         placeholder_ends = [r["span"][1] for r in replacement_offsets[i]]
                         chars_gained = [0] + [r["new_span"][1] - r["span"][1] for r in replacement_offsets[i]]
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            assistant_start_char, assistant_end_char = (
-                                char + chars_gained[bisect.bisect_right(placeholder_ends, char)]
-                                for char in (assistant_start_char, assistant_end_char)
+                        for span in generation_indices[i]:
+                            # Shift the span past any placeholders that were expanded before it
+                            start_char, end_char = (
+                                char + chars_gained[bisect.bisect_right(placeholder_ends, char)] for char in span
                             )
-                            start_pos = first + bisect.bisect_left(offset_starts, assistant_start_char)
-                            end_pos = first + bisect.bisect_left(offset_starts, assistant_end_char)
-                            # The span may start inside the previous token, e.g. `▁The` absorbing the newline before it
-                            if (
-                                start_pos > first
-                                and offsets[start_pos - 1][0] < assistant_start_char < offsets[start_pos - 1][1]
-                            ):
-                                start_pos -= 1
-
-                            if not (
-                                start_pos >= 0
-                                and start_pos < len(offsets)
-                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
-                            ):
-                                # start_token is out of bounds maybe due to truncation.
-                                continue
-                            # Ensure end_pos is also within bounds
-                            if end_pos > len(input_ids[i]):
-                                end_pos = len(input_ids[i])
-                            for token_id in range(start_pos, end_pos or len(input_ids[i])):
-                                current_mask[token_id] = 1
+                            # Mask every token overlapping the span. Zero-width tokens (padding, added specials) never
+                            # match, and a span truncated away simply matches nothing
+                            for pos, (token_start, token_end) in enumerate(offset_mapping[i]):
+                                if token_start < end_char and token_end > start_char:
+                                    current_mask[pos] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
                     out.convert_to_tensors(tensor_type=return_tensors)
