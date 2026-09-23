@@ -19,7 +19,10 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_nemotron_h_omni import *
+    from .image_processing_nemotron_h_omni import *
     from .modeling_nemotron_h_omni import *
+    from .processing_nemotron_h_omni import *
+    from .video_processing_nemotron_h_omni import *
 else:
     import sys
 

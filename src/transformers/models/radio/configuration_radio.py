@@ -88,6 +88,14 @@ class RadioConfig(PreTrainedConfig):
         self.norm_std = list(self.norm_std)
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        super().validate_architecture()
+        # packed video is told apart from images by its channel count, so it needs at least 2 frames per patch
+        if self.video_temporal_patch_size is not None and self.video_temporal_patch_size < 2:
+            raise ValueError(
+                f"`video_temporal_patch_size` must be at least 2 or `None`, got {self.video_temporal_patch_size}."
+            )
+
     @property
     def num_summary_tokens(self) -> int:
         """Number of skipped prefix tokens (cls + registers) before spatial features."""

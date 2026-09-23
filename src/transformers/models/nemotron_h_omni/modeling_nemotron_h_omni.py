@@ -22,11 +22,13 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 
@@ -41,120 +43,47 @@ class NemotronH_Omni_RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # Unlike Llama, the weight multiply is kept in fp32 and only the result is cast back to the input
+        # dtype, matching the reference implementation.
         return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
-    """Encode pre-extracted mel features with Parakeet and project them into LLM space, returning
-    flattened embeddings ready to scatter onto `<audio>` positions. Mel extraction itself lives in
-    the processor.
-    """
-
-    def __init__(self, config, llm_hidden_size: int):
+class NemotronH_Omni_Reasoning_V3MultiModalProjector(nn.Module):
+    def __init__(self, input_size: int, hidden_size: int, output_size: int, bias: bool = False, eps: float = 1e-5):
         super().__init__()
-        self.sound_encoder = AutoModel.from_config(config)
-        self.sound_projection = NemotronH_Omni_Reasoning_V3MLP(
-            config.hidden_size,
-            config.projection_hidden_size,
-            llm_hidden_size,
-            bias=config.projection_bias,
-        )
+        self.layer_norm = NemotronH_Omni_RMSNorm(input_size, eps=eps)
+        self.linear_1 = nn.Linear(input_size, hidden_size, bias=bias)
+        self.act = ACT2FN["relu2"]
+        self.linear_2 = nn.Linear(hidden_size, output_size, bias=bias)
 
-    def forward(self, input_features, input_features_mask=None) -> torch.Tensor:
-        weight = self.sound_encoder.subsampling.linear.weight
-        input_features = input_features.to(device=weight.device, dtype=weight.dtype)
-        attention_mask = input_features_mask.to(weight.device) if input_features_mask is not None else None
-
-        encoder_states = self.sound_encoder(
-            input_features=input_features, attention_mask=attention_mask
-        ).last_hidden_state
-        sound_embeds = self.sound_projection(encoder_states.to(torch.bfloat16))
-
-        # Multiple clips are batch-padded; keep only each clip's real (subsampled) length before flattening.
-        if sound_embeds.dim() == 3 and sound_embeds.shape[0] > 1 and attention_mask is not None:
-            lengths = self.sound_encoder._get_subsampling_output_length(attention_mask.sum(-1) + 1)
-            positions = torch.arange(sound_embeds.shape[1], device=sound_embeds.device)
-            return sound_embeds[positions[None, :] < lengths[:, None]]
-        return sound_embeds.reshape(-1, sound_embeds.shape[-1])
+    def forward(self, image_features):
+        hidden_states = self.layer_norm(image_features)
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
-class NemotronH_Omni_Reasoning_V3MLP(nn.Module):
-    """Projector MLP: RMSNorm -> linear1 -> ReLU² -> linear2 (NemotronHMLP-style).
-
-    Used both for the vision-to-LLM projector (`mlp1`) and the sound-to-LLM projection. The
-    `linear1`/`linear2` submodule names match the Megatron sound-projection checkpoint structure
-    (`sound_projection.{norm,linear1,linear2}.weight`); pass `bias=True` for the sound projection.
-    """
-
-    def __init__(
-        self, in_features: int, hidden_features: int, out_features: int, bias: bool = False, eps: float = 1e-5
-    ):
-        super().__init__()
-        self.norm = NemotronH_Omni_RMSNorm(in_features, eps=eps)
-        self.linear1 = nn.Linear(in_features, hidden_features, bias=bias)
-        self.linear2 = nn.Linear(hidden_features, out_features, bias=bias)
-        self.act_fn = ACT2FN["relu2"]
-
-    def forward(self, x):
-        return self.linear2(self.act_fn(self.linear1(self.norm(x))))
-
-
-class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
-    """Project vision-tower features into LLM space: pixel-shuffle downsampling then `mlp1`.
-
-    Shared by the image and the temporally-packed video path, which differ only in how the tower
-    is run; both hand their `(num_patches, height * width, vit_hidden_size)` features to `forward`.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.downsample_ratio = config.downsample_ratio
-        # Mirror Megatron training behavior: when the language model has MTP,
-        # Megatron-Core's TransformerBlock places a final LayerNorm with the last
-        # layer of every block built from the (shared) config -- including the
-        # vision tower, whose config inherits `mtp_num_layers` from the language
-        # model. The vision tower output is therefore layer-normalized before the
-        # projector. LayerNorm is applied per token, so normalizing the RADIO
-        # features here is exactly equivalent to Megatron's block-internal
-        # placement before class-token stripping.
-        # CODEPATH: only checkpoints whose language model carries MTP layers build this norm.
-        if (getattr(config.llm_config, "num_nextn_predict_layers", 0) or 0) > 0:
-            self.vision_final_layernorm = nn.LayerNorm(config.vit_hidden_size, eps=config.vision_config.layer_norm_eps)
-        else:
-            self.vision_final_layernorm = None
-        self.mlp1 = NemotronH_Omni_Reasoning_V3MLP(
-            config.vit_hidden_size * int(1 / config.downsample_ratio) ** 2,
-            config.projector_hidden_size,
-            config.llm_config.hidden_size,
-        )
-
-    def pixel_shuffle(self, x, scale_factor=0.5):
-        n, w, h, c = x.size()
-        x = x.view(n, w, int(h * scale_factor), int(c / scale_factor))
-        x = x.permute(0, 2, 1, 3).contiguous()
-        x = x.view(
-            n,
-            int(h * scale_factor),
-            int(w * scale_factor),
-            int(c / (scale_factor * scale_factor)),
-        )
-        return x.permute(0, 2, 1, 3).contiguous()
-
-    def forward(self, vit_embeds, height, width):
-        if self.vision_final_layernorm is not None:
-            vit_embeds = self.vision_final_layernorm(vit_embeds)
-        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], height, width, -1)
-        vit_embeds = self.pixel_shuffle(vit_embeds, scale_factor=self.downsample_ratio)
-        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], -1, vit_embeds.shape[-1])
-        return self.mlp1(vit_embeds)
+@auto_docstring
+class NemotronH_Omni_Reasoning_V3PreTrainedModel(PreTrainedModel):
+    config: NemotronH_Omni_Reasoning_V3_Config
+    main_input_name = "input_ids"
+    input_modalities = ("image", "video", "audio", "text")
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _is_stateful = True
+    # mel extraction runs in the processor, so the checkpoint's in-encoder featurizer buffers are unused
+    _keys_to_ignore_on_load_unexpected = [r"audio_tower\.feature_extractor\."]
 
 
 def compute_retention_mask(
@@ -208,75 +137,99 @@ def compute_retention_mask(
     return mask
 
 
-class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
-    config_class = NemotronH_Omni_Reasoning_V3_Config
-    main_input_name = "input_ids"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn = True
-
+class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, GenerationMixin):
     def __init__(self, config: NemotronH_Omni_Reasoning_V3_Config):
         super().__init__(config)
-
-        self.img_context_token_id = config.img_context_token_id
-
-        self.language_model = AutoModelForCausalLM.from_config(config.llm_config)
-        self.vision_model = AutoModel.from_config(config.vision_config)
-        self.vision_model.make_preprocessor_external()
-
-        llm_hidden_size = config.llm_config.hidden_size
-
+        self.image_token_id = config.image_token_id
+        self.audio_token_id = config.audio_token_id
         self.video_pruning_rate = config.video_pruning_rate
         self.video_temporal_patch_dim = config.video_temporal_patch_size
 
-        self.vision_projector = NemotronH_Omni_Reasoning_V3VisionProjector(config)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.vision_model = AutoModel.from_config(config.vision_config)
+        self.vision_model.make_preprocessor_external()
+        self.multi_modal_projector = NemotronH_Omni_Reasoning_V3MultiModalProjector(
+            config.vision_hidden_size * int(1 / config.downsample_ratio) ** 2,
+            config.projector_hidden_size,
+            config.text_config.hidden_size,
+        )
 
-        self.sound_context_token_id = config.sound_context_token_id
-        # CODEPATH: `nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16` ships a `sound_config` and
-        # takes the audio branch.
-        if config.sound_config is not None:
-            self.sound_projector = NemotronH_Omni_Reasoning_V3SoundProjector(config.sound_config, llm_hidden_size)
-        else:
-            self.sound_projector = None
+        # CODEPATH: `nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16` ships an `audio_config` and builds the
+        # audio tower; configs without one have no audio branch.
+        self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
+        self.embed_audio = (
+            # CODEPATH: same split as `audio_tower` above.
+            NemotronH_Omni_Reasoning_V3MultiModalProjector(
+                config.audio_config.hidden_size,
+                config.audio_config.projection_hidden_size,
+                config.text_config.hidden_size,
+                bias=config.audio_config.projection_bias,
+            )
+            if config.audio_config is not None
+            else None
+        )
 
         self.all_tied_weights_keys = {}
 
         self.post_init()
 
+    def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5) -> torch.Tensor:
+        batch_size, width, height, channels = vision_features.size()
+        vision_features = vision_features.view(
+            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
+        )
+        vision_features = vision_features.transpose(1, 2).contiguous()
+        vision_features = vision_features.view(
+            batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
+        )
+        return vision_features.transpose(1, 2).contiguous()
+
+    def project_vision_features(self, vision_features: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """Pixel-shuffle the `(num_images, height * width, vision_hidden_size)` tower features and project them."""
+        vision_features = vision_features.reshape(vision_features.shape[0], height, width, -1)
+        vision_features = self.pixel_shuffle(vision_features, scale_factor=self.config.downsample_ratio)
+        vision_features = vision_features.reshape(vision_features.shape[0], -1, vision_features.shape[-1])
+        return self.multi_modal_projector(vision_features)
+
     @can_return_tuple
     @auto_docstring
-    def get_image_features(self, pixel_values, image_flags=None, **kwargs):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_hw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
-        image_flags (`torch.LongTensor` of shape `(num_images, 1)`, *optional*):
-            Marks which projected image tiles are real; tiles flagged with `0` are dropped before
-            the features are scattered onto the placeholder tokens.
+        pixel_values (`torch.FloatTensor` of shape `(total_patches, num_channels * patch_size**2)`):
+            Flattened patches of all images, concatenated.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
+            Patch grid `(height, width)` of each image.
         """
-        # `pixel_values` is a list when tiles of differing sizes are batched; each runs the tower
-        # separately and their projected tokens are concatenated.
-        tiles = list(pixel_values) if isinstance(pixel_values, (list, tuple)) else [pixel_values]
-        last_hidden_states, image_embeds = [], []
-        for tile in tiles:
-            tile = tile.to(dtype=self.vision_model.config.torch_dtype)
-            vision_outputs = self.vision_model(tile, **kwargs)
-            height, width = tile.shape[-2:]
-            patch_size = self.vision_model.patch_size
-            last_hidden_states.append(vision_outputs.last_hidden_state)
-            image_embeds.append(
-                self.vision_projector(vision_outputs.features, height // patch_size, width // patch_size)
-            )
+        pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
+        vision_outputs = self.vision_model(pixel_values, image_grid_hw=image_grid_hw, **kwargs)
 
-        image_embeds = torch.cat(image_embeds, dim=0)
-        if image_flags is not None:
-            image_embeds = image_embeds[image_flags.squeeze(-1) == 1]
+        image_features = vision_outputs.features.split(image_grid_hw.prod(-1).tolist())
+        image_features = torch.cat(
+            [
+                self.pixel_shuffle(
+                    features.view(1, grid_height, grid_width, -1), scale_factor=self.config.downsample_ratio
+                ).flatten(0, 2)
+                for features, (grid_height, grid_width) in zip(image_features, image_grid_hw.tolist())
+            ]
+        )
+
         return BaseModelOutputWithPooling(
-            last_hidden_state=torch.cat(last_hidden_states, dim=0),
-            pooler_output=image_embeds,
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=self.multi_modal_projector(image_features),
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
 
     @can_return_tuple
     @auto_docstring
-    def get_video_features(self, pixel_values_videos, **kwargs):
+    def get_video_features(
+        self, pixel_values_videos: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithPooling:
         pixel_values_videos = pixel_values_videos.to(dtype=self.vision_model.config.torch_dtype)
         temporal_patch_dim = self.video_temporal_patch_dim
         num_frames, channels, height, width = pixel_values_videos.shape
@@ -293,47 +246,87 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         packed = pixel_values_videos.reshape(
             num_frames // temporal_patch_dim, temporal_patch_dim * channels, height, width
         )
-        vision_outputs = self.vision_model(packed, use_video_patch_projection=True, **kwargs)
+        vision_outputs = self.vision_model(packed, **kwargs)
         patch_size = self.vision_model.patch_size
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=self.vision_projector(vision_outputs.features, height // patch_size, width // patch_size),
+            pooler_output=self.project_vision_features(
+                vision_outputs.features, height // patch_size, width // patch_size
+            ),
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Encodes mel features with the audio tower and projects them into language model space."
+    )
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(num_clips, num_frames, num_mel_bins)`):
+            Mel features produced by the processor.
+        input_features_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
+            Mask marking the real mel frames of each padded clip.
+        """
+        if self.audio_tower is None:
+            raise ValueError("Audio features were requested, but the model was initialized without an `audio_config`.")
 
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+        input_features = input_features.to(self.audio_tower.device, self.audio_tower.dtype)
+        if input_features_mask is not None:
+            input_features_mask = input_features_mask.to(self.audio_tower.device)
+        audio_outputs = self.audio_tower(
+            input_features=input_features, attention_mask=input_features_mask, return_dict=True, **kwargs
+        )
+        audio_embeds = self.embed_audio(audio_outputs.last_hidden_state)
 
+        # Clips are batch-padded; keep only each clip's real (subsampled) length before flattening.
+        if input_features_mask is not None:
+            lengths = self.audio_tower._get_subsampling_output_length(input_features_mask.sum(-1) + 1)
+            positions = torch.arange(audio_embeds.shape[1], device=audio_embeds.device)
+            audio_embeds = audio_embeds[positions[None, :] < lengths[:, None].to(audio_embeds.device)]
+        else:
+            audio_embeds = audio_embeds.reshape(-1, audio_embeds.shape[-1])
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=audio_outputs.last_hidden_state,
+            pooler_output=audio_embeds,
+            hidden_states=audio_outputs.hidden_states,
+            attentions=audio_outputs.attentions,
+        )
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        image_grid_hw: torch.LongTensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        image_flags: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
-        inputs_embeds=None,
+        inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, num_frames)`, *optional*):
+        pixel_values (`torch.FloatTensor` of shape `(total_patches, num_channels * patch_size**2)`, *optional*):
+            Flattened patches of all images, concatenated, as returned by the image processor.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            Patch grid `(height, width)` of each image in `pixel_values`.
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_frames, num_mel_bins)`, *optional*):
             Mel features produced by the processor, encoded and scattered onto the audio
             placeholder tokens.
         input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask marking the real mel frames of each padded clip.
-        image_flags (`torch.LongTensor` of shape `(num_images, 1)`, *optional*):
-            Marks which projected image tiles are real; tiles flagged with `0` are dropped before
-            the features are scattered onto the placeholder tokens.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -341,15 +334,15 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         # Multimodal merges need `input_ids` to locate the placeholder tokens; skip them on the
         # cached decode steps and the inputs-embeds-only path where `input_ids` is absent.
         if pixel_values is not None and input_ids is not None:
-            image_embeds = self.get_image_features(pixel_values, image_flags=image_flags).pooler_output
+            image_embeds = self.get_image_features(pixel_values, image_grid_hw).pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            image_mask = (input_ids == self.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_embeds)
 
         if pixel_values_videos is not None and input_ids is not None:
             video_embeds = self.get_video_features(pixel_values_videos).pooler_output
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            video_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            video_mask = (input_ids == self.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_embeds)
 
             if self.video_pruning_rate > 0:
@@ -361,17 +354,17 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
                     q=self.video_pruning_rate,
                 )
                 retention_mask = torch.ones_like(input_ids, dtype=torch.bool)
-                retention_mask[input_ids == self.img_context_token_id] = evs_mask.view(-1)
+                retention_mask[input_ids == self.image_token_id] = evs_mask.view(-1)
                 inputs_embeds = inputs_embeds[retention_mask].unsqueeze(0)
                 if attention_mask is not None:
                     attention_mask = attention_mask[retention_mask].unsqueeze(0)
                 input_ids = input_ids[retention_mask].unsqueeze(0)
 
-        if input_features is not None and self.sound_projector is not None and input_ids is not None:
-            sound_embeds = self.sound_projector(input_features, input_features_mask)
-            sound_embeds = sound_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            sound_mask = (input_ids == self.sound_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(sound_mask.to(inputs_embeds.device), sound_embeds)
+        if input_features is not None and self.audio_tower is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features, input_features_mask).pooler_output
+            audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            audio_mask = (input_ids == self.audio_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(audio_mask.to(inputs_embeds.device), audio_embeds)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -386,7 +379,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.llm_config.vocab_size, **kwargs
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         return CausalLMOutputWithPast(
@@ -397,45 +390,42 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
+    def _expand_inputs_for_generation(
         self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        input_features=None,
-        input_features_mask=None,
-        image_flags=None,
-        use_cache=True,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            input_features=input_features,
-            input_features_mask=input_features_mask,
-            image_flags=image_flags,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict]:
+        # packed `pixel_values` / `image_grid_hw` have no batch dimension, so each sample's images are repeated
+        # together instead of being interleaved along the first dimension
+        pixel_values = model_kwargs.pop("pixel_values", None)
+        image_grid_hw = model_kwargs.pop("image_grid_hw", None)
+        if expand_size > 1 and pixel_values is not None and input_ids is not None:
+            merge_size = round(1 / self.config.downsample_ratio)
+            tokens_per_image = (image_grid_hw.prod(-1) // merge_size**2).tolist()
+            images_per_sample, image_idx = [], 0
+            for num_tokens in (input_ids == self.image_token_id).sum(-1).tolist():
+                start = image_idx
+                while image_idx < len(tokens_per_image) and num_tokens >= tokens_per_image[image_idx]:
+                    num_tokens -= tokens_per_image[image_idx]
+                    image_idx += 1
+                images_per_sample.append(image_idx - start)
+
+            # images are only merged at their placeholders, so without them in `input_ids` they stay unused
+            if sum(images_per_sample) == len(tokens_per_image):
+                sample_grids = image_grid_hw.split(images_per_sample)
+                sample_patches = pixel_values.split([int(grid.prod(-1).sum()) for grid in sample_grids])
+                pixel_values = torch.cat([patches for patches in sample_patches for _ in range(expand_size)])
+                image_grid_hw = torch.cat([grid for grid in sample_grids for _ in range(expand_size)])
+
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size, is_encoder_decoder=is_encoder_decoder, input_ids=input_ids, **model_kwargs
         )
-
-        # The multimodal inputs are only merged on the prefill step; drop them once the cache is warm.
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-            model_inputs["input_features"] = None
-            model_inputs["input_features_mask"] = None
-            model_inputs["image_flags"] = None
-
-        return model_inputs
+        if pixel_values is not None:
+            model_kwargs["pixel_values"] = pixel_values
+            model_kwargs["image_grid_hw"] = image_grid_hw
+        return input_ids, model_kwargs
 
 
-__all__ = ["NemotronH_Omni_Reasoning_V3"]
+__all__ = ["NemotronH_Omni_Reasoning_V3PreTrainedModel", "NemotronH_Omni_Reasoning_V3"]

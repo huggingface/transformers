@@ -36,8 +36,8 @@ class NemotronH_Omni_Reasoning_V3ImageProcessingTest(unittest.TestCase):
 
     def image_processor(self, **kwargs):
         defaults = {
-            "norm_mean": [0.5, 0.5, 0.5],
-            "norm_std": [0.5, 0.5, 0.5],
+            "image_mean": [0.5, 0.5, 0.5],
+            "image_std": [0.5, 0.5, 0.5],
             "patch_size": self.patch_size,
             "downsample_ratio": self.downsample_ratio,
             "min_num_patches": 4,
@@ -50,7 +50,7 @@ class NemotronH_Omni_Reasoning_V3ImageProcessingTest(unittest.TestCase):
     def test_properties_round_trip(self):
         processor = self.image_processor()
         restored = NemotronH_Omni_Reasoning_V3ImageProcessor.from_dict(processor.to_dict())
-        for attr in ("norm_mean", "norm_std", "patch_size", "min_num_patches", "max_num_patches"):
+        for attr in ("image_mean", "image_std", "patch_size", "min_num_patches", "max_num_patches"):
             self.assertEqual(getattr(restored, attr), getattr(processor, attr))
 
     def test_single_image_output_shape(self):
@@ -58,19 +58,18 @@ class NemotronH_Omni_Reasoning_V3ImageProcessingTest(unittest.TestCase):
         image = Image.new("RGB", (128, 96))
         out = processor(images=image, return_tensors="pt")
 
-        pixel_values = out["pixel_values"]
-        self.assertEqual(pixel_values.ndim, 4)
-        self.assertEqual(pixel_values.shape[1], 3)
-        # the resized image must land on a whole number of `patch_size` patches
-        self.assertEqual(pixel_values.shape[-2] % self.patch_size, 0)
-        self.assertEqual(pixel_values.shape[-1] % self.patch_size, 0)
+        pixel_values, image_grid_hw = out["pixel_values"], out["image_grid_hw"]
+        self.assertEqual(image_grid_hw.shape, (1, 2))
+        self.assertEqual(pixel_values.shape, (int(image_grid_hw.prod()), 3 * self.patch_size**2))
+        # both sides of the grid are multiples of the pixel-shuffle factor
+        self.assertTrue((image_grid_hw % 2 == 0).all())
 
     def test_patch_budget_is_respected(self):
         processor = self.image_processor(min_num_patches=4, max_num_patches=16)
         out = processor(images=Image.new("RGB", (512, 512)), return_tensors="pt")
 
-        height, width = out["pixel_values"].shape[-2:]
-        num_patches = (height // self.patch_size) * (width // self.patch_size)
+        num_patches = int(out["image_grid_hw"].prod())
+        self.assertEqual(out["pixel_values"].shape[0], num_patches)
         self.assertGreaterEqual(num_patches, 4)
         self.assertLessEqual(num_patches, 16)
 
@@ -78,10 +77,39 @@ class NemotronH_Omni_Reasoning_V3ImageProcessingTest(unittest.TestCase):
         processor = self.image_processor()
         images = [Image.new("RGB", (128, 96)), Image.new("RGB", (128, 96))]
         out = processor(images=images, return_tensors="pt")
-        self.assertEqual(out["pixel_values"].shape[0], 2)
+        self.assertEqual(out["image_grid_hw"].shape, (2, 2))
+        self.assertEqual(out["pixel_values"].shape[0], int(out["image_grid_hw"].prod(-1).sum()))
 
     def test_normalization_uses_configured_statistics(self):
-        processor = self.image_processor(norm_mean=[0.0, 0.0, 0.0], norm_std=[1.0, 1.0, 1.0])
+        processor = self.image_processor(image_mean=[0.0, 0.0, 0.0], image_std=[1.0, 1.0, 1.0])
         out = processor(images=Image.new("RGB", (128, 96), color=(255, 255, 255)), return_tensors="pt")
         # with mean 0 / std 1 a fully white image stays at 1.0
         self.assertTrue(torch.allclose(out["pixel_values"], torch.ones_like(out["pixel_values"])))
+
+    def test_legacy_norm_statistics_are_accepted(self):
+        processor = NemotronH_Omni_Reasoning_V3ImageProcessor(norm_mean=[0.1, 0.2, 0.3], norm_std=[0.4, 0.5, 0.6])
+        self.assertEqual(tuple(processor.image_mean), (0.1, 0.2, 0.3))
+        self.assertEqual(tuple(processor.image_std), (0.4, 0.5, 0.6))
+        self.assertNotIn("norm_mean", processor.to_dict())
+
+    def test_call_kwargs_override_defaults(self):
+        processor = self.image_processor(min_num_patches=4, max_num_patches=64)
+        image = Image.new("RGB", (512, 512))
+        default = processor(images=image, return_tensors="pt")["image_grid_hw"]
+        capped = processor(images=image, max_num_patches=16, return_tensors="pt")["image_grid_hw"]
+        self.assertEqual(int(default.prod()), 64)
+        self.assertEqual(int(capped.prod()), 16)
+
+    def test_images_of_different_sizes_are_packed(self):
+        processor = self.image_processor()
+        out = processor(images=[Image.new("RGB", (128, 96)), Image.new("RGB", (96, 128))], return_tensors="pt")
+        self.assertIsInstance(out["pixel_values"], torch.Tensor)
+        self.assertNotEqual(out["image_grid_hw"][0].tolist(), out["image_grid_hw"][1].tolist())
+        self.assertEqual(out["pixel_values"].shape[0], int(out["image_grid_hw"].prod(-1).sum()))
+
+    def test_patches_are_channel_major(self):
+        processor = self.image_processor(image_mean=[0.0, 0.0, 0.0], image_std=[1.0, 1.0, 1.0])
+        out = processor(images=Image.new("RGB", (64, 64), color=(255, 0, 0)), return_tensors="pt")
+        first_patch = out["pixel_values"][0].view(3, self.patch_size, self.patch_size)
+        self.assertTrue(torch.allclose(first_patch[0], torch.ones_like(first_patch[0])))
+        self.assertTrue(torch.allclose(first_patch[1:], torch.zeros_like(first_patch[1:])))

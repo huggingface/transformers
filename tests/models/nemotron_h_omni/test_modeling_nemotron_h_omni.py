@@ -15,7 +15,12 @@
 
 import unittest
 
-from transformers import AutoTokenizer, NemotronH_Omni_Reasoning_V3_Config, is_torch_available
+from transformers import (
+    NemotronH_Omni_Reasoning_V3_Config,
+    ParakeetFeatureExtractor,
+    PreTrainedTokenizerFast,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
@@ -37,6 +42,7 @@ if is_torch_available():
         NemotronH_Omni_Reasoning_V3,
         NemotronH_Omni_Reasoning_V3ImageProcessor,
         NemotronH_Omni_Reasoning_V3Processor,
+        NemotronH_Omni_Reasoning_V3VideoProcessor,
     )
 
 
@@ -47,7 +53,8 @@ class NemotronHOmniVisionText2TextModelTester:
     the RADIO patch-embed + pixel-shuffle:
         num_image_token = (force_image_size // patch_size) ** 2 * downsample_ratio ** 2
                         = (32 // 16) ** 2 * 0.5 ** 2 = 1
-    so each sequence must contain exactly one `img_context_token_id`.
+    so each sequence must contain exactly one `image_token_id`. Likewise each audio clip of
+    `num_audio_frames` mel frames yields `num_audio_token` embeddings after the 8x conv subsampling.
     """
 
     def __init__(
@@ -58,9 +65,12 @@ class NemotronHOmniVisionText2TextModelTester:
         force_image_size=32,
         patch_size=16,
         downsample_ratio=0.5,
-        vit_hidden_size=32,
+        vision_hidden_size=32,
         projector_hidden_size=64,
-        img_context_token_id=1,
+        image_token_id=1,
+        audio_token_id=2,
+        num_audio_frames=16,
+        video_temporal_patch_size=2,
         is_training=False,
     ):
         self.parent = parent
@@ -69,14 +79,17 @@ class NemotronHOmniVisionText2TextModelTester:
         self.force_image_size = force_image_size
         self.patch_size = patch_size
         self.downsample_ratio = downsample_ratio
-        self.vit_hidden_size = vit_hidden_size
+        self.vision_hidden_size = vision_hidden_size
         self.projector_hidden_size = projector_hidden_size
-        self.img_context_token_id = img_context_token_id
+        self.image_token_id = image_token_id
+        self.audio_token_id = audio_token_id
+        self.num_audio_frames = num_audio_frames
+        self.video_temporal_patch_size = video_temporal_patch_size
         self.is_training = is_training
 
         self.vocab_size = 99
         self.hidden_size = 32
-        self.llm_config = {
+        self.text_config = {
             "vocab_size": self.vocab_size,
             "hidden_size": self.hidden_size,
             "layers_block_type": ["linear_attention", "moe", "full_attention", "moe"],
@@ -100,7 +113,7 @@ class NemotronHOmniVisionText2TextModelTester:
             "use_mamba_kernels": False,
         }
         self.vision_config = {
-            "hidden_size": self.vit_hidden_size,
+            "hidden_size": self.vision_hidden_size,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "mlp_ratio": 2.0,
@@ -111,12 +124,14 @@ class NemotronHOmniVisionText2TextModelTester:
             # >= 2 cls tokens so the default summary_idxs=[0, 1] is in-bounds
             "num_cls_tokens": 2,
             "num_registers": 1,
+            # must match the top-level value; the tower builds its video patch projection from it
+            "video_temporal_patch_size": video_temporal_patch_size,
         }
         # The video path reuses the same RADIO tower, so its expected layer counts are the vision ones.
         self.video_config = self.vision_config
-        # Tiny Parakeet encoder + projection. Kept enabled so the `sound_encoder` / `sound_projection`
+        # Tiny Parakeet encoder + projection. Kept enabled so the `audio_tower` / `embed_audio`
         # weight renames in the conversion mapping have matching keys to check.
-        self.sound_config = {
+        self.audio_config = {
             "model_type": "parakeet",
             "hidden_size": 32,
             "num_attention_heads": 2,
@@ -133,41 +148,54 @@ class NemotronHOmniVisionText2TextModelTester:
             "projection_bias": False,
             "sampling_rate": 16000,
         }
-        self.num_hidden_layers = len(self.llm_config["layers_block_type"])
-        self.num_attention_heads = self.llm_config["num_attention_heads"]
+        self.num_hidden_layers = len(self.text_config["layers_block_type"])
+        self.num_attention_heads = self.text_config["num_attention_heads"]
         self.num_image_token = int((force_image_size // patch_size) ** 2 * (downsample_ratio**2))
+        self.num_audio_token = num_audio_frames // self.audio_config["subsampling_factor"]
 
     def get_config(self):
         return NemotronH_Omni_Reasoning_V3_Config(
             vision_config=self.vision_config,
-            llm_config=self.llm_config,
-            sound_config=self.sound_config,
+            text_config=self.text_config,
+            audio_config=self.audio_config,
             force_image_size=self.force_image_size,
             downsample_ratio=self.downsample_ratio,
-            vit_hidden_size=self.vit_hidden_size,
+            vision_hidden_size=self.vision_hidden_size,
             projector_hidden_size=self.projector_hidden_size,
-            img_context_token_id=self.img_context_token_id,
+            image_token_id=self.image_token_id,
+            audio_token_id=self.audio_token_id,
+            video_temporal_patch_size=self.video_temporal_patch_size,
             attn_implementation="eager",
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        # ids in [3, vocab) so they never collide with img_context_token_id (1)
+        # ids in [3, vocab) so they never collide with image_token_id (1) or audio_token_id (2)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 3) + 3
-        input_ids[:, 1 : 1 + self.num_image_token] = self.img_context_token_id
+        audio_start = 1 + self.num_image_token
+        audio_end = audio_start + self.num_audio_token
+        input_ids[:, 1:audio_start] = self.image_token_id
+        input_ids[:, audio_start:audio_end] = self.audio_token_id
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-        attention_mask[:, : 1 + self.num_image_token] = 1  # keep image tokens unmasked
-        pixel_values = floats_tensor([self.batch_size, 3, self.force_image_size, self.force_image_size])
-        image_flags = torch.ones(self.batch_size, 1, dtype=torch.long)
-        return config, input_ids, attention_mask, pixel_values, image_flags
+        attention_mask[:, :audio_end] = 1  # keep multimodal tokens unmasked
+        grid_size = self.force_image_size // self.patch_size
+        pixel_values = floats_tensor([self.batch_size * grid_size**2, 3 * self.patch_size**2])
+        image_grid_hw = torch.tensor([[grid_size, grid_size]] * self.batch_size)
+        input_features = floats_tensor([self.batch_size, self.num_audio_frames, self.audio_config["num_mel_bins"]])
+        input_features_mask = torch.ones(self.batch_size, self.num_audio_frames, dtype=torch.long)
+        return config, input_ids, attention_mask, pixel_values, image_grid_hw, input_features, input_features_mask
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_ids, attention_mask, pixel_values, image_flags = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask, pixel_values, image_grid_hw, input_features, input_features_mask = (
+            self.prepare_config_and_inputs()
+        )
         inputs_dict = {
             "pixel_values": pixel_values,
+            "image_grid_hw": image_grid_hw,
+            "input_features": input_features,
+            "input_features_mask": input_features_mask,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "image_flags": image_flags,
         }
         return config, inputs_dict
 
@@ -180,11 +208,27 @@ class NemotronHOmniModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     # The video path packs `video_temporal_patch_dim` frames into a single tower pass, so the
     # vision batch dim is deliberately smaller than `pixel_values_videos.shape[0]`.
     skip_test_video_features_output_shape = True
+    # packed image patches have no batch dimension
+    skip_test_image_features_output_shape = True
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
         self.model_tester = NemotronHOmniVisionText2TextModelTester(self)
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        # packed patches cannot be sliced per sample like the other inputs; keep the patches of the kept images
+        grid_size = self.model_tester.force_image_size // self.model_tester.patch_size
+        inputs_dict["pixel_values"] = floats_tensor(
+            [len(inputs_dict["image_grid_hw"]) * grid_size**2, 3 * self.model_tester.patch_size**2]
+        )
+        return config, inputs_dict
+
+    def _video_features_prepare_config_and_inputs(self):
+        config = self.model_tester.get_config()
+        size = self.model_tester.force_image_size
+        return config, {"pixel_values_videos": floats_tensor([self.model_tester.batch_size, 3, size, size])}
 
     @unittest.skip(reason="Mixed Mamba/attention stack does not expose uniform per-layer outputs")
     def test_attention_outputs(self):
@@ -270,10 +314,6 @@ class NemotronHOmniModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     def test_model_base_model_prefix(self):
         pass
 
-    @unittest.skip(reason="Model produces return_dict outputs only; the tuple path is unsupported")
-    def test_model_outputs_equivalence(self):
-        pass
-
     @unittest.skip(reason="RADIO config is @strict and rejects the scalar norm_std this test injects")
     def test_can_load_ignoring_mismatched_shapes(self):
         pass
@@ -302,16 +342,22 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         # The Hub repo still advertises the pre-port `NemotronH_Nano_Omni_Reasoning_V3*` classes via
         # `auto_map`, so `AutoProcessor.from_pretrained` routes to remote code. Composing the native
-        # processor from the same repo files avoids that and keeps this an end-to-end test of the
-        # port; it yields byte-identical inputs to the remote processor for all three modalities.
-        tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
-        image_processor = NemotronH_Omni_Reasoning_V3ImageProcessor.from_pretrained(cls.model_id)
+        # processor from the same repo files avoids that and keeps this an end-to-end test of the port.
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(cls.model_id)
         cls.processor = NemotronH_Omni_Reasoning_V3Processor(
-            image_processor=image_processor, tokenizer=tokenizer, chat_template=tokenizer.chat_template
+            image_processor=NemotronH_Omni_Reasoning_V3ImageProcessor.from_pretrained(cls.model_id),
+            video_processor=NemotronH_Omni_Reasoning_V3VideoProcessor.from_pretrained(cls.model_id),
+            feature_extractor=ParakeetFeatureExtractor(feature_size=128),
+            tokenizer=tokenizer,
+            chat_template=tokenizer.chat_template,
         )
         cls.model = NemotronH_Omni_Reasoning_V3.from_pretrained(
-            cls.model_id, dtype=torch.bfloat16, device_map="auto", attn_implementation="flash_attention_2"
-        ).eval()
+            cls.model_id,
+            dtype=torch.bfloat16,
+            device_map="auto",
+            # ParakeetEncoder has no flash-attention kernel
+            attn_implementation={"": "flash_attention_2", "audio_config": "sdpa"},
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -319,15 +365,7 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _generate(self, inputs):
-        accepted = {
-            "input_ids",
-            "attention_mask",
-            "pixel_values",
-            "pixel_values_videos",
-            "input_features",
-            "input_features_mask",
-        }
-        inputs = {k: (v.to(self.model.device) if hasattr(v, "to") else v) for k, v in inputs.items() if k in accepted}
+        inputs = inputs.to(self.model.device)
         with torch.inference_mode():
             output = self.model.generate(**inputs, max_new_tokens=self.max_new_tokens, do_sample=False)
         generated = output[0, inputs["input_ids"].shape[-1] :]
@@ -384,7 +422,7 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
         inputs = self.processor(text=text, videos=[[Image.fromarray(f) for f in frames]], return_tensors="pt")
 
         # 8 frames packed 2-per-temporal-patch -> 4 tower passes x 252 tokens after pixel shuffle.
-        self.assertEqual(int((inputs["input_ids"] == self.model.img_context_token_id).sum()), 1008)
+        self.assertEqual(int((inputs["input_ids"] == self.model.image_token_id).sum()), 1008)
 
         self.model.video_pruning_rate = 0.0
         self.assertTrue(self._generate(inputs).strip())

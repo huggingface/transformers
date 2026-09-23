@@ -24,7 +24,6 @@ from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, 
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 from ...video_utils import VideoInput
-from ..auto import CONFIG_MAPPING, FEATURE_EXTRACTOR_MAPPING
 
 
 if is_torch_available():
@@ -46,37 +45,17 @@ class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
-    r"""
-    Constructs a NemotronH Omni processor which wraps an image processor and a tokenizer into a
-    single processor.
-
-    [`NemotronH_Omni_Reasoning_V3Processor`] offers all the functionalities of the image
-    processor and tokenizer. See [`~NemotronH_Omni_Reasoning_V3Processor.__call__`] and
-    [`~NemotronH_Omni_Reasoning_V3Processor.decode`] for more information.
-
-    Args:
-        image_processor ([`NemotronH_Omni_Reasoning_V3ImageProcessor`], *optional*):
-            The image processor.
-        tokenizer ([`AutoTokenizer`], *optional*):
-            The tokenizer.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages in a chat into a
-            tokenizable string.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
+        video_processor=None,
         tokenizer=None,
+        feature_extractor=None,
         chat_template=None,
         audio_sampling_rate: int = 16000,
         audio_subsampling_factor: int = 8,
         audio_hop_length: int = 160,
         video_temporal_patch_dim: int = 2,
-        num_mel_bins: int = 128,
         **kwargs,
     ):
         r"""
@@ -89,8 +68,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             Hop length, in samples, between consecutive mel frames.
         video_temporal_patch_dim (`int`, *optional*, defaults to 2):
             Number of frames collapsed into a single temporal patch by the model's video embedder.
-        num_mel_bins (`int`, *optional*, defaults to 128):
-            Number of mel filterbank bins the sound encoder expects.
         """
         self.video_temporal_patch_dim = video_temporal_patch_dim
         self.image_token = "<image>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
@@ -121,11 +98,8 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         self.audio_sampling_rate = audio_sampling_rate
         self.audio_subsampling_factor = audio_subsampling_factor
         self.audio_hop_length = audio_hop_length
-        self.num_mel_bins = num_mel_bins
-        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[CONFIG_MAPPING["parakeet_encoder"]]
-        self.feature_extractor = feature_extractor_class(sampling_rate=audio_sampling_rate, feature_size=num_mel_bins)
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, video_processor, tokenizer, feature_extractor, chat_template=chat_template)
 
     @auto_docstring
     def __call__(
@@ -145,20 +119,10 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
 
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_num_tokens = image_inputs["num_tokens"]
 
         if videos is not None:
-            # One tile per frame, but sized with the video rule (aspect ratio preserved). We flip a
-            # flag on the image processor around the call rather than routing a new kwarg through
-            # the strict `ImagesKwargs` dataclass.
-            self.image_processor._is_video_mode = True
-            try:
-                videos_inputs = self.image_processor(images=videos, **output_kwargs["images_kwargs"])
-            finally:
-                self.image_processor._is_video_mode = False
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_num_patches = [sum(videos_inputs["num_patches"])]
-            videos_inputs["pixel_values_videos"] = videos_inputs["pixel_values"]
-            del videos_inputs["pixel_values"]
 
         audio_num_tokens = []
         if audio is not None:
@@ -173,84 +137,38 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             text = [text]
 
         text = text.copy()  # below lines change text in-place
+        images_replacements, videos_replacements, audio_replacements = [], [], []
         if images is not None:
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    n_tokens = image_num_tokens[index]
-                    text[i] = text[i].replace(
-                        self.image_token,
-                        self.image_start_token + "<|placeholder|>" * n_tokens + self.image_end_token,
-                        1,
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
+            images_replacements = [
+                self.replace_image_token(image_inputs, idx) for idx in range(len(image_inputs["image_grid_hw"]))
+            ]
         if videos is not None:
             assert len(text) == 1, "Video is not supported for batch size > 1"
-            video_metadata = output_kwargs.get("videos_kwargs", {}).get("video_metadata", None)
-            i = 0
-            index = 0
-            if self.video_token in text[i]:
-                # One `<img>...</img>` chunk per temporal patch (tubelet), labeled with the per-frame
-                # timestamps joined by " and " ("Frame" for the first frame in the tubelet, "frame"
-                # for the rest).
-                tokens_per_tubelet = videos_inputs["num_tokens"][0]
-                each_group = self.image_start_token + "<|placeholder|>" * tokens_per_tubelet + self.image_end_token
-                T = self.video_temporal_patch_dim
-                n_frames = video_num_patches[index]
-                n_groups = (n_frames + T - 1) // T
-
-                source_fps = video_metadata.fps if (video_metadata is not None and video_metadata.fps) else None
-                frames_indices = video_metadata.frames_indices if video_metadata is not None else None
-                if source_fps is not None:
-                    frame_duration_ms = int(1000.0 / source_fps)
-
-                frame_labels = []
-                for g in range(n_groups):
-                    parts = []
-                    for j in range(T):
-                        fi = g * T + j
-                        if fi >= n_frames:
-                            break  # last group may be short
-                        prefix = "Frame" if j == 0 else "frame"
-                        if source_fps is not None and frames_indices is not None and fi < len(frames_indices):
-                            ts = int(frames_indices[fi]) * frame_duration_ms / 1000.0
-                            parts.append(f"{prefix} {fi + 1} sampled at {ts:.2f} seconds")
-                        elif source_fps is not None:
-                            ts = fi / source_fps
-                            parts.append(f"{prefix} {fi + 1} sampled at {ts:.2f} seconds")
-                        else:
-                            parts.append(f"{prefix} {fi + 1}")
-                    frame_labels.append(" and ".join(parts) + ": ")
-
-                video_prompt = ""
-                for g, label in enumerate(frame_labels):
-                    if g > 0:
-                        video_prompt += "\n"
-                    video_prompt += label + each_group
-
-                text[i] = text[i].replace(self.video_token, video_prompt, 1)
-            # The tokenizer has no real `<video>` token, so we reuse `<image>` as the placeholder.
-            # The model distinguishes image vs. video by which `pixel_values_*` arg was passed.
-            text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
+            videos_replacements = [
+                self.replace_video_token(
+                    videos_inputs,
+                    0,
+                    num_frames=video_num_patches[0],
+                    video_metadata=output_kwargs.get("videos_kwargs", {}).get("video_metadata", None),
+                )
+            ]
         if audio is not None:
-            index = 0
-            for i in range(len(text)):
-                while self.audio_token in text[i]:
-                    num_tokens = audio_num_tokens[index] if index < len(audio_num_tokens) else 1
-                    text[i] = text[i].replace(
-                        self.audio_token,
-                        self.audio_start_token + "<|audio_placeholder|>" * num_tokens + self.audio_end_token,
-                        1,
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|audio_placeholder|>", self.audio_token)
+            audio_replacements = [
+                self.replace_audio_token({"num_tokens": audio_num_tokens}, idx) for idx in range(len(audio_num_tokens))
+            ]
+
+        text, _ = self.get_text_with_replacements(
+            text,
+            images_replacements=images_replacements,
+            videos_replacements=videos_replacements,
+            audio_replacements=audio_replacements,
+        )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
+        # the video processor also returns the per-frame token counts used for the placeholder expansion above
+        videos_inputs = {k: v for k, v in videos_inputs.items() if k in self.video_processor.model_input_names}
         output_data = {**text_inputs, **image_inputs, **videos_inputs}
         result = BatchFeature(data=output_data, tensor_type=return_tensors)
 
@@ -258,6 +176,58 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             result[key] = value
 
         return result
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        grid_height, grid_width = image_inputs["image_grid_hw"][image_idx].tolist()
+        merge_size = round(1 / self.image_processor.downsample_ratio)
+        n_tokens = grid_height * grid_width // merge_size**2
+        return self.image_start_token + self.image_token * n_tokens + self.image_end_token
+
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
+        """Expand `<video>` into one `<img>...</img>` chunk per temporal patch (tubelet).
+
+        Each chunk is labeled with the timestamps of the frames it packs, joined by " and "
+        ("Frame" for the first frame in the tubelet, "frame" for the rest). The tokenizer has no
+        real `<video>` token, so the chunks use the image token; the model tells image from video
+        by which `pixel_values_*` argument was passed.
+        """
+        num_frames = kwargs["num_frames"]
+        video_metadata = kwargs.get("video_metadata")
+        tokens_per_tubelet = int(video_inputs["num_tokens"][video_idx])
+        each_group = self.image_start_token + self.image_token * tokens_per_tubelet + self.image_end_token
+
+        temporal_patch_dim = self.video_temporal_patch_dim
+        n_groups = (num_frames + temporal_patch_dim - 1) // temporal_patch_dim
+
+        source_fps = video_metadata.fps if (video_metadata is not None and video_metadata.fps) else None
+        frames_indices = video_metadata.frames_indices if video_metadata is not None else None
+        if source_fps is not None:
+            frame_duration_ms = int(1000.0 / source_fps)
+
+        frame_labels = []
+        for group in range(n_groups):
+            parts = []
+            for offset in range(temporal_patch_dim):
+                frame_index = group * temporal_patch_dim + offset
+                if frame_index >= num_frames:
+                    break  # last group may be short
+                prefix = "Frame" if offset == 0 else "frame"
+                if source_fps is not None and frames_indices is not None and frame_index < len(frames_indices):
+                    ts = int(frames_indices[frame_index]) * frame_duration_ms / 1000.0
+                    parts.append(f"{prefix} {frame_index + 1} sampled at {ts:.2f} seconds")
+                elif source_fps is not None:
+                    ts = frame_index / source_fps
+                    parts.append(f"{prefix} {frame_index + 1} sampled at {ts:.2f} seconds")
+                else:
+                    parts.append(f"{prefix} {frame_index + 1}")
+            frame_labels.append(" and ".join(parts) + ": ")
+
+        return "\n".join(label + each_group for label in frame_labels)
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        num_tokens = audio_inputs["num_tokens"]
+        n_tokens = int(num_tokens[audio_idx]) if audio_idx < len(num_tokens) else 1
+        return self.audio_start_token + self.audio_token * n_tokens + self.audio_end_token
 
     def _process_audio(self, audio: AudioInput, audio_kwargs: dict) -> tuple:
         """Extract mel features from the clip(s) and estimate the number of audio embedding tokens."""

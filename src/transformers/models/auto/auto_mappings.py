@@ -1007,6 +1007,7 @@ VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("minicpmv4_6", "MiniCPMV4_6VideoProcessor"),
         ("minimax_m3_vl", "MiniMaxM3VLVideoProcessor"),
         ("muse_glimmer", "MuseGlimmerVideoProcessor"),
+        ("nemotron_h_omni", "NemotronH_Omni_Reasoning_V3VideoProcessor"),
         ("pe_video", "PeVideoVideoProcessor"),
         ("perception_lm", "PerceptionLMVideoProcessor"),
         ("qwen2_vl", "Qwen2VLVideoProcessor"),

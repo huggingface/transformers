@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-01.*
+*This model was contributed to Hugging Face Transformers on 2026-09-23.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -31,44 +31,33 @@ embedding space at the `<image>` / `<video>` context-token positions; audio clip
 `<audio>` positions. The result is a single autoregressive model that reasons jointly over text, images, video and
 sound.
 
-The example below demonstrates how to reason over an image and a text prompt with the
-[`NemotronH_Omni_Reasoning_V3`] class.
+The example below demonstrates how to reason over an image and a text prompt with [`AutoModelForImageTextToText`].
 
 <hfoptions id="usage">
-<hfoption id="NemotronH_Omni_Reasoning_V3">
+<hfoption id="AutoModel">
 
 ```python
-import requests
-from PIL import Image
-
-from transformers import (
-    NemotronH_Omni_Reasoning_V3,
-    NemotronH_Omni_Reasoning_V3ImageProcessor,
-    NemotronH_Omni_Reasoning_V3Processor,
-    PreTrainedTokenizerFast,
-)
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
 model_id = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16"
 
-image_processor = NemotronH_Omni_Reasoning_V3ImageProcessor.from_pretrained(model_id)
-tokenizer = PreTrainedTokenizerFast.from_pretrained(model_id)
-processor = NemotronH_Omni_Reasoning_V3Processor(
-    image_processor=image_processor, tokenizer=tokenizer, chat_template=tokenizer.chat_template
-)
-model = NemotronH_Omni_Reasoning_V3.from_pretrained(
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForImageTextToText.from_pretrained(
     model_id,
     device_map="auto",
-).eval()
-
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    # the Parakeet audio encoder has no flash-attention kernel, so pin that tower to sdpa
+    attn_implementation={"": "flash_attention_2", "audio_config": "sdpa"},
+)
 
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "image": image},
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
             {"type": "text", "text": "Describe this image in detail."},
         ],
     }
@@ -77,15 +66,12 @@ inputs = processor.apply_chat_template(
     messages,
     add_generation_prompt=True,
     tokenize=True,
-    return_tensors="pt",
     return_dict=True,
-)
-accepted = {"input_ids", "attention_mask", "pixel_values", "pixel_values_videos", "sound_clips", "sound_length"}
-inputs = {k: v.to(model.device) for k, v in inputs.items() if k in accepted and hasattr(v, "to")}
+    return_tensors="pt",
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=128, do_sample=False)
-generated = output[0, inputs["input_ids"].shape[-1] :]
-print(processor.tokenizer.decode(generated, skip_special_tokens=True))
+print(processor.decode(output[0, inputs["input_ids"].shape[-1] :], skip_special_tokens=True))
 ```
 
 </hfoption>
@@ -98,6 +84,10 @@ print(processor.tokenizer.decode(generated, skip_special_tokens=True))
 ## NemotronH_Omni_Reasoning_V3ImageProcessor
 
 [[autodoc]] NemotronH_Omni_Reasoning_V3ImageProcessor
+
+## NemotronH_Omni_Reasoning_V3VideoProcessor
+
+[[autodoc]] NemotronH_Omni_Reasoning_V3VideoProcessor
 
 ## NemotronH_Omni_Reasoning_V3Processor
 

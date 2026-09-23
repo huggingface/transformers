@@ -29,6 +29,8 @@ if is_vision_available():
     from transformers import (
         NemotronH_Omni_Reasoning_V3ImageProcessor,
         NemotronH_Omni_Reasoning_V3Processor,
+        NemotronH_Omni_Reasoning_V3VideoProcessor,
+        ParakeetFeatureExtractor,
     )
 
 
@@ -55,15 +57,27 @@ class NemotronH_Omni_Reasoning_V3ProcessorTest(unittest.TestCase):
 
     def _processor(self):
         image_processor = NemotronH_Omni_Reasoning_V3ImageProcessor(
-            norm_mean=[0.5, 0.5, 0.5],
-            norm_std=[0.5, 0.5, 0.5],
+            image_mean=[0.5, 0.5, 0.5],
+            image_std=[0.5, 0.5, 0.5],
             patch_size=self.patch_size,
             downsample_ratio=0.5,
             min_num_patches=4,
             max_num_patches=16,
             max_model_len=1024,
         )
-        return NemotronH_Omni_Reasoning_V3Processor(image_processor=image_processor, tokenizer=self._tokenizer())
+        video_processor = NemotronH_Omni_Reasoning_V3VideoProcessor(
+            norm_mean=[0.5, 0.5, 0.5],
+            norm_std=[0.5, 0.5, 0.5],
+            patch_size=self.patch_size,
+            downsample_ratio=0.5,
+            video_target_num_patches=16,
+        )
+        return NemotronH_Omni_Reasoning_V3Processor(
+            image_processor=image_processor,
+            video_processor=video_processor,
+            tokenizer=self._tokenizer(),
+            feature_extractor=ParakeetFeatureExtractor(sampling_rate=16000, feature_size=32),
+        )
 
     def test_placeholder_token_ids_resolve(self):
         processor = self._processor()
@@ -89,9 +103,15 @@ class NemotronH_Omni_Reasoning_V3ProcessorTest(unittest.TestCase):
         self.assertIn("pixel_values", out)
         input_ids = out["input_ids"][0]
         num_placeholders = int((input_ids == processor.image_token_id).sum())
-        # a single `<image>` expands to one placeholder per post-pixel-shuffle token
-        self.assertEqual(num_placeholders, int(out["num_tokens"][0]))
+        # a single `<image>` expands to one placeholder per post-pixel-shuffle token (2x2 patches each)
+        self.assertEqual(num_placeholders, int(out["image_grid_hw"].prod()) // 4)
         self.assertGreater(num_placeholders, 1)
+
+    def test_only_model_inputs_are_returned(self):
+        processor = self._processor()
+        image = Image.new("RGB", (128, 96))
+        out = processor(text="<image> describe this picture", images=image, return_tensors="pt")
+        self.assertEqual(set(out.keys()), {"input_ids", "attention_mask", "pixel_values", "image_grid_hw"})
 
     def test_model_input_names_are_exposed(self):
         processor = self._processor()

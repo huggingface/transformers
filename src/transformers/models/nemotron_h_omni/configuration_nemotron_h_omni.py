@@ -111,9 +111,15 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
         # `ParakeetEncoderConfig` defaults them to `True`. Supply them for configs that predate the
         # fields; an explicit value in the checkpoint still wins.
         if isinstance(self.audio_config, dict):
-            audio_config = {"attention_bias": False, "scale_input": False, **self.audio_config}
+            audio_config = dict(self.audio_config)  # copy: the caller may reuse the dict
+            # the checkpoint stores `model_type: parakeet`, which is not a registered type; let the
+            # sub-config class supply its own
             audio_config.pop("model_type", None)
-            self.audio_config = CONFIG_MAPPING["parakeet_encoder"](**audio_config)
+            self.audio_config = CONFIG_MAPPING["parakeet_encoder"](
+                attention_bias=audio_config.pop("attention_bias", False),
+                scale_input=audio_config.pop("scale_input", False),
+                **audio_config,
+            )
 
         super().__post_init__(**kwargs)
 
