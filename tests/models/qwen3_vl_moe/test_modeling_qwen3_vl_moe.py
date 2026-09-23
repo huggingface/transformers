@@ -28,7 +28,6 @@ from transformers import (
 from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -36,6 +35,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -344,11 +344,11 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class Qwen3VLMoeIntegrationTest(unittest.TestCase):
+class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     maxDiff = None
 
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
 
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-30B-A3B-Instruct")
         self.processor.tokenizer.padding_side = "left"
@@ -394,9 +394,6 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test(self):

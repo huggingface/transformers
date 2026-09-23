@@ -164,9 +164,6 @@ class NemotronHConfig(PreTrainedConfig):
         elif self.layer_types is None:
             # Default layers_block_type if not provided
             self.layer_types = ["linear_attention", "moe", "full_attention", "mlp"]
-        else:
-            # Migrate legacy names from configs stored on the Hub.
-            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         # Note: num_hidden_layers is deprecated and ignored if layers_block_type is explicitly provided
         # It's only kept for backward compatibility when loading old configs

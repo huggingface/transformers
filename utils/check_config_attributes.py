@@ -210,6 +210,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_diffusion_samples",
         "max_atomic_number",
     ],
+    "AXK2Config": ["layer_types"],  # needed for correct cache
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.
     "EsmFold2AtomEncoderConfig": True,
