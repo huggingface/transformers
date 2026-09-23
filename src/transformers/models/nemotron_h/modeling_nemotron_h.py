@@ -591,11 +591,13 @@ class NemotronHRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # Unlike Llama, the weight multiply is kept in fp32 and only the result is cast back to the input
+        # dtype, matching the reference implementation.
         return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
 
     def extra_repr(self):
