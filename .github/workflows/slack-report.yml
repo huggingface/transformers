@@ -41,7 +41,6 @@ permissions: {}
 jobs:
   send_results:
     permissions:
-      actions: read
       contents: read
     name: Send results to webhook
     runs-on:
