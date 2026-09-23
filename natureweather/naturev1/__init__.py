@@ -48,7 +48,7 @@ from .storms import StormTargets, StormWindow, format_pairing, pair_tracks_with_
 from .train import Trainer, TrainSettings, apply_ema, load_for_inference, next_state_targets
 
 
-__version__ = "0.3.3"
+__version__ = "0.4.0"
 __author__ = "Nathan"
 __all__ = [
     "CORPORA", "RI_THRESHOLDS_KT", "WIND_RADII_THRESHOLDS_KT", "EyewallHead", "RapidIntensificationHead",

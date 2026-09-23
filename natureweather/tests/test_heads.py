@@ -137,3 +137,22 @@ def test_climatological_loss_is_sane(model):
     naive = masked_gaussian_nll(naive_mean, naive_log_var, target)
     assert float(naive) > 100 * float(loss)
     assert float(naive) == pytest.approx(0.5 * (100.0**2 + math.log(2 * math.pi)), rel=1e-3)
+
+
+def test_naturev1_carries_its_grids_to_the_device():
+    """
+    The bug a user hit in Colab: ``NatureV1(...).to("cuda")`` moved the weights and not the mesh.
+
+    It surfaced as "mat1 is on cpu, different from other tensors on cuda:0" from inside a linear layer
+    in RelativeEncoder -- four frames deep and with no mention of a grid anywhere in the traceback.
+    """
+    config = NatureConfig(latent_points=128, num_layers=2, hidden_size=96)
+    model = NatureV1(config, fibonacci_sphere(128, num_neighbours=12, cluster_size=32)).to("meta")
+
+    assert model.latent_grid.points.device.type == "meta"
+    assert model.latent_grid.neighbour_offsets.device.type == "meta"
+
+    supplied = fibonacci_sphere(64, num_neighbours=8, cluster_size=16)
+    link = model.link(model.latent_grid, supplied, 8)
+    assert link.offsets.device.type == "meta"
+    assert link.alignment.device.type == "meta"

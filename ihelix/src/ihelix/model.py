@@ -282,6 +282,45 @@ def init_weights(module: nn.Module, config: IHelixConfig) -> None:
             module.level_bias.zero_()
 
 
+class GridBound:
+    """
+    Mixin that keeps a model's grids on the same device as its weights.
+
+    ``nn.Module.to()`` walks parameters and buffers. A :class:`~ihelix.grid.FieldGrid` is neither -- it
+    is a plain attribute holding coordinates, a neighbour graph and quadrature weights -- so
+    ``model.to("cuda")`` moved every weight and left every grid on the CPU. The failure surfaced deep
+    inside cross-attention as ``mat1 is on cpu, different from other tensors on cuda:0``, which points
+    at a linear layer and says nothing about grids.
+
+    Hooking ``_apply`` fixes it for ``.to()``, ``.cuda()``, ``.float()`` and everything else that routes
+    through it. Cached :class:`~ihelix.attention.GridLink` objects are dropped at the same time, because
+    a correspondence built on one device is wrong on another.
+    """
+
+    def _apply(self, fn, recurse: bool = True):
+        result = super()._apply(fn, recurse) if recurse else super()._apply(fn)
+        grid = getattr(result, "latent_grid", None)
+        if grid is not None:
+            for name, value in list(grid.__dict__.items()):
+                if isinstance(value, torch.Tensor):
+                    setattr(grid, name, fn(value))
+        if getattr(result, "_links", None):
+            result._links.clear()
+        return result
+
+    @property
+    def device(self) -> torch.device:
+        """Where this model's weights live, for moving grids to meet them."""
+        return next(self.parameters()).device
+
+    def _aligned(self, grid: FieldGrid) -> FieldGrid:
+        """Move a caller-supplied grid onto the model's device, in place, once."""
+        points = getattr(grid, "points", None)
+        if points is not None and points.device != self.device:
+            grid.to(self.device)
+        return grid
+
+
 class GradientCheckpointing:
     """
     Mixin adding ``gradient_checkpointing_enable()`` to a stack of blocks.
@@ -347,7 +386,7 @@ class IHelixField(GradientCheckpointing, nn.Module):
         return sum(p.numel() for p in self.parameters())
 
 
-class IHelixFieldModel(GradientCheckpointing, nn.Module):
+class IHelixFieldModel(GridBound, GradientCheckpointing, nn.Module):
     """
     Encode onto a fixed internal mesh, process there, decode back out.
 
@@ -399,7 +438,10 @@ class IHelixFieldModel(GradientCheckpointing, nn.Module):
         """Cached correspondence between two grids, built on first use."""
         key = (id(target), id(source))
         if key not in self._links:
-            self._links[key] = GridLink(target, source, num_neighbours)
+            # Both grids must sit on the model's device before the correspondence is built: the kNN
+            # inside GridLink compares their coordinates directly, and a CPU/GPU pair fails there.
+            link = GridLink(self._aligned(target), self._aligned(source), num_neighbours)
+            self._links[key] = link.to(self.device)
         return self._links[key]
 
     def forward(

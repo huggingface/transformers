@@ -451,3 +451,56 @@ def test_encode_process_decode_changes_grid_without_changing_weights():
 def test_invalid_configs_are_rejected(bad):
     with pytest.raises(ValueError):
         IHelixConfig(**bad)
+
+
+# --------------------------------------------------------------------------------------------------
+# Device placement
+# --------------------------------------------------------------------------------------------------
+
+def test_grids_follow_the_weights_to_another_device():
+    """
+    ``model.to(device)`` walks parameters and buffers. A FieldGrid is neither.
+
+    Left unhandled, ``model.to("cuda")`` moved every weight and left every grid on the CPU, and the
+    failure surfaced deep inside cross-attention as "mat1 is on cpu, different from other tensors on
+    cuda:0" -- pointing at a linear layer and saying nothing about grids. The meta device exercises the
+    identical code path without needing a GPU.
+    """
+    grid = fibonacci_sphere(64, num_neighbours=8, cluster_size=16)
+    config = IHelixConfig(in_channels=3, hidden_size=32, num_layers=2, num_heads=2, num_kv_heads=1,
+                          head_dim=16, min_radius=200.0, max_radius=800.0, use_temporal=False,
+                          latent_points=64)
+    model = IHelixFieldModel(config, grid)
+    assert model.latent_grid.points.device.type == "cpu"
+
+    model = model.to("meta")
+    for name in ("points", "coords", "weights", "neighbours", "neighbour_offsets", "neighbour_distances"):
+        moved = getattr(model.latent_grid, name)
+        assert moved.device.type == "meta", f"latent_grid.{name} stayed behind"
+
+
+def test_a_caller_supplied_grid_is_pulled_to_the_model():
+    """The source grid is built by the user on the CPU and handed in; it must be moved to meet them."""
+    config = IHelixConfig(in_channels=3, hidden_size=32, num_layers=2, num_heads=2, num_kv_heads=1,
+                          head_dim=16, min_radius=200.0, max_radius=800.0, use_temporal=False,
+                          latent_points=64)
+    model = IHelixFieldModel(config, fibonacci_sphere(64, num_neighbours=8, cluster_size=16)).to("meta")
+
+    source = fibonacci_sphere(32, num_neighbours=8, cluster_size=16)
+    assert source.points.device.type == "cpu"
+    link = model.link(model.latent_grid, source, 8)
+    assert link.offsets.device.type == "meta"
+    assert source.points.device.type == "meta", "the caller's grid was not moved"
+
+
+def test_link_cache_does_not_survive_a_device_change():
+    """A correspondence built on one device serves tensors from that device, which is now the wrong one."""
+    config = IHelixConfig(in_channels=3, hidden_size=32, num_layers=2, num_heads=2, num_kv_heads=1,
+                          head_dim=16, min_radius=200.0, max_radius=800.0, use_temporal=False,
+                          latent_points=64)
+    model = IHelixFieldModel(config, fibonacci_sphere(64, num_neighbours=8, cluster_size=16))
+    model.link(model.latent_grid, fibonacci_sphere(32, num_neighbours=8, cluster_size=16), 8)
+    assert len(model._links) == 1
+
+    model = model.to("meta")
+    assert len(model._links) == 0

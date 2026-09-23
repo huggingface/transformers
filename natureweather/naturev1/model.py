@@ -21,14 +21,23 @@ probability per lead time. A forecast that cannot say how sure it is, is not a f
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, fields
 
 import torch
 import torch.nn.functional as F
 from ihelix.kernels import IHelixRMSNorm
 from torch import nn
 
-from ihelix import CrossAttention, FieldGrid, Geometry, GradientCheckpointing, GridLink, IHelixBlock, IHelixConfig
+from ihelix import (
+    CrossAttention,
+    FieldGrid,
+    Geometry,
+    GradientCheckpointing,
+    GridBound,
+    GridLink,
+    IHelixBlock,
+    IHelixConfig,
+)
 
 
 #: Gridded fields the model predicts everywhere, with a variance for each.
@@ -315,7 +324,7 @@ class RapidIntensificationHead(nn.Module):
         }
 
 
-class NatureV1(GradientCheckpointing, nn.Module):
+class NatureV1(GridBound, GradientCheckpointing, nn.Module):
     """
     The model. Reads any number of geolocated sources, forecasts fields and storm behaviour with
     uncertainty attached to everything.
@@ -327,7 +336,8 @@ class NatureV1(GradientCheckpointing, nn.Module):
     Args:
         config: the model configuration.
         latent_grid: the shared global mesh, normally a near-equal-area Fibonacci sphere so there is no
-            pole to distort and no seam to cross.
+            pole to distort and no seam to cross. ``.to(device)`` carries it along with the weights, and
+            any source or output grid you pass in is moved to meet them on first use.
     """
 
     def __init__(self, config: NatureConfig, latent_grid: FieldGrid) -> None:
@@ -430,7 +440,10 @@ class NatureV1(GradientCheckpointing, nn.Module):
         """Cached geometric correspondence between two point sets."""
         key = (id(target), id(source), num_neighbours)
         if key not in self._links:
-            self._links[key] = GridLink(target, source, num_neighbours)
+            # Both grids must sit on the model's device before the correspondence is built: the kNN
+            # inside GridLink compares their coordinates directly, and a CPU/GPU pair fails there.
+            link = GridLink(self._aligned(target), self._aligned(source), num_neighbours)
+            self._links[key] = link.to(self.device)
         return self._links[key]
 
     def clear_links(self) -> None:
