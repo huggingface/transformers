@@ -40,6 +40,7 @@ Made by Nathan.
 """
 
 from .attention import CrossAttention, GeodesicAttention, GridLink, IndexAttention, RelativeEncoder
+from .domains import CATALOGUE, channel_flow, cylinder, describe, image, ocean, seismic, volume
 from .geometry import EARTH_RADIUS_KM, Axis, Geometry
 from .grid import FieldGrid, fibonacci_sphere, latlon_grid
 from .model import (
@@ -52,7 +53,7 @@ from .model import (
                     TemporalStrand,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Nathan"
 
 __all__ = [
@@ -64,6 +65,14 @@ __all__ = [
     "Geometry",
     "GradientCheckpointing",
     "GridBound",
+    "CATALOGUE",
+    "ocean",
+    "seismic",
+    "channel_flow",
+    "cylinder",
+    "volume",
+    "image",
+    "describe",
     "GridLink",
     "IHelixBlock",
     "IHelixConfig",

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "naturev1"
-version = "0.4.0"
+version = "0.5.0"
 description = "Probabilistic weather and hurricane-track model over geolocated fields, with live GOES ingest"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Atmospheric Science",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = ["torch>=2.5", "ihelix>=0.3.0", "numpy>=1.24"]
+dependencies = ["torch>=2.5", "ihelix>=0.4.0", "numpy>=1.24"]
 
 [project.optional-dependencies]
 satellite = ["xarray>=2023.1", "netCDF4>=1.6"]

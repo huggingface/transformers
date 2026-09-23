@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ihelix"
-version = "0.3.0"
+version = "0.4.0"
 description = "One architecture for fields on any geometry: spheres, grids, volumes, periodic boxes and point clouds"
 readme = "README.md"
 requires-python = ">=3.10"
