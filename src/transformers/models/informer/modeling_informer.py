@@ -860,6 +860,7 @@ class InformerEncoder(InformerPreTrainedModel):
                     if padding_mask is not None:
                         # same pooling as `InformerConvLayer.maxPool`: a distilled position is valid
                         # as soon as one of the positions it summarizes is valid
+                        # Keep these parameters in sync with `InformerConvLayer.maxPool`.
                         padding_mask = nn.functional.max_pool1d(
                             padding_mask[:, None, :].to(hidden_states.dtype),
                             kernel_size=3,
