@@ -452,7 +452,7 @@ class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
     config: EmbeddingGemma2Config
-    base_model_prefix = "language_model"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
     _supports_flash_attn = True
@@ -488,7 +488,6 @@ class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
 class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
     config: EmbeddingGemma2TextConfig
     input_modalities = ("text",)
-    _keys_to_ignore_on_load_unexpected = [r"^vision_tower\.", r"^embed_vision\.", r"^audio_tower\.", r"^embed_audio\."]
     _can_record_outputs = {
         "hidden_states": EmbeddingGemma2EncoderLayer,
         "attentions": EmbeddingGemma2Attention,
@@ -650,6 +649,12 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     config: EmbeddingGemma2Config
+    _keys_to_ignore_on_load_unexpected = [
+        r"(^|\.)vision_tower\.",
+        r"(^|\.)embed_vision\.",
+        r"(^|\.)audio_tower\.",
+        r"(^|\.)embed_audio\.",
+    ]
 
     def __init__(self, config: EmbeddingGemma2Config):
         super().__init__(config)
@@ -669,11 +674,6 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             if config.audio_config is not None
             else None
         )
-        self._keys_to_ignore_on_load_unexpected = set(getattr(self, "_keys_to_ignore_on_load_unexpected", None) or [])
-        if config.vision_config is None:
-            self._keys_to_ignore_on_load_unexpected.update([r"(^|\.)vision_tower\.", r"(^|\.)embed_vision\."])
-        if config.audio_config is None:
-            self._keys_to_ignore_on_load_unexpected.update([r"(^|\.)audio_tower\.", r"(^|\.)embed_audio\."])
         self.post_init()
 
     @can_return_tuple

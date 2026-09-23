@@ -430,7 +430,6 @@ class EmbeddingGemma2EncoderLayer(Gemma3DecoderLayer):
 
 class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     config: EmbeddingGemma2Config
-    base_model_prefix = "language_model"
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
     # Deletes the inherited attribute: both entries were KV-cache related, which we do not have.
     _skip_keys_device_placement = AttributeError()
@@ -469,7 +468,6 @@ class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     """
 )
 class EmbeddingGemma2TextModel(Gemma3TextModel):
-    _keys_to_ignore_on_load_unexpected = [r"^vision_tower\.", r"^embed_vision\.", r"^audio_tower\.", r"^embed_audio\."]
     _can_record_outputs = {
         "hidden_states": EmbeddingGemma2EncoderLayer,
         "attentions": EmbeddingGemma2Attention,
@@ -592,16 +590,17 @@ class EmbeddingGemma2ModelOutput(BaseModelOutput):
 )
 class EmbeddingGemma2Model(Gemma4Model):
     config: EmbeddingGemma2Config
+    _keys_to_ignore_on_load_unexpected = [
+        r"(^|\.)vision_tower\.",
+        r"(^|\.)embed_vision\.",
+        r"(^|\.)audio_tower\.",
+        r"(^|\.)embed_audio\.",
+    ]
 
     def __init__(self, config: EmbeddingGemma2Config):
         super().__init__(config)
         # Drop inherited `vocab_size_per_layer_input` (no token-identity PLE in EmbeddingGemma 2)
         del self.vocab_size_per_layer_input
-        self._keys_to_ignore_on_load_unexpected = set(getattr(self, "_keys_to_ignore_on_load_unexpected", None) or [])
-        if config.vision_config is None:
-            self._keys_to_ignore_on_load_unexpected.update([r"(^|\.)vision_tower\.", r"(^|\.)embed_vision\."])
-        if config.audio_config is None:
-            self._keys_to_ignore_on_load_unexpected.update([r"(^|\.)audio_tower\.", r"(^|\.)embed_audio\."])
         self.post_init()
 
     @can_return_tuple
