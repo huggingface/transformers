@@ -325,8 +325,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         attn_mask_penalty = -10000.0
 
         # generate random attention and corresponding masks
-        # The adjacency list below is only randomized during training: in eval mode the helpers return a
-        # constant (all-zero) list, so seeding would needlessly reset the global numpy RNG on every forward.
+        # Only seed while training: in eval the helpers below return a constant all-zero list.
         if self.training:
             np.random.seed(seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
