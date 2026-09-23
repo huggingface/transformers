@@ -1,7 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════════════════════════════
-#  NatureV1 — the whole thing in one cell.
-#
-#  !pip install -q "naturev1[all]"      <- run this once, first
+#  NatureV1 — the whole thing in one cell. Paste and run; it installs what it needs.
 #
 #  Set the RUN_* switches below and execute. Everything resumes: if the cell dies, re-run it and it
 #  picks up from the last checkpoint (written every 60 s, and mirrored to the Hub every 15 min).
@@ -26,6 +24,98 @@ HUB_REPO      = "Sigmandndnns/NatureV1-500"
 STORM         = (24.6, -78.2)      # current storm centre (lat, lon)
 CITY          = (25.77, -80.19)    # somewhere you want a local forecast
 
+# ═══ 0 ═══ bootstrap ═══════════════════════════════════════════════════════════════════════════════
+# Standard library only, and it runs before numpy or torch are imported. That ordering is the whole
+# point: pip may upgrade numpy while satisfying zarr or gcsfs, and a numpy that changes underneath an
+# already-imported torch gives binary-incompatibility errors that look like a bug in this code.
+import importlib
+import importlib.util
+import subprocess
+import sys
+
+
+_NEEDED = {                                    # import name -> pip requirement
+    "naturev1":        "naturev1[all]>=0.3.3",
+    "ihelix":          "ihelix>=0.2.0",
+    "xarray":          "xarray>=2023.1",
+    "zarr":            "zarr>=2.16",
+    "gcsfs":           "gcsfs>=2023.1",
+    "netCDF4":         "netCDF4>=1.6",
+    "huggingface_hub": "huggingface_hub>=0.20",
+}
+_MIN_NATUREV1 = (0, 3, 3)
+
+
+def _present(module: str) -> bool:
+    """Is this importable right now? A broken install counts as absent."""
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _naturev1_too_old() -> bool:
+    """The cell below uses APIs added in 0.3.3, so an older copy is as good as missing."""
+    try:
+        import naturev1
+        parts = tuple(int(piece) for piece in naturev1.__version__.split(".")[:3])
+        return parts < _MIN_NATUREV1
+    except Exception:
+        return True
+
+
+def _bootstrap() -> bool:
+    """Install whatever is missing. Returns True if anything was installed."""
+    missing = [req for module, req in _NEEDED.items() if not _present(module)]
+    if not missing and _naturev1_too_old():
+        missing = [_NEEDED["naturev1"]]
+    if not missing:
+        return False
+
+    print(f"installing {len(missing)} package(s): {', '.join(missing)}")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--upgrade", *missing])
+    except subprocess.CalledProcessError as error:
+        print(f"\n!! pip failed (exit {error.returncode}). Install by hand and re-run:")
+        print(f"!!   !pip install --upgrade {' '.join(missing)}")
+        raise SystemExit(1) from None
+    importlib.invalidate_caches()
+    return True
+
+
+def _stale_after_install() -> list[str]:
+    """
+    Which already-imported packages did pip move out from under us.
+
+    Colab usually has numpy loaded before any user cell runs, so "was it imported" is the wrong
+    question -- it would demand a restart every single time. The right question is whether the copy in
+    memory still matches the copy on disk, which is only false when pip actually upgraded it.
+    """
+    import importlib.metadata
+
+    stale = []
+    for name in ("numpy", "torch"):
+        loaded = getattr(sys.modules.get(name), "__version__", None)
+        if loaded is None:
+            continue
+        try:
+            if importlib.metadata.version(name) != loaded:
+                stale.append(f"{name} {loaded} -> {importlib.metadata.version(name)}")
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return stale
+
+
+_INSTALLED = _bootstrap()
+_STALE = _stale_after_install() if _INSTALLED else []
+if _STALE:
+    # The version in memory no longer matches the one on disk. Carrying on gives binary-incompatibility
+    # errors far from here; restarting is the only reliable fix.
+    print(f"\n!! pip upgraded something already loaded: {', '.join(_STALE)}")
+    print("!! Runtime -> Restart session, then run this cell again. Nothing is lost.")
+    raise SystemExit(0)
+print("dependencies ready\n")
+
 # ───────────────────────────────────────────────────────────────────────────────────────────────────
 import datetime as dt
 import json
@@ -34,8 +124,6 @@ import os
 import numpy as np
 import torch
 from naturev1 import (
-    SURFACE_FIELDS,
-    WEATHER_TYPES,
     CachedERA5,
     ERA5Window,
     NatureConfig,

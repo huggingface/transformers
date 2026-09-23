@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "naturev1"
-version = "0.3.2"
+version = "0.3.3"
 description = "Probabilistic weather and hurricane-track model over geolocated fields, with live GOES ingest"
 readme = "README.md"
 requires-python = ">=3.10"
