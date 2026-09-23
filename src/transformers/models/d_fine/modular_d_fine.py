@@ -20,8 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2CLS
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_transforms import corners_to_center_format
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -160,7 +159,11 @@ class DFineConfig(PreTrainedConfig):
     """
 
     model_type = "d_fine"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="hgnet_v2", init_kwargs={{"out_indices": [2, 3, 4]}}
+        ),
+    }
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -240,12 +243,6 @@ class DFineConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={"out_indices": [2, 3, 4]},
-            **kwargs,
-        )
         self.head_dim = self.d_model // self.decoder_attention_heads
         super().__post_init__(**kwargs)
 

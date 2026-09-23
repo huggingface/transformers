@@ -45,7 +45,11 @@ class PeAudioVideoEncoderConfig(PreTrainedConfig):
 
     model_type = "pe_audio_video_encoder"
     base_config_key = "audio_video_config"
-    sub_configs = {"audio_config": AutoConfig, "video_config": AutoConfig}
+    default_theta = 20000
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="pe_audio_encoder"),
+        "video_config": SubConfigSpec(config_class=AutoConfig, model_type="pe_video_encoder"),
+    }
 
     audio_config: dict | PreTrainedConfig | None = None
     video_config: dict | PreTrainedConfig | None = None
@@ -66,21 +70,6 @@ class PeAudioVideoEncoderConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "pe_audio_encoder")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["pe_audio_encoder"]()
-
-        if isinstance(self.video_config, dict):
-            self.video_config["model_type"] = self.video_config.get("model_type", "pe_video_encoder")
-            self.video_config = CONFIG_MAPPING[self.video_config["model_type"]](**self.video_config)
-        elif self.video_config is None:
-            self.video_config = CONFIG_MAPPING["pe_video_encoder"]()
-
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_theta": 20000}
         super().__post_init__(**kwargs)
 
 

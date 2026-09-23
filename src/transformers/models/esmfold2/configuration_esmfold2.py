@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -55,6 +55,8 @@ class EsmFold2AtomEncoderConfig(PreTrainedConfig):
     uid_rope_base_frequency (`float`, *optional*, defaults to 10000.0):
         Base frequency for the space-UID half of the 3D rotary embedding.
     """
+
+    model_type = "esmfold2_atom_encoder"
 
     hidden_size: int | None = 128
     output_dim: int | None = 384
@@ -113,7 +115,10 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
         is this module's `hidden_size`.
     """
 
-    sub_configs = {"atom_encoder": EsmFold2AtomEncoderConfig}
+    model_type = "esmfold2_diffusion"
+    sub_configs_defaults = {
+        "atom_encoder": SubConfigSpec(config_class=EsmFold2AtomEncoderConfig, init_kwargs={"output_dim": 768})
+    }
 
     sigma_data: float | None = 16.0
     hidden_size: int | None = 768
@@ -128,10 +133,6 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
-        if self.atom_encoder is None:
-            self.atom_encoder = EsmFold2AtomEncoderConfig(output_dim=self.hidden_size)
-        elif isinstance(self.atom_encoder, dict):
-            self.atom_encoder = EsmFold2AtomEncoderConfig(**self.atom_encoder)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -183,7 +184,8 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
         high-sigma tail above it is truncated and the cap re-prepended, so sampling starts from the cap.
     """
 
-    sub_configs = {"diffusion_module": EsmFold2DiffusionModuleConfig}
+    model_type = "esmfold2_structure_encoder"
+    sub_configs_defaults = {"diffusion_module": SubConfigSpec(config_class=EsmFold2DiffusionModuleConfig)}
 
     diffusion_module: dict | EsmFold2DiffusionModuleConfig | None = None
     num_distogram_bins: int | None = 128
@@ -197,13 +199,6 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
     inference_exponent: float | None = 8.0
     inference_num_steps: int | None = 68
     inference_sigma_cap: float | None = 256.0
-
-    def __post_init__(self, **kwargs):
-        if self.diffusion_module is None:
-            self.diffusion_module = EsmFold2DiffusionModuleConfig()
-        elif isinstance(self.diffusion_module, dict):
-            self.diffusion_module = EsmFold2DiffusionModuleConfig(**self.diffusion_module)
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(
@@ -230,6 +225,8 @@ class EsmFold2ConfidenceHeadConfig(PreTrainedConfig):
     eps (`float`, *optional*, defaults to 1e-6):
         Additive guard for masked-mean denominators (empty chains / all-padding rows).
     """
+
+    model_type = "esmfold2_confidence_head"
 
     num_hidden_layers: int | None = 4
     num_plddt_bins: int | None = 50
@@ -266,6 +263,8 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
         bit-exact in bf16, so it trades exactness for peak memory on long sequences.
     """
 
+    model_type = "esmfold2_mas_encoder"
+
     hidden_size: int | None = 128
     outer_hidden_size: int | None = 32
     num_hidden_layers: int | None = 4
@@ -286,6 +285,8 @@ class EsmFold2LmEncoderConfig(PreTrainedConfig):
     per_loop_lm_dropout (`bool`, *optional*, defaults to `True`):
         Whether to resample that dropout on every trunk loop rather than once per fold.
     """
+
+    model_type = "esmfold2_lm_encoder"
 
     num_hidden_layers: int | None = 4
     lm_dropout: float | None = 0.25
@@ -348,13 +349,13 @@ class EsmFold2Config(PreTrainedConfig):
     """
 
     model_type = "esmfold2"
-    sub_configs = {
-        "esmc_config": AutoConfig,
-        "atom_encoder": EsmFold2AtomEncoderConfig,
-        "structure_head": EsmFold2StructureHeadConfig,
-        "confidence_head": EsmFold2ConfidenceHeadConfig,
-        "msa_encoder": EsmFold2MsaEncoderConfig,
-        "lm_encoder": EsmFold2LmEncoderConfig,
+    sub_configs_defaults = {
+        "esmc_config": SubConfigSpec(config_class=AutoConfig, model_type="esmc"),
+        "atom_encoder": SubConfigSpec(config_class=EsmFold2AtomEncoderConfig),
+        "structure_head": SubConfigSpec(config_class=EsmFold2StructureHeadConfig),
+        "confidence_head": SubConfigSpec(config_class=EsmFold2ConfidenceHeadConfig),
+        "msa_encoder": SubConfigSpec(config_class=EsmFold2MsaEncoderConfig),
+        "lm_encoder": SubConfigSpec(config_class=EsmFold2LmEncoderConfig),
     }
 
     hidden_size: int | None = 384
@@ -383,20 +384,6 @@ class EsmFold2Config(PreTrainedConfig):
     esmc_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        def _init_nested(cls, val):
-            if val is None:
-                return cls()
-            if isinstance(val, dict):
-                return cls(**val)
-            return val
-
-        self.esmc_config = _init_nested(CONFIG_MAPPING["esmc"], self.esmc_config)
-        self.atom_encoder = _init_nested(EsmFold2AtomEncoderConfig, self.atom_encoder)
-        self.structure_head = _init_nested(EsmFold2StructureHeadConfig, self.structure_head)
-        self.confidence_head = _init_nested(EsmFold2ConfidenceHeadConfig, self.confidence_head)
-        self.msa_encoder = _init_nested(EsmFold2MsaEncoderConfig, self.msa_encoder)
-        self.lm_encoder = _init_nested(EsmFold2LmEncoderConfig, self.lm_encoder)
-
         # 3 (xyz) + 1 (charge) + 1 (mask) + element one-hot + atom-name-char one-hots.
         if self.atom_feature_dim is None:
             self.atom_feature_dim = 3 + 1 + 1 + self.max_atomic_number + self.char_vocab_size * self.max_chars

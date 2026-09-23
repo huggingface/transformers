@@ -26,7 +26,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..auto import AutoConfig
 from ..d_fine.configuration_d_fine import DFineConfig
 from ..d_fine.modeling_d_fine import (
     DFineAIFILayer,
@@ -176,9 +175,6 @@ class Deimv2Config(DFineConfig):
         `True` for RepNCSPELAN4 (used by HGNetV2 N and LiteEncoder variants).
         `False` for RepNCSPELAN5 (used by DINOv3 variants).
     """
-
-    model_type = "deimv2"
-    sub_configs = {"backbone_config": AutoConfig}
 
     eval_size: list[int] | tuple[int, int] | None = None
     weight_loss_mal: float = 1.0

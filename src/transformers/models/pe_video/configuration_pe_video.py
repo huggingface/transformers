@@ -18,7 +18,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..timm_wrapper import TimmWrapperConfig
 
 
@@ -42,16 +42,20 @@ class PeVideoEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "pe_video_encoder"
-    sub_configs = {"vision_config": TimmWrapperConfig}
-    base_config_key = "audio_video_config"
-
-    _default_vision_config_kwargs = {
-        "architecture": "vit_pe_core_large_patch14_336",
-        "do_pooling": True,
-        "num_classes": 1024,
-        "global_pool": "map",
-        "initializer_range": 0.02,
+    default_theta = 20000
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=TimmWrapperConfig,
+            init_kwargs={
+                "architecture": "vit_pe_core_large_patch14_336",
+                "do_pooling": True,
+                "num_classes": 1024,
+                "global_pool": "map",
+                "initializer_range": 0.02,
+            },
+        ),
     }
+    base_config_key = "audio_video_config"
 
     vision_config: dict | PreTrainedConfig | None = None
     hidden_size: int = 1792
@@ -71,18 +75,6 @@ class PeVideoEncoderConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_theta": 20000}
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "timm_wrapper")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]].from_dict(
-                {**self._default_vision_config_kwargs, **self.vision_config}
-            )
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
-
         super().__post_init__(**kwargs)
 
 
