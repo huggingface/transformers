@@ -352,13 +352,8 @@ def finegrained_linear(
                 bias=bias,
             )
         except (ImportError, NotImplementedError, ValueError) as e:
-            # DeepGEMM is loadable but declined this specific input; fall back to Triton, which is more
-            # permissive (handles FP8/FP4 with float32 or UE8M0 scales on any arch, plus input dtypes
-            # DeepGEMM rejects). If Triton can't serve it either, it raises its own error.
-            #   - NotImplementedError: an arch/input combo DeepGEMM has no kernel for (FP4 on Hopper —
-            #     `is_deepgemm_loadable` is dtype-agnostic and passes there — or float32 scales on Blackwell);
-            #   - ValueError: an input DeepGEMM rejects but Triton supports (e.g. activations it won't quantize);
-            #   - ImportError: a symbol/build gap.
+            # Triton is the more permissive of the two, so a decline here is not fatal: it serves
+            # arch/input combos DeepGEMM has no kernel for, and raises its own error if it cannot.
             logger.warning_once(
                 f"DeepGEMM declined this call, falling back to Triton. Reason: {e} "
                 "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."

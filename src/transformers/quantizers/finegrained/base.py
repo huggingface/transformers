@@ -197,6 +197,11 @@ class FineGrainedHfQuantizer(HfQuantizer):
         )
 
         if self.pre_quantized and self.quantization_config.modules_to_convert:
+            if self._quant_method() != "fp8":
+                logger.warning_once(
+                    f"Embedding tables are quantized to FP8; {self._quant_method()} has no embedding path. "
+                    f"{self.quantization_config.modules_to_convert} will hold FP8 rows with one per-tensor scale."
+                )
             replace_with_finegrained_embedding(
                 model, self.quantization_config.modules_to_convert, self.modules_to_not_convert
             )

@@ -396,8 +396,7 @@ class FineGrainedQuantize(_FineGrainedOp):
             }
 
         if value.device.type not in ("cuda", "xpu"):
-            # the kernels' quantizers are triton launches; the package builds for cuda, rocm
-            # (which torch reports as "cuda") and xpu
+            # rocm counts: torch reports it as "cuda"
             raise ValueError(
                 f"on-the-fly {module.weight_format} quantization runs the kernels' quantizers on an "
                 f"accelerator, but the weight is on {value.device.type}"

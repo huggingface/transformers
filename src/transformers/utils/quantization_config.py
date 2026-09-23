@@ -1816,6 +1816,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
             A list of module names that should not be converted during quantization.
         modules_to_convert (`list`, *optional*):
             A list of additional module names, such as embedding tables, that should be converted during quantization.
+            An embedding table is quantized to FP8 whatever the rest of the config says: it holds one
+            per-tensor scale, and the group formats have no embedding path.
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
@@ -1823,6 +1825,11 @@ class FineGrainedConfig(QuantizationConfigMixin):
             Activation quantization format, needed only where the weights leave it ambiguous
             (MXFP4 weights run as W4A16 with `"bf16"`, W4A8 with `"mxfp8"`, W4A4 with
             `"mxfp4"`). `None` (default) matches the kernels' weight-native choice.
+        groups (`dict[str, transformers.utils.quantization_config.FineGrainedGroup] | None`, *optional*):
+            Which format covers which modules, for a checkpoint that is more than one (DeepSeek-V4
+            is MXFP4 experts over block-FP8 linears). Each group names its modules with regexes and
+            carries its own copy of the fields above. Leave unset for a single-format checkpoint:
+            the flat fields are the one-group spelling.
     """
 
     def __init__(
