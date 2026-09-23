@@ -160,6 +160,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^llm\.model\.", "model.language_model."),
             WeightRenaming(r"^llm\.lm_head\.", "lm_head."),
             WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.", "model.vision_tower."),
+            WeightRenaming(r"^model\.vision_tower\.encoder\.layers\.", "model.vision_tower.layers."),
             WeightRenaming(
                 r"^visual_tokenizer\.head\.0\.", "model.multi_modal_projector.visual_tokenizer.head_linear."
             ),
