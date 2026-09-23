@@ -71,6 +71,26 @@ class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
+    def test_gemma1_legacy_hidden_act_mapping(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/49051:
+        # the original Gemma 1.0 checkpoints (e.g. `google/gemma-2b`) were released with the legacy
+        # value `hidden_act="gelu"` (exact erf GELU) while the model was trained with the
+        # tanh-approximated GELU. `GemmaConfig.__post_init__` must remap it and warn.
+        from transformers import GemmaConfig
+        from transformers.activations import GELUTanh
+        from transformers.models.gemma.modeling_gemma import GemmaMLP
+
+        legacy_config = GemmaConfig(hidden_act="gelu")
+        self.assertEqual(legacy_config.hidden_act, "gelu_pytorch_tanh")
+        self.assertIsInstance(GemmaMLP(legacy_config).act_fn, GELUTanh)
+
+        default_config = GemmaConfig()
+        self.assertEqual(default_config.hidden_act, "gelu_pytorch_tanh")
+        self.assertIsInstance(GemmaMLP(default_config).act_fn, GELUTanh)
+
+        explicit_config = GemmaConfig(hidden_act="gelu_new")
+        self.assertEqual(explicit_config.hidden_act, "gelu_new")
+
 
 @slow
 @require_torch_accelerator

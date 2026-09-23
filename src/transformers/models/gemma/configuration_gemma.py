@@ -24,7 +24,10 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-7b")
@@ -81,6 +84,19 @@ class GemmaConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     use_bidirectional_attention: bool | None = None
+
+    def __post_init__(self, **kwargs):
+        # The original Gemma 1.0 checkpoints (e.g. `google/gemma-2b`) were released with the legacy value
+        # `hidden_act="gelu"`, which maps to the exact erf GELU, while the model was trained with the
+        # tanh-approximated GELU. Restore the legacy mapping removed in #35235. See #49051.
+        if self.hidden_act == "gelu":
+            logger.warning_once(
+                "GemmaConfig received the legacy value `hidden_act='gelu'`, which resolves to the exact erf "
+                "GELU activation. The original Gemma 1.0 checkpoints (e.g. `google/gemma-2b`) were trained with "
+                "the tanh-approximated GELU, so `hidden_act` is being set to `'gelu_pytorch_tanh'` instead."
+            )
+            self.hidden_act = "gelu_pytorch_tanh"
+        return super().__post_init__(**kwargs)
 
 
 __all__ = ["GemmaConfig"]
