@@ -41,12 +41,6 @@ You can find all the original GraniteForDocling checkpoints under the [docling-p
 
 - Prompt the model through the chat template. `<doclang>` converts the full page. Append a bracket list to request a subset of elements, for example `<doclang> [<ocr>]` or `<doclang> [<ocr>, <layout>, <picture>]`.
 - Decode with `skip_special_tokens=False` if you will parse the string as DocLang. Dedicated markup tokens are otherwise stripped.
-- Set `padding_side="left"` before batched generation, otherwise the padded prompts generate from the wrong position.
-
-```py
-processor.tokenizer.padding_side = "left"
-```
-
 - Pass `fine_route=True` to the processor for dense pages (small print, long tables, multi-column text). The prompt gets longer and inference slower. Checkpoints trained with the coarse path only set `use_fine_route=False` in the config, and `fine_route=True` raises an error for them.
 - Checkpoints with a density router decide that for you: [`~GraniteForDoclingForConditionalGeneration.predict_fine_route`] returns which pages of a batch need the fine path.
 
@@ -96,18 +90,12 @@ pipe(text=messages, max_new_tokens=4096, return_full_text=False, skip_special_to
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model_id = "docling-project/granite-for-docling-500m"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(
-    model_id,
-    dtype=torch.bfloat16,
-    device_map="auto",
-    attn_implementation="sdpa",  # or "flash_attention_2"
-)
+model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -173,11 +161,9 @@ output = model.generate(**inputs, max_new_tokens=4096)
 
 ### Batched inference
 
-Pages get different tile grids, so `pixel_values` is padded to the largest tile count in the batch with all-zero tiles that the model discards, and the prompts are padded on the left.
+Pages get different tile grids, so `pixel_values` is padded to the largest tile count in the batch with all-zero tiles that the model discards.
 
 ```python
-processor.tokenizer.padding_side = "left"
-
 pages = [
     "https://huggingface.co/docling-project/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png",
     "https://huggingface.co/docling-project/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png",
