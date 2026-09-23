@@ -1,9 +1,13 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # CELL 2 — Build the model  (~88M parameters)
 # ══════════════════════════════════════════════════════════════════════════════
-import torch, datetime as dt
-from ihelix import fibonacci_sphere, Geometry, FieldGrid
-from naturev1 import NatureConfig, NatureV1, calendar_features, SURFACE_FIELDS, WEATHER_TYPES
+import datetime as dt
+
+import torch
+from naturev1 import SURFACE_FIELDS, WEATHER_TYPES, NatureConfig, NatureV1, calendar_features
+
+from ihelix import FieldGrid, Geometry, fibonacci_sphere
+
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

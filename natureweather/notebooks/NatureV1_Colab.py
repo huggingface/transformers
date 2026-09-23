@@ -175,13 +175,26 @@ pretrain = TrainSettings(
     checkpoint_dir=f"{CKPT}/stage1", checkpoint_seconds=60,
     hub_repo="Sigmandndnns/NatureV1-500", hub_push_seconds=900,
     ema_decay=0.999, log_every=25,
+    val_every=500, val_batches=32,       # held-out check every 500 steps
 )
+
+# The held-out years, which the model never trains on. Without this there is no overfitting signal at
+# all -- training loss falls whether the model is learning weather or memorising, and the two curves
+# look identical until you check against data it has never seen.
+val_ds = ERA5Window(ERA5, indices=SPLITS["val"], history=CFG.history_frames, lead_steps=OFFSETS,
+                    augment=False, channels=CFG.analysis_channels, stats_cache=STATS)
 
 loader = era5_loader(train_ds, batch_size=BATCH, num_workers=4, shuffle=True,
                      analysis_grid=SRC, output_grid=SRC)
+val_loader = era5_loader(val_ds, batch_size=BATCH, num_workers=2, shuffle=False,
+                         analysis_grid=SRC, output_grid=SRC)
+
 trainer = Trainer(model, pretrain, device=DEVICE)
 trainer.resume()          # picks up wherever the last cell died; pulls from the Hub on a fresh VM
-trainer.fit(loader, epochs=8)
+trainer.fit(loader, epochs=8, val_loader=val_loader)
+
+# Read the [val] lines as they scroll. Held-out loss falling = learning. Held-out loss rising while
+# training loss keeps falling = memorising, and the gap is how much.
 
 # ══ CELL 7 ══ stage two data -- best tracks paired with the same reanalysis ═══
 from naturev1 import (
@@ -236,13 +249,45 @@ finetune = TrainSettings(
     precision="bf16",
     checkpoint_dir=f"{CKPT}/stage2", checkpoint_seconds=60,
     hub_repo="Sigmandndnns/NatureV1-500", hub_push_seconds=900,
-    ema_decay=0.999, early_stopping_patience=10, log_every=25,
+    ema_decay=0.999, log_every=25,
+    val_every=200, val_batches=32,
+    early_stopping_patience=10,          # 10 held-out passes without improvement -> stop
 )
+# Held-out SEASONS -- 2017/2019/2021 for validation, 2018/2020 for the final test. Whole seasons,
+# never individual points: six-hourly points from one storm are near-duplicates, so a random split
+# puts the same hurricane on both sides and the validation number becomes meaningless.
+storm_val, val_report = storm_split("validation")
+print(f"validation: {val_report['paired']:,} samples from {val_report['storms']} unseen storms")
+
 storm_loader = era5_loader(storm_train, batch_size=max(BATCH // 2, 1), num_workers=4, shuffle=True,
                            analysis_grid=SRC, output_grid=SRC)
+storm_val_loader = era5_loader(storm_val, batch_size=max(BATCH // 2, 1), num_workers=2, shuffle=False,
+                               analysis_grid=SRC, output_grid=SRC)
 storm_trainer = Trainer(model, finetune, device=DEVICE)
 storm_trainer.resume()
-storm_trainer.fit(storm_loader, epochs=50)
+storm_trainer.fit(storm_loader, epochs=50, val_loader=storm_val_loader)
+
+# Stage two is where overfitting is a live risk: 24,585 samples, and the storm heads have capacity to
+# memorise them. Early stopping is on held-out loss, so the run halts when it starts to.
+
+# ══ CELL 8b ══ the honest scoreboard: is it actually any good? ════════════════
+# Train loss alone tells you nothing. These are the three comparisons that do.
+final = storm_trainer.evaluate(storm_val_loader, max_batches=64)
+train_score = storm_trainer.evaluate(storm_loader, max_batches=64)
+print(f"held-out {final['val_total']:.4f}  vs  training {train_score['val_total']:.4f}  "
+      f"gap {final['val_total'] - train_score['val_total']:+.4f}")
+print("  a large positive gap means it memorised the training storms\n")
+
+for key in sorted(final):
+    if key != "val_total":
+        print(f"  {key:22} {final[key]:.4f}")
+
+# Baseline 1: persistence -- "tomorrow looks like today". Any weather model that cannot beat this is
+# not a weather model. Baseline 2: climatology -- what the untrained, anchored heads already say.
+# Score both on the SAME held-out batches and compare. A model that ties climatology has learned
+# nothing from the data; a model that beats persistence at +120 h is doing real work.
+print("\nRun these before trusting any forecast this model makes. The numbers above are")
+print("likelihoods, not skill -- skill is only meaningful against a baseline.")
 
 # ══ CELL 9 ══ live forecast from real GOES imagery ════════════════════════════
 CHANNELS = ("C13", "C09")     # clean IR window + mid-level water vapour

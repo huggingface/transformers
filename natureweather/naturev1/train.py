@@ -14,6 +14,7 @@ state along with the weights, and carries on.
 
 from __future__ import annotations
 
+import itertools
 import math
 import signal
 import time
@@ -47,7 +48,12 @@ class TrainSettings:
             points: under a million parameters are ever fitted to them.
         ema_decay: exponential moving average of the weights, evaluated instead of the raw ones. Cheap,
             and it consistently helps on small fine-tuning sets where the last step is noisy.
-        early_stopping_patience: validation evaluations without improvement before stopping. ``0`` disables.
+        early_stopping_patience: validation passes without improvement before stopping. ``0`` disables.
+            Requires a ``val_loader``; without one there is nothing to early-stop on, and stopping on
+            training loss would only measure how noisy the minibatches are.
+        val_every: optimizer steps between validation passes.
+        val_batches: batches per validation pass. A few dozen is enough to track the gap and costs far
+            less than a full sweep of a held-out decade.
     """
 
     learning_rate: float = 3e-4
@@ -66,6 +72,8 @@ class TrainSettings:
     stage: str = "pretrain"
     ema_decay: float = 0.999
     early_stopping_patience: int = 0
+    val_every: int = 500
+    val_batches: int = 32
 
 
 def build_scheduler(optimizer, settings: TrainSettings):
@@ -131,6 +139,7 @@ class Trainer:
         self.state = TrainingState()
         self._stop = False
         self._since_improvement = 0
+        self._best_val = float("inf")
         self.ema = None
         if settings.ema_decay and settings.ema_decay > 0:
             self.ema = {name: p.detach().clone() for name, p in model.named_parameters() if p.requires_grad}
@@ -170,13 +179,55 @@ class Trainer:
             config=self.model.config.to_dict(), force=force,
         )
 
-    def fit(self, loader, epochs: int = 1) -> TrainingState:
+    @torch.no_grad()
+    def evaluate(self, loader, max_batches: int | None = None) -> dict:
+        """
+        Average the loss over held-out data, without touching the weights.
+
+        This is the only thing that can tell you whether the model is learning weather or memorising
+        the training set. Training loss falling is not evidence of either -- a model with enough
+        capacity drives it down by memorising, and the curve looks identical until you check it against
+        data the model has never seen.
+
+        Returns:
+            The same breakdown :func:`naturev1.total_loss` reports, averaged, with ``val_`` prefixed.
+        """
+        was_training = self.model.training
+        self.model.eval()
+        totals: dict[str, float] = {}
+        seen = 0
+        limit = max_batches if max_batches is not None else self.settings.val_batches
+
+        # islice rather than enumerate-and-break: breaking after the check still pulls one batch past
+        # the limit, and pulling an ERA5 window costs about half a second.
+        for batch in itertools.islice(loader, limit):
+            batch = move_batch(batch, self.device)
+            with torch.autocast(self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
+                outputs = self.model(
+                    satellite=batch.get("satellite"), satellite_grid=batch.get("satellite_grid"),
+                    analysis=batch.get("analysis"), analysis_grid=batch.get("analysis_grid"),
+                    calendar=batch["calendar"], output_grid=batch.get("output_grid"),
+                )
+                _, parts = total_loss(outputs, batch, SURFACE_FIELDS)
+            for key, value in parts.items():
+                totals[key] = totals.get(key, 0.0) + value
+            seen += 1
+
+        if was_training:
+            self.model.train()
+        return {f"val_{key}": value / max(seen, 1) for key, value in totals.items()}
+
+    def fit(self, loader, epochs: int = 1, val_loader=None) -> TrainingState:
         """
         Train until ``max_steps``, the epochs run out, or the process is asked to stop.
 
         ``loader`` yields dicts holding the model inputs and whichever targets are available; a batch
         missing a target simply does not contribute that term, so storm-centric and gridded data can be
         interleaved freely.
+
+        Pass ``val_loader`` and the run reports held-out loss every ``val_every`` steps, keeps the best
+        one, and early-stops on it. Without it there is no overfitting signal at all: the training curve
+        goes down either way.
         """
         settings = self.settings
         self.model.train()
@@ -220,19 +271,34 @@ class Trainer:
                 self.state.wall_seconds = time.time() - started
                 if parts["total"] < self.state.best_loss:
                     self.state.best_loss = parts["total"]
-                    self._since_improvement = 0
-                else:
-                    self._since_improvement += 1
                 if self.ema is not None:
                     decay = settings.ema_decay
                     with torch.no_grad():
                         for name, parameter in self.model.named_parameters():
                             if name in self.ema:
                                 self.ema[name].mul_(decay).add_(parameter.detach(), alpha=1 - decay)
-                if (settings.early_stopping_patience
-                        and self._since_improvement >= settings.early_stopping_patience):
-                    print(f"[train] no improvement for {self._since_improvement} steps; stopping", flush=True)
-                    self._stop = True
+                if val_loader is not None and self.state.step % settings.val_every == 0:
+                    scores = self.evaluate(val_loader)
+                    self.state.history.append({"step": self.state.step, **scores})
+                    gap = scores["val_total"] - parts["total"]
+                    print(
+                        f"[val]   step {self.state.step:>7}  held-out {scores['val_total']:.4f}  "
+                        f"train {parts['total']:.4f}  gap {gap:+.4f}"
+                        f"{'  <- held-out rising: overfitting' if gap > 0 and scores['val_total'] > self._best_val else ''}",
+                        flush=True,
+                    )
+                    if scores["val_total"] < self._best_val:
+                        self._best_val = scores["val_total"]
+                        self._since_improvement = 0
+                    else:
+                        self._since_improvement += 1
+                    if (settings.early_stopping_patience
+                            and self._since_improvement >= settings.early_stopping_patience):
+                        print(
+                            f"[train] held-out loss has not improved for "
+                            f"{self._since_improvement} validation passes; stopping", flush=True
+                        )
+                        self._stop = True
 
                 if self.state.step % settings.log_every == 0:
                     self.state.history.append({"step": self.state.step, **parts})
