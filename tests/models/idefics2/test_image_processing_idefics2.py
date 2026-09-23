@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # applicable limitations under the License.
 
+import io
 import unittest
 
 import numpy as np
@@ -20,6 +21,8 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+from transformers.models.idefics2.image_processing_pil_idefics2 import Idefics2ImageProcessorPil
 
 
 if is_vision_available():
@@ -236,6 +239,21 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(
                 tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
+
+    def test_convert_to_rgb_handles_png_trns(self):
+        def _trns_image():
+            image = Image.new("RGB", (2, 2), (255, 0, 0))
+            image.paste((0, 0, 255), (0, 0, 1, 1))
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG", transparency=(255, 0, 0))
+            buffer.seek(0)
+            return Image.open(buffer)
+
+        convert = Idefics2ImageProcessorPil()
+        image = _trns_image()
+        self.assertEqual(image.mode, "RGB")
+        self.assertIn("transparency", image.info)
+        self.assertEqual(convert.convert_to_rgb(image).getpixel((1, 1)), (255, 255, 255))
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():
