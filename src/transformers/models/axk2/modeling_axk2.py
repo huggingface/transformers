@@ -286,11 +286,11 @@ class AXK2Indexer(nn.Module):
             )
             index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation.
+        # Masked keys score `-inf` for both mask types, which marks those selected when fewer than topk are visible.
+        if attention_mask.dtype != torch.bool:
+            attention_mask = attention_mask > torch.finfo(attention_mask.dtype).min
+        index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
 
         topk = min(self.index_topk, index_scores.shape[-1])
         topk_scores, topk_indices = index_scores.topk(topk, dim=-1)  # [B, S, topk]

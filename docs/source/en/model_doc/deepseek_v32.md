@@ -91,7 +91,7 @@ outputs = model(**inputs, labels=inputs["input_ids"], output_indexer_loss=True)
 outputs.loss.backward()  # LM loss + outputs.indexer_loss
 ```
 
-`indexer_loss` is averaged over layers and non-padding queries, or divided by `num_items_in_batch` when it is supplied, as the language modeling loss is under Trainer's gradient accumulation. The indexer's parameters receive no gradient from the language modeling loss, so give them their own learning rate through an optimizer parameter group rather than scaling the loss. Gradient checkpointing must be non-reentrant (the default): reentrant checkpointing runs each layer under `no_grad`, so the recorded scores carry no gradient.
+`indexer_loss` is averaged over layers and over the queries the language modeling loss is computed on, those whose next token is a label, so that it is divided by `num_items_in_batch` under Trainer's gradient accumulation exactly as the language modeling loss is. Without labels, it is averaged over the non-padding queries. The indexer's parameters receive no gradient from the language modeling loss, so give them their own learning rate through an optimizer parameter group rather than scaling the loss. Gradient checkpointing must be non-reentrant (the default): reentrant checkpointing runs each layer under `no_grad`, so the recorded scores carry no gradient.
 
 Either loss input can also be recorded on its own, with `output_indexer_scores=True` or `output_indexer_targets=True`, to build a different loss.
 

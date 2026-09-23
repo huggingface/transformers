@@ -255,15 +255,50 @@ class DeepseekV32Indexer(nn.Module):
             )
             index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation.
+        # Masked keys score `-inf` for both mask types, which marks those selected when fewer than topk are visible.
+        if attention_mask.dtype != torch.bool:
+            attention_mask = attention_mask > torch.finfo(attention_mask.dtype).min
+        index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
 
         topk = min(self.index_topk, index_scores.shape[-1])
         topk_scores, topk_indices = index_scores.topk(topk, dim=-1)  # [B, S, topk]
         return topk_indices.to(torch.int32), topk_scores
+
+
+class DeepseekV32IndexerTarget(nn.Module):
+    """
+    Attention distribution over the keys the indexer selected, averaged over heads: the target its scores are
+    distilled towards. It is recomputed from the attention inputs, in head chunks, so the attention itself can run
+    on any backend. Queries without a visible key get an all-zero row and thus add nothing to the loss.
+
+    This module has no parameters: it exists so that its output can be recorded as `indexer_targets`.
+    """
+
+    @torch.no_grad()
+    def forward(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        topk_indices: torch.Tensor,
+        topk_scores: torch.Tensor,
+        scaling: float,
+    ) -> torch.Tensor:
+        """
+        Returns:
+            `torch.Tensor` of shape `[B, S, topk]` in `float32`.
+        """
+        # The indexer scores masked keys `-inf`, so the selected keys the attention can see are the finite scores
+        visible = topk_scores.isfinite()  # [B, S, topk]
+        candidates = topk_indices.long().unsqueeze(1)  # [B, 1, S, topk]
+        target = query_states.new_zeros(topk_indices.shape, dtype=torch.float32)
+        for query_chunk, key_chunk in zip(query_states.split(16, dim=1), key_states.split(16, dim=1)):
+            logits = torch.matmul(query_chunk, key_chunk.transpose(-1, -2))
+            logits = logits.gather(-1, candidates.expand(-1, logits.shape[1], -1, -1)) * scaling
+            logits = logits.masked_fill(~visible.unsqueeze(1), torch.finfo(logits.dtype).min)
+            target += F.softmax(logits, dim=-1, dtype=torch.float32).sum(dim=1)
+        # Queries without a visible key got a uniform row: zero it
+        return target / query_states.shape[1] * visible
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -358,39 +393,6 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
-@torch.no_grad()
-def indexer_attention_target(
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    attention_mask: torch.Tensor,
-    topk_indices: torch.Tensor,
-    scaling: float,
-) -> torch.Tensor:
-    """
-    Attention distribution over the keys the indexer selected, averaged over heads: the target its scores are
-    distilled towards. It is recomputed from the attention inputs, in head chunks, so the attention itself can run
-    on any backend. Queries without a visible key get an all-zero row and thus add nothing to the loss.
-
-    Returns:
-        `torch.Tensor` of shape `[B, S, topk]` in `float32`.
-    """
-    if attention_mask.dtype == torch.bool:
-        attention_mask = torch.zeros_like(attention_mask, dtype=query_states.dtype).masked_fill(
-            ~attention_mask, torch.finfo(query_states.dtype).min
-        )
-    candidates = topk_indices.long().unsqueeze(1)  # [B, 1, S, topk]
-    target = query_states.new_zeros(topk_indices.shape, dtype=torch.float32)
-    for query_chunk, key_chunk in zip(query_states.split(16, dim=1), key_states.split(16, dim=1)):
-        logits = torch.matmul(query_chunk, key_chunk.transpose(-1, -2)) * scaling + attention_mask
-        logits = logits.gather(-1, candidates.expand(-1, logits.shape[1], -1, -1))
-        # Fully masked queries must stay finite too; their rows are zeroed below.
-        logits = logits.clamp_min(torch.finfo(logits.dtype).min)
-        target += F.softmax(logits, dim=-1, dtype=torch.float32).sum(dim=1)
-    target /= query_states.shape[1]
-    visible = (attention_mask > torch.finfo(attention_mask.dtype).min).any(dim=-1).any(dim=1)  # [B, S]
-    return target.masked_fill(~visible.unsqueeze(-1), 0.0)
-
-
 class DeepseekV32Attention(nn.Module):
     """
     DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
@@ -438,6 +440,7 @@ class DeepseekV32Attention(nn.Module):
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
         self.indexer = DeepseekV32Indexer(config, layer_idx)
+        self.indexer_target = DeepseekV32IndexerTarget()
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
@@ -466,7 +469,7 @@ class DeepseekV32Attention(nn.Module):
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
@@ -491,21 +494,18 @@ class DeepseekV32Attention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        topk_indices = self.indexer(
+        topk_indices, topk_scores = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
             past_key_values=past_key_values,
-        )[0]  # [B, S, topk]
+        )  # [B, S, topk]
 
         # Recorded, with the indexer scores, as the target of the indexer's distillation loss
-        indexer_target = None
         if kwargs.get("output_indexer_targets", False):
-            indexer_target = indexer_attention_target(
-                query_states, key_states, attention_mask, topk_indices, self.scaling
-            )
+            self.indexer_target(query_states, key_states, topk_indices, topk_scores, self.scaling)
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
@@ -540,7 +540,7 @@ class DeepseekV32Attention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, indexer_target
+        return attn_output, attn_weights
 
 
 class DeepseekV32MLP(nn.Module):
@@ -688,7 +688,7 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _, _ = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -724,7 +724,7 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
         "hidden_states": DeepseekV32DecoderLayer,
         "attentions": DeepseekV32Attention,
         "indexer_scores": OutputRecorder(DeepseekV32Indexer, index=1),
-        "indexer_targets": OutputRecorder(DeepseekV32Attention, index=2),
+        "indexer_targets": DeepseekV32IndexerTarget,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
@@ -874,37 +874,33 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
 def indexer_kl_loss(
     indexer_scores: tuple[torch.Tensor, ...],
     indexer_targets: tuple[torch.Tensor, ...],
-    attention_mask: torch.Tensor | None = None,
+    query_mask: torch.Tensor | None = None,
     num_items_in_batch: torch.Tensor | int | None = None,
 ) -> torch.Tensor:
     r"""
     Distillation loss of the DSA indexer, from section 2.1.1 of the [DeepSeek-V3.2 report](https://arxiv.org/abs/2512.02556):
     the KL divergence from each layer's attention distribution over the selected keys (`indexer_targets`) to the
-    indexer's distribution over them (`softmax(indexer_scores)`), summed over layers and queries.
+    indexer's distribution over them (`softmax(indexer_scores)`), summed over layers and the queries of `query_mask`
+    (`[B, S]`, by default those with a visible key).
 
-    The sum is divided by the number of layers and by `num_items_in_batch` when given, as the language modeling loss
-    is under gradient accumulation, or else by the number of queries that count: those of non-padding tokens when
-    `attention_mask` is 2D, otherwise those with a visible key. With `index_topk` at least the sequence length,
+    The sum is divided by the number of layers and by `num_items_in_batch`, the number of queries that count in the
+    whole gradient accumulation batch, or by default in this one. With `index_topk` at least the sequence length,
     every visible key is selected: the dense warm-up stage.
     """
-    query_mask = None
-    if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
-        query_mask = attention_mask[:, -indexer_targets[0].shape[1] :].bool()
+    if query_mask is None:
+        # The other queries have an all-zero target
+        query_mask = indexer_targets[0].sum(dim=-1) > 0
+    if num_items_in_batch is None:
+        num_items_in_batch = query_mask.sum()
 
     loss = None
     for scores, target in zip(indexer_scores, indexer_targets):
         # Early queries select masked keys when fewer than topk are visible. Keep log-softmax finite.
         log_probs = F.log_softmax(scores.clamp_min(torch.finfo(scores.dtype).min), dim=-1, dtype=torch.float32)
         kl = F.kl_div(log_probs, target, reduction="none").sum(dim=-1)  # [B, S]
-        if query_mask is not None:
-            kl = kl.masked_fill(~query_mask.to(kl.device), 0.0)
-        loss = kl.sum() if loss is None else loss + kl.sum().to(loss.device)
+        kl = kl.masked_fill(~query_mask.to(kl.device), 0.0).sum()
+        loss = kl if loss is None else loss + kl.to(loss.device)
 
-    if num_items_in_batch is None:
-        if query_mask is not None:
-            num_items_in_batch = query_mask.sum()
-        else:
-            num_items_in_batch = (indexer_targets[0].sum(dim=-1) > 0).sum()
     normalizer = torch.as_tensor(num_items_in_batch, device=loss.device).clamp_min(1)
     return loss / (len(indexer_scores) * normalizer)
 
@@ -989,8 +985,18 @@ class DeepseekV32ForCausalLM(DeepseekV32PreTrainedModel, GenerationMixin):
 
         indexer_loss = None
         if output_indexer_loss:
+            # The indexer is trained on the queries the language modeling loss is computed on, which are those
+            # `num_items_in_batch` counts, or else on those of non-padding tokens
+            query_mask = None
+            if kwargs.get("shift_labels") is not None:
+                query_mask = kwargs["shift_labels"] != -100
+            elif labels is not None:
+                # The query of token t predicts label t + 1
+                query_mask = F.pad(labels[..., 1:] != -100, (0, 1), value=False)
+            elif isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
+                query_mask = attention_mask[:, -hidden_states.shape[1] :].bool()
             indexer_loss = indexer_kl_loss(
-                outputs.indexer_scores, outputs.indexer_targets, attention_mask, kwargs.get("num_items_in_batch")
+                outputs.indexer_scores, outputs.indexer_targets, query_mask, kwargs.get("num_items_in_batch")
             )
             if self.training and torch.is_grad_enabled() and not indexer_loss.requires_grad:
                 logger.warning_once(

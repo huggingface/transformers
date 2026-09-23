@@ -169,6 +169,8 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         input_ids, attention_mask = inputs["input_ids"], inputs["attention_mask"]
         labels = input_ids.masked_fill(~attention_mask.bool(), -100)
         valid_queries = attention_mask.bool()
+        # With labels, the loss counts the queries that predict a label, like the language modeling loss
+        loss_queries = torch.nn.functional.pad(labels, (0, 1), value=-100)[..., 1:] != -100
 
         # The indexer returns its top-k indices and their scores, and the scores are recorded as the loss input.
         indexer_outputs = []
@@ -195,8 +197,8 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             # Early queries select masked keys when fewer than topk are visible: the loss clamps their scores.
             log_probs = scores.clamp_min(torch.finfo(scores.dtype).min).log_softmax(-1)
             kl = torch.nn.functional.kl_div(log_probs, target, reduction="none").sum(-1)
-            reference_loss += kl.masked_fill(~valid_queries, 0).sum()
-        reference_loss /= config.num_hidden_layers * valid_queries.sum()
+            reference_loss += kl.masked_fill(~loss_queries, 0).sum()
+        reference_loss /= config.num_hidden_layers * loss_queries.sum()
         torch.testing.assert_close(outputs.indexer_loss, reference_loss)
         lm_loss = model.loss_function(logits=outputs.logits, labels=labels, vocab_size=config.vocab_size)
         torch.testing.assert_close(outputs.loss, lm_loss + outputs.indexer_loss)
@@ -282,7 +284,8 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertTrue(all(p.grad is None or p.grad.isfinite().all() for p in model.parameters()))
             model.zero_grad(set_to_none=True)
 
-        # Padding does not add indexer training queries, including entirely masked sequences.
+        # Without labels, padding does not add indexer training queries, including entirely masked sequences.
+        expected = model(input_ids).indexer_loss
         for left in (False, True):
             padded_ids = torch.cat((input_ids[:, :2], input_ids) if left else (input_ids, input_ids[:, :2]), dim=1)
             mask = torch.ones_like(padded_ids)
