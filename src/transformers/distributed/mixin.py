@@ -80,11 +80,16 @@ class DistributedMixin:
             if plan := getattr(module, "_fsdp_plan", None):
                 self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
-        # A tied lm_head IS the embedding's parameter, so the `embedding_rowwise` entry shards
-        # the tensor it reads while lm_head itself gets no style — leaving `F.linear` a plain
-        # input against a DTensor weight. The CONFIG flag, not `head.weight is embed.weight`:
-        # tying happens later in `post_init`, so an identity test here silently misses.
-        tied = getattr(self.config.get_text_config(), "tie_word_embeddings", False)
+        # A tied lm_head IS the embedding's parameter, so `embedding_rowwise` shards the tensor
+        # it reads while lm_head gets no style — leaving `F.linear` a plain input against a
+        # DTensor weight. The CONFIG flag, not `head.weight is embed.weight`: tying happens in
+        # `post_init`, after this. And `get_text_config` RAISES on a composite model with two
+        # text sub-configs (musicgen), which this would hit in every model's `post_init`.
+        try:
+            text_config = self.config.get_text_config()
+        except ValueError:
+            text_config = self.config
+        tied = getattr(text_config, "tie_word_embeddings", False)
         if tied and "embedding_rowwise" in self._tp_plan.values():
             head = self.get_output_embeddings()
             if head is not None:
