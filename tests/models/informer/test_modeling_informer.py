@@ -225,6 +225,24 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
+    def test_distillation_updates_encoder_attention_mask(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config.distil = True
+        model = InformerModel(config).to(torch_device).eval()
+
+        transformer_inputs, _, _, _ = model.create_network_inputs(**inputs_dict)
+        encoder_inputs = transformer_inputs[:, : config.context_length]
+        attention_mask = torch.ones(encoder_inputs.shape[:2], device=torch_device, dtype=torch.long)
+
+        with torch.no_grad():
+            outputs = model.encoder(inputs_embeds=encoder_inputs, attention_mask=attention_mask)
+
+        expected_sequence_length = (config.context_length + 1) // 2
+        self.assertEqual(
+            outputs.last_hidden_state.shape[:2],
+            (self.model_tester.batch_size, expected_sequence_length),
+        )
+
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
