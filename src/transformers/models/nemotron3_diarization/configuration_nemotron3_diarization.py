@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ...utils.type_validators import interval, positive_int_field
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization")
 @strict
 class Nemotron3DiarizationAudioConfig(PreTrainedConfig):
     r"""
@@ -66,7 +66,7 @@ class Nemotron3DiarizationAudioConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization")
 @strict
 class Nemotron3DiarizationHeadConfig(PreTrainedConfig):
     r"""
@@ -92,7 +92,7 @@ class Nemotron3DiarizationHeadConfig(PreTrainedConfig):
     subsampling_factor: int = positive_int_field(default=8)
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization")
 @strict
 class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
     r"""
@@ -141,7 +141,7 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
     subsampling_factor: int = positive_int_field(default=8)
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization")
 @strict
 class Nemotron3DiarizationConfig(PreTrainedConfig):
     r"""

@@ -272,8 +272,8 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
 
     def setUp(self):
         super().setUp()
-        self.checkpoint_name = "nvidia/Nemotron-3-Diarization-preview"
-        self.revision = "refs/pr/6"
+        self.checkpoint_name = "nvidia/Nemotron-3-Diarization"
+        self.revision = "refs/pr/1"
         self.bucket = "hf-internal-testing/nemotron3-diarization-integration-test"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, revision=self.revision)
 

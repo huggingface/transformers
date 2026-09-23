@@ -43,7 +43,7 @@ from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..pe_audio.modeling_pe_audio import PeAudioPreTrainedModel
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization")
 @strict
 class Nemotron3DiarizationAudioConfig(GlmAsrEncoderConfig):
     r"""
@@ -74,7 +74,7 @@ class Nemotron3DiarizationAudioConfig(GlmAsrEncoderConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization")
 @strict
 class Nemotron3DiarizationHeadConfig(PreTrainedConfig):
     r"""
@@ -100,7 +100,7 @@ class Nemotron3DiarizationHeadConfig(PreTrainedConfig):
     subsampling_factor: int = positive_int_field(default=8)
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization")
 @strict
 class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
     r"""
@@ -149,7 +149,7 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
     subsampling_factor: int = positive_int_field(default=8)
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
+@auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization")
 @strict
 class Nemotron3DiarizationConfig(PreTrainedConfig):
     r"""
@@ -711,9 +711,10 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         >>> from transformers import AutoModelForAudioFrameClassification, AutoProcessor
         >>> from transformers.audio_utils import load_audio
 
-        >>> model_id = "nvidia/Nemotron-3-Diarization-preview"
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto")
+        >>> model_id = "nvidia/Nemotron-3-Diarization"
+        >>> revision = "refs/pr/1"
+        >>> processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+        >>> model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto", revision=revision)
 
         >>> sampling_rate = processor.feature_extractor.sampling_rate
         >>> audio = load_audio(

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert a NeMo Streaming Sortformer checkpoint (`nvidia/Nemotron-3-Diarization-preview`) to Nemotron3Diarization."""
+"""Convert a NeMo Streaming Sortformer checkpoint (`nvidia/Nemotron-3-Diarization`) to Nemotron3Diarization."""
 
 import argparse
 import re
@@ -56,11 +56,13 @@ STATE_DICT_MAPPING = {
 KEYS_TO_DROP = {
     # Legacy two-branch speaker head (384 -> 8), frozen and never called in the original forward.
     r"^sortformer_modules\.hidden_to_spks\.",
+    # Auxiliary three-class activity head (silence / single / overlap), only used by the training loss.
+    r"^sortformer_modules\.activity_head\.",
     # STFT window and mel filter bank, recomputed by the feature extractor.
     r"^preprocessor\.featurizer\.",
 }
 
-# The `.nemo` config holds the training-time streaming values (fifo 0, chunk 264, update 188, no right context),
+# The `.nemo` config holds the training-time streaming values (fifo 0, chunk 264, no right context),
 # which are not meant for inference: the config defaults are the model-card "offline" profile (chunking and
 # `offline_*` cache sizes) and the cache sizes shared by its streaming profiles (`streaming_*`).
 
@@ -191,7 +193,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--nemo_path", default=None, help="Local `.nemo` file. Downloaded from `--model_id` when unset."
     )
-    parser.add_argument("--model_id", default="nvidia/Nemotron-3-Diarization-preview")
+    parser.add_argument("--model_id", default="nvidia/Nemotron-3-Diarization")
     parser.add_argument("--output_dir", required=True)
     args = parser.parse_args()
     main(args.nemo_path, args.model_id, args.output_dir)

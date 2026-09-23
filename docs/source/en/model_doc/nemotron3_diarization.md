@@ -37,8 +37,8 @@ import torch
 from transformers import AutoModelForAudioFrameClassification, AutoProcessor
 from transformers.audio_utils import load_audio
 
-model_id = "nvidia/Nemotron-3-Diarization-preview"
-revision = "refs/pr/6"
+model_id = "nvidia/Nemotron-3-Diarization"
+revision = "refs/pr/1"
 processor = AutoProcessor.from_pretrained(model_id, revision=revision)
 model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto", revision=revision)
 
@@ -79,8 +79,8 @@ import torch
 from transformers import AutoModelForAudioFrameClassification, AutoProcessor
 from transformers.audio_utils import load_audio
 
-model_id = "nvidia/Nemotron-3-Diarization-preview"
-revision = "refs/pr/6"
+model_id = "nvidia/Nemotron-3-Diarization"
+revision = "refs/pr/1"
 processor = AutoProcessor.from_pretrained(model_id, revision=revision)
 model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto", revision=revision)
 processor.set_streaming_mode("low_latency")  # the default, can also be "very_low_latency" and "ultra_low_latency"
