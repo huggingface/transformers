@@ -106,6 +106,8 @@ class Nemotron3DiarizationModelTester:
             head_config=Nemotron3DiarizationHeadConfig(
                 hidden_size=self.speaker_hidden_size,
                 num_speakers=self.num_speakers,
+                audio_hidden_size=self.hidden_size,
+                subsampling_factor=self.subsampling_factor,
             ),
             streaming_config=Nemotron3DiarizationStreamingConfig(
                 speaker_cache_length=self.speaker_cache_length,

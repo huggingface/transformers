@@ -76,12 +76,20 @@ class Nemotron3DiarizationHeadConfig(PreTrainedConfig):
     num_speakers (`int`, *optional*, defaults to 8):
         Maximum number of speakers, i.e. the number of per-frame activity outputs. Speakers are ordered by their first
         arrival in the audio.
+    audio_hidden_size (`int`, *optional*, defaults to 512):
+        Hidden size of the encoder output the head projects from. Must match
+        `Nemotron3DiarizationAudioConfig.hidden_size`.
+    subsampling_factor (`int`, *optional*, defaults to 8):
+        Upsampling factor of the head, back to the spectrogram frame rate. Must match
+        `Nemotron3DiarizationAudioConfig.subsampling_factor`.
     """
 
     base_config_key = "head_config"
 
     hidden_size: int = positive_int_field(default=192)
     num_speakers: int = positive_int_field(default=8)
+    audio_hidden_size: int = positive_int_field(default=512)
+    subsampling_factor: int = positive_int_field(default=8)
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
@@ -196,6 +204,16 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
                 f"`chunk_length` ({self.chunk_length})."
             )
 
+        if self.head_config.audio_hidden_size != self.audio_config.hidden_size:
+            raise ValueError(
+                f"`head_config.audio_hidden_size` ({self.head_config.audio_hidden_size}) must match "
+                f"`audio_config.hidden_size` ({self.audio_config.hidden_size})."
+            )
+        if self.head_config.subsampling_factor != self.audio_config.subsampling_factor:
+            raise ValueError(
+                f"`head_config.subsampling_factor` ({self.head_config.subsampling_factor}) must match "
+                f"`audio_config.subsampling_factor` ({self.audio_config.subsampling_factor})."
+            )
         if self.streaming_config.num_speakers != self.head_config.num_speakers:
             raise ValueError(
                 f"`streaming_config.num_speakers` ({self.streaming_config.num_speakers}) must match "

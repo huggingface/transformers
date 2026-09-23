@@ -127,6 +127,8 @@ def build_config(nemo_config: dict) -> Nemotron3DiarizationConfig:
         head_config=Nemotron3DiarizationHeadConfig(
             hidden_size=modules["tf_d_model"],
             num_speakers=modules["num_spks"],
+            audio_hidden_size=encoder["d_model"],
+            subsampling_factor=encoder["subsampling_factor"],
         ),
         streaming_config=Nemotron3DiarizationStreamingConfig(
             speaker_cache_silence_frames_per_speaker=modules["spkcache_sil_frames_per_spk"],

@@ -84,12 +84,20 @@ class Nemotron3DiarizationHeadConfig(PreTrainedConfig):
     num_speakers (`int`, *optional*, defaults to 8):
         Maximum number of speakers, i.e. the number of per-frame activity outputs. Speakers are ordered by their first
         arrival in the audio.
+    audio_hidden_size (`int`, *optional*, defaults to 512):
+        Hidden size of the encoder output the head projects from. Must match
+        `Nemotron3DiarizationAudioConfig.hidden_size`.
+    subsampling_factor (`int`, *optional*, defaults to 8):
+        Upsampling factor of the head, back to the spectrogram frame rate. Must match
+        `Nemotron3DiarizationAudioConfig.subsampling_factor`.
     """
 
     base_config_key = "head_config"
 
     hidden_size: int = positive_int_field(default=192)
     num_speakers: int = positive_int_field(default=8)
+    audio_hidden_size: int = positive_int_field(default=512)
+    subsampling_factor: int = positive_int_field(default=8)
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
@@ -204,6 +212,16 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
                 f"`chunk_length` ({self.chunk_length})."
             )
 
+        if self.head_config.audio_hidden_size != self.audio_config.hidden_size:
+            raise ValueError(
+                f"`head_config.audio_hidden_size` ({self.head_config.audio_hidden_size}) must match "
+                f"`audio_config.hidden_size` ({self.audio_config.hidden_size})."
+            )
+        if self.head_config.subsampling_factor != self.audio_config.subsampling_factor:
+            raise ValueError(
+                f"`head_config.subsampling_factor` ({self.head_config.subsampling_factor}) must match "
+                f"`audio_config.subsampling_factor` ({self.audio_config.subsampling_factor})."
+            )
         if self.streaming_config.num_speakers != self.head_config.num_speakers:
             raise ValueError(
                 f"`streaming_config.num_speakers` ({self.streaming_config.num_speakers}) must match "
@@ -568,12 +586,12 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
 class Nemotron3DiarizationSubpixelUpsampler(nn.Module):
     """Upsamples the encoder frame rate back to the spectrogram frame rate with a sub-pixel convolution."""
 
-    def __init__(self, config: Nemotron3DiarizationConfig):
+    def __init__(self, config: Nemotron3DiarizationHeadConfig):
         super().__init__()
-        self.upsample_factor = config.audio_config.subsampling_factor
+        self.upsample_factor = config.subsampling_factor
         self.conv = nn.Conv1d(
-            config.head_config.hidden_size,
-            config.head_config.hidden_size * config.audio_config.subsampling_factor,
+            config.hidden_size,
+            config.hidden_size * config.subsampling_factor,
             kernel_size=3,
             padding=1,
         )
@@ -585,10 +603,10 @@ class Nemotron3DiarizationSubpixelUpsampler(nn.Module):
 
 
 class Nemotron3DiarizationClassificationHead(nn.Module):
-    def __init__(self, config: Nemotron3DiarizationConfig):
+    def __init__(self, config: Nemotron3DiarizationHeadConfig):
         super().__init__()
-        self.dense = nn.Linear(config.head_config.hidden_size, config.head_config.hidden_size)
-        self.out_proj = nn.Linear(config.head_config.hidden_size, config.head_config.num_speakers)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_speakers)
         self.act_fn = ACT2FN["relu"]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -599,9 +617,9 @@ class Nemotron3DiarizationClassificationHead(nn.Module):
 class Nemotron3DiarizationSpeakerHead(nn.Module):
     """Turns encoder frames into per-speaker activity logits at the spectrogram frame rate."""
 
-    def __init__(self, config: Nemotron3DiarizationConfig):
+    def __init__(self, config: Nemotron3DiarizationHeadConfig):
         super().__init__()
-        self.proj = nn.Linear(config.audio_config.hidden_size, config.head_config.hidden_size)
+        self.proj = nn.Linear(config.audio_hidden_size, config.hidden_size)
         self.upsampler = Nemotron3DiarizationSubpixelUpsampler(config)
         self.classifier = Nemotron3DiarizationClassificationHead(config)
 
@@ -622,7 +640,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
     def __init__(self, config: Nemotron3DiarizationConfig):
         super().__init__(config)
         self.model = Nemotron3DiarizationAudioModel(config.audio_config)
-        self.head = Nemotron3DiarizationSpeakerHead(config)
+        self.head = Nemotron3DiarizationSpeakerHead(config.head_config)
         self.silence_embeds = nn.Parameter(torch.zeros(config.audio_config.hidden_size))
         self.post_init()
 
