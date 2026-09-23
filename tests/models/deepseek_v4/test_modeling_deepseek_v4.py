@@ -258,6 +258,14 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         RUN_SLOW=1 pytest tests/models/deepseek_v4/test_modeling_deepseek_v4.py::DeepseekV4IntegrationTest -k generation -s
     """
 
+    @classmethod
+    def setUpClass(cls):
+        cls.offload_dir = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.offload_dir.cleanup()
+
     model_id = "deepseek-ai/DeepSeek-V4-Flash"
     prompt = "Pipeline parallelism in ai is "
 
@@ -280,6 +288,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             device_map="auto",
             attn_implementation="eager",
             quantization_config=quantization_config,
+            offload_folder=self.offload_dir.name,
         )
 
         inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
@@ -398,6 +407,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             device_map="auto",
             attn_implementation="eager",
             quantization_config=quantization_config,
+            offload_folder=self.offload_dir.name,
         )
 
         for i, (prompt, expected) in enumerate(cases, start=1):
