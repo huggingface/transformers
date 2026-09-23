@@ -422,7 +422,7 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
 
         # Keep the 2D padding mask around: the distillation conv layers halve the sequence length,
         # so the attention mask has to be downsampled together with the hidden states.
-        padding_mask = attention_mask if attention_mask is None or attention_mask.dim() == 2 else None
+        padding_mask = attention_mask if attention_mask is not None and attention_mask.dim() == 2 else None
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
