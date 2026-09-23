@@ -23,15 +23,13 @@ limitations under the License.
 
 ## Overview
 
-EmbeddingGemma 2 is a multimodal embedding model built on the [Gemma 4](./gemma4) backbone. It turns text, images, video and audio into a single dense vector space, and is meant to be used for retrieval, clustering, classification and semantic similarity rather than for generation.
+EmbeddingGemma 2 is a multimodal embedding model from Google built on the [Gemma 4](./gemma4) architecture. It encodes text, images, video, and audio—individually or interleaved—into a shared 768-dimensional dense vector space for retrieval, semantic similarity, clustering, and classification.
 
-The key differences from Gemma 4 are:
+Key features:
 
-- **No language modeling head.** There is no `ForCausalLM` and no `ForConditionalGeneration` class. [`EmbeddingGemma2Model`] returns a `last_hidden_state` of shape `(batch_size, sequence_length, embedding_dim)`, already projected by the embedding head.
-- **An embedding head on the text backbone.** [`EmbeddingGemma2TextModel`] owns `embedding_projection`, a bias-free `nn.Linear(hidden_size, embedding_dim)` applied after the final norm. Because a linear map commutes with averaging, projecting per token is equivalent to projecting the mean-pooled sentence embedding.
-- **Bidirectional attention.** The stack is an encoder: every layer attends bidirectionally, over the full sequence on `full_attention` layers and over a symmetric window on `sliding_attention` layers. There is no causal mask and no key-value cache.
-- **Projection-only Per-Layer Embeddings (PLE).** Gemma 4 sums a token-identity term (an `embed_tokens_per_layer` lookup table) with a context-aware projection of `inputs_embeds`. EmbeddingGemma 2 keeps only the context-aware half: `EmbeddingGemma2TextPLE` takes `inputs_embeds` alone, and neither `vocab_size_per_layer_input` nor the lookup table exists. The text model computes the per-layer embeddings once with `EmbeddingGemma2TextPLE`; each encoder layer then mixes its own slice into the residual stream with `EmbeddingGemma2TextPLEBlock`, after attention and the MLP.
-- **Reused Gemma 4 towers and processors.** `config.vision_config` is a [`Gemma4VisionConfig`] and `config.audio_config` is a [`Gemma4AudioConfig`]; the towers themselves are resolved through `AutoModel`, so they are a `Gemma4VisionModel` and a `Gemma4AudioModel`. The image processor ([`Gemma4ImageProcessor`]) and the audio feature extractor ([`Gemma4AudioFeatureExtractor`]) are reused as-is through the auto mappings. Only the video processor is specialized: by default, [`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS (`fps=1`), caps a clip at 32 frames by uniformly subsampling anything longer (`max_frames=32`, `overflow_strategy="uniform"`), and leaves frame timestamps out of the prompt (`add_timestamps=False`).
+- **Multimodal bidirectional encoder.** Vision ([`Gemma4VisionModel`]) and audio ([`Gemma4AudioModel`]) towers feed into a bidirectional text encoder ([`EmbeddingGemma2TextModel`]) that interleaves full and sliding-window attention with context-aware Per-Layer Embeddings (PLE).
+- **Matryoshka embedding head.** [`EmbeddingGemma2Model`] outputs token representations projected to `embedding_dim` (`768`) via a linear head and trained with Matryoshka Representation Learning (MRL), supporting prefix truncation to smaller dimensions.
+- **Unified multimodal processing.** [`EmbeddingGemma2Processor`] processes text, images, audio, and video in a single call. By default, [`EmbeddingGemma2VideoProcessor`] samples video clips at 1 FPS up to 32 frames (`fps=1`, `max_frames=32`, `overflow_strategy="uniform"`, `add_timestamps=False`).
 
 You can find all the original EmbeddingGemma checkpoints under the [EmbeddingGemma](https://huggingface.co/collections/google/embeddinggemma) collection. The examples below use the `google/embeddinggemma-2` identifier.
 
@@ -103,7 +101,7 @@ print(sentence_embeddings[0] @ sentence_embeddings[1])
 
 ### Task prompts
 
-The model is trained with a task prompt in front of every input, and the prompt is included in the pooled tokens. Sentence Transformers ships the catalog below in `config_sentence_transformers.json`, so pass `prompt_name` (or use `encode_query` / `encode_document`, which map to `query` and `document`). With [`AutoModel`], prepend the prompt string to the text yourself — that is the only difference.
+The model supports optional task prompts prepended to the input (included in the pooled tokens), though prompts are not mandatory and the model also works without them. Because the optimal setup depends on the downstream domain and modality mix, we recommend evaluating both with and without task prompts on your specific task. Sentence Transformers ships the catalog below in `config_sentence_transformers.json`, so pass `prompt_name` (or use `encode_query` / `encode_document`, which map to `query` and `document`); with [`AutoModel`], prepend the prompt string yourself.
 
 ```python
 embeddings = model.encode("How to train a neural network", prompt_name="Classification")

@@ -89,6 +89,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
+    # TODO: remove `_CHAT_TEMPLATE` and set `model_id` once the checkpoint is available on the Hub.
     _CHAT_TEMPLATE = (
         "{%- for msg in messages if msg.get('role') == 'system' -%}"
         "{%- if msg.get('content') is string -%}"
