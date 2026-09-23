@@ -988,11 +988,11 @@ class DeepseekV32ForCausalLM(DeepseekV32PreTrainedModel, GenerationMixin):
             # The indexer is trained on the queries the language modeling loss is computed on, which are those
             # `num_items_in_batch` counts, or else on those of non-padding tokens
             query_mask = None
-            if kwargs.get("shift_labels") is not None:
-                query_mask = kwargs["shift_labels"] != -100
-            elif labels is not None:
-                # The query of token t predicts label t + 1
-                query_mask = F.pad(labels[..., 1:] != -100, (0, 1), value=False)
+            shift_labels = kwargs.get("shift_labels")
+            if shift_labels is None and labels is not None:
+                shift_labels = F.pad(labels, (0, 1), value=-100)[..., 1:]
+            if shift_labels is not None:
+                query_mask = shift_labels != -100
             elif isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
                 query_mask = attention_mask[:, -hidden_states.shape[1] :].bool()
             indexer_loss = indexer_kl_loss(
