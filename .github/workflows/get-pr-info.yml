@@ -69,7 +69,6 @@ jobs:
   get-pr-info:
     permissions:
       contents: read
-      pull-requests: read
     runs-on: ubuntu-22.04
     name: Get PR commit SHA better
     outputs:
