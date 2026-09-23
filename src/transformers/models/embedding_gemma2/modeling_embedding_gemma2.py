@@ -25,6 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -43,7 +44,6 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from ..gemma4 import Gemma4AudioConfig, Gemma4VisionConfig
 from .configuration_embedding_gemma2 import EmbeddingGemma2Config, EmbeddingGemma2TextConfig
 
 
@@ -498,10 +498,7 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # Redeclared so that this comment, rather than the inherited one, lands in the generated file:
-        # `embed_scale` is `sqrt(hidden_size)`, held as a buffer and cast to the weight dtype on use, so it
-        # rounds under bfloat16 — sqrt(512) = 22.6274 becomes 22.625.
-        # See https://github.com/huggingface/transformers/pull/29402
+        # bfloat16 rounding turns sqrt(512)=22.6274 into 22.625; see https://github.com/huggingface/transformers/pull/29402
         self.embed_tokens = EmbeddingGemma2TextScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
@@ -515,8 +512,7 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
         self.unique_layer_types = set(self.config.layer_types)
         self.ple = EmbeddingGemma2TextPLE(config)
 
-        # The embedding head. Applying it per-token is equivalent to applying it after the mean
-        # pooling SentenceTransformers performs downstream, since a linear map commutes with averaging.
+        # Projecting per token is equivalent to projecting after mean pooling
         self.embedding_projection = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
 
         # Initialize weights and apply final processing
@@ -582,7 +578,7 @@ class EmbeddingGemma2MultimodalEmbedder(nn.Module):
 
     def __init__(
         self,
-        multimodal_config: Gemma4AudioConfig | Gemma4VisionConfig,
+        multimodal_config: PreTrainedConfig,
         text_config: EmbeddingGemma2TextConfig,
     ):
         super().__init__()

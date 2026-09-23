@@ -42,8 +42,8 @@ from ...utils import (
 )
 from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3MLP, Gemma3TextModel, apply_rotary_pos_emb
-from ..gemma4 import Gemma4AudioConfig, Gemma4VisionConfig
 from ..gemma4.modeling_gemma4 import (
     Gemma4AudioModelOutput,
     Gemma4Model,
@@ -176,10 +176,10 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     r"""
     text_config (`EmbeddingGemma2TextConfig`, *optional*):
         Configuration of the text backbone.
-    vision_config (`Gemma4VisionConfig`, *optional*):
+    vision_config (`PreTrainedConfig` or `dict`, *optional*):
         Configuration of the vision tower. Reused verbatim from Gemma 4; the tower itself is
         resolved at runtime through `AutoModel`.
-    audio_config (`Gemma4AudioConfig`, *optional*):
+    audio_config (`PreTrainedConfig` or `dict`, *optional*):
         Configuration of the audio tower. Reused verbatim from Gemma 4; the tower itself is
         resolved at runtime through `AutoModel`.
     boi_token_id (`int`, *optional*, defaults to 255999):
@@ -195,13 +195,13 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     model_type = "embedding_gemma2"
     sub_configs = {
         "text_config": EmbeddingGemma2TextConfig,
-        "vision_config": Gemma4VisionConfig,
-        "audio_config": Gemma4AudioConfig,
+        "vision_config": AutoConfig,
+        "audio_config": AutoConfig,
     }
 
     text_config: EmbeddingGemma2TextConfig | dict[str, Any] | None = None
-    vision_config: Gemma4VisionConfig | dict[str, Any] | None = None
-    audio_config: Gemma4AudioConfig | dict[str, Any] | None = None
+    vision_config: PreTrainedConfig | dict[str, Any] | None = None
+    audio_config: PreTrainedConfig | dict[str, Any] | None = None
     boi_token_id: int | None = 255_999
     eoi_token_id: int | None = 258_882
     image_token_id: int | None = 258_880
@@ -221,12 +221,14 @@ class EmbeddingGemma2Config(PreTrainedConfig):
         if self.vision_config is None:
             logger.info("vision_config is None. EmbeddingGemma2Model.vision_tower will not be initialized.")
         if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma4VisionConfig(**self.vision_config)
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "gemma4_vision")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
 
         if self.audio_config is None:
             logger.info("audio_config is None. EmbeddingGemma2Model.audio_tower will not be initialized.")
         if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma4AudioConfig(**self.audio_config)
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "gemma4_audio")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
 
         super().__post_init__(**kwargs)
 
@@ -476,10 +478,7 @@ class EmbeddingGemma2TextModel(Gemma3TextModel):
     def __init__(self, config: EmbeddingGemma2TextConfig):
         super().__init__(config)
 
-        # Redeclared so that this comment, rather than the inherited one, lands in the generated file:
-        # `embed_scale` is `sqrt(hidden_size)`, held as a buffer and cast to the weight dtype on use, so it
-        # rounds under bfloat16 — sqrt(512) = 22.6274 becomes 22.625.
-        # See https://github.com/huggingface/transformers/pull/29402
+        # bfloat16 rounding turns sqrt(512)=22.6274 into 22.625; see https://github.com/huggingface/transformers/pull/29402
         self.embed_tokens = EmbeddingGemma2TextScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
@@ -490,8 +489,7 @@ class EmbeddingGemma2TextModel(Gemma3TextModel):
         self.unique_layer_types = set(self.config.layer_types)
         self.ple = EmbeddingGemma2TextPLE(config)
 
-        # The embedding head. Applying it per-token is equivalent to applying it after the mean
-        # pooling SentenceTransformers performs downstream, since a linear map commutes with averaging.
+        # Projecting per token is equivalent to projecting after mean pooling
         self.embedding_projection = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
 
     def forward(
@@ -547,10 +545,9 @@ class EmbeddingGemma2TextModel(Gemma3TextModel):
 
 
 class EmbeddingGemma2MultimodalEmbedder(Gemma4MultimodalEmbedder):
-    # Re-declared only to keep Gemma 4's config classes in the annotation; the body is inherited.
     def __init__(
         self,
-        multimodal_config: Gemma4AudioConfig | Gemma4VisionConfig,
+        multimodal_config: PreTrainedConfig,
         text_config: EmbeddingGemma2TextConfig,
     ):
         super().__init__(multimodal_config, text_config)

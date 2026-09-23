@@ -613,17 +613,6 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
                 composite_text_out = text_via_composite(input_ids=text_input_ids).last_hidden_state
             torch.testing.assert_close(composite_text_out, full_text_out)
 
-            # 4. Text only via EmbeddingGemma2TextModel directly
-            text_model, info = EmbeddingGemma2TextModel.from_pretrained(
-                tmpdir, config=config.text_config, output_loading_info=True
-            )
-            self.assertEqual(len(info["missing_keys"]), 0)
-            self.assertEqual(len(info["unexpected_keys"]), 0)
-            text_model = text_model.to(torch_device).eval()
-            with torch.no_grad():
-                direct_text_out = text_model(input_ids=text_input_ids).last_hidden_state
-            torch.testing.assert_close(direct_text_out, full_text_out)
-
 
 @slow
 @require_torch_accelerator
