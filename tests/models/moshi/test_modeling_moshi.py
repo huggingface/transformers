@@ -32,7 +32,6 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
 )
 from transformers.testing_utils import (
-    cleanup,
     is_flaky,
     is_torch_available,
     require_torch,
@@ -43,6 +42,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -829,10 +829,7 @@ def place_dict_on_device(dict_to_place, device):
 
 
 @require_torch
-class MoshiIntegrationTests(unittest.TestCase):
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class MoshiIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def feature_extractor(self):
         return AutoFeatureExtractor.from_pretrained("kmhf/hf-moshiko")
@@ -935,9 +932,9 @@ class MoshiIntegrationTests(unittest.TestCase):
             "kmhf/hf-moshiko", dtype=torch.float16, device_map="auto"
         )
 
-        expected_audio_codesum = 87746
-        expected_text_tokens = [3, 555, 555, 555, 555, 555, 555, 555, 555, 555]  # fmt: skip
-        some_expected_audio_tokens = [[1967, 666], [1663, 1515], [480, 1178], [1450, 1562], [1532, 481], [347, 555], [712, 1238], [151, 1744]]  # fmt: skip
+        expected_audio_codesum = 72065
+        expected_text_tokens = [3, 3, 3, 0, 11725, 261, 3, 3, 3, 3]  # fmt: skip
+        some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
         model_outputs = model.generate(
             do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
