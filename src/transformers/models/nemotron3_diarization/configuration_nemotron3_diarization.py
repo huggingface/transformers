@@ -96,7 +96,7 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
         streaming mode (offline mode uses `Nemotron3DiarizationConfig.speaker_cache_update_period`).
     speaker_cache_length (`int`, *optional*, defaults to 264):
         Capacity of the Arrival-Order Speaker Cache. Must be at least
-        `(1 + speaker_cache_silence_frames_per_speaker) * Nemotron3DiarizationHeadConfig.num_speakers`.
+        `(1 + speaker_cache_silence_frames_per_speaker) * num_speakers`.
     speaker_cache_silence_frames_per_speaker (`int`, *optional*, defaults to 1):
         Number of speaker-cache slots per speaker reserved for the learned silence embedding when the cache is
         compressed.
@@ -113,6 +113,11 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
     min_positive_scores_rate (`float`, *optional*, defaults to 0.5):
         Fraction of the per-speaker cache budget: a speaker with at least that many positively scored frames has its
         non-positive (overlapped speech) frames excluded from the cache.
+    num_speakers (`int`, *optional*, defaults to 8):
+        Number of speakers tracked by the speaker cache. Must match `Nemotron3DiarizationHeadConfig.num_speakers`.
+    subsampling_factor (`int`, *optional*, defaults to 8):
+        Number of speaker-probability frames per encoder frame. Must match
+        `Nemotron3DiarizationAudioConfig.subsampling_factor`.
     """
 
     fifo_length: int = positive_int_field(default=264)
@@ -124,6 +129,8 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
     strong_boost_rate: float = 0.75
     weak_boost_rate: float = 1.5
     min_positive_scores_rate: float = 0.5
+    num_speakers: int = positive_int_field(default=8)
+    subsampling_factor: int = positive_int_field(default=8)
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
@@ -189,13 +196,24 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
                 f"`chunk_length` ({self.chunk_length})."
             )
 
+        if self.streaming_config.num_speakers != self.head_config.num_speakers:
+            raise ValueError(
+                f"`streaming_config.num_speakers` ({self.streaming_config.num_speakers}) must match "
+                f"`head_config.num_speakers` ({self.head_config.num_speakers})."
+            )
+        if self.streaming_config.subsampling_factor != self.audio_config.subsampling_factor:
+            raise ValueError(
+                f"`streaming_config.subsampling_factor` ({self.streaming_config.subsampling_factor}) must match "
+                f"`audio_config.subsampling_factor` ({self.audio_config.subsampling_factor})."
+            )
+
         silence_frames = self.streaming_config.speaker_cache_silence_frames_per_speaker
-        min_speaker_cache_length = (1 + silence_frames) * self.head_config.num_speakers
+        min_speaker_cache_length = (1 + silence_frames) * self.streaming_config.num_speakers
         if self.streaming_config.speaker_cache_length < min_speaker_cache_length:
             raise ValueError(
                 f"`streaming_config.speaker_cache_length` ({self.streaming_config.speaker_cache_length}) must be at "
-                "least `(1 + streaming_config.speaker_cache_silence_frames_per_speaker) * head_config.num_speakers` "
-                f"({min_speaker_cache_length})."
+                "least `(1 + streaming_config.speaker_cache_silence_frames_per_speaker) * "
+                f"streaming_config.num_speakers` ({min_speaker_cache_length})."
             )
 
 

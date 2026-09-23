@@ -135,6 +135,8 @@ def build_config(nemo_config: dict) -> Nemotron3DiarizationConfig:
             strong_boost_rate=modules["strong_boost_rate"],
             weak_boost_rate=modules["weak_boost_rate"],
             min_positive_scores_rate=modules["min_pos_scores_rate"],
+            num_speakers=modules["num_spks"],
+            subsampling_factor=encoder["subsampling_factor"],
         ),
         dtype="float32",
     )

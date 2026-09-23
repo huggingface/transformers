@@ -43,7 +43,11 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_nemotron3_diarization import Nemotron3DiarizationAudioConfig, Nemotron3DiarizationConfig
+from .configuration_nemotron3_diarization import (
+    Nemotron3DiarizationAudioConfig,
+    Nemotron3DiarizationConfig,
+    Nemotron3DiarizationStreamingConfig,
+)
 
 
 class Nemotron3DiarizationSpeakerCache:
@@ -52,30 +56,32 @@ class Nemotron3DiarizationSpeakerCache:
     FIFO queue of the most recent encoder frames, that every chunk attends to.
 
     Args:
-        config (`Nemotron3DiarizationConfig`):
-            Model configuration, read for the speaker-cache policy (`config.streaming_config`).
+        config (`Nemotron3DiarizationStreamingConfig`):
+            Speaker-cache policy.
         fifo_length (`int`):
             Capacity of the FIFO queue of the most recent encoder frames.
         speaker_cache_update_period (`int`):
             Number of encoder frames moved from the FIFO queue to the speaker cache when the queue overflows.
     """
 
-    def __init__(self, config: Nemotron3DiarizationConfig, fifo_length: int, speaker_cache_update_period: int):
+    def __init__(
+        self, config: Nemotron3DiarizationStreamingConfig, fifo_length: int, speaker_cache_update_period: int
+    ):
         self.fifo_length = fifo_length
         self.speaker_cache_update_period = speaker_cache_update_period
-        self.speaker_cache_length = config.streaming_config.speaker_cache_length
-        self.num_silence_frames = config.streaming_config.speaker_cache_silence_frames_per_speaker
-        self.prediction_score_threshold = config.streaming_config.prediction_score_threshold
-        self.latest_frames_score_boost = config.streaming_config.latest_frames_score_boost
-        self.num_speakers = config.head_config.num_speakers
-        self.subsampling_factor = config.audio_config.subsampling_factor
+        self.speaker_cache_length = config.speaker_cache_length
+        self.num_silence_frames = config.speaker_cache_silence_frames_per_speaker
+        self.prediction_score_threshold = config.prediction_score_threshold
+        self.latest_frames_score_boost = config.latest_frames_score_boost
+        self.num_speakers = config.num_speakers
+        self.subsampling_factor = config.subsampling_factor
 
         # share of the speaker cache every speaker is budgeted, excluding its reserved silence slots, and the frame
         # counts the score policy spends it on when the cache is compressed
         budget = self.speaker_cache_length // self.num_speakers - self.num_silence_frames
-        self.min_positive_scores = math.floor(budget * config.streaming_config.min_positive_scores_rate)
-        self.num_strong_boosted_frames = math.floor(budget * config.streaming_config.strong_boost_rate)
-        self.num_weak_boosted_frames = math.floor(budget * config.streaming_config.weak_boost_rate)
+        self.min_positive_scores = math.floor(budget * config.min_positive_scores_rate)
+        self.num_strong_boosted_frames = math.floor(budget * config.strong_boost_rate)
+        self.num_weak_boosted_frames = math.floor(budget * config.weak_boost_rate)
 
         self.embeds: torch.Tensor | None = None
         self.probs: torch.Tensor | None = None
@@ -707,7 +713,9 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
                 if is_streaming
                 else self.config.speaker_cache_update_period
             )
-            speaker_cache = Nemotron3DiarizationSpeakerCache(self.config, fifo_length, speaker_cache_update_period)
+            speaker_cache = Nemotron3DiarizationSpeakerCache(
+                self.config.streaming_config, fifo_length, speaker_cache_update_period
+            )
         if num_lookahead_frames is None:
             num_lookahead_frames = 0
 

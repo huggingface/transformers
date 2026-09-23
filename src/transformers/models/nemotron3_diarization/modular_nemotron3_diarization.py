@@ -104,7 +104,7 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
         streaming mode (offline mode uses `Nemotron3DiarizationConfig.speaker_cache_update_period`).
     speaker_cache_length (`int`, *optional*, defaults to 264):
         Capacity of the Arrival-Order Speaker Cache. Must be at least
-        `(1 + speaker_cache_silence_frames_per_speaker) * Nemotron3DiarizationHeadConfig.num_speakers`.
+        `(1 + speaker_cache_silence_frames_per_speaker) * num_speakers`.
     speaker_cache_silence_frames_per_speaker (`int`, *optional*, defaults to 1):
         Number of speaker-cache slots per speaker reserved for the learned silence embedding when the cache is
         compressed.
@@ -121,6 +121,11 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
     min_positive_scores_rate (`float`, *optional*, defaults to 0.5):
         Fraction of the per-speaker cache budget: a speaker with at least that many positively scored frames has its
         non-positive (overlapped speech) frames excluded from the cache.
+    num_speakers (`int`, *optional*, defaults to 8):
+        Number of speakers tracked by the speaker cache. Must match `Nemotron3DiarizationHeadConfig.num_speakers`.
+    subsampling_factor (`int`, *optional*, defaults to 8):
+        Number of speaker-probability frames per encoder frame. Must match
+        `Nemotron3DiarizationAudioConfig.subsampling_factor`.
     """
 
     fifo_length: int = positive_int_field(default=264)
@@ -132,6 +137,8 @@ class Nemotron3DiarizationStreamingConfig(PreTrainedConfig):
     strong_boost_rate: float = 0.75
     weak_boost_rate: float = 1.5
     min_positive_scores_rate: float = 0.5
+    num_speakers: int = positive_int_field(default=8)
+    subsampling_factor: int = positive_int_field(default=8)
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3-Diarization-preview")
@@ -197,13 +204,24 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
                 f"`chunk_length` ({self.chunk_length})."
             )
 
+        if self.streaming_config.num_speakers != self.head_config.num_speakers:
+            raise ValueError(
+                f"`streaming_config.num_speakers` ({self.streaming_config.num_speakers}) must match "
+                f"`head_config.num_speakers` ({self.head_config.num_speakers})."
+            )
+        if self.streaming_config.subsampling_factor != self.audio_config.subsampling_factor:
+            raise ValueError(
+                f"`streaming_config.subsampling_factor` ({self.streaming_config.subsampling_factor}) must match "
+                f"`audio_config.subsampling_factor` ({self.audio_config.subsampling_factor})."
+            )
+
         silence_frames = self.streaming_config.speaker_cache_silence_frames_per_speaker
-        min_speaker_cache_length = (1 + silence_frames) * self.head_config.num_speakers
+        min_speaker_cache_length = (1 + silence_frames) * self.streaming_config.num_speakers
         if self.streaming_config.speaker_cache_length < min_speaker_cache_length:
             raise ValueError(
                 f"`streaming_config.speaker_cache_length` ({self.streaming_config.speaker_cache_length}) must be at "
-                "least `(1 + streaming_config.speaker_cache_silence_frames_per_speaker) * head_config.num_speakers` "
-                f"({min_speaker_cache_length})."
+                "least `(1 + streaming_config.speaker_cache_silence_frames_per_speaker) * "
+                f"streaming_config.num_speakers` ({min_speaker_cache_length})."
             )
 
 
@@ -213,30 +231,32 @@ class Nemotron3DiarizationSpeakerCache:
     FIFO queue of the most recent encoder frames, that every chunk attends to.
 
     Args:
-        config (`Nemotron3DiarizationConfig`):
-            Model configuration, read for the speaker-cache policy (`config.streaming_config`).
+        config (`Nemotron3DiarizationStreamingConfig`):
+            Speaker-cache policy.
         fifo_length (`int`):
             Capacity of the FIFO queue of the most recent encoder frames.
         speaker_cache_update_period (`int`):
             Number of encoder frames moved from the FIFO queue to the speaker cache when the queue overflows.
     """
 
-    def __init__(self, config: Nemotron3DiarizationConfig, fifo_length: int, speaker_cache_update_period: int):
+    def __init__(
+        self, config: Nemotron3DiarizationStreamingConfig, fifo_length: int, speaker_cache_update_period: int
+    ):
         self.fifo_length = fifo_length
         self.speaker_cache_update_period = speaker_cache_update_period
-        self.speaker_cache_length = config.streaming_config.speaker_cache_length
-        self.num_silence_frames = config.streaming_config.speaker_cache_silence_frames_per_speaker
-        self.prediction_score_threshold = config.streaming_config.prediction_score_threshold
-        self.latest_frames_score_boost = config.streaming_config.latest_frames_score_boost
-        self.num_speakers = config.head_config.num_speakers
-        self.subsampling_factor = config.audio_config.subsampling_factor
+        self.speaker_cache_length = config.speaker_cache_length
+        self.num_silence_frames = config.speaker_cache_silence_frames_per_speaker
+        self.prediction_score_threshold = config.prediction_score_threshold
+        self.latest_frames_score_boost = config.latest_frames_score_boost
+        self.num_speakers = config.num_speakers
+        self.subsampling_factor = config.subsampling_factor
 
         # share of the speaker cache every speaker is budgeted, excluding its reserved silence slots, and the frame
         # counts the score policy spends it on when the cache is compressed
         budget = self.speaker_cache_length // self.num_speakers - self.num_silence_frames
-        self.min_positive_scores = math.floor(budget * config.streaming_config.min_positive_scores_rate)
-        self.num_strong_boosted_frames = math.floor(budget * config.streaming_config.strong_boost_rate)
-        self.num_weak_boosted_frames = math.floor(budget * config.streaming_config.weak_boost_rate)
+        self.min_positive_scores = math.floor(budget * config.min_positive_scores_rate)
+        self.num_strong_boosted_frames = math.floor(budget * config.strong_boost_rate)
+        self.num_weak_boosted_frames = math.floor(budget * config.weak_boost_rate)
 
         self.embeds: torch.Tensor | None = None
         self.probs: torch.Tensor | None = None
@@ -498,7 +518,7 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
 
     def __init__(self, config: Nemotron3DiarizationAudioConfig):
         super().__init__(config)
-        self.feature_stacking = Nemotron3DiarizationFeatureStacking(config)
+        self.embedder = Nemotron3DiarizationFeatureStacking(config)
         self.input_layer_norm = nn.LayerNorm(config.hidden_size)
         self.layers = nn.ModuleList(
             [Nemotron3DiarizationAudioLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -522,7 +542,7 @@ class Nemotron3DiarizationAudioModel(Nemotron3DiarizationPreTrainedModel):
             raise ValueError("Provide exactly one of `input_features` and `inputs_embeds`.")
 
         if inputs_embeds is None:
-            inputs_embeds = self.feature_stacking(input_features)
+            inputs_embeds = self.embedder(input_features)
             # if inputs_embeds is provided, we expect attention_mask already downsampled
             if attention_mask is not None:
                 attention_mask = attention_mask[:, :: self.config.subsampling_factor].bool()
@@ -659,12 +679,14 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
                 if is_streaming
                 else self.config.speaker_cache_update_period
             )
-            speaker_cache = Nemotron3DiarizationSpeakerCache(self.config, fifo_length, speaker_cache_update_period)
+            speaker_cache = Nemotron3DiarizationSpeakerCache(
+                self.config.streaming_config, fifo_length, speaker_cache_update_period
+            )
         if num_lookahead_frames is None:
             num_lookahead_frames = 0
 
         batch_size, num_frames, _ = input_features.shape
-        inputs_embeds = self.model.feature_stacking(input_features)
+        inputs_embeds = self.model.embedder(input_features)
         num_embeds = inputs_embeds.shape[1]
         subsampling_factor = self.config.audio_config.subsampling_factor
 

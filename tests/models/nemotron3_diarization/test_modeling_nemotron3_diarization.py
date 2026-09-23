@@ -111,6 +111,8 @@ class Nemotron3DiarizationModelTester:
                 speaker_cache_length=self.speaker_cache_length,
                 fifo_length=self.fifo_length,
                 speaker_cache_update_period=self.speaker_cache_update_period,
+                num_speakers=self.num_speakers,
+                subsampling_factor=self.subsampling_factor,
             ),
             chunk_length=self.streaming_chunk_length,
             chunk_right_context=self.chunk_right_context,
