@@ -13,12 +13,18 @@
 # limitations under the License.
 """Testing suite for the PyTorch NemotronH_Omni model."""
 
+import copy
+import re
+import tempfile
 import unittest
 
 from transformers import (
     NemotronH_Omni_Reasoning_V3_Config,
+    NemotronHConfig,
+    ParakeetEncoderConfig,
     ParakeetFeatureExtractor,
     PreTrainedTokenizerFast,
+    RadioConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -31,8 +37,11 @@ from transformers.testing_utils import (
 )
 from transformers.video_utils import load_video
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...alm_tester import ALMModelTest, ALMModelTester
+from ...multimodal_tester import MultiModalModelTester
+from ...test_modeling_common import floats_tensor, ids_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
+from ..nemotron_h import test_modeling_nemotron_h
 
 
 if is_torch_available():
@@ -46,281 +55,373 @@ if is_torch_available():
     )
 
 
-class NemotronHOmniVisionText2TextModelTester:
-    """Builds a tiny NemotronH_Omni model and coupled multimodal inputs.
+def get_tiny_text_config(tester) -> "NemotronHConfig":
+    return NemotronHConfig(
+        vocab_size=tester.vocab_size,
+        hidden_size=tester.hidden_size,
+        layers_block_type=["linear_attention", "moe", "full_attention", "moe"],
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=8,
+        intermediate_size=40,
+        moe_intermediate_size=40,
+        moe_shared_expert_intermediate_size=40,
+        mlp_hidden_act="relu2",
+        mamba_hidden_act="silu",
+        ssm_state_size=16,
+        mamba_num_heads=8,
+        mamba_n_groups=2,
+        mamba_head_dim=8,
+        mamba_d_conv=4,
+        mamba_expand=2,
+        mamba_chunk_size=8,
+        n_routed_experts=4,
+        num_experts_per_tok=2,
+        use_mamba_kernels=False,
+        pad_token_id=tester.pad_token_id,
+        bos_token_id=tester.bos_token_id,
+        eos_token_id=tester.eos_token_id,
+    )
 
-    The image branch is sized so a single image yields exactly one `img_context` token after
-    the RADIO patch-embed + pixel-shuffle:
-        num_image_token = (force_image_size // patch_size) ** 2 * downsample_ratio ** 2
-                        = (32 // 16) ** 2 * 0.5 ** 2 = 1
-    so each sequence must contain exactly one `image_token_id`. Likewise each audio clip of
-    `num_audio_frames` mel frames yields `num_audio_token` embeddings after the 8x conv subsampling.
-    """
 
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=8,
-        force_image_size=32,
-        patch_size=16,
-        downsample_ratio=0.5,
-        vision_hidden_size=32,
-        projector_hidden_size=64,
-        image_token_id=1,
-        audio_token_id=2,
-        num_audio_frames=16,
-        video_temporal_patch_size=2,
-        is_training=False,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.force_image_size = force_image_size
-        self.patch_size = patch_size
-        self.downsample_ratio = downsample_ratio
-        self.vision_hidden_size = vision_hidden_size
-        self.projector_hidden_size = projector_hidden_size
-        self.image_token_id = image_token_id
-        self.audio_token_id = audio_token_id
-        self.num_audio_frames = num_audio_frames
-        self.video_temporal_patch_size = video_temporal_patch_size
-        self.is_training = is_training
+TINY_VISION_LAYERS = 2
+TINY_AUDIO_LAYERS = 2
 
-        self.vocab_size = 99
-        self.hidden_size = 32
-        self.text_config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "layers_block_type": ["linear_attention", "moe", "full_attention", "moe"],
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "head_dim": 8,
-            "intermediate_size": 40,
-            "moe_intermediate_size": 40,
-            "moe_shared_expert_intermediate_size": 40,
-            "mlp_hidden_act": "relu2",
-            "mamba_hidden_act": "silu",
-            "ssm_state_size": 16,
-            "mamba_num_heads": 8,
-            "mamba_n_groups": 2,
-            "mamba_head_dim": 8,
-            "mamba_d_conv": 4,
-            "mamba_expand": 2,
-            "mamba_chunk_size": 8,
-            "n_routed_experts": 4,
-            "num_experts_per_tok": 2,
-            "use_mamba_kernels": False,
-        }
-        self.vision_config = {
-            "hidden_size": self.vision_hidden_size,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "mlp_ratio": 2.0,
-            "patch_size": self.patch_size,
-            "image_size": self.force_image_size,
-            "max_img_size": 64,
-            "num_channels": 3,
-            # >= 2 cls tokens so the default summary_idxs=[0, 1] is in-bounds
-            "num_cls_tokens": 2,
-            "num_registers": 1,
-            # must match the top-level value; the tower builds its video patch projection from it
-            "video_temporal_patch_size": video_temporal_patch_size,
-        }
-        # The video path reuses the same RADIO tower, so its expected layer counts are the vision ones.
-        self.video_config = self.vision_config
-        # Tiny Parakeet encoder + projection. Kept enabled so the `audio_tower` / `embed_audio`
-        # weight renames in the conversion mapping have matching keys to check.
-        self.audio_config = {
-            "model_type": "parakeet",
-            "hidden_size": 32,
-            "num_attention_heads": 2,
-            "num_hidden_layers": 2,
-            "intermediate_size": 64,
-            "conv_kernel_size": 9,
-            "convolution_bias": False,
-            "subsampling_conv_channels": 16,
-            "subsampling_conv_kernel_size": 3,
-            "subsampling_conv_stride": 2,
-            "subsampling_factor": 8,
-            "num_mel_bins": 32,
-            "projection_hidden_size": 64,
-            "projection_bias": False,
-            "sampling_rate": 16000,
-        }
-        self.num_hidden_layers = len(self.text_config["layers_block_type"])
-        self.num_attention_heads = self.text_config["num_attention_heads"]
-        self.num_image_token = int((force_image_size // patch_size) ** 2 * (downsample_ratio**2))
-        self.num_audio_token = num_audio_frames // self.audio_config["subsampling_factor"]
 
-    def get_config(self):
-        return NemotronH_Omni_Reasoning_V3_Config(
-            vision_config=self.vision_config,
-            text_config=self.text_config,
-            audio_config=self.audio_config,
-            force_image_size=self.force_image_size,
-            downsample_ratio=self.downsample_ratio,
-            vision_hidden_size=self.vision_hidden_size,
-            projector_hidden_size=self.projector_hidden_size,
-            image_token_id=self.image_token_id,
-            audio_token_id=self.audio_token_id,
-            video_temporal_patch_size=self.video_temporal_patch_size,
-            attn_implementation="eager",
-        )
+def get_tiny_vision_config(tester) -> "RadioConfig":
+    return RadioConfig(
+        hidden_size=tester.vision_hidden_size,
+        num_hidden_layers=TINY_VISION_LAYERS,
+        num_attention_heads=4,
+        mlp_ratio=2.0,
+        patch_size=tester.patch_size,
+        image_size=tester.image_size,
+        max_img_size=64,
+        num_channels=3,
+        # >= 2 cls tokens so the default summary_idxs=[0, 1] is in-bounds
+        num_cls_tokens=2,
+        num_registers=1,
+        video_temporal_patch_size=tester.video_temporal_patch_size,
+    )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        # ids in [3, vocab) so they never collide with image_token_id (1) or audio_token_id (2)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 3) + 3
-        audio_start = 1 + self.num_image_token
-        audio_end = audio_start + self.num_audio_token
-        input_ids[:, 1:audio_start] = self.image_token_id
-        input_ids[:, audio_start:audio_end] = self.audio_token_id
-        attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-        attention_mask[:, :audio_end] = 1  # keep multimodal tokens unmasked
-        grid_size = self.force_image_size // self.patch_size
-        pixel_values = floats_tensor([self.batch_size * grid_size**2, 3 * self.patch_size**2])
+
+def get_tiny_audio_config(tester) -> "ParakeetEncoderConfig":
+    return ParakeetEncoderConfig(
+        hidden_size=32,
+        num_attention_heads=2,
+        num_hidden_layers=TINY_AUDIO_LAYERS,
+        intermediate_size=64,
+        conv_kernel_size=9,
+        convolution_bias=False,
+        subsampling_conv_channels=16,
+        subsampling_conv_kernel_size=3,
+        subsampling_conv_stride=2,
+        subsampling_factor=tester.subsampling_factor,
+        num_mel_bins=tester.num_mel_bins,
+        attention_bias=False,
+        scale_input=False,
+        projection_hidden_size=64,
+        projection_bias=False,
+    )
+
+
+def set_omni_tester_defaults(kwargs):
+    """Sizes shared by the vision and audio testers. Both build the full model (vision, audio and a tiny hybrid
+    NemotronH language model); they only differ in which modality they feed."""
+    kwargs.setdefault("image_size", 32)
+    kwargs.setdefault("patch_size", 16)
+    kwargs.setdefault("downsample_ratio", 0.5)
+    kwargs.setdefault("vision_hidden_size", 32)
+    kwargs.setdefault("projector_hidden_size", 64)
+    kwargs.setdefault("video_temporal_patch_size", 2)
+    kwargs.setdefault("num_mel_bins", 32)
+    # 64 mel frames subsample 8x into at most 8 audio tokens
+    kwargs.setdefault("feat_seq_length", 64)
+    kwargs.setdefault("subsampling_factor", 8)
+    # the length of the tiny NemotronH's `layers_block_type`
+    kwargs.setdefault("num_hidden_layers", 4)
+
+
+class NemotronHOmniVision2TextModelTester(VLMModelTester):
+    config_class = NemotronH_Omni_Reasoning_V3_Config
+    text_config_class = NemotronHConfig
+    vision_config_class = RadioConfig
+    # the model is a single generative class with no separate base model
+    base_model_class = None
+    conditional_generation_class = NemotronH_Omni_Reasoning_V3
+    _required_attributes = MultiModalModelTester._required_attributes + ("vision_config_class",)
+
+    def __init__(self, parent, **kwargs):
+        set_omni_tester_defaults(kwargs)
+        # a (32 // 16) ** 2 patch grid pixel-shuffles 2x2 into a single image token
+        kwargs.setdefault("num_image_tokens", 1)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def pipeline_model_mapping(self):
+        return {"image-text-to-text": self.conditional_generation_class}
+
+    def get_text_config(self):
+        return get_tiny_text_config(self)
+
+    def get_vision_config(self):
+        return get_tiny_vision_config(self)
+
+    def _build_modality_sub_configs(self):
+        return {**super()._build_modality_sub_configs(), "audio_config": get_tiny_audio_config(self)}
+
+    def _prepare_modality_inputs(self, input_ids, config):
+        grid_size = self.image_size // self.patch_size
+        pixel_values = floats_tensor([self.batch_size * grid_size**2, self.num_channels * self.patch_size**2])
         image_grid_hw = torch.tensor([[grid_size, grid_size]] * self.batch_size)
-        input_features = floats_tensor([self.batch_size, self.num_audio_frames, self.audio_config["num_mel_bins"]])
-        input_features_mask = torch.ones(self.batch_size, self.num_audio_frames, dtype=torch.long)
-        return config, input_ids, attention_mask, pixel_values, image_grid_hw, input_features, input_features_mask
+        input_ids = self.place_image_tokens(input_ids, config)
+        return input_ids, {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
 
-    def prepare_config_and_inputs_for_common(self):
-        config, input_ids, attention_mask, pixel_values, image_grid_hw, input_features, input_features_mask = (
-            self.prepare_config_and_inputs()
+
+class NemotronHOmniAudio2TextModelTester(ALMModelTester):
+    config_class = NemotronH_Omni_Reasoning_V3_Config
+    text_config_class = NemotronHConfig
+    audio_config_class = ParakeetEncoderConfig
+    conditional_generation_class = NemotronH_Omni_Reasoning_V3
+    audio_mask_key = "input_features_mask"
+
+    def __init__(self, parent, **kwargs):
+        set_omni_tester_defaults(kwargs)
+        kwargs.setdefault("audio_token_id", 3)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def pipeline_model_mapping(self):
+        # the ALM tester has no audio-text-to-text pipeline test yet
+        return {}
+
+    def get_text_config(self):
+        return get_tiny_text_config(self)
+
+    def get_audio_config(self):
+        return get_tiny_audio_config(self)
+
+    def _build_modality_sub_configs(self):
+        # the vision tower is always built, so keep it tiny
+        return {**super()._build_modality_sub_configs(), "vision_config": get_tiny_vision_config(self)}
+
+    def create_audio_features(self):
+        # Parakeet takes `(batch, frames, mel_bins)`
+        return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
+
+    def create_audio_mask(self):
+        # clips are right-padded; at least one uses every frame
+        lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length).abs() + 1
+        lengths[0] = self.feat_seq_length
+        positions = torch.arange(self.feat_seq_length)[None, :]
+        return (positions < lengths[:, None]).long().to(torch_device)
+
+    def _subsampled_length(self, length):
+        for _ in range(self.subsampling_factor.bit_length() - 1):
+            length = (length - 1) // 2 + 1
+        return length
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # mirrors `get_audio_features`: each clip keeps `subsample(num_frames + 1)` tokens, capped by the padded length
+        lengths = self._subsampled_length(audio_mask.sum(-1) + 1).clamp(
+            max=self._subsampled_length(self.feat_seq_length)
         )
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_grid_hw": image_grid_hw,
-            "input_features": input_features,
-            "input_features_mask": input_features_mask,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
+        positions = torch.arange(int(lengths.max()), device=audio_mask.device)[None, :]
+        return (positions < lengths[:, None]).long()
+
+
+class NemotronHOmniModelTestMixin:
+    """Overrides shared by both test classes: the hybrid Mamba/attention language model, and `get_*_features`
+    inputs for every modality so both classes exercise all three feature paths."""
+
+    # each class feeds a single modality, so the other towers (and the video projection) get no gradient
+    test_all_params_have_gradient = False
+    # packed image patches have no batch dimension, and the video path packs `video_temporal_patch_size` frames
+    # into one tower pass, so neither output keeps the input's leading dimension
+    skip_test_image_features_output_shape = True
+    skip_test_video_features_output_shape = True
+
+    _get_conv_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_conv_state_shape
+    _get_recurrent_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_recurrent_state_shape
+    _check_past_key_values_for_generate = (
+        test_modeling_nemotron_h.NemotronHModelTest._check_past_key_values_for_generate
+    )
+
+    def _image_features_prepare_config_and_inputs(self):
+        tester = self.model_tester
+        grid_size = tester.image_size // tester.patch_size
+        pixel_values = floats_tensor([tester.batch_size * grid_size**2, 3 * tester.patch_size**2])
+        image_grid_hw = torch.tensor([[grid_size, grid_size]] * tester.batch_size)
+        return tester.get_config(), {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
+
+    def _video_features_prepare_config_and_inputs(self):
+        tester = self.model_tester
+        pixel_values_videos = floats_tensor([tester.batch_size, 3, tester.image_size, tester.image_size])
+        return tester.get_config(), {"pixel_values_videos": pixel_values_videos}
+
+    def _audio_features_prepare_config_and_inputs(self):
+        tester = self.model_tester
+        input_features = floats_tensor([tester.batch_size, tester.feat_seq_length, tester.num_mel_bins])
+        input_features_mask = torch.ones(tester.batch_size, tester.feat_seq_length, dtype=torch.long)
+        return tester.get_config(), {"input_features": input_features, "input_features_mask": input_features_mask}
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        return TINY_VISION_LAYERS
+
+    def _video_features_get_expected_num_attentions(self, model_tester=None):
+        return TINY_VISION_LAYERS
+
+    def _audio_features_get_expected_num_attentions(self, model_tester=None):
+        return TINY_AUDIO_LAYERS
+
+    def test_attention_outputs(self):
+        # only the language model's attention layers return attention maps; the mamba and moe layers do not
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        text_config = config.get_text_config()
+        num_attention_layers = text_config.layers_block_type.count("full_attention")
+        seq_length = inputs_dict["input_ids"].shape[1]
+
+        for model_class in self.all_model_classes:
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_attentions=True)
+            self.assertEqual(len(outputs.attentions), num_attention_layers)
+            self.assertListEqual(
+                list(outputs.attentions[0].shape[-3:]), [text_config.num_attention_heads, seq_length, seq_length]
+            )
+
+    def test_keep_in_fp32_modules(self):
+        # Same checks as the common test, except that integer tensors such as RADIO's `summary_idxs` index buffer
+        # keep their dtype: only floating-point weights are cast to the requested dtype.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            fp32_modules = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
+            if not fp32_modules:
+                self.skipTest(reason=f"{model_class.__name__} has no `_keep_in_fp32_modules(_strict)`")
+            original_dtypes = {name: tensor.dtype for name, tensor in model.state_dict().items()}
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                # fp16 upcasts both lists, bf16 only the strict one
+                for dtype, upcast_modules in (
+                    (torch.float16, fp32_modules),
+                    (torch.bfloat16, model._keep_in_fp32_modules_strict),
+                ):
+                    reloaded = model_class.from_pretrained(tmpdirname, dtype=dtype)
+                    for name, tensor in reloaded.state_dict().items():
+                        if not tensor.is_floating_point():
+                            self.assertEqual(tensor.dtype, original_dtypes[name], f"{name} changed dtype")
+                        elif any(re.search(rf"(?:^|\.){module}(?:\.|$)", name) for module in upcast_modules):
+                            self.assertEqual(tensor.dtype, torch.float32, f"{name} not upcasted to fp32")
+                        else:
+                            self.assertEqual(tensor.dtype, dtype, f"{name} was upcasted but it should NOT be")
+
+    @unittest.skip(reason="NemotronH needs at least 3 layers to test (mamba, moe, attention)")
+    def test_num_layers_is_small(self):
+        pass
+
+    @unittest.skip(reason="The model is a single generative class; there is no separate base model to expose")
+    def test_model_base_model_prefix(self):
+        pass
+
+    @unittest.skip(
+        reason="`_config_zero_init` sets every `*_std` config field to a scalar, which RADIO's strict `norm_std` "
+        "(a per-channel list) rejects"
+    )
+    def test_can_load_ignoring_mismatched_shapes(self):
+        pass
 
 
 @require_torch
-class NemotronHOmniModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (NemotronH_Omni_Reasoning_V3,) if is_torch_available() else ()
-    all_generative_model_classes = (NemotronH_Omni_Reasoning_V3,) if is_torch_available() else ()
-    _is_composite = True
-    # The video path packs `video_temporal_patch_dim` frames into a single tower pass, so the
-    # vision batch dim is deliberately smaller than `pixel_values_videos.shape[0]`.
-    skip_test_video_features_output_shape = True
-    # packed image patches have no batch dimension
-    skip_test_image_features_output_shape = True
-    test_pruning = False
-    test_head_masking = False
-
-    def setUp(self):
-        self.model_tester = NemotronHOmniVisionText2TextModelTester(self)
+class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTest, unittest.TestCase):
+    model_tester_class = NemotronHOmniVision2TextModelTester
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
         # packed patches cannot be sliced per sample like the other inputs; keep the patches of the kept images
-        grid_size = self.model_tester.force_image_size // self.model_tester.patch_size
+        grid_size = self.model_tester.image_size // self.model_tester.patch_size
         inputs_dict["pixel_values"] = floats_tensor(
             [len(inputs_dict["image_grid_hw"]) * grid_size**2, 3 * self.model_tester.patch_size**2]
         )
         return config, inputs_dict
 
-    def _video_features_prepare_config_and_inputs(self):
-        config = self.model_tester.get_config()
-        size = self.model_tester.force_image_size
-        return config, {"pixel_values_videos": floats_tensor([self.model_tester.batch_size, 3, size, size])}
+    def test_mismatching_num_image_tokens(self):
+        # packed `pixel_values` have no batch dimension, so images are dropped or added by their patches
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        patches_per_image = int(input_dict["image_grid_hw"][0].prod())
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            _ = model(**input_dict)
 
-    @unittest.skip(reason="Mixed Mamba/attention stack does not expose uniform per-layer outputs")
-    def test_attention_outputs(self):
-        pass
+            # one image fewer than the image tokens in the text
+            curr_input_dict = copy.deepcopy(input_dict)
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][patches_per_image:]
+            curr_input_dict["image_grid_hw"] = curr_input_dict["image_grid_hw"][1:]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
 
-    @unittest.skip(reason="Mixed Mamba/attention stack does not expose uniform per-layer outputs")
-    def test_hidden_states_output(self):
-        pass
+            # patches that do not add up to the image grids
+            curr_input_dict = copy.deepcopy(input_dict)
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][:-1]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
 
-    @unittest.skip(reason="Mixed Mamba/attention stack does not expose uniform per-layer outputs")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
+            # two prompts with image tokens but a single image
+            curr_input_dict = {
+                "input_ids": torch.cat([input_dict["input_ids"][:1]] * 2),
+                "attention_mask": torch.cat([input_dict["attention_mask"][:1]] * 2),
+                "pixel_values": input_dict["pixel_values"][:patches_per_image],
+                "image_grid_hw": input_dict["image_grid_hw"][:1],
+            }
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
 
-    @unittest.skip(reason="Language model needs at least one block of each mixed layer type")
-    def test_num_layers_is_small(self):
-        pass
+            # two prompts with two images
+            curr_input_dict["pixel_values"] = torch.cat([curr_input_dict["pixel_values"]] * 2)
+            curr_input_dict["image_grid_hw"] = torch.cat([curr_input_dict["image_grid_hw"]] * 2)
+            _ = model(**curr_input_dict)
 
-    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
-    def test_attn_implementation_composite_models(self):
-        pass
+    def test_mtp_checkpoints_normalize_vision_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
+        self.assertIsNone(model.vision_final_layernorm)
 
-    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
-    def test_can_set_attention_dynamically_composite_model(self):
-        pass
+        config.text_config.num_nextn_predict_layers = 1
+        mtp_model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
+        self.assertIsInstance(mtp_model.vision_final_layernorm, torch.nn.LayerNorm)
+        mtp_model.load_state_dict(model.state_dict(), strict=False)
 
-    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
-    def test_config_attn_implementation_setter(self):
-        pass
+        pixel_values = inputs_dict["pixel_values"].to(torch_device)
+        image_grid_hw = inputs_dict["image_grid_hw"].to(torch_device)
+        with torch.no_grad():
+            features = model.vision_model(pixel_values, image_grid_hw=image_grid_hw).features
+            expected = model.get_image_features(pixel_values, image_grid_hw).pooler_output
+            normalized = mtp_model.get_image_features(pixel_values, image_grid_hw).pooler_output
+            # the norm is the only difference, so feeding pre-normalized features reproduces its output
+            normalized_features = torch.nn.functional.layer_norm(
+                features, (features.shape[-1],), eps=config.vision_config.layer_norm_eps
+            )
+            manual = mtp_model.multi_modal_projector(
+                torch.cat(
+                    [
+                        mtp_model.pixel_shuffle(f.view(1, h, w, -1), scale_factor=config.downsample_ratio).flatten(
+                            0, 2
+                        )
+                        for f, (h, w) in zip(
+                            normalized_features.split(image_grid_hw.prod(-1).tolist()), image_grid_hw.tolist()
+                        )
+                    ]
+                )
+            )
 
-    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
-    def test_sdpa_can_dispatch_composite_models(self):
-        pass
+        self.assertFalse(torch.allclose(expected, normalized))
+        torch.testing.assert_close(normalized, manual)
 
-    @unittest.skip(reason="Composite attention-implementation dispatch not wired for sub-models")
-    def test_flash_attn_2_can_dispatch_composite_models(self):
-        pass
 
-    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
-    def test_model_parallelism(self):
-        pass
-
-    @unittest.skip(reason="device_map offload not supported (RADIO summary_idxs buffer / Mamba state)")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(reason="NemotronH hybrid Mamba cache is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search_0_random(self):
-        pass
-
-    @unittest.skip(reason="NemotronH hybrid Mamba cache is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search_1_same(self):
-        pass
-
-    @unittest.skip(reason="NemotronH hybrid Mamba cache is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip(reason="NemotronH hybrid Mamba cache does not expose a standard past_key_values format")
-    def test_past_key_values_format(self):
-        pass
-
-    @unittest.skip(reason="NemotronH hybrid Mamba cache: cached-generation hidden states are not uniform")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="NemotronH hybrid Mamba cache: cached-generation hidden states are not uniform")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="Composite model exposes no single base transformer via base_model_prefix")
-    def test_model_base_model_prefix(self):
-        pass
-
-    @unittest.skip(reason="RADIO config is @strict and rejects the scalar norm_std this test injects")
-    def test_can_load_ignoring_mismatched_shapes(self):
-        pass
-
-    @unittest.skip(reason="RADIO summary_idxs is an int64 index buffer, exempt from dtype casting")
-    def test_keep_in_fp32_modules(self):
-        pass
+@require_torch
+class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest, unittest.TestCase):
+    model_tester_class = NemotronHOmniAudio2TextModelTester
 
 
 @slow

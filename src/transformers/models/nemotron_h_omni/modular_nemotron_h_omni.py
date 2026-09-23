@@ -22,7 +22,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..auto import AutoModel, AutoModelForCausalLM
 from ..internvl.modeling_internvl import InternVLMultiModalProjector
 from ..nemotron_h.modeling_nemotron_h import NemotronHRMSNorm
@@ -111,6 +111,8 @@ class NemotronH_Omni_Reasoning_V3PreTrainedModel(PreTrainedModel):
     _is_stateful = True
     # mel extraction runs in the processor, so the checkpoint's in-encoder featurizer buffers are unused
     _keys_to_ignore_on_load_unexpected = [r"audio_tower\.feature_extractor\."]
+    # checkpoints never store the MTP vision norm; it keeps its identity affine initialization
+    _keys_to_ignore_on_load_missing = [r"vision_final_layernorm\."]
 
 
 class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, GenerationMixin):
@@ -124,6 +126,14 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.vision_model = AutoModel.from_config(config.vision_config)
         self.vision_model.make_preprocessor_external()
+        # Megatron-Core adds a final LayerNorm to every block built from the shared config when the language model
+        # has MTP layers, including the vision tower, so its features are normalized before the projector.
+        self.vision_final_layernorm = (
+            # CODEPATH: only checkpoints whose language model carries MTP layers build this norm.
+            nn.LayerNorm(config.vision_hidden_size, eps=config.vision_config.layer_norm_eps)
+            if config.text_config.num_nextn_predict_layers > 0
+            else None
+        )
         self.multi_modal_projector = NemotronH_Omni_Reasoning_V3MultiModalProjector(
             config.vision_hidden_size * int(1 / config.downsample_ratio) ** 2,
             config.projector_hidden_size,
@@ -162,6 +172,8 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
 
     def project_vision_features(self, vision_features: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """Pixel-shuffle the `(num_images, height * width, vision_hidden_size)` tower features and project them."""
+        if self.vision_final_layernorm is not None:
+            vision_features = self.vision_final_layernorm(vision_features)
         vision_features = vision_features.reshape(vision_features.shape[0], height, width, -1)
         vision_features = self.pixel_shuffle(vision_features, scale_factor=self.config.downsample_ratio)
         vision_features = vision_features.reshape(vision_features.shape[0], -1, vision_features.shape[-1])
@@ -181,10 +193,18 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
             Patch grid `(height, width)` of each image.
         """
+        torch_compilable_check(
+            image_grid_hw.prod(-1).sum() == pixel_values.shape[0],
+            lambda: f"`pixel_values` holds {pixel_values.shape[0]} patches but `image_grid_hw` describes "
+            f"{int(image_grid_hw.prod(-1).sum())}",
+        )
         pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
         vision_outputs = self.vision_model(pixel_values, image_grid_hw=image_grid_hw, **kwargs)
 
-        image_features = vision_outputs.features.split(image_grid_hw.prod(-1).tolist())
+        image_features = vision_outputs.features
+        if self.vision_final_layernorm is not None:
+            image_features = self.vision_final_layernorm(image_features)
+        image_features = image_features.split(image_grid_hw.prod(-1).tolist())
         image_features = torch.cat(
             [
                 self.pixel_shuffle(
@@ -275,6 +295,23 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             attentions=audio_outputs.attentions,
         )
 
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        features: torch.FloatTensor,
+        token_id: int,
+    ) -> torch.BoolTensor:
+        """Locates the placeholder tokens of one modality and checks that each receives one feature vector."""
+        special_mask = input_ids == token_id
+        num_tokens = special_mask.sum()
+        torch_compilable_check(
+            num_tokens * inputs_embeds.shape[-1] == features.numel(),
+            lambda: f"Got {features.numel() // inputs_embeds.shape[-1]} feature vectors for {int(num_tokens)} "
+            f"placeholder tokens (id {token_id})",
+        )
+        return special_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -312,14 +349,14 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         if pixel_values is not None and input_ids is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_hw).pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask = (input_ids == self.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_embeds)
+            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_embeds, self.image_token_id)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None and input_ids is not None:
             video_embeds = self.get_video_features(pixel_values_videos).pooler_output
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            video_mask = (input_ids == self.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_embeds)
+            video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_embeds, self.image_token_id)
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
             if self.video_pruning_rate > 0:
                 h = w = int(video_embeds.shape[1] ** 0.5)
@@ -339,8 +376,8 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         if input_features is not None and self.audio_tower is not None and input_ids is not None:
             audio_embeds = self.get_audio_features(input_features, input_features_mask).pooler_output
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            audio_mask = (input_ids == self.audio_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(audio_mask.to(inputs_embeds.device), audio_embeds)
+            audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds, audio_embeds, self.audio_token_id)
+            inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_embeds)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,

@@ -27,6 +27,21 @@ if is_torch_available():
 
 
 class NemotronH_Omni_Reasoning_V3VideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    norm_mean (`list[float]`, *optional*):
+        Per-channel mean used to normalize the frames.
+    norm_std (`list[float]`, *optional*):
+        Per-channel standard deviation used to normalize the frames.
+    patch_size (`int`, *optional*, defaults to 16):
+        Side length, in pixels, of one vision-tower patch.
+    downsample_ratio (`float`, *optional*, defaults to 0.5):
+        Pixel-shuffle spatial downsample ratio; its reciprocal is the patch-grid divisor.
+    video_target_num_patches (`int`, *optional*, defaults to 1024):
+        Patch-grid budget each frame is resized towards.
+    video_maintain_aspect_ratio (`bool`, *optional*, defaults to `True`):
+        Whether to preserve the frame aspect ratio when choosing the tile; a square tile is used otherwise.
+    """
+
     norm_mean: list[float] | None
     norm_std: list[float] | None
     patch_size: int
@@ -42,21 +57,6 @@ class NemotronH_Omni_Reasoning_V3VideoProcessor(BaseVideoProcessor):
     `video_target_num_patches`, then normalized with `norm_mean` / `norm_std`. This is the video
     counterpart of [`NemotronH_Omni_Reasoning_V3ImageProcessor`], which uses a per-image dynamic
     resolution budget instead.
-
-    Args:
-        norm_mean (`list[float]`, *optional*):
-            Per-channel mean used to normalize the frames.
-        norm_std (`list[float]`, *optional*):
-            Per-channel standard deviation used to normalize the frames.
-        patch_size (`int`, *optional*, defaults to 16):
-            Side length, in pixels, of one vision-tower patch.
-        downsample_ratio (`float`, *optional*, defaults to 0.5):
-            Pixel-shuffle spatial downsample ratio; its reciprocal is the patch-grid divisor.
-        video_target_num_patches (`int`, *optional*, defaults to 1024):
-            Patch-grid budget each frame is resized towards.
-        video_maintain_aspect_ratio (`bool`, *optional*, defaults to `True`):
-            Whether to preserve the frame aspect ratio when choosing the tile; a square tile is
-            used otherwise.
     """
 
     valid_kwargs = NemotronH_Omni_Reasoning_V3VideoProcessorInitKwargs
