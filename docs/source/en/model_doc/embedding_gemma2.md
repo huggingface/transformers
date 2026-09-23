@@ -283,36 +283,6 @@ embedding = F.normalize((token_embeddings * mask).sum(dim=1) / mask.sum(dim=1).c
 </hfoption>
 </hfoptions>
 
-### Video preprocessing controls
-
-Video sampling and timestamp flags (`fps`, `max_frames`, `overflow_strategy`, `add_timestamps`) can be customized per call.
-
-<hfoptions id="multimodal-video">
-<hfoption id="Sentence Transformers">
-
-```python
-video_embedding = model.encode(
-    {"video": "path/to/video.mp4"},
-    processing_kwargs={"video": {"add_timestamps": True, "fps": 2, "max_frames": 16}},
-)
-```
-
-</hfoption>
-<hfoption id="AutoModel">
-
-```python
-inputs = processor(
-    videos=["path/to/video.mp4"],
-    add_timestamps=True,
-    fps=2,
-    max_frames=16,
-    return_tensors="pt",
-).to(model.device)
-```
-
-</hfoption>
-</hfoptions>
-
 ## Processor
 
 [`EmbeddingGemma2Processor`] bundles the tokenizer, the image processor, the audio feature extractor and the video processor. Each modality can be passed on its own, in which case the processor synthesizes the placeholder tokens, so no text is required.
@@ -349,9 +319,22 @@ print(inputs["input_ids"].shape, inputs["pixel_values"].shape)
 # torch.Size([1, 68]) torch.Size([1, 630, 768])
 ```
 
-By default, [`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS, caps a clip at 32 frames, and leaves frame timestamps out of the prompt. Every knob is overridable per call.
+By default, [`EmbeddingGemma2VideoProcessor`] samples frames at 1 FPS, caps a clip at 32 frames (`overflow_strategy="uniform"`), and leaves frame timestamps out of the prompt (`add_timestamps=False`). Every knob is overridable per call.
 
 Rate-based sampling needs to know the source frame rate, which only comes from decoding a file. A pre-decoded array carries no `fps` or `duration`, so for those inputs the processor warns, skips FPS sampling, and applies the `max_frames` budget alone — pass a `VideoMetadata` with a valid `fps` and `duration` if you want the array sampled at a target rate. Timestamps have no such fallback: `add_timestamps=True` on an array with no `fps` raises, because a guessed rate would write wrong `mm:ss` labels into the prompt.
+
+<hfoptions id="multimodal-video">
+<hfoption id="Sentence Transformers">
+
+```python
+video_embedding = model.encode(
+    {"video": "path/to/video.mp4"},
+    processing_kwargs={"video": {"add_timestamps": True, "fps": 2, "max_frames": 16}},
+)
+```
+
+</hfoption>
+<hfoption id="AutoProcessor">
 
 ```python
 inputs = processor(
@@ -362,6 +345,9 @@ inputs = processor(
     return_tensors="pt",
 )
 ```
+
+</hfoption>
+</hfoptions>
 
 Chat-style messages are also accepted, which is what Sentence Transformers (`>=6.1.0`) uses internally for media inputs. The template renders any `system` messages first (where Sentence Transformers places the task prompt), then emits the remaining content entries in the order provided (or expands manual `<|image|>`, `<|video|>`, and `<|audio|>` markers in-place when present in the text).
 
