@@ -258,9 +258,10 @@ def _ignore_causal_mask_sdpa(
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
     # `ignore_causal_mask = True` if we are not tracing
-    # Under `torch.compile` we can still skip, but only if we do not have to read the values of the `padding_mask`.
-    # NOTE: this requires torch>=2.14. Before pytorch#176499, dynamo replaced `torch.compiler.is_exporting()` by a
-    # constant `True`, so older versions keep the previous behavior of never skipping while compiling.
+    # NOTE: under `torch.compile` we can still skip, but only if we do not have to read the values of the
+    # `padding_mask`. This requires torch>=2.14: before pytorch#176499, dynamo replaced
+    # `torch.compiler.is_exporting()` by a constant `True`, so older versions keep the previous behavior of
+    # never skipping while compiling.
     if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
