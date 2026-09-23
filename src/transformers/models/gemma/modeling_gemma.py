@@ -40,11 +40,14 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_gemma import GemmaConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class GemmaTextScaledWordEmbedding(nn.Embedding):
@@ -90,7 +93,17 @@ class GemmaMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+
+        # Guard for legacy Gemma 1.0 checkpoints that use exact "gelu" instead of "gelu_pytorch_tanh"
+        if config.hidden_act == "gelu":
+            logger.warning_once(
+                "The `hidden_act` config value 'gelu' is deprecated for Gemma. "
+                "Setting activation function to `gelu_pytorch_tanh` to match the original model's training. "
+                "Please use `gelu_pytorch_tanh` instead of `gelu` in your config to silence this warning."
+            )
+            self.act_fn = ACT2FN["gelu_pytorch_tanh"]
+        else:
+            self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
