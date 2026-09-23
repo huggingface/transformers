@@ -75,7 +75,7 @@ print(f"pytest runs successfully.")
 exit(0)
 """
 
-    with open("target_script.py", "w") as fp:
+    with open("target_script.py", "w", encoding="utf-8") as fp:
         fp.write(script.strip())
 
 
@@ -232,7 +232,7 @@ git bisect start --first-parent {start_commit} {end_commit}
 git bisect run python3 target_script.py
 """
 
-    with open("run_git_bisect.sh", "w") as fp:
+    with open("run_git_bisect.sh", "w", encoding="utf-8") as fp:
         fp.write(bash.strip())
 
     bash_result = subprocess.run(

@@ -279,6 +279,18 @@ if is_kernels_available():
                         version=2,
                     ),
                 },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=3,
+                    ),
+                },
             },
             "mamba_split_conv1d_scan_combined": {
                 "cuda": {
@@ -291,6 +303,18 @@ if is_kernels_available():
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
                         version=2,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=3,
                     ),
                 },
             },
@@ -307,6 +331,18 @@ if is_kernels_available():
                         version=2,
                     ),
                 },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=3,
+                    ),
+                },
             },
             "selective_scan_fn": {
                 "cuda": {
@@ -321,6 +357,18 @@ if is_kernels_available():
                         version=2,
                     ),
                 },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=3,
+                    ),
+                },
             },
             "selective_state_update": {
                 "cuda": {
@@ -333,6 +381,18 @@ if is_kernels_available():
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
                         version=2,
+                    ),
+                },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=3,
                     ),
                 },
             },
