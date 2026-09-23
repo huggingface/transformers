@@ -184,6 +184,10 @@ class PaddleOCRVLConfig(PreTrainedConfig):
             self.text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
             self.text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
 
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "paddleocr_vl":
+            # old ckpt with incorrect model type -> override manually
+            self.vision_config["model_type"] = "paddleocr_vl_vision"
+
         super().__post_init__(**kwargs)
         # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
         # config (where v5's tying logic looks) when the root value is the default. Checked after

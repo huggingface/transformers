@@ -45,5 +45,8 @@ class ColPaliConfig(PreTrainedConfig):
     vlm_config: dict | PreTrainedConfig | None = None
     embedding_dim: int = 128
 
+    def get_text_config(self, decoder=None, encoder=None) -> PreTrainedConfig:
+        return self.vlm_config.get_text_config(decoder=decoder, encoder=encoder)
+
 
 __all__ = ["ColPaliConfig"]
