@@ -264,7 +264,6 @@ class ExecutorchQnnConfig(ExecutorchConfig):
     backend_hardware: str = "htp"
     model_id: str = "llama3_2-1b"
     soc_model: str = "SM8750"
-    artifact_dir: str = "./qnn_hf_transformers"
     use_fp16: bool = False
 
 
