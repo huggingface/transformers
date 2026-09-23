@@ -134,6 +134,40 @@ class FineGrainedLoaderTest(unittest.TestCase):
             load_finegrained_kernel()
         self.assertIn("matmul_grouped", str(ctx.exception))
 
+    def test_loader_is_compile_safe_cold(self):
+        """Cold path: the compiled call is first to load, so the opaque loader node runs its full
+        body under compile and must return None, never the bundle (`torch.* op returned
+        non-Tensor`). The loader has no arch gate, so nothing here fakes a device."""
+        kernel, _ = _fake_bundle()
+        kernel.matmul_2d = lambda x, *a, **k: x + 1
+        p1, p2, p3, p4 = _loaded(kernel)
+        with p1, p2, p3, p4:
+            torch.compiler.reset()
+
+            @torch.compile(fullgraph=True)
+            def run(x):
+                return load_finegrained_kernel().matmul_2d(x)
+
+            out = run(torch.zeros(3))
+        self.assertTrue(torch.equal(out, torch.ones(3)))
+
+    def test_loader_is_compile_safe_when_warm(self):
+        """Warm path, which is the production order: eager warm-up, then compile. The loader hits
+        its short-circuit at trace time — the branch that must also return None."""
+        kernel, _ = _fake_bundle()
+        kernel.matmul_2d = lambda x, *a, **k: x + 1
+        p1, p2, p3, p4 = _loaded(kernel)
+        with p1, p2, p3, p4:
+            load_finegrained_kernel()
+            torch.compiler.reset()
+
+            @torch.compile(fullgraph=True)
+            def run(x):
+                return load_finegrained_kernel().matmul_2d(x)
+
+            out = run(torch.zeros(3))
+        self.assertTrue(torch.equal(out, torch.ones(3)))
+
     def test_loader_binds_all_symbols(self):
         kernel, _ = _fake_bundle()
         p1, p2, p3, p4 = _loaded(kernel)
@@ -888,6 +922,96 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         self.assertEqual(plan["layers.*.mlp.experts"], "moe_tp_experts")
         for companion in ("gate_up_proj_scale_inv", "down_proj_scale_inv", "gate_up_proj_bias"):
             self.assertIn(f"layers.*.mlp.experts.{companion}", plan, companion)
+
+
+class FineGrainedGroupsTest(unittest.TestCase):
+    """A quant config names a format per module SUBSET, because a checkpoint can be more than one."""
+
+    def _config(self, **kwargs):
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        return FineGrainedConfig(**kwargs)
+
+    def test_a_flat_config_is_one_group_over_everything(self):
+        groups = self._config(quant_method="mxfp8").groups
+        self.assertEqual({name: group.quant_method for name, group in groups.items()}, {"default": "mxfp8"})
+
+    def test_a_legacy_expert_dtype_becomes_the_two_groups_it_meant(self):
+        """DeepSeek-V4 ships `quant_method="fp8"` and declares its mxfp4 experts on the MODEL
+        config, because a flat config cannot say "the experts differ". `shared_experts` is DENSE
+        despite the name, which is why the pattern matches a path segment and not a substring."""
+        from transformers.utils.quantization_config import groups_with_expert_dtype
+
+        config = self._config(quant_method="fp8", weight_block_size=(128, 128), scale_fmt="ue8m0")
+        config.groups = groups_with_expert_dtype(config.groups, "fp4")
+        for module, expected in (
+            ("model.layers.3.mlp.experts", "mxfp4"),
+            ("model.layers.3.mlp.experts.gate_up_proj", "mxfp4"),
+            ("model.layers.3.self_attn.q_proj", "fp8"),
+            ("model.layers.3.mlp.shared_experts.up_proj", "fp8"),
+        ):
+            self.assertEqual(config.group_for(module).quant_method, expected, module)
+
+    def test_resolution_survives_a_round_trip_through_config_json(self):
+        """`to_json_string` SORTS keys, so a config read back has lost the order it was written
+        in. Resolution must not depend on it: the catch-all sorts first here and would swallow
+        every module if targeted groups were not preferred outright."""
+        import json
+
+        from transformers.utils.quantization_config import FineGrainedConfig, FineGrainedGroup
+
+        config = FineGrainedConfig(
+            groups={
+                "experts": FineGrainedGroup(quant_method="nvfp4", targets=[r"\.experts($|\.)"]),
+                "dense": FineGrainedGroup(quant_method="fp8", weight_block_size=(128, 128)),
+            }
+        )
+        back = FineGrainedConfig.from_dict(json.loads(config.to_json_string()))
+        self.assertEqual(back.group_for("model.layers.0.mlp.experts").quant_method, "nvfp4")
+        self.assertEqual(back.group_for("model.layers.0.self_attn.q_proj").quant_method, "fp8")
+        # a list survives JSON where a tuple does not, and the block size is compared as a tuple
+        self.assertEqual(back.groups["dense"].weight_block_size, (128, 128))
+
+    def test_two_targeted_groups_claiming_one_module_is_an_error(self):
+        from transformers.utils.quantization_config import FineGrainedGroup
+
+        config = self._config(
+            groups={
+                "a": FineGrainedGroup(quant_method="fp8", targets=[r"\.experts"]),
+                "b": FineGrainedGroup(quant_method="nvfp4", targets=[r"mlp\."]),
+            }
+        )
+        with self.assertRaises(ValueError):
+            config.group_for("model.layers.0.mlp.experts")
+
+    def test_a_producers_config_groups_are_normalized(self):
+        """modelopt describes a format by its parameters; we name it. GLM-5.2-NVFP4 ships exactly
+        this, and `targets: ["Linear"]` is its spelling of the catch-all."""
+        config = self._config(
+            quant_method="modelopt",
+            quant_algo="NVFP4",
+            config_groups={
+                "group_0": {
+                    "weights": {"num_bits": 4, "type": "float", "group_size": 16},
+                    "input_activations": {"num_bits": 4, "type": "float", "group_size": 16, "dynamic": False},
+                    "targets": ["Linear"],
+                }
+            },
+        )
+        group = config.group_for("model.layers.0.self_attn.q_proj")
+        self.assertEqual((group.quant_method, group.activation_format), ("nvfp4", "nvfp4"))
+        self.assertEqual(group.activation_scheme, "static")  # `dynamic: False`
+
+    def test_a_format_we_do_not_serve_falls_back_rather_than_guessing(self):
+        """Half a translation would quantize modules by a rule the producer did not write."""
+        config = self._config(
+            quant_method="modelopt",
+            quant_algo="NVFP4",
+            config_groups={
+                "group_0": {"weights": {"num_bits": 3, "type": "int", "group_size": 64}, "targets": ["Linear"]}
+            },
+        )
+        self.assertEqual(list(config.groups), ["default"])
 
 
 class SubtreePatternTest(unittest.TestCase):
@@ -2172,7 +2296,9 @@ def _checkpoint_expert_shape(model_dir):
     shards = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
     index = os.path.join(model_dir, "model.safetensors.index.json")
     if os.path.exists(index):
-        shards = sorted({os.path.join(model_dir, f) for f in json.load(open(index))["weight_map"].values()})
+        with open(index, encoding="utf-8") as fh:
+            weight_map = json.load(fh)["weight_map"]
+        shards = sorted({os.path.join(model_dir, f) for f in weight_map.values()})
 
     experts: set[int] = set()
     rows = 0
@@ -2559,7 +2685,7 @@ class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
         import torch
 
         script = os.path.join(self._tmp.name, "sharding_worker.py")
-        with open(script, "w") as fh:
+        with open(script, "w", encoding="utf-8") as fh:
             fh.write(_SHARDING_WORKER)
         out = os.path.join(self._tmp.name, "out")
         os.makedirs(out, exist_ok=True)

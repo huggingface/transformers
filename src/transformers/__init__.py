@@ -261,6 +261,7 @@ _import_structure = {
         "FbgemmFp8Config",
         "FineGrainedConfig",
         "FineGrainedFP8Config",
+        "FineGrainedGroup",
         "FourOverSixConfig",
         "FPQuantConfig",
         "GemmaQuantizationConfig",
@@ -793,6 +794,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import FbgemmFp8Config as FbgemmFp8Config
     from .utils.quantization_config import FineGrainedConfig as FineGrainedConfig
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
+    from .utils.quantization_config import FineGrainedGroup as FineGrainedGroup
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
     from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig

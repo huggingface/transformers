@@ -102,6 +102,10 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 [[autodoc]] FineGrainedConfig
 
+## FineGrainedGroup
+
+[[autodoc]] FineGrainedGroup
+
 ## FineGrainedFP8Config
 
 [[autodoc]] FineGrainedFP8Config
