@@ -14,7 +14,16 @@
 # limitations under the License.
 from .auto import AutoExportConfig, AutoHfExporter, get_hf_exporter, register_export_config, register_exporter
 from .base import HfExporter
-from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig, OpenVINOConfig
+from .configs import (
+    DynamoConfig,
+    ExecutorchConfig,
+    ExecutorchQnnConfig,
+    ExecutorchQnnLlmConfig,
+    ExportConfigMixin,
+    ExportFormat,
+    OnnxConfig,
+    OpenVINOConfig,
+)
 from .exporter_dynamo import DynamoExporter
 from .exporter_executorch import ExecutorchExporter
 from .exporter_onnx import OnnxExporter, OnnxRuntimeQuantizer

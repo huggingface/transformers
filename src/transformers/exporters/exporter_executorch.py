@@ -17,8 +17,8 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): move the model to the target device/dtype
-   and build the partitioner list.
+1. **Backend registration** (`_BACKENDS`): move the model to the target device/dtype and build
+   the partitioner list, then run the backend's quantize/lower hooks.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -42,11 +42,12 @@ import math
 import operator
 import re
 from collections.abc import MutableMapping
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
-from .configs import ExecutorchConfig
+from .configs import ExecutorchConfig, ExecutorchQnnConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
@@ -106,6 +107,173 @@ if is_executorch_available():
 logger = logging.get_logger(__name__)
 
 
+# ── Stage 1: Backend registration ─────────────────────────────────────────────
+# Each backend is a `_ExecutorchBackend(prepare, quantize, lower)` entry in the `_BACKENDS` table
+# below:
+# - `prepare_for_*(model, sample_inputs, config)` receives the original model and sample inputs,
+#   applies backend-specific preparation, and returns `(model, sample_inputs, partitioner)`. Common
+#   patterns include moving the model to the target device, casting the model/inputs to the required
+#   dtype (e.g. bfloat16 for CUDA), and building the partitioner list passed to
+#   `to_edge_transform_and_lower`.
+# - `quantize` runs the backend's PT2E quantization/calibration recipe — the inherited generic
+#   `DynamoExporter._quantize`, unless the backend needs its own (e.g. QNN's `_qnn_quantize`).
+# - `lower` builds the final `ExecutorchProgramManager` — `_default_lower_to_executorch`, unless the
+#   backend needs its own (e.g. QNN's `_qnn_lower_to_executorch`).
+# To add a new backend: implement `prepare_for_<name>` (plus dedicated `quantize`/`lower` hooks if
+# needed) and add an entry to `_BACKENDS` below.
+
+
+class _PrepareHook(Protocol):
+    def __call__(
+        self, config: ExecutorchConfig, model: PreTrainedModel, sample_inputs: Any, /
+    ) -> tuple[Any, Any, Any]: ...
+
+
+class _QuantizeHook(Protocol):
+    def __call__(
+        self,
+        exporter: ExecutorchExporter,
+        exported_program: ExportedProgram,
+        config: ExecutorchConfig,
+        sample_inputs: Any,
+        dynamic_shapes: Any,
+        /,
+    ) -> ExportedProgram: ...
+
+
+class _LowerHook(Protocol):
+    def __call__(
+        self, config: ExecutorchConfig, exported_program: ExportedProgram, sample_inputs: Any, partitioner: Any, /
+    ) -> EdgeProgramManager: ...
+
+
+def _default_lower_to_executorch(config, exported_program, sample_inputs, partitioner):
+    """The plain edge lowering every backend uses unless it registers its own."""
+
+    def _get_backend_config(config):
+        """Build the ``ExecutorchBackendConfig`` for ``to_executorch``, or ``None`` for defaults.
+
+        Only overrides the memory-planning pass when the caller changed an ``alloc_*`` flag. Turning off
+        ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
+        (see [`ExecutorchConfig`]) — the prerequisite for zero-copy in-place ``USER_INPUT_MUTATION``.
+        """
+        if config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
+            return None
+        return ExecutorchBackendConfig(
+            memory_planning_pass=MemoryPlanningPass(
+                alloc_graph_input=config.alloc_graph_input,
+                alloc_graph_output=config.alloc_graph_output,
+                alloc_mutable_buffers=config.alloc_mutable_buffers,
+            )
+        )
+
+    edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+        exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
+    )
+    executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
+        config=_get_backend_config(config)
+    )
+    return executorch_programs_manager
+
+
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
+    """CPU inference via XNNPACK.
+
+    Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
+    require a CPU-typed graph, and tracing on CPU also sidesteps per-model device bugs — models
+    create in-``forward`` tensors (``arange``/``zeros``/sinusoids) without ``device=``, which
+    default to CPU and would mismatch a CUDA model (``FakeTensor Device Propagation ... cuda, cpu``).
+    ``prepare_for_export`` then casts the inputs to CPU during the trace."""
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    # Force MoE experts to `batched_mm`: on this CPU fp32 trace the "grouped_mm" implementation
+    # dispatches to the opaque `transformers.grouped_mm_fallback` custom op, which has no ExecuTorch
+    # lowering (`aten._grouped_mm` itself is bf16-only at trace time).
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
+    partitioner = [XnnpackPartitioner()]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
+def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchQnnConfig):
+    from executorch.backends.qualcomm.hf_transformers.api import prepare_for_qnn as _prepare_for_qnn
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    model = model.eval()
+    qnn_decoder_model = _prepare_for_qnn(model, config)
+    return qnn_decoder_model, _make_contiguous(qnn_decoder_model.get_example_inputs()), None
+
+
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
+    """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
+
+    The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
+    kernels compiled by AOTInductor, which needs a GPU to compile/autotune. The model itself can
+    stay on any device (e.g. CPU): AOTInductor targets the machine's GPU regardless of where the
+    traced tensors live, so no `.to("cuda")` is needed."""
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
+
+    model.requires_grad_(False)
+    dtype = module_dtype(model)
+    if dtype is not None and dtype != torch.bfloat16:
+        logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
+        model = model.to(dtype=torch.bfloat16)
+    partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
+def _qnn_quantize(exporter, exported_program, config, sample_inputs, dynamic_shapes):
+    from executorch.backends.qualcomm.hf_transformers.api import quantize_for_qnn
+
+    return quantize_for_qnn(exported_program, config, sample_inputs)
+
+
+def _qnn_lower_to_executorch(config, exported_program, sample_inputs, partitioner):
+    from executorch.backends.qualcomm.hf_transformers.api import lower_for_qnn
+
+    return lower_for_qnn(exported_program=exported_program, hf_config=config, sample_inputs=sample_inputs)
+
+
+@dataclass(frozen=True)
+class _ExecutorchBackend:
+    prepare: _PrepareHook
+    quantize: _QuantizeHook
+    lower: _LowerHook
+
+
+_BACKENDS = {
+    "xnnpack": _ExecutorchBackend(
+        prepare=prepare_for_xnnpack,
+        # The inherited generic PT2E recipe, referenced as an unbound method.
+        quantize=DynamoExporter._quantize,
+        lower=_default_lower_to_executorch,
+    ),
+    "cuda": _ExecutorchBackend(
+        prepare=prepare_for_cuda,
+        quantize=DynamoExporter._quantize,
+        lower=_default_lower_to_executorch,
+    ),
+    "qnn": _ExecutorchBackend(
+        prepare=prepare_for_qnn,
+        quantize=_qnn_quantize,
+        lower=_qnn_lower_to_executorch,
+    ),
+}
+
+
+def _get_backend(config: ExecutorchConfig) -> _ExecutorchBackend:
+    """Look up `config`'s backend entry, raising for an unknown backend name."""
+    backend = _BACKENDS.get(config.backend)
+    if backend is None:
+        raise ValueError(
+            f"Unsupported backend {config.backend!r} for ExecuTorch export; expected one of {sorted(_BACKENDS)}."
+        )
+    return backend
+
+
 class ExecutorchExporter(DynamoExporter):
     """Exporter that converts a [`PreTrainedModel`] to an ExecuTorch `ExecutorchProgramManager`.
 
@@ -132,27 +300,19 @@ class ExecutorchExporter(DynamoExporter):
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
         if isinstance(config, dict):
             config = ExecutorchConfig(**config)
-        elif type(config) is not ExecutorchConfig:
+        elif not isinstance(config, ExecutorchConfig):
             raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
 
-        prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
-        if prepare_for_backend is None:
-            raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
+        backend = _get_backend(config)
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        model, sample_inputs, partitioner = backend.prepare(model, sample_inputs, config)
 
         with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=partitioner,
-                compile_config=_get_edge_compile_config(config.backend),
-                transform_passes=_get_transform_passes(config.backend),
-            )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_backend_config(config)
+            executorch_programs_manager: ExecutorchProgramManager = _lower_to_executorch(
+                config, exported_program, sample_inputs, partitioner
             )
 
         return executorch_programs_manager
@@ -165,6 +325,9 @@ def _get_transform_passes(backend: str):
 
         return get_default_passes()
     return None
+
+def _quantize(self, exported_program, config, sample_inputs, dynamic_shapes):
+    return _get_backend(config).quantize(self, exported_program, config, sample_inputs, dynamic_shapes)
 
 
 def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
@@ -197,31 +360,8 @@ def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
     )
 
 
-def _get_backend_config(config):
-    """Build the ``ExecutorchBackendConfig`` for ``to_executorch``, or ``None`` for defaults.
-
-    Only overrides the memory-planning pass when the caller changed an ``alloc_*`` flag. Turning off
-    ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
-    (see [`ExecutorchConfig`]) — the prerequisite for zero-copy in-place ``USER_INPUT_MUTATION``.
-    """
-    if config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
-        return None
-    return ExecutorchBackendConfig(
-        memory_planning_pass=MemoryPlanningPass(
-            alloc_graph_input=config.alloc_graph_input,
-            alloc_graph_output=config.alloc_graph_output,
-            alloc_mutable_buffers=config.alloc_mutable_buffers,
-        )
-    )
-
-
-# ── Stage 1: Backend preparation ──────────────────────────────────────────────
-# Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
-# and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
-# - Move the model to the target device.
-# - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
-# - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
-# To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
+def _lower_to_executorch(config, exported_program, sample_inputs, partitioner):
+    return _get_backend(config).lower(config, exported_program, sample_inputs, partitioner)
 
 
 def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
@@ -234,73 +374,6 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     their identity for in-place static-cache writes.
     """
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
-
-
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
-    """CPU inference via XNNPACK.
-
-    Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
-    require a CPU-typed graph, and tracing on CPU also sidesteps per-model device bugs — models
-    create in-``forward`` tensors (``arange``/``zeros``/sinusoids) without ``device=``, which
-    default to CPU and would mismatch a CUDA model (``FakeTensor Device Propagation ... cuda, cpu``).
-    ``prepare_for_export`` then casts the inputs to CPU during the trace."""
-
-    model.requires_grad_(False)
-    model = model.to(device="cpu")
-    # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
-    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
-        model.set_experts_implementation("batched_mm")
-    partitioner = [XnnpackPartitioner()]
-    return model, _make_contiguous(sample_inputs), partitioner
-
-
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
-    """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
-
-    The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
-    kernels compiled by AOTInductor, which needs a GPU to compile/autotune. The model itself can
-    stay on any device (e.g. CPU): AOTInductor targets the machine's GPU regardless of where the
-    traced tensors live, so no `.to("cuda")` is needed."""
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
-
-    model.requires_grad_(False)
-    dtype = module_dtype(model)
-    if dtype is not None and dtype != torch.bfloat16:
-        logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
-        model = model.to(dtype=torch.bfloat16)
-    partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
-    return model, _make_contiguous(sample_inputs), partitioner
-
-
-def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
-    """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
-    for value in sample_inputs.values():
-        caches = [value]
-        if isinstance(value, EncoderDecoderCache):
-            caches = [value.self_attention_cache, value.cross_attention_cache]
-        if any(isinstance(cache, StaticCache) for cache in caches):
-            raise ValueError(
-                "StaticCache is not supported by the ExecuTorch MLX backend. "
-                "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
-            )
-
-    from executorch.backends.mlx import MLXPartitioner
-
-    model.requires_grad_(False)
-    model = model.to(device="cpu")
-    # MLX does not support grouped MoE kernels.
-    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
-        model.set_experts_implementation("batched_mm")
-    partitioner = [MLXPartitioner()]
-    return model, _make_contiguous(sample_inputs), partitioner
-
-
-_BACKEND_PREPARE = {
-    "xnnpack": prepare_for_xnnpack,
-    "cuda": prepare_for_cuda,
-    "mlx": prepare_for_mlx,
-}
 
 
 # ── Stage 2: Torch patches ────────────────────────────────────────────────────

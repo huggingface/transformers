@@ -252,3 +252,26 @@ class OpenVINOConfig(DynamoConfig):
     def __post_init__(self):
         if self.pt2e_quantizer is not None and self.nncf_quantizer is not None:
             raise ValueError("Set at most one of `pt2e_quantizer` and `nncf_quantizer`.")
+
+
+@dataclass
+class ExecutorchQnnConfig(ExecutorchConfig):
+    """
+    Configuration for QNN Transformer export path
+    """
+
+    backend: str = "qnn"
+    backend_hardware: str = "htp"
+    model_id: str = "llama3_2-1b"
+    soc_model: str = "SM8750"
+    artifact_dir: str = "./qnn_hf_transformers"
+    use_fp16: bool = False
+
+
+@dataclass
+class ExecutorchQnnLlmConfig(ExecutorchQnnConfig):
+    """
+    Configuration for the QNN LLM export path.
+    """
+
+    max_seq_len: int = 128
