@@ -280,10 +280,8 @@ class FineGrainedInputScales(_FineGrainedOp):
             value = torch.stack(value, dim=0) if isinstance(value, list) else value
             values.append(value.float())
         stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
-        # A scale is a MAGNITUDE, so reduce over absolute values and keep it off zero: a negative
-        # flips every dequantized row's sign and a zero divides the activations by zero. A no-op
-        # for a real calibrated checkpoint; it catches scales that were built rather than measured.
-        per_expert = stacked.reshape(stacked.shape[0], -1).abs().amax(dim=1).clamp(min=1e-12)
+        # a scale is a magnitude, so the reduce is over absolute values
+        per_expert = stacked.reshape(stacked.shape[0], -1).abs().amax(dim=1)
         one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")  # the NVFP4 global only
         return {full_layer_name: (per_expert.amax().reshape(1) if one_value else per_expert).contiguous()}
 
