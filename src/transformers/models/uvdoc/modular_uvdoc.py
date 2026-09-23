@@ -24,10 +24,9 @@ from ...activations import ACT2FN
 from ...backbone_utils import (
     BackboneConfigMixin,
     BackboneMixin,
-    consolidate_backbone_kwargs_to_config,
     filter_output_hidden_states,
 )
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -140,22 +139,19 @@ class UVDocConfig(PreTrainedConfig):
     """
 
     model_type = "uvdoc"
-    sub_configs = {"backbone_config": AutoConfig}
-    backbone_config: dict | PreTrainedConfig | None = None
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="uvdoc_backbone",
+        ),
+    }
 
+    backbone_config: dict | PreTrainedConfig | None = None
     hidden_act: str = "prelu"
     padding_mode: str = "reflect"
     kernel_size: int = 5
     bridge_connector: list[int] | tuple[int, ...] = (128, 128)
     out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="uvdoc_backbone",
-            **kwargs,
-        )
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring

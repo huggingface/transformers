@@ -336,8 +336,8 @@ class Gemma4Config(PreTrainedConfig):
     model_type = "gemma4"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=Gemma4TextConfig),
-        "vision_config": SubConfigSpec(config_class=Gemma4VisionConfig),
-        "audio_config": SubConfigSpec(config_class=Gemma4AudioConfig),
+        "vision_config": SubConfigSpec(config_class=Gemma4VisionConfig, optional=True),
+        "audio_config": SubConfigSpec(config_class=Gemma4AudioConfig, optional=True),
     }
 
     text_config: Gemma4TextConfig | dict[str, Any] | None = None

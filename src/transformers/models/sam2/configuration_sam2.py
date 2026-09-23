@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
@@ -122,8 +122,8 @@ class Sam2VisionConfig(PreTrainedConfig):
 
     base_config_key = "vision_config"
     model_type = "sam2_vision_model"
-    sub_configs = {
-        "backbone_config": AutoConfig,
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="sam2_hiera_det_model"),
     }
 
     backbone_config: dict | PreTrainedConfig | None = None
@@ -147,12 +147,6 @@ class Sam2VisionConfig(PreTrainedConfig):
             [[256, 256], [128, 128], [64, 64]] if self.backbone_feature_sizes is None else self.backbone_feature_sizes
         )
         self.fpn_top_down_levels = [2, 3] if self.fpn_top_down_levels is None else self.fpn_top_down_levels
-
-        if isinstance(self.backbone_config, dict):
-            self.backbone_config["model_type"] = self.backbone_config.get("model_type", "sam2_hiera_det_model")
-            self.backbone_config = CONFIG_MAPPING[self.backbone_config["model_type"]](**self.backbone_config)
-        elif self.backbone_config is None:
-            self.backbone_config = Sam2HieraDetConfig()
 
         super().__post_init__(**kwargs)
 

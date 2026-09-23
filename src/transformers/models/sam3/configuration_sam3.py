@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam3")
@@ -77,8 +77,8 @@ class Sam3VisionConfig(PreTrainedConfig):
 
     base_config_key = "vision_config"
     model_type = "sam3_vision_model"
-    sub_configs = {
-        "backbone_config": AutoConfig,
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="sam3_vit_model"),
     }
 
     backbone_config: dict | PreTrainedConfig | None = None
@@ -93,12 +93,6 @@ class Sam3VisionConfig(PreTrainedConfig):
         self.scale_factors = [4.0, 2.0, 1.0, 0.5] if self.scale_factors is None else self.scale_factors
         if self.backbone_feature_sizes is None:
             self.backbone_feature_sizes = [[288, 288], [144, 144], [72, 72]]
-
-        if isinstance(self.backbone_config, dict):
-            self.backbone_config["model_type"] = self.backbone_config.get("model_type", "sam3_vit_model")
-            self.backbone_config = CONFIG_MAPPING[self.backbone_config["model_type"]](**self.backbone_config)
-        elif self.backbone_config is None:
-            self.backbone_config = CONFIG_MAPPING["sam3_vit_model"]()
 
         super().__post_init__(**kwargs)
 

@@ -182,9 +182,11 @@ class SubConfigSpec:
         config_class,
         model_type: str | None = None,
         init_kwargs: dict | None = None,
+        optional: bool = False,
     ):
         self.init_kwargs = init_kwargs if init_kwargs is not None else {}
         self.config_class = config_class
+        self.optional = optional
 
         # we can have `AutoConfig` with a default model-type (eg. LLaVA), or the subconfig
         # is already a specific class (eg. Qwen2VLVisionConfig) which has a `model_type` attr
@@ -393,6 +395,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if self.sub_configs_defaults:
             for key, specs in self.sub_configs_defaults.items():
                 subconfig = getattr(self, key)
+                if subconfig is None and specs.optional:
+                    continue
                 subconfig = specs.create_subconfig(key, subconfig, **kwargs)
                 setattr(self, key, subconfig)
 

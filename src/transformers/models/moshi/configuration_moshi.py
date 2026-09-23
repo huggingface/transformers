@@ -165,7 +165,7 @@ class MoshiConfig(PreTrainedConfig):
 
         if self.audio_encoder_config is not None:
             encoder_codebook_size = (
-                self.audio_encoder_config["codebook_size"]
+                self.audio_encoder_config.get("codebook_size", 2048)
                 if isinstance(self.audio_encoder_config, dict)
                 else self.audio_encoder_config.codebook_size
             )
