@@ -192,7 +192,9 @@ class SentencePieceExtractor:
             AddedToken(token, normalized=False, special=special)
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
         ]
-        kwargs["_spm_precompiled_charsmap"] = getattr(self.proto.normalizer_spec, "precompiled_charsmap", None)
+        # Protobuf bytes fields default to b"" (not None) when absent; treat empty bytes as no map
+        _precompiled_charsmap = self.proto.normalizer_spec.precompiled_charsmap
+        kwargs["_spm_precompiled_charsmap"] = _precompiled_charsmap if _precompiled_charsmap else None
         return kwargs
 
 

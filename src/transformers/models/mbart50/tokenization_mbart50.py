@@ -160,7 +160,7 @@ class MBart50Tokenizer(TokenizersBackend):
         )
 
         normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]
-        if _spm_precompiled_charsmap is not None:
+        if _spm_precompiled_charsmap:  # empty bytes (b"") from protobuf is falsy; skip if absent
             normalizers_ = [normalizers.Precompiled(_spm_precompiled_charsmap)] + normalizers_
 
         self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
@@ -310,3 +310,4 @@ __all__ = ["MBart50Tokenizer"]
 
 # Backward alias
 MBart50TokenizerFast = MBart50Tokenizer
+

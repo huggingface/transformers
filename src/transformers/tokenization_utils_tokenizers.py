@@ -1512,3 +1512,4 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
 # Backward-compatible alias: allow referring to TokenizersBackend as PreTrainedTokenizerFast
 PreTrainedTokenizerFast = TokenizersBackend
+

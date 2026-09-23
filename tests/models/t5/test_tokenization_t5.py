@@ -19,6 +19,28 @@ from transformers.testing_utils import get_tests_dir, require_sentencepiece, req
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
+class T5TokenizerSpmCharsmapTest(unittest.TestCase):
+    """Regression tests for issue #48942."""
+
+    def test_init_with_empty_bytes_charsmap_does_not_raise(self):
+        """b'' for _spm_precompiled_charsmap must not crash.
+        Previously raised: Cannot parse precompiled_charsmap
+        """
+        tok = T5Tokenizer(_spm_precompiled_charsmap=b"")
+        self.assertIsNotNone(tok)
+
+    def test_init_with_none_charsmap_does_not_raise(self):
+        tok = T5Tokenizer(_spm_precompiled_charsmap=None)
+        self.assertIsNotNone(tok)
+
+    def test_empty_and_none_produce_same_tokenization(self):
+        tok_none = T5Tokenizer(_spm_precompiled_charsmap=None)
+        tok_empty = T5Tokenizer(_spm_precompiled_charsmap=b"")
+        text = "hello world"
+        self.assertEqual(tok_none.tokenize(text), tok_empty.tokenize(text))
+
+
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
