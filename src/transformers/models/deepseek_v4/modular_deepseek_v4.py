@@ -65,13 +65,12 @@ def apply_rotary_pos_emb(
 
 class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Return the input dtype. V4 pins these norms to FP32 (`_keep_in_fp32_modules_strict`),
-        so `weight * hidden_states` promotes the result and hands FP32 to the compressor
-        projections, which ship BF16. A no-op where the weight already matches."""
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # back to the input dtype: V4 pins these norms to FP32, and `weight * hidden_states`
+        # would otherwise hand FP32 to the compressor projections, which ship BF16
         return (self.weight * hidden_states.to(input_dtype)).to(input_dtype)
 
 

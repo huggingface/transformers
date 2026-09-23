@@ -387,12 +387,17 @@ class DeepGemmForwardTest(unittest.TestCase):
 
         applied = []
 
+        class _Norm(torch.nn.Module):
+            def forward(self, rows):
+                applied.append(tuple(rows.shape))
+                return rows
+
         class _Experts(torch.nn.Module):
             has_post_expert_norm = True
 
-            def _apply_post_norm(self, rows):
-                applied.append(tuple(rows.shape))
-                return rows
+            def __init__(self):
+                super().__init__()
+                self.post_expert_norm = _Norm()
 
         module = _Experts()
         rows = torch.randn(4, 8)

@@ -1687,10 +1687,18 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("shapes must be a dict")
 
 
-# What a modelopt export's `quant_algo` means in our vocabulary: the format it becomes, and the
-# activation format that algo implies when the config does not name one. modelopt exports other
-# algos (FP8, INT4 AWQ, W4A8, MXFP4); they are refused rather than silently mis-read.
-_MODELOPT_ALGOS = {"NVFP4": (QuantizationMethod.NVFP4, "nvfp4")}
+def subtree_patterns(globs: list[str]) -> list[str]:
+    """Glob-style module names ("model.layers.0*", "model.layers.1.*", bare "self_attn") as
+    regexes that match the named module and everything under it.
+
+    Handed on as regexes the globs are wrong twice: the dots match any character, and the star is
+    greedy, so "model.layers.1.*" also takes layers 10-19. Anchor each at a path boundary instead.
+    """
+    patterns = []
+    for glob in globs:
+        subtree = glob[:-2] if glob.endswith(".*") else glob.rstrip("*").rstrip(".")
+        patterns.append(r"(?:^|.*\.)" + re.escape(subtree) + r"(\..*)?$")
+    return patterns
 
 
 _CATCH_ALL = [".*"]  # the targets of a group that takes whatever no other group claimed
@@ -1720,28 +1728,43 @@ class FineGrainedGroup:
         return any(re.search(target, module_name) for target in self.targets)
 
 
-# (num_bits, type, group_size) as compressed-tensors / modelopt spell a format, to the name our
-# kernels dispatch on. `group_size` is what separates the two 4-bit formats: nvfp4's block scale
-# is E4M3 over 16 values, mxfp4's is E8M0 over 32.
-_CT_FORMATS = {
-    (4, "float", 16): "nvfp4",
-    (4, "float", 32): "mxfp4",
-    (8, "float", 32): "mxfp8",
-    (8, "float", None): "fp8",
-}
+def groups_with_expert_dtype(
+    groups: dict[str, FineGrainedGroup], expert_dtype: str | None
+) -> dict[str, FineGrainedGroup]:
+    """`groups` with a legacy `config.expert_dtype` folded into the group it means, unchanged if
+    there is nothing to fold.
+
+    DeepSeek-V4 ships `quant_method="fp8"` and declares its mxfp4 experts on the MODEL config,
+    because a flat quant config carries one format and cannot say "the experts differ". The
+    caller holds both configs; this only says what the two of them describe.
+    """
+    if expert_dtype != "fp4" or len(groups) > 1:
+        return groups
+    flat = groups["default"]
+    return {
+        "experts": replace(flat, quant_method="mxfp4", activation_format="mxfp4", targets=[r"\.experts($|\.)"]),
+        "dense": flat,
+    }
 
 
-def _group_from_config_groups(spec: dict) -> FineGrainedGroup | None:
+def group_from_config_groups(spec: dict) -> FineGrainedGroup | None:
     """One `config_groups` entry as a `FineGrainedGroup`, or `None` if it names a format we do not
     serve — in which case the caller falls back to the flat fields rather than guessing.
 
-    compressed-tensors describes a format by its parameters; we name it. `targets` is theirs too:
-    a bare entry is a CLASS name (GLM-5.2 ships `["Linear"]`, i.e. every linear), and an `re:`
-    prefix introduces a pattern.
+    compressed-tensors describes a format by its parameters; we name it. `group_size` is what
+    separates the two 4-bit formats: nvfp4's block scale is E4M3 over 16 values, mxfp4's is E8M0
+    over 32. `targets` is theirs too: a bare entry is a CLASS name (GLM-5.2 ships `["Linear"]`,
+    i.e. every linear), and an `re:` prefix introduces a pattern.
     """
+    formats = {
+        (4, "float", 16): "nvfp4",
+        (4, "float", 32): "mxfp4",
+        (8, "float", 32): "mxfp8",
+        (8, "float", None): "fp8",
+    }
     weights = spec.get("weights") or {}
     key = (weights.get("num_bits"), weights.get("type"), weights.get("group_size"))
-    quant_method = _CT_FORMATS.get(key)
+    quant_method = formats.get(key)
     if quant_method is None:
         return None
     targets = []
@@ -1757,7 +1780,7 @@ def _group_from_config_groups(spec: dict) -> FineGrainedGroup | None:
     return FineGrainedGroup(
         quant_method=quant_method,
         targets=targets or list(_CATCH_ALL),
-        activation_format=_CT_FORMATS.get(act_key) if activations else None,
+        activation_format=formats.get(act_key) if activations else None,
         activation_scheme="dynamic" if activations.get("dynamic", True) else "static",
     )
 
@@ -1819,42 +1842,13 @@ class FineGrainedConfig(QuantizationConfigMixin):
         # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
-        # NVIDIA modelopt exports: `quant_algo` names the format (modelopt covers FP8, INT4 AWQ,
-        # W4A8 and others; `_MODELOPT_ALGOS` is the subset this path serves) and the skip list is
-        # a glob-style `ignore`, or `exclude_modules` in modelopt's own spelling. The calibrated
-        # `input_scale` TENSORS are the loader's business, not this config's.
+        # "modelopt" names the PRODUCER, not a format; read what it exported into our fields
         if str(self.quant_method) == "modelopt" or kwargs.get("quant_algo") is not None:
-            quant_algo = kwargs.pop("quant_algo", None)
-            if quant_algo not in _MODELOPT_ALGOS:
-                raise ValueError(
-                    f"modelopt checkpoints are supported for quant_algo in "
-                    f"{sorted(_MODELOPT_ALGOS)}; got {quant_algo!r}"
-                )
-            # "modelopt" names the PRODUCER, not a format, so the algo it exported becomes the
-            # format here and nothing downstream has to ask where a config came from.
-            self.quant_method, algo_activation_format = _MODELOPT_ALGOS[quant_algo]
-            logger.info(
-                f"modelopt checkpoint exported with quant_algo={quant_algo!r}; loading it as "
-                f"{str(self.quant_method)!r}."
-            )
+            self.quant_method, algo_activation_format, algo_groups, ignore = self._read_modelopt(kwargs)
             self.activation_format = activation_format or algo_activation_format
-            # modelopt also describes the format parametrically under `config_groups`; take it
-            # when every entry maps, so a multi-group export is not silently flattened to one
-            ct_groups = kwargs.pop("config_groups", None)
-            if groups is None and ct_groups:
-                mapped = {name: _group_from_config_groups(spec) for name, spec in ct_groups.items()}
-                if all(group is not None for group in mapped.values()):
-                    groups = mapped
-            ignore = kwargs.pop("ignore", None) or kwargs.pop("exclude_modules", None)
+            groups = groups or algo_groups
             if modules_to_not_convert is None and ignore is not None:
-                # modelopt names skipped subtrees with GLOBS — "model.layers.0*", "model.layers.1.*",
-                # or bare "self_attn". Handed on as regexes they are wrong twice: the dots match any
-                # character, and the star is greedy, so "model.layers.1.*" also takes layers 10-19.
-                # Anchor each at a path boundary instead: the named module and everything under it.
-                modules_to_not_convert = []
-                for glob in ignore:
-                    subtree = glob[:-2] if glob.endswith(".*") else glob.rstrip("*").rstrip(".")
-                    modules_to_not_convert.append(r"(?:^|.*\.)" + re.escape(subtree) + r"(\..*)?$")
+                modules_to_not_convert = subtree_patterns(ignore)
         self.modules_to_not_convert = modules_to_not_convert
         self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
@@ -1882,6 +1876,34 @@ class FineGrainedConfig(QuantizationConfigMixin):
             }
         self.post_init()
 
+    @staticmethod
+    def _read_modelopt(kwargs: dict) -> tuple[str, str | None, dict | None, list | None]:
+        """`(format, activation format, groups, ignore list)` out of an NVIDIA modelopt export.
+
+        `quant_algo` names what it exported; modelopt also covers FP8, INT4 AWQ, W4A8 and MXFP4,
+        which are refused rather than silently mis-read. It may describe the same thing
+        parametrically under `config_groups` — taken only when every entry maps, so a multi-group
+        export is not flattened to one. The calibrated `input_scale` TENSORS are the loader's
+        business, not this config's.
+        """
+        algos = {"NVFP4": (QuantizationMethod.NVFP4, "nvfp4")}
+        quant_algo = kwargs.pop("quant_algo", None)
+        if quant_algo not in algos:
+            raise ValueError(
+                f"modelopt checkpoints are supported for quant_algo in {sorted(algos)}; got {quant_algo!r}"
+            )
+        quant_method, activation_format = algos[quant_algo]
+        logger.info(
+            f"modelopt checkpoint exported with quant_algo={quant_algo!r}; loading it as {str(quant_method)!r}."
+        )
+        groups = None
+        if ct_groups := kwargs.pop("config_groups", None):
+            mapped = {name: group_from_config_groups(spec) for name, spec in ct_groups.items()}
+            if all(group is not None for group in mapped.values()):
+                groups = mapped
+        ignore = kwargs.pop("ignore", None) or kwargs.pop("exclude_modules", None)
+        return quant_method, activation_format, groups, ignore
+
     def to_dict(self):
         """`config.json`-ready: the groups go out as plain dicts so the config round-trips."""
         out = super().to_dict()
@@ -1906,21 +1928,6 @@ class FineGrainedConfig(QuantizationConfigMixin):
             if group.targets == _CATCH_ALL:
                 return group
         raise KeyError(f"no group covers {module_name!r}; groups: {list(self.groups)}")
-
-    def split_out_experts(self, expert_dtype: str | None) -> None:
-        """Fold a legacy `config.expert_dtype` into the group it means.
-
-        DeepSeek-V4 ships `quant_method="fp8"` and declares its mxfp4 experts on the MODEL config,
-        because a flat quant config carries one format and cannot say "the experts differ". Split
-        that into the two groups it describes, so nothing downstream reads the side-channel.
-        """
-        if expert_dtype != "fp4" or len(self.groups) > 1:
-            return
-        flat = self.groups["default"]
-        self.groups = {
-            "experts": replace(flat, quant_method="mxfp4", activation_format="mxfp4", targets=[r"\.experts($|\.)"]),
-            "dense": flat,
-        }
 
     def post_init(self):
         r"""

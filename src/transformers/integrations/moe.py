@@ -168,7 +168,7 @@ def batched_mm_experts_forward(
     # `getattr`: an experts module built without the decorator has no such attribute, and this
     # forward is the shared one every backend adapts onto.
     if getattr(self, "has_post_expert_norm", False):
-        proj_out = self._apply_post_norm(proj_out)  # (S, hidden_dim)
+        proj_out = self.post_expert_norm(proj_out)  # (S, hidden_dim)
 
     # Apply routing weights
     if sentinel_mask is not None:
@@ -485,7 +485,7 @@ def grouped_mm_experts_forward(
     # `getattr`: an experts module built without the decorator has no such attribute, and this
     # forward is the shared one every backend adapts onto.
     if getattr(self, "has_post_expert_norm", False):
-        proj_out = self._apply_post_norm(proj_out)  # (S, hidden_dim)
+        proj_out = self.post_expert_norm(proj_out)  # (S, hidden_dim)
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
@@ -574,9 +574,8 @@ def use_experts_implementation(
             Whether the experts use a gating mechanism or not.
             Whether it has gate_up_proj weights or just up_proj weights.
         has_post_expert_norm (`bool`, *optional*, defaults to `False`):
-            Whether the experts normalize the down output before the routing weights. The class
-            must then define `_apply_post_norm(self, expert_out)` — the standard name every
-            backend applies, so none of them needs to know the model's own math.
+            Whether the experts normalize the down output before the routing weights. The norm
+            itself is the module under `post_expert_norm`, which every backend calls directly.
 
     Returns:
         `type[torch.nn.Module]`: The modified experts class.
@@ -604,13 +603,6 @@ def use_experts_implementation(
 
         if not hasattr(experts_class, "_apply_gate"):
             experts_class._apply_gate = _default_apply_gate
-
-        if has_post_expert_norm and not hasattr(experts_class, "_apply_post_norm"):
-            raise TypeError(
-                f"{experts_class.__name__} declares a post-expert norm but does not "
-                "define `_apply_post_norm(self, expert_out)`, which applies it to one expert "
-                "application's rows before the routing weights."
-            )
 
         experts_class.__init__ = __init__
         experts_class.forward = forward

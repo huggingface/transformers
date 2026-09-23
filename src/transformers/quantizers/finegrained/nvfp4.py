@@ -15,8 +15,8 @@
 that the other formats do not. Everything else is inherited.
 """
 
-from ..utils import logging
-from .quantizer_finegrained import FineGrainedHfQuantizer
+from ...utils import logging
+from .base import FineGrainedHfQuantizer
 
 
 logger = logging.get_logger(__name__)
@@ -34,20 +34,18 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
       `weight_scale` / `weight_scale_2`.
     """
 
-    def _assert_dequantize_supported(self) -> None:
-        raise NotImplementedError(
-            "`dequantize=True` is not supported for nvfp4 checkpoints: their two-level scales "
-            "cannot be folded into a full-precision weight by this path. Load them quantized on a "
-            "GPU that serves NVFP4, or start from a bf16 checkpoint."
-        )
+    @property
+    def supports_dequantize(self) -> bool:
+        """No: NVFP4's two-level scales do not fold into a single full-precision weight here."""
+        return False
 
     def get_weight_conversions(self):
         return self._nvfp4_conversions() if self.pre_quantized else []
 
     def update_weight_conversions(self, weight_conversions):
         """The base chain, with every `.weight` source anchored and bitcast to the int8 view."""
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained_conversions import FineGrainedViewPackedInt8
+        from ...core_model_loading import WeightConverter
+        from ...integrations.finegrained.conversions import FineGrainedViewPackedInt8
 
         if self.pre_quantized:
             updated = []
@@ -80,8 +78,8 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
         parallelism keep only this rank's experts (`tensor_idx` in `core_model_loading`); without
         it every rank collects all E values and the forward asserts on the per-expert count.
         """
-        from ..core_model_loading import Concatenate, MergeModulelist, WeightConverter
-        from ..integrations.finegrained_conversions import FineGrainedInputScales, FineGrainedWeightGlobals
+        from ...core_model_loading import Concatenate, MergeModulelist, WeightConverter
+        from ...integrations.finegrained.conversions import FineGrainedInputScales, FineGrainedWeightGlobals
 
         merge = [MergeModulelist(dim=0)]
         expert = r"mlp\.experts\..*\."
@@ -129,8 +127,8 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
         """Already stacked per layer, as the vLLM fused layout and Muse-Spark ship them — so no
         `MergeModulelist`, and the expert weights need the packed uint8 -> int8 view the
         `.weight`-anchored rule gives the per-expert layout."""
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained_conversions import (
+        from ...core_model_loading import WeightConverter
+        from ...integrations.finegrained.conversions import (
             FineGrainedInputScales,
             FineGrainedScaleContainer,
             FineGrainedViewPackedInt8,

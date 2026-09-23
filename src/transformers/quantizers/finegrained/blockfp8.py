@@ -13,19 +13,15 @@
 # limitations under the License.
 """The BLOCKFP8 arm of the fine-grained quantizer."""
 
-from .quantizer_finegrained import FineGrainedHfQuantizer
+from .base import FineGrainedHfQuantizer
 
 
 class FineGrainedBlockFp8HfQuantizer(FineGrainedHfQuantizer):
     """Block-FP8 and per-tensor FP8 — the only formats that take a CALIBRATED activation scale.
 
-    A static scale is one value standing in for the quantization the other formats do inline, so
-    it only means anything where activations are quantized per tensor or per block. The group
-    formats hand the kernels a scale GRID instead (`As` is per group-32 / group-16), and NVFP4
-    spends the checkpoint's `input_scale` as its second-level activation global, so neither can
-    consume one. Keeping the converters here is what makes that structural.
-
-    Named `blockfp8` because `quantizer_finegrained_fp8` is the frozen legacy module.
+    The group formats hand the kernels a scale GRID instead, and NVFP4 spends `input_scale` as
+    its activation global, so neither can consume one. Named `blockfp8` because
+    `quantizer_finegrained_fp8` is the frozen legacy module.
     """
 
     def get_weight_conversions(self):
@@ -38,15 +34,12 @@ class FineGrainedBlockFp8HfQuantizer(FineGrainedHfQuantizer):
         return []
 
     def _static_activation_conversions(self):
-        """A calibrated checkpoint's ``input_scale`` onto the slot its module holds it in. One
-        value per quantized module: a dense linear brings one (Ministral-3), and a MoE brings one
-        per expert, each expert being its own quantized module (Mistral-4) — the gate|up pair
-        reduces to one per expert, both halves reading the same routed rows. Both expert layouts,
-        per expert per projection and already stacked per layer; a checkpoint matches one and the
-        other never fires. NVFP4 consumes ``input_scale`` as its activation GLOBAL instead
-        (the NVFP4 arm's converters) — a second level over a block scale, not the scale itself."""
-        from ..core_model_loading import MergeModulelist, WeightConverter, WeightRenaming
-        from ..integrations.finegrained_conversions import FineGrainedInputScales
+        """A calibrated checkpoint's ``input_scale`` onto the slot its module holds it in: one
+        value per quantized module, so a MoE brings one per expert. Both expert layouts are
+        covered — per expert per projection, and already stacked per layer — and a checkpoint
+        matches one while the other never fires."""
+        from ...core_model_loading import MergeModulelist, WeightConverter, WeightRenaming
+        from ...integrations.finegrained.conversions import FineGrainedInputScales
 
         per_expert = [
             WeightConverter(
@@ -71,8 +64,7 @@ class FineGrainedBlockFp8HfQuantizer(FineGrainedHfQuantizer):
             )
             for proj in ("gate_up_proj", "down_proj")
         ]
-        # every other calibrated module is a dense linear holding the one value itself — a plain
-        # rename. The lookahead keeps it off the expert keys above, which stack per layer instead
+        # a dense linear holds the one value itself; the lookahead keeps this off the expert keys
         dense = [
             WeightRenaming(
                 source_patterns=r"^(?!.*\.experts\.)(.+)\.input_scale$",

@@ -46,6 +46,12 @@ from ..utils.quantization_config import (
     VptqConfig,
 )
 from .base import HfQuantizer
+from .finegrained import (
+    FineGrainedBlockFp8HfQuantizer,
+    FineGrainedMxfp4HfQuantizer,
+    FineGrainedMxfp8HfQuantizer,
+    FineGrainedNvfp4HfQuantizer,
+)
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_auto_round import AutoRoundQuantizer
 from .quantizer_awq import AwqQuantizer
@@ -55,10 +61,6 @@ from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
-from .quantizer_finegrained import FineGrainedHfQuantizer
-from .quantizer_finegrained_blockfp8 import FineGrainedBlockFp8HfQuantizer
-from .quantizer_finegrained_mxfp4 import FineGrainedMxfp4HfQuantizer
-from .quantizer_finegrained_nvfp4 import FineGrainedNvfp4HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gemma import GemmaQuantizer
@@ -97,12 +99,10 @@ AUTO_QUANTIZER_MAPPING = {
     "gguf": GgufHfQuantizer,
     "metal": MetalHfQuantizer,
     "auto-round": AutoRoundQuantizer,
-    # An arm exists where a PRODUCER's key layout needs one — GPT-OSS's packed `_blocks`,
-    # modelopt's two-level scales, the calibrated `input_scale`. MXFP8 ships the plain
-    # `weight` / `weight_scale_inv` pair, so the base serves it. Which FORMAT each module is
-    # quantized in is the config's groups, not the arm.
+    # one arm per checkpoint PRODUCER, since that is what decides the key layout; which FORMAT
+    # each module is in comes from the config's groups, not from the arm
     "fp8": FineGrainedBlockFp8HfQuantizer,
-    "mxfp8": FineGrainedHfQuantizer,  # no distinct key layout — the base is its handler
+    "mxfp8": FineGrainedMxfp8HfQuantizer,
     "mxfp4": FineGrainedMxfp4HfQuantizer,
     "nvfp4": FineGrainedNvfp4HfQuantizer,
     "modelopt": FineGrainedNvfp4HfQuantizer,

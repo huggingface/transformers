@@ -112,16 +112,11 @@ class DtensorShardOperation:
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
         ]
 
-        # A 0-dim tensor has no axis to shard, so every rank that owns it takes the whole value
-        # (`source[...]`, since a lazy safetensors slice rejects `source[()]`).
-        if not source_shape:
-            if tensor_idx is not None and not self._owns_expert(tensor_idx, dim_placements):
-                return None
-            return source[...].to(device=device, dtype=dtype)
-
         # Dense path
         if tensor_idx is None:
-            if not dim_placements:
+            # nothing to slice: a 0-dim tensor has no axis, and no placement names one
+            # (`source[...]`, since a lazy safetensors slice rejects `source[()]`)
+            if not source_shape or not dim_placements:
                 return source[...].to(device=device, dtype=dtype)
 
             # Determine for each tensor dimension, which type of sharding operations to apply (_StridedShard or Shard) and which rank to apply it to.
@@ -163,6 +158,10 @@ class DtensorShardOperation:
         # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
         if not self._owns_expert(tensor_idx, dim_placements):
             return None
+
+        # a 0-dim per-expert value has no axis to slice, so this rank takes it whole
+        if not source_shape:
+            return source[...].to(device=device, dtype=dtype)
 
         normalized_dim_placements = [
             (mesh_dim, placement, self._normalize_param_dim(placement.dim)) for mesh_dim, placement in dim_placements

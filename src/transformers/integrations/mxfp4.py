@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 
 from ..utils import is_torch_available, logging
 
@@ -27,14 +26,6 @@ from ..quantizers.quantizers_utils import get_module_from_name, on_device, shoul
 
 
 logger = logging.get_logger(__name__)
-
-
-warnings.warn(
-    "mxfp4 is frozen for backward compatibility and no longer "
-    "receives new recipes; the fine-grained quantization machinery lives in transformers.integrations.finegrained "
-    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
-    DeprecationWarning,
-)
 
 
 FP4_VALUES = [

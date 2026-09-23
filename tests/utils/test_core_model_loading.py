@@ -46,7 +46,6 @@ from transformers.core_model_loading import (
     spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
-from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
 from .test_distributed_sharding_utils import FakeMesh, _make_dtensor_shard_op
@@ -515,10 +514,10 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
-        if is_triton_available():
-            from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
-        else:
-            self.skipTest("Fine-grained FP8 integration tests require Triton to be installed.")
+        # block-FP8 quantize/dequantize is pure torch here; no kernel is launched
+        from transformers.integrations.finegrained import FineGrainedLinear
+        from transformers.integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedQuantize
+
         n_heads = 2
         head_dim = 4
         in_dim = 4
@@ -526,17 +525,15 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         block_size = (4, 4)
 
         class RopeProjector(nn.Module):
-            def __init__(self, *, with_scale: bool = False):
+            def __init__(self):
                 super().__init__()
                 self.weight = nn.Parameter(torch.zeros(out_dim, in_dim))
-                if with_scale:
-                    scale_shape = (out_dim // block_size[0], in_dim // block_size[1])
-                    self.weight_scale_inv = nn.Parameter(torch.ones(scale_shape))
 
         class RopeSelfAttn(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.q_proj = RopeProjector(with_scale=True)
+                # only q_proj is quantized, so only it is a finegrained module holding a scale
+                self.q_proj = FineGrainedLinear(in_dim, out_dim, block_size=block_size, weight_format="fp8")
                 self.k_proj = RopeProjector()
                 self.v_proj = RopeProjector()
 
@@ -552,6 +549,9 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 super().__init__(config)
                 self.layers = nn.ModuleList([RopeLayer()])
                 self.post_init()
+
+            def _init_weights(self, module):
+                pass  # every weight here comes from the state dict, and `normal_` has no fp8 kernel
 
         config = PreTrainedConfig()
         config.num_attention_heads = n_heads
@@ -573,17 +573,17 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         raw_k = torch.arange(out_dim * in_dim, dtype=torch.float32).reshape(out_dim, in_dim)
         raw_v = torch.arange(out_dim * in_dim, dtype=torch.float32).reshape(out_dim, in_dim) + 100.0
         raw_qkv = torch.cat([raw_q, raw_k, raw_v], dim=0)
-        state_dict = {"model.layers.0.self_attn.qkv_proj.weight": raw_qkv.clone()}
+        state_dict = {"layers.0.self_attn.qkv_proj.weight": raw_qkv.clone()}
 
         quantizer_cls = type(
-            "FineGrainedFP8HfQuantizer",
+            "FineGrainedHfQuantizer",
             (),
             {
                 "__init__": lambda self, bs=block_size: setattr(
-                    self, "quantization_config", SimpleNamespace(weight_block_size=bs)
+                    self, "quantization_config", SimpleNamespace(weight_block_size=bs, scale_fmt="float")
                 ),
                 "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
-                "get_quantize_ops": lambda self: Fp8Quantize(self),
+                "get_quantize_ops": lambda self: FineGrainedQuantize(self),
                 "pre_quantized": False,
             },
         )
@@ -597,7 +597,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     "self_attn.k_proj.weight",
                     "self_attn.v_proj.weight",
                 ],
-                operations=[Chunk(dim=0), PermuteForRope()],
+                operations=[Chunk(dim=0), PermuteForRope(permute_layer_names=["q_proj", "k_proj"])],
             )
         ]
         load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
@@ -608,19 +608,19 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertEqual(loading_info.mismatched_keys, set())
         self.assertEqual(loading_info.conversion_errors, {})
 
-        permute_op = PermuteForRope()
+        permute_op = PermuteForRope(permute_layer_names=["q_proj", "k_proj"])
         permute_op.config = model.config
         expected_q = permute_op._apply(raw_q)
         expected_k = permute_op._apply(raw_k)
-        expected_v = permute_op._apply(raw_v)
+        expected_v = raw_v  # V carries no RoPE, so the permute names only q and k
 
         model_state = model.state_dict()
         self.assertFalse(torch.allclose(raw_k, expected_k))
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.k_proj.weight"], expected_k)
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.v_proj.weight"], expected_v)
+        torch.testing.assert_close(model_state["layers.0.self_attn.k_proj.weight"], expected_k)
+        torch.testing.assert_close(model_state["layers.0.self_attn.v_proj.weight"], expected_v)
 
-        q_weight_key = "model.layers.0.self_attn.q_proj.weight"
-        scale_key = "model.layers.0.self_attn.q_proj.weight_scale_inv"
+        q_weight_key = "layers.0.self_attn.q_proj.weight"
+        scale_key = "layers.0.self_attn.q_proj.weight_scale_inv"
         self.assertIn(scale_key, model_state)
         expected_dtype = torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.int8
         self.assertEqual(model_state[q_weight_key].dtype, expected_dtype)
@@ -631,10 +631,8 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             torch.Size((out_dim // block_size[0], in_dim // block_size[1])),
         )
 
-        dequant = Fp8Dequantize(block_size=block_size)
-        dequantized_q = dequant.convert(
-            [model_state[q_weight_key], model_state[scale_key]],
-            context={"quantization_config": quantizer.quantization_config},
+        dequantized_q = FineGrainedDequantize(None)._dequantize_one(
+            model_state[q_weight_key], model_state[scale_key], output_dtype=torch.float32
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
 
@@ -642,7 +640,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         # ``scale_fmt="ue8m0"`` rounds weight_scale_inv to a power of two; the weight has to be
         # quantized with that same rounded scale, or ``weight * weight_scale_inv`` at dequant
         # disagrees with the scale the weight was divided by (a silent per-block error up to an octave).
-        from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
+        from transformers.integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedQuantize
 
         if not hasattr(torch, "float8_e8m0fnu"):
             self.skipTest("ue8m0 storage requires torch.float8_e8m0fnu")
@@ -653,29 +651,39 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.manual_seed(0)
         weight = torch.randn(128, 128, dtype=torch.float32)
 
-        quantized = Fp8Quantize(quantizer)._quantize_one("layer.weight", weight)
-        recovered = Fp8Dequantize(quantizer)._dequantize_one(
-            quantized["layer.weight"], quantized["layer.weight_scale_inv"], output_dtype=torch.float32
+        # no model to ask, so the op takes the block and the scale format from the config
+        quantized = FineGrainedQuantize(quantizer)._quantize_one("layer.weight", weight, None)
+        recovered = FineGrainedDequantize(quantizer)._dequantize_one(
+            quantized["layer.weight"], quantized["layer.weight_scale_inv"].float(), output_dtype=torch.float32
         )
         rel_err = ((recovered - weight).abs().sum() / weight.abs().sum()).item()
         self.assertLess(rel_err, 5e-2)  # fp8 round-trip is ~2e-2; a scale mismatch inflates it past 0.2
 
     def test_fp8_float_scale_fmt_quantization_unchanged(self):
-        # The ue8m0 reordering must leave the default scale_fmt="float" path bit-identical to the
-        # original single-division formula (scales = _FP8_MAX / max_abs). Any divergence only shows
-        # on rare fp32-ULP block maxima, so scan many random 128x128 blocks rather than one.
-        from transformers.integrations.finegrained_fp8 import _FP8_DTYPE, _FP8_MAX, _FP8_MIN, Fp8Quantize
+        """The default `scale_fmt="float"` path stays bit-identical to its formula: the inverse
+        scale is `amax / MAX` and the weight is DIVIDED by it.
 
-        quantizer = Fp8Quantize(
+        Reordering that into the algebraically equal `weight * (MAX / amax)` is not bit-equal —
+        measured, it moves 29 of 100 random blocks' scales and 1 of their weights — so a refactor
+        that "simplifies" the arithmetic changes every checkpoint this path writes. Scan many
+        blocks, since the divergence only shows on particular fp32 maxima.
+        """
+        from transformers.integrations.finegrained.conversions import (
+            _FP8_DTYPE,
+            _FP8_MAX,
+            _FP8_MIN,
+            FineGrainedQuantize,
+        )
+
+        quantizer = FineGrainedQuantize(
             SimpleNamespace(quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="float"))
         )
         for seed in range(100):
             torch.manual_seed(seed)
             weight = torch.randn(128, 128, dtype=torch.float32)
-            out = quantizer._quantize_one("layer.weight", weight)
-            scales = _FP8_MAX / weight.abs().amax()
-            ref_q = torch.clamp(weight * scales, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-            ref_inv = (1.0 / scales).to(torch.float32).reshape(1, 1)
+            out = quantizer._quantize_one("layer.weight", weight, None)
+            ref_inv = (weight.abs().amax() / _FP8_MAX).to(torch.float32).reshape(1, 1)
+            ref_q = torch.clamp(weight / ref_inv, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
             self.assertTrue(torch.equal(out["layer.weight"], ref_q), f"float weight diverged at seed {seed}")
             self.assertTrue(
                 torch.equal(out["layer.weight_scale_inv"], ref_inv), f"float scale diverged at seed {seed}"

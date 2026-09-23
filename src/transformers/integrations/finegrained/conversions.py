@@ -24,9 +24,9 @@ from collections import defaultdict
 
 import torch
 
-from ..core_model_loading import ConversionOps, Interleave
-from ..quantizers.quantizers_utils import get_module_from_name
-from .finegrained import (
+from ...core_model_loading import ConversionOps, Interleave
+from ...quantizers.quantizers_utils import get_module_from_name
+from .core import (
     _FP8_DTYPE,
     _FP8_MAX,
     _FP8_MIN,
@@ -54,7 +54,7 @@ def _held_scale(model, full_layer_name, key):
     """The finegrained module and its ``*_scale_inv`` Parameter a converter output fills, else
     ``(None, None)``. A converter emitting several tensors names them fully (key); a single target's
     name arrives as the pattern, its full name (with the ``_scale_inv`` suffix) in ``full_layer_name``."""
-    param_name = (key if key.endswith("_scale_inv") else full_layer_name).rpartition(".")[2]
+    param_name = (key if key.endswith("_scale_inv") else full_layer_name).rpartition(".")[-1]
     if not param_name.endswith("_scale_inv") or model is None:
         return None, None
     module = model.get_submodule(full_layer_name.rpartition(".")[0])
@@ -63,9 +63,23 @@ def _held_scale(model, full_layer_name, key):
     return module, getattr(module, param_name, None)
 
 
-def _as_container(scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
+def as_container(scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     """The same bytes under a same-width dtype (uint8 <-> e8m0), an exact numeric cast otherwise."""
     return scale.view(dtype) if scale.element_size() == dtype.itemsize else scale.to(dtype)
+
+
+def _global_role(key: str) -> tuple[str, str]:
+    """What a global-scale key holds, for a checkpoint key and a module target alike: which
+    projection it belongs to, and which of modelopt's two levels it is — the weight's second-level
+    global (``weight_scale_2``) or the calibrated activation one (``input_scale``).
+
+    This runs while the converters are being BUILT, against raw checkpoint keys, so the vLLM-style
+    `w1`/`w2`/`w3` names are still in play and have not been renamed to `gate/down/up_proj` yet.
+    Matched on path SEGMENTS: the default is gate_up, so a loose `"w2" in key` would silently
+    bucket a down global as one."""
+    down = any(seg == "w2" or seg.startswith("down_proj") for seg in key.split("."))
+    level = "input" if "input_scale" in key or "input_global" in key else "weight"
+    return ("down" if down else "gate_up"), level
 
 
 class _FineGrainedOp(ConversionOps):
@@ -124,12 +138,12 @@ class FineGrainedScaleContainer(_FineGrainedOp):
                 modules = model.modules() if model is not None else ()
                 container = next((c for m in modules if (c := getattr(m, "scale_container_dtype", None))), None)
                 if container is not None and value.dtype == _get_ue8m0_dtype():
-                    value = _as_container(value, container)
+                    value = as_container(value, container)
             else:
                 module, held = _held_scale(model, full_layer_name, key)
                 if held is not None and value.dtype != held.dtype:
                     module.scale_container_dtype = value.dtype
-                    value = _as_container(value, held.dtype)
+                    value = as_container(value, held.dtype)
             out[key] = value
         return out
 
@@ -230,7 +244,8 @@ class FineGrainedWeightGlobals(_FineGrainedOp):
         # input global gives back (keeping the requantized intermediate on the calibrated range)
         if stack is not None and globals_[stack].shape[1] == 2:
             self._assert_no_gate_up_bias(model)
-            gate, up = globals_[stack][:, 0], globals_[stack][:, 1]
+            gate, up = globals_[stack].chunk(2, dim=1)
+            gate, up = gate.squeeze(1), up.squeeze(1)
             globals_[stack] = gate
             ratio = (up / gate)[:, None]
             for role, factor in ((("down", "weight"), ratio), (("down", "input"), 1 / ratio)):
@@ -252,17 +267,6 @@ class FineGrainedWeightGlobals(_FineGrainedOp):
             )
 
 
-def _global_role(key: str) -> tuple[str, str]:
-    """What a global-scale key holds, for a checkpoint key and a module target alike: which
-    projection it belongs to, and which of modelopt's two levels it is — the weight's second-level
-    global (``weight_scale_2``) or the calibrated activation one (``input_scale``). Matched on path
-    SEGMENTS, since the default is gate_up and a loose `"w2" in key` would silently bucket a down
-    global as one."""
-    down = any(seg == "w2" or seg.startswith("down_proj") for seg in key.split("."))
-    level = "input" if "input_scale" in key or "input_global" in key else "weight"
-    return ("down" if down else "gate_up"), level
-
-
 class FineGrainedInputScales(_FineGrainedOp):
     """A calibrated checkpoint's ``input_scale`` in the layout the module holds: one value per
     quantized module, so a MoE brings one per expert, the gate|up pair reducing to their max since
@@ -276,13 +280,9 @@ class FineGrainedInputScales(_FineGrainedOp):
             value = torch.stack(value, dim=0) if isinstance(value, list) else value
             values.append(value.float())
         stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
-        # A scale is a MAGNITUDE (`amax(|x|) / 448`), so reduce over absolute values and keep it
-        # off zero. A signed reduce returns whatever the largest signed entry is, and the two
-        # degenerate results it admits are both fatal downstream: a negative scale flips the sign
-        # of every dequantized row, and a zero one divides the activations by zero — NaN logits
-        # on a SINGLE device, before any sharding is involved. Real calibrated checkpoints ship
-        # positive scales, so this is a no-op for them; it is the models whose scales are built
-        # rather than measured that reach here with a sign or a zero.
+        # A scale is a MAGNITUDE, so reduce over absolute values and keep it off zero: a negative
+        # flips every dequantized row's sign and a zero divides the activations by zero. A no-op
+        # for a real calibrated checkpoint; it catches scales that were built rather than measured.
         per_expert = stacked.reshape(stacked.shape[0], -1).abs().amax(dim=1).clamp(min=1e-12)
         one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")  # the NVFP4 global only
         return {full_layer_name: (per_expert.amax().reshape(1) if one_value else per_expert).contiguous()}
@@ -314,14 +314,12 @@ class FineGrainedInputScalesSplit(_FineGrainedOp):
 
 class FineGrainedQuantize(_FineGrainedOp):
     """Quantize a full-precision weight on load into the format its module holds, emitting the
-    scale (and the NVFP4 global) in the module's layout — the held container dtype, the swizzled
-    artifact where the module holds one. Block-FP8 is computed in torch (per-block E4M3, fp32 or
-    power-of-two UE8M0 inverse scales); the group formats run the kernels' row-wise quantizers
-    (``mxfp8_act_quant`` / ``mxfp4_act_quant`` / ``nvfp4_act_quant``), NVFP4 after normalizing by the
-    canonical per-tensor / per-expert global ``amax / (6 * 448)``.
-    A tensor that is not a finegrained module's weight passes through — `_weight_holder` decides,
-    since rank alone does not (an expert bias is 2-D). Without a model, a direct invocation has
-    nothing to ask and quantizes block-FP8 from the config."""
+    scale (and the NVFP4 global) in that module's layout.
+
+    Block-FP8 is computed in torch; the group formats run the kernels' row-wise quantizers, NVFP4
+    after normalizing by the canonical global ``amax / (6 * 448)``. A tensor that is not a
+    finegrained module's weight passes through — `_weight_holder` decides, since rank alone does
+    not (an expert bias is 2-D)."""
 
     def convert(self, input_dict: dict[str, torch.Tensor], model=None, **kwargs) -> dict[str, torch.Tensor]:
         result: dict[str, torch.Tensor] = {}
@@ -407,7 +405,7 @@ class FineGrainedQuantize(_FineGrainedOp):
                 f"accelerator, but the weight is on {value.device.type}"
             )
         weight, scale, global_scale = self._quantize_group(value, format_spec)
-        scale = _as_container(scale, held_scale.dtype)
+        scale = as_container(scale, held_scale.dtype)
         if held_scale.ndim == 5:
             scale = load_finegrained_kernel().swizzle_mx_scales(scale)
         out = {key: weight, f"{prefix}_scale_inv": scale}
@@ -462,7 +460,7 @@ class FineGrainedQuantize(_FineGrainedOp):
             inv_scale = torch.pow(2.0, torch.ceil(torch.log2(inv_scale.clamp(min=torch.finfo(torch.float32).tiny))))
         scaled = tiles / inv_scale.unsqueeze(-1).unsqueeze(-3)
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE).reshape(padded.shape)
-        # a no-op slice on a shape that tiled, and `contiguous` then returns the tensor itself
+        # a no-op when the shape tiled
         return quantized[..., :rows, :cols].contiguous(), inv_scale.to(_get_ue8m0_dtype() if ue8m0 else torch.float32)
 
     @staticmethod
@@ -642,7 +640,7 @@ def keep_swizzle_reverse_for_save(model, hf_quantizer) -> None:
     broader pattern would take keys away from the real converter and skip the rest of its
     chain.
     """
-    from ..core_model_loading import WeightConverter
+    from ...core_model_loading import WeightConverter
 
     conversions = list(getattr(model, "_weight_conversions", None) or [])
     covered = {

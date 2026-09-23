@@ -13,13 +13,15 @@
 # limitations under the License.
 from __future__ import annotations
 
-import warnings
 from typing import TYPE_CHECKING
 
-from ..utils import is_kernels_available, is_torch_available
+from ..utils import is_kernels_available, is_torch_available, logging
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
+
+
+logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
@@ -28,14 +30,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import NVFP4Config
-
-
-warnings.warn(
-    "quantizer_nvfp4 is frozen for backward compatibility and no longer "
-    "receives new recipes; the fine-grained quantization machinery lives in transformers.quantizers.quantizer_finegrained "
-    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
-    DeprecationWarning,
-)
 
 
 def _as_cuda_device(device) -> torch.device | None:
@@ -53,6 +47,13 @@ class NVFP4HfQuantizer(HfQuantizer):
 
     requires_calibration = False
     quantization_config: NVFP4Config
+
+    def __init__(self, quantization_config, **kwargs):
+        super().__init__(quantization_config, **kwargs)
+        logger.warning_once(
+            "`NVFP4Config` is frozen for backward compatibility and receives no new recipes. "
+            "`FineGrainedConfig` supersedes it (block-FP8, MXFP8, MXFP4, NVFP4, weight-only)."
+        )
 
     def validate_environment(self, device_map, **kwargs):
         if self.pre_quantized:

@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import functools
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -32,14 +31,6 @@ from .hub_kernels import lazy_load_kernel
 if is_torch_available():
     import torch
     import torch.nn as nn
-
-
-warnings.warn(
-    "nvfp4 is frozen for backward compatibility and no longer "
-    "receives new recipes; the fine-grained quantization machinery lives in transformers.integrations.finegrained "
-    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
-    DeprecationWarning,
-)
 
 
 # NVFP4 uses one FP8 scale factor for every 16 consecutive weight values.

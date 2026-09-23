@@ -15,7 +15,7 @@
 and the weight-only default that layout implies.
 """
 
-from .quantizer_finegrained import FineGrainedHfQuantizer
+from .base import FineGrainedHfQuantizer
 
 
 class FineGrainedMxfp4HfQuantizer(FineGrainedHfQuantizer):
@@ -41,8 +41,8 @@ class FineGrainedMxfp4HfQuantizer(FineGrainedHfQuantizer):
     def _dequantize_conversions(self):
         """The blocks regroup into the packed rows and the exponent-byte scales come back out of
         them as bf16, in the `(E, hidden, 2I)` orientation the unquantized experts hold."""
-        from ..core_model_loading import Transpose, WeightConverter
-        from ..integrations.finegrained_conversions import FineGrainedDequantize, FineGrainedPackedBlocks
+        from ...core_model_loading import Transpose, WeightConverter
+        from ...integrations.finegrained.conversions import FineGrainedDequantize, FineGrainedPackedBlocks
 
         return [
             WeightConverter(
@@ -57,8 +57,8 @@ class FineGrainedMxfp4HfQuantizer(FineGrainedHfQuantizer):
         """{proj}_blocks + {proj}_scales checkpoints (GPT-OSS): the blocks regroup into the packed
         weight, the exponent bytes take the scale container op; then the usual layout ops. Bare
         patterns (no `experts.` scope), so they ride here rather than via `_with_expert_layout_ops`."""
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained_conversions import (
+        from ...core_model_loading import WeightConverter
+        from ...integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
             FineGrainedPackedBlocks,
             FineGrainedScaleContainer,

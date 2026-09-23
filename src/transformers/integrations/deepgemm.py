@@ -704,7 +704,7 @@ def _apply_post_expert_norm(self: torch.nn.Module, rows: torch.Tensor) -> torch.
     same place the reference forwards apply it. A no-op for a model that declares none."""
     if not getattr(self, "has_post_expert_norm", False):
         return rows
-    return self._apply_post_norm(rows)
+    return self.post_expert_norm(rows)
 
 
 def _assert_bf16_hidden_states(hidden_states: torch.Tensor) -> None:
@@ -719,15 +719,15 @@ def deepgemm_experts_guards(
     *,
     affine_scales: bool = False,
     sm100: bool = False,
-    post_expert_norm: bool = True,
+    supports_post_expert_norm: bool = True,
     stacked_gate_up: bool = False,
 ):
     """State an experts forward's requirements on the module, checked before any kernel work.
 
     Usable bare (`@deepgemm_experts_guards`) for an arm that only needs the common checks.
 
-    ``post_expert_norm=False`` refuses a model that declares a per-expert output norm — Mega MoE
-    only, whose fused reduce has no seam for it. ``affine_scales`` refuses the SWIZZLE_32_4_4
+    ``supports_post_expert_norm=False`` refuses a model that declares a per-expert output norm —
+    Mega MoE only, whose fused reduce has no seam for it. ``affine_scales`` refuses the SWIZZLE_32_4_4
     scales a module loaded for a triton backend holds, ``stacked_gate_up`` refuses the interleaved
     rows that same load produces, and ``sm100`` fails before the hub download + JIT when the device
     cannot serve these dtypes."""
@@ -737,7 +737,7 @@ def deepgemm_experts_guards(
         def guarded(self, hidden_states, *args, **kwargs):
             _assert_bf16_hidden_states(hidden_states)
             _assert_dynamic_activations(self)
-            if not post_expert_norm:
+            if not supports_post_expert_norm:
                 _assert_no_post_expert_norm(self)
             if affine_scales:
                 _assert_affine_scales(self)
@@ -967,7 +967,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
-@deepgemm_experts_guards(affine_scales=True, sm100=True, post_expert_norm=False, stacked_gate_up=True)
+@deepgemm_experts_guards(affine_scales=True, sm100=True, supports_post_expert_norm=False, stacked_gate_up=True)
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
@@ -37,14 +36,6 @@ if is_torch_available():
 
     from ..core_model_loading import WeightConverter
 
-warnings.warn(
-    "quantizer_mxfp4 is frozen for backward compatibility and no longer "
-    "receives new recipes; the fine-grained quantization machinery lives in transformers.quantizers.quantizer_finegrained "
-    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
-    DeprecationWarning,
-)
-
-
 logger = logging.get_logger(__name__)
 triton_kernels_hub = None
 
@@ -59,6 +50,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
+        logger.warning_once(
+            "`Mxfp4Config` is frozen for backward compatibility and receives no new recipes. "
+            "`FineGrainedConfig` supersedes it (block-FP8, MXFP8, MXFP4, NVFP4, weight-only)."
+        )
         self.triton_kernels_hub = None
 
     def _lazy_import_kernels(self):

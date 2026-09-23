@@ -24,23 +24,24 @@ block-FP8 linears, and one arm per checkpoint could never express that.
 import re
 from typing import TYPE_CHECKING
 
-from ..utils import (
+from ...utils import (
     is_accelerate_available,
     is_torch_available,
     is_torch_distributed_available,
     is_torch_xpu_available,
     logging,
 )
-from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name
+from ...utils.quantization_config import groups_with_expert_dtype
+from ..base import HfQuantizer
+from ..quantizers_utils import get_module_from_name
 
 
 if is_torch_available():
     import torch
 
 if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
-    from ..utils.quantization_config import FineGrainedConfig
+    from ...modeling_utils import PreTrainedModel
+    from ...utils.quantization_config import FineGrainedConfig
 
 logger = logging.get_logger(__name__)
 
@@ -64,9 +65,18 @@ class FineGrainedHfQuantizer(HfQuantizer):
         kernels' weight-native choice; the MXFP4 arm overrides this to run weight-only."""
         return None
 
-    def _assert_dequantize_supported(self) -> None:
+    @property
+    def supports_dequantize(self) -> bool:
         """Whether `dequantize=True` can fold this format's scales into a full-precision weight.
-        Every one-level format can; the NVFP4 arm overrides this to refuse."""
+        Every one-level format can; the NVFP4 arm says no."""
+        return True
+
+    def _assert_dequantize_supported(self) -> None:
+        if not self.supports_dequantize:
+            raise NotImplementedError(
+                f"`dequantize=True` is not supported for {self._quant_method()} checkpoints. Load them "
+                "quantized on a GPU that serves the format, or start from a bf16 checkpoint."
+            )
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -123,7 +133,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         # `FineGrainedGroupedLinear` subclasses `FineGrainedLinear`, so the tuple covers it implicitly.
-        from ..integrations.finegrained import FineGrainedExperts, FineGrainedLinear
+        from ...integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module, (FineGrainedLinear, FineGrainedExperts)):
@@ -150,7 +160,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         if not skip:
             return
 
-        from ..conversion_mapping import get_model_conversion_mapping
+        from ...conversion_mapping import get_model_conversion_mapping
 
         renamings = get_model_conversion_mapping(model)
         remapped = []
@@ -166,12 +176,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        from ..integrations.finegrained import replace_with_finegrained_embedding, replace_with_finegrained_layer
+        from ...integrations.finegrained import replace_with_finegrained_embedding, replace_with_finegrained_layer
 
         self._normalize_modules_to_not_convert(model)
         # the one place both configs are in hand: a legacy checkpoint declares a second format
         # for its experts on the MODEL config, and it becomes a group here
-        self.quantization_config.split_out_experts(getattr(model.config.get_text_config(), "expert_dtype", None))
+        expert_dtype = getattr(model.config.get_text_config(), "expert_dtype", None)
+        self.quantization_config.groups = groups_with_expert_dtype(self.quantization_config.groups, expert_dtype)
         if self.quantization_config.activation_format is None:
             self.quantization_config.activation_format = self._default_activation_format()
         if self.quantization_config.activation_format == "bf16":
@@ -194,8 +205,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        from ..integrations.finegrained import assert_modules_are_quantized, disable_deepgemm_on_multi_device
-        from ..integrations.finegrained_conversions import keep_swizzle_reverse_for_save
+        from ...integrations.finegrained import assert_modules_are_quantized, disable_deepgemm_on_multi_device
+        from ...integrations.finegrained.conversions import keep_swizzle_reverse_for_save
 
         assert_modules_are_quantized(model)
         disable_deepgemm_on_multi_device(model)
@@ -207,14 +218,10 @@ class FineGrainedHfQuantizer(HfQuantizer):
         # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes on
         # top of any plan written above (e.g. the Qwen3 dense plan). Models carry the experts
         # mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite both.
-        from ..integrations.finegrained import FineGrainedExperts
+        from ...integrations.finegrained import FineGrainedExperts
 
         impl = getattr(config, "_experts_implementation", None)
         layer_overrides = FineGrainedExperts._impl_tp_layer_overrides.get(impl, {})
-        # A multimodal model keeps its experts' plans on a SUB-config: the outer one carries a
-        # few projector entries and no `base_model_ep_plan` at all, so reading only what we were
-        # handed adds no companion anywhere while the weights still shard from the sub-config's
-        # own plan — the scale stays whole against a sharded weight.
         sub_configs = [c for name in getattr(type(config), "sub_configs", {}) if (c := getattr(config, name, None))]
         for plan_owner, plan_attr in (
             (owner, attr) for owner in (config, *sub_configs) for attr in ("base_model_tp_plan", "base_model_ep_plan")
@@ -222,11 +229,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
             base_plan = getattr(plan_owner, plan_attr, None) or {}
             updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
 
-            # Every companion beside a projection weight — block scales, bias, NVFP4 globals, a
-            # static activation scale — is expert-indexed too, so each shards with the weight. The
-            # matcher keys on the exact parameter name and falls back only to the owning MODULE,
-            # whose entry shards nothing, so without these the weight is this rank's expert slice
-            # while its scales are every rank's. gate_up's input global is per-tensor: replicated.
+            # every companion beside a projection weight is expert-indexed too, so each needs its
+            # own entry: the matcher keys on the parameter name and the module's entry shards
+            # nothing, which would leave this rank's weight slice beside every rank's scales
             for key, style in list(updated_plan.items()):
                 # only the experts' own projections: a dense `self_attn.q_proj` is `colwise` too
                 projection = key.rpartition(".")[2]
@@ -240,28 +245,23 @@ class FineGrainedHfQuantizer(HfQuantizer):
                         updated_plan.setdefault(f"{key}{suffix}", style)
                     continue
 
-                # ...and only a STACKED experts module: `mlp.up_proj`, and the dense
-                # `mlp.shared_experts.up_proj`, end in the same word but are plain 2-D linears
-                # that colwise/rowwise already shard correctly. The model's own entry for the
-                # owning module is what distinguishes them.
+                # ...and only a STACKED experts module: a dense `mlp.shared_experts.up_proj` ends
+                # in the same word but colwise/rowwise already shards it correctly
                 if updated_plan.get(key.rpartition(".")[0]) not in ("moe_tp_experts", "megamoe_experts"):
                     continue
                 if not is_torch_distributed_available():
                     continue  # the styles below need a distributed build; without one, no TP
 
-                # Intra-expert TP: the experts stay whole and the projection's own axis splits, so
-                # the per-expert globals, activation scales and the down bias (added after the
-                # row-reduce) stay replicated — only the scale grid follows its weight. A
-                # per-tensor scale is `(E, 1, 1)`: no grid to split, so it stays replicated too.
+                # Intra-expert TP: the experts stay whole and the projection's own axis splits,
+                # so only the scale GRID follows its weight — the per-expert globals, activation
+                # scales and the down bias stay replicated, as does a per-tensor `(E, 1, 1)`.
                 blocked = self.quantization_config.weight_block_size is not None
                 if projection == "down_proj" and style in ("rowwise", "packed_rowwise"):
                     if blocked:
                         updated_plan.setdefault(f"{key}_scale_inv", "moe_experts_rowwise")
                 elif projection != "down_proj" and style in ("packed_colwise", "colwise"):
-                    # Companions take the WEIGHT's split, which is the CHECKPOINT's layout: the
-                    # interleave into the kernels' row order runs on each rank's shard afterwards.
-                    # `packed_colwise` keeps a concatenated `[gate; up]`'s pairs together;
-                    # `colwise` suits an already-interleaved layout (GPT-OSS).
+                    # the CHECKPOINT's split, since the interleave into the kernels' row order
+                    # runs on each rank's shard afterwards
                     rows = "moe_experts_packed_colwise" if style == "packed_colwise" else "moe_experts_colwise"
                     if blocked:
                         updated_plan.setdefault(f"{key}_scale_inv", rows)
@@ -284,7 +284,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         return True
 
     def get_quantize_ops(self):
-        from ..integrations.finegrained_conversions import FineGrainedQuantize
+        from ...integrations.finegrained.conversions import FineGrainedQuantize
 
         return FineGrainedQuantize(self)
 
@@ -304,8 +304,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
         """Every quantized key folded back to a full-precision weight, from the
         `weight` + `weight_scale_inv` pair. The MXFP4 arm overrides this for GPT-OSS's
         `{proj}_blocks` + `{proj}_scales`."""
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained_conversions import FineGrainedDequantize
+        from ...core_model_loading import WeightConverter
+        from ...integrations.finegrained.conversions import FineGrainedDequantize
 
         # anchored `weight$` so the scale keys land in the scale slots; the activation
         # scales are collected only to be dropped
@@ -334,8 +334,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
         - otherwise the expert converters get the module layout ops (``_with_expert_layout_ops``).
 
         :meth:`get_weight_conversions` is appended in every mode."""
-        from ..core_model_loading import WeightConverter, WeightRenaming
-        from ..integrations.finegrained_conversions import FineGrainedDequantize
+        from ...core_model_loading import WeightConverter, WeightRenaming
+        from ...integrations.finegrained.conversions import FineGrainedDequantize
 
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename, *weight_conversions]
@@ -383,8 +383,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
         the checkpoint layout. Catch-all converters at the end take keys that arrive already under
         the fused names (a plain rename, a transformers-format checkpoint) and dense linears' scale
         keys, so they get the same treatment."""
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained_conversions import (
+        from ...core_model_loading import WeightConverter
+        from ...integrations.finegrained.conversions import (
             FineGrainedInterleaveGateUp,
             FineGrainedScaleContainer,
             FineGrainedSwizzleScales,
