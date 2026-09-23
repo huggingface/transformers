@@ -135,8 +135,11 @@ class RadioPatchEmbeddings(nn.Module):
                 f"Expected {self.num_channels} input channels, got {pixel_values.shape[1]}. Temporally-packed "
                 "video input requires `config.video_temporal_patch_size` to be set."
             )
-        projection = self.video_patch_projection if is_video else self.patch_projection
-        patches = projection(self._image_to_patches(pixel_values))
+        patches = (
+            self.video_patch_projection(self._image_to_patches(pixel_values))
+            if is_video
+            else self.patch_projection(self._image_to_patches(pixel_values))
+        )
         input_dims = (pixel_values.shape[-2] // self.patch_size, pixel_values.shape[-1] // self.patch_size)
         patches = patches + self._interpolate_position_embedding(input_dims, patches.dtype)
         prefix = self.cls_register_token.unsqueeze(0).expand(patches.shape[0], -1, -1)
