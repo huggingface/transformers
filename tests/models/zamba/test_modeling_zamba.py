@@ -539,8 +539,8 @@ class ZambaModelIntegrationTest(unittest.TestCase):
         output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
         expected_text = self.tokenizer.decode(output[0].tolist())
 
-        del model
         torch._dynamo.reset()
+        torch.cuda.empty_cache()
 
         # Opt-in: use_associative_scan=True → compiled associative scan
         model = ZambaForCausalLM.from_pretrained(
