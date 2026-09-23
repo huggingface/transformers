@@ -63,7 +63,7 @@ model = AutoModel.from_pretrained(
 )
 ```
 
-Loading from a branch or tag pins every file in that call to one commit, (when `revision` is omitted), then fetches every file from that commit.
+Loading from a branch or tag pins every file in that call to one commit, then fetches every file from that commit.
 
 That pin lasts for the call only. For reproducibility across runs, pass an explicit commit hash or a tag you treat as fixed. Do not rely on `main` or another moving branch staying fixed between runs.
 

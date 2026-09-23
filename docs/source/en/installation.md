@@ -168,7 +168,7 @@ After installation, you can configure the Transformers cache location or set up 
 
 When you load a pretrained model with [`~PreTrainedModel.from_pretrained`], the model is downloaded from the Hub and locally cached.
 
-If you pass a commit hash, Transformers uses the local cache for that commit's files and does not re-check the Hub for each one (including files that are known to be missing).
+If you pass a commit hash, Transformers uses the local cache for that commit's files and does not re-check the Hub for each one (including files that are known to be missing). This is the default behavior when no revision is specified.
 
 If you pass a branch or tag, Transformers contacts the Hub once at the start of the load to pick the commit, then uses the cache the same way for that commit's files.
 
