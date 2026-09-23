@@ -13,10 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch EmbeddingGemma2 model."""
 
+import os
 import tempfile
 import unittest
 
+from huggingface_hub import download_bucket_files
 from parameterized import parameterized
+from safetensors.torch import load_file
 
 from transformers import (
     EmbeddingGemma2Config,
@@ -27,18 +30,24 @@ from transformers import (
 from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
+    require_torch_accelerator,
+    slow,
     torch_device,
 )
 from transformers.utils import ModelOutput, logging
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
+        AutoProcessor,
         EmbeddingGemma2Model,
         EmbeddingGemma2TextModel,
     )
@@ -603,3 +612,334 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 composite_text_out = text_via_composite(input_ids=text_input_ids).last_hidden_state
             torch.testing.assert_close(composite_text_out, full_text_out)
+
+            # 4. Text only via EmbeddingGemma2TextModel directly
+            text_model, info = EmbeddingGemma2TextModel.from_pretrained(
+                tmpdir, config=config.text_config, output_loading_info=True
+            )
+            self.assertEqual(len(info["missing_keys"]), 0)
+            self.assertEqual(len(info["unexpected_keys"]), 0)
+            text_model = text_model.to(torch_device).eval()
+            with torch.no_grad():
+                direct_text_out = text_model(input_ids=text_input_ids).last_hidden_state
+            torch.testing.assert_close(direct_text_out, full_text_out)
+
+
+@slow
+@require_torch_accelerator
+class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    """
+    reproducer (uploads the golden to
+    ``hf://buckets/hf-internal-testing/embeddinggemma2-integration-test/<case>/expected_embeddings.safetensors``,
+    holding the `embeddings` and, where the case computes one, the `similarities` matrix):
+        TODO
+    """
+
+    # TODO: pick the correct values once the golden embeddings are generated on the CI hardware
+    # Tolerance against the golden embeddings and similarities from the bucket
+    RTOL = 1e-2
+    ATOL = 1e-2
+    # Tolerance between batched and single-input embeddings of the same run (bf16 kernels vary with padded shapes)
+    BATCH_RTOL = 2e-3
+    BATCH_ATOL = 2e-3
+
+    IMAGE_URL = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+    IMAGE_2_URL = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    )
+    AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3"
+    VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+
+    @classmethod
+    def setUpClass(cls):
+        # TODO: switch to `google/embeddinggemma-2` at release
+        cls.checkpoint_name = "gg-hf-em/embeddinggemma-2"
+        cls.bucket = "hf-internal-testing/embeddinggemma2-integration-test"
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+
+        cls.image = url_to_local_path(cls.IMAGE_URL)
+        cls.image_2 = url_to_local_path(cls.IMAGE_2_URL)
+        cls.audio = url_to_local_path(cls.AUDIO_URL)
+        cls.video = url_to_local_path(cls.VIDEO_URL)
+
+    @staticmethod
+    def _pool(model, inputs):
+        """Mask-aware mean pooling of `last_hidden_state`, then L2 normalization in float32."""
+        token_embeddings = model(**inputs).last_hidden_state
+        mask = inputs["attention_mask"].unsqueeze(-1).to(token_embeddings.dtype)
+        embeddings = (token_embeddings * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+        return F.normalize(embeddings.float(), p=2, dim=-1)
+
+    def _load_expected(self, case: str):
+        remote = f"{case}/expected_embeddings.safetensors"
+        with tempfile.TemporaryDirectory() as tmp:
+            local = os.path.join(tmp, "expected_embeddings.safetensors")
+            download_bucket_files(self.bucket, files=[(remote, local)])
+            return load_file(local)
+
+    # ==== Text retrieval ====
+
+    def test_model_text_query_document(self):
+        """`encode_query` / `encode_document`: the query and the documents carry different task prompts."""
+        model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
+
+        venus = "Venus is often called Earth's twin because of its similar size and proximity."
+        mars = "Mars, known for its reddish appearance, is often referred to as the Red Planet."
+        query_messages = [
+            {"role": "system", "content": "task: search result | query: "},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Which planet is known as the Red Planet?"},
+                ],
+            },
+        ]
+        document_messages = [
+            [
+                {"role": "system", "content": "title: none | text: "},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": venus},
+                    ],
+                },
+            ],
+            [
+                {"role": "system", "content": "title: none | text: "},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": mars},
+                    ],
+                },
+            ],
+        ]
+
+        # Queries and documents are separate forward passes, as `encode_query` and `encode_document` are
+        query_inputs = self.processor.apply_chat_template(
+            query_messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+
+        document_inputs = self.processor.apply_chat_template(
+            document_messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+
+        query_embeddings = self._pool(model, query_inputs)
+        document_embeddings = self._pool(model, document_inputs)
+        similarities = query_embeddings @ document_embeddings.T
+
+        expected = self._load_expected("text_query_document")
+        torch.testing.assert_close(
+            torch.cat([query_embeddings, document_embeddings]).cpu(),
+            expected["embeddings"],
+            rtol=self.RTOL,
+            atol=self.ATOL,
+        )
+        torch.testing.assert_close(similarities.cpu(), expected["similarities"], rtol=self.RTOL, atol=self.ATOL)
+        self.assertGreater(similarities[0, 1], similarities[0, 0])
+
+        # Matryoshka: a truncated, re-normalized prefix keeps the ranking
+        truncated = (
+            F.normalize(query_embeddings[:, :256], dim=-1) @ F.normalize(document_embeddings[:, :256], dim=-1).T
+        )
+        self.assertGreater(truncated[0, 1], truncated[0, 0])
+
+    # ==== Single modality ====
+
+    def test_model_single_modality(self):
+        """One key per modality: text, image, audio and video each embedded on their own, one conversation per row."""
+        model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
+
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A photo of a cat"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": self.image},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio", "url": self.audio},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video", "url": self.video},
+                    ],
+                },
+            ],
+        ]
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        embeddings = self._pool(model, inputs)
+
+        expected = self._load_expected("single_modality")
+        torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
+
+    # ==== Several modalities in one input ====
+
+    def test_model_multiple_modalities(self):
+        """Several modalities in one input give one embedding: text + image, text + audio and image + audio."""
+        model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
+
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A photo of a cat"},
+                        {"type": "image", "url": self.image},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A song"},
+                        {"type": "audio", "url": self.audio},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": self.image},
+                        {"type": "audio", "url": self.audio},
+                    ],
+                },
+            ],
+        ]
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        embeddings = self._pool(model, inputs)
+
+        expected = self._load_expected("multiple_modalities")
+        torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
+
+    def test_model_manual_placeholders(self):
+        """Placeholders written in the text interleave the media with it, in the order the media items are given."""
+        model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": self.image},
+                    {"type": "image", "url": self.image_2},
+                    {"type": "audio", "url": self.audio},
+                    {"type": "text", "text": "A jacket similar to <|image|> or <|image|> featured in <|audio|>"},
+                ],
+            },
+        ]
+        self.assertEqual(
+            self.processor.apply_chat_template(messages, tokenize=False),
+            "A jacket similar to <|image|> or <|image|> featured in <|audio|>",
+        )
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        embeddings = self._pool(model, inputs)
+
+        expected = self._load_expected("manual_placeholders")
+        torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
+
+    # ==== Batching ====
+
+    def test_model_mixed_modality_batch(self):
+        """A batch mixing text, image, text + image and audio embeds each row as if it were alone."""
+        model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
+
+        conversations = [
+            [
+                {"role": "system", "content": "title: none | text: "},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A photo of a cat"},
+                    ],
+                },
+            ],
+            [
+                {"role": "system", "content": "title: none | text: "},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": self.image},
+                    ],
+                },
+            ],
+            [
+                {"role": "system", "content": "title: none | text: "},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A photo of a cat"},
+                        {"type": "image", "url": self.image},
+                    ],
+                },
+            ],
+            [
+                {"role": "system", "content": "title: none | text: "},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio", "url": self.audio},
+                    ],
+                },
+            ],
+        ]
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        batched = self._pool(model, inputs)
+
+        expected = self._load_expected("mixed_modality_batch")
+        torch.testing.assert_close(batched.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
+
+        for idx, conversation in enumerate(conversations):
+            inputs = self.processor.apply_chat_template(
+                conversation,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+            ).to(model.device)
+            torch.testing.assert_close(
+                batched[idx : idx + 1], self._pool(model, inputs), rtol=self.BATCH_RTOL, atol=self.BATCH_ATOL
+            )
