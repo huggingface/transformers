@@ -112,7 +112,7 @@ python xla_spawn.py --num_cores 8 pytorch/summarization/run_summarization.py \
 
 ### Run a script on Hugging Face Jobs
 
-The example scripts declare their dependencies in a [PEP 723](https://peps.python.org/pep-0723/) `# /// script` header, so they run on [Hugging Face Jobs](https://huggingface.co/docs/hub/jobs) straight from their GitHub URL, on a GPU you rent for the length of the run. Install the `hf` CLI (`pip install -U huggingface_hub`), then pass the script URL to `hf jobs uv run` and the script arguments after it. `--flavor` picks the hardware, `--timeout` sets the time limit (30 minutes by default), and `-s HF_TOKEN` forwards your token so `--push_to_hub` works. The `--` before the URL keeps the two apart, so a script argument that shares a name with an `hf` flag, such as `--token`, goes to the script.
+The example scripts declare their dependencies in a [PEP 723](https://peps.python.org/pep-0723/) `# /// script` header, so they run on [Hugging Face Jobs](https://huggingface.co/docs/hub/jobs) straight from their GitHub URL, on a GPU you rent for the length of the run. [Install the `hf` CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli#getting-started) and log in, then pass the script URL to `hf jobs uv run` and the script arguments after it. `--flavor` picks the hardware, `--timeout` sets the time limit (30 minutes by default), and `-s HF_TOKEN` forwards your token so `--push_to_hub` works. The `--` before the URL keeps the two apart, so a script argument that shares a name with an `hf` flag, such as `--token`, goes to the script.
 
 ```bash
 hf jobs uv run --flavor a10g-small --timeout 30m -s HF_TOKEN -- \
