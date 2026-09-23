@@ -283,7 +283,7 @@ class OneFormerImageProcessingTest(
         for image_processing_class in self.image_processing_classes.values():
             with tempfile.TemporaryDirectory() as tmpdirname:
                 metadata_path = os.path.join(tmpdirname, "metadata.json")
-                with open(metadata_path, "w") as f:
+                with open(metadata_path, "w", encoding="utf-8") as f:
                     json.dump(class_info, f)
 
                 config_dict = self.image_processor_dict

@@ -280,7 +280,11 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        dummy_image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+            )
+        )
 
         image_processor_pil = self.image_processing_classes["pil"](**self.image_processor_dict)
         image_processor_torchvision = self.image_processing_classes["torchvision"](**self.image_processor_dict)

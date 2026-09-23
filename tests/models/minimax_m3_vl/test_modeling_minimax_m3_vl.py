@@ -497,7 +497,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         image_processor = MiniMaxM3VLImageProcessorFast.from_pretrained(self.model_id)
         video_processor = MiniMaxM3VLVideoProcessor.from_pretrained(self.model_id)
-        with open(cached_file(self.model_id, "chat_template.jinja")) as f:
+        with open(cached_file(self.model_id, "chat_template.jinja"), encoding="utf-8") as f:
             chat_template = f.read()
         return MiniMaxM3VLProcessor(
             image_processor=image_processor,
@@ -695,7 +695,9 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         # Two real, semantically distinct images downloaded from the hub/web (the picsum dog and the
         # canonical COCO two-cats photo), paired with deliberately different-length questions so the
         # batch genuinely needs padding.
-        dog = load_test_image("https://picsum.photos/id/237/400/300").convert("RGB")
+        dog = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+        ).convert("RGB")
         cats = load_coco_image("000000039769.jpg").convert("RGB")
         texts = [
             self._prompt(processor, "What animal is this? One word."),

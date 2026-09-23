@@ -35,6 +35,12 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-mllama"
     model_id = "hf-internal-testing/mllama-11b"
 
+    @unittest.skip(
+        "Processor prepends the BOS token as text, which shifts the offsets the assistant mask is computed from"
+    )
+    def test_apply_chat_template_assistant_mask(self):
+        pass
+
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image1 = Image.new("RGB", (224, 220))
@@ -49,18 +55,14 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"chat_template": "{% for message in messages %}{% if loop.index0 == 0 %}{{ bos_token }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{ '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"}  # fmt: skip
 
-    @unittest.skip("MllamaProcessor does not return tensors")
-    def test_image_processor_defaults(self):
-        pass
-
     @unittest.skip("MllamaProcessor modifies input text")
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     # Override as Mllama needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -175,14 +177,14 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
                         ),
                     },
                     {"type": "text", "text": " Test sentence   "},
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
                         ),
                     },
                     {"type": "text", "text": "ok\n"},
@@ -380,10 +382,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -406,7 +407,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,
@@ -425,6 +426,10 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 max_length=3,
             )
 
-    @unittest.skip("Mllama can't process inputs with no image ttogether with multimodal inputs")
+    @unittest.skip("Mllama can't process inputs with no image together with multimodal inputs")
     def test_processor_text_has_no_visual(self):
+        pass
+
+    @unittest.skip("Model doesn't use offsets as it uses cross-attn instead of early fusion")
+    def test_replacement_offsets(self):
         pass

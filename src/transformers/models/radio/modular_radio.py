@@ -31,7 +31,6 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2Layer,
     Dinov2LayerScale,
     Dinov2MLP,
-    Dinov2SelfAttention,
     eager_attention_forward,
 )
 from .configuration_radio import RadioConfig
@@ -167,10 +166,11 @@ class RadioLayerScale(Dinov2LayerScale):
     pass
 
 
-class RadioSelfAttention(Dinov2SelfAttention):
+class RadioAttention(Dinov2Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         cu_seqlens: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -178,33 +178,29 @@ class RadioSelfAttention(Dinov2SelfAttention):
         cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`, *optional*):
             Boundaries of the image sequences packed into `hidden_states`; each image only attends to itself.
         """
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        attention_kwargs = {
-            "is_causal": self.is_causal,
-            "scaling": self.scaling,
-            "dropout": 0.0 if not self.training else self.dropout_prob,
-        }
+        attention_kwargs = {"dropout": 0.0 if not self.training else self.attention_dropout, "scaling": self.scaling}
 
         if cu_seqlens is None:
-            context_layer, attention_probs = attention_interface(
-                self, query_layer, key_layer, value_layer, None, **attention_kwargs, **kwargs
+            attn_output, attn_weights = attention_interface(
+                self, query_states, key_states, value_states, attention_mask, **attention_kwargs, **kwargs
             )
         elif is_flash_attention_requested(self.config):
             max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs)
-            context_layer, attention_probs = attention_interface(
+            attn_output, attn_weights = attention_interface(
                 self,
-                query_layer,
-                key_layer,
-                value_layer,
+                query_states,
+                key_states,
+                value_states,
                 None,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
@@ -216,55 +212,35 @@ class RadioSelfAttention(Dinov2SelfAttention):
         else:
             # without a varlen kernel, attend within each image separately
             splits = [
-                torch.split(layer, (cu_seqlens[1:] - cu_seqlens[:-1]).tolist(), dim=2)
-                for layer in (query_layer, key_layer, value_layer)
+                torch.split(states, (cu_seqlens[1:] - cu_seqlens[:-1]).tolist(), dim=2)
+                for states in (query_states, key_states, value_states)
             ]
             outputs = [
                 attention_interface(self, query, key, value, None, **attention_kwargs, **kwargs)
                 for query, key, value in zip(*splits)
             ]
-            context_layer = torch.cat([output[0] for output in outputs], dim=1)
-            attention_probs = None
+            attn_output = torch.cat([output[0] for output in outputs], dim=1)
+            attn_weights = None
             # eager returns per-image probabilities; lay them out block-diagonally over the packed sequence
             if outputs[0][1] is not None:
-                total_length = query_layer.shape[2]
-                attention_probs = query_layer.new_zeros(
-                    batch_size, self.num_attention_heads, total_length, total_length
+                total_length = query_states.shape[2]
+                attn_weights = query_states.new_zeros(
+                    query_states.shape[0], self.num_attention_heads, total_length, total_length
                 )
                 start = 0
-                for _, probs in outputs:
-                    end = start + probs.shape[-1]
-                    attention_probs[..., start:end, start:end] = probs
+                for _, weights in outputs:
+                    end = start + weights.shape[-1]
+                    attn_weights[..., start:end, start:end] = weights
                     start = end
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
 
-        return context_layer, attention_probs
-
-
-class RadioAttention(Dinov2Attention):
-    pass
+        return attn_output, attn_weights
 
 
 class RadioLayer(Dinov2Layer):
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
-        hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm, **kwargs)
-        self_attention_output = self.layer_scale1(self_attention_output)
-
-        # first residual connection
-        hidden_states = self.drop_path(self_attention_output) + hidden_states
-
-        # in Dinov2, layernorm is also applied after self-attention
-        layer_output = self.norm2(hidden_states)
-        layer_output = self.mlp(layer_output)
-        layer_output = self.layer_scale2(layer_output)
-
-        # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
-
-        return layer_output
+    pass
 
 
 @auto_docstring
@@ -279,7 +255,7 @@ class RadioPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": RadioLayer,
-        "attentions": RadioSelfAttention,
+        "attentions": RadioAttention,
     }
 
     @torch.no_grad()

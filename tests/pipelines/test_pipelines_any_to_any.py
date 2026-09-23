@@ -84,13 +84,13 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         videos_examples = [
             {
                 "videos": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
                 ),
                 "text": f"{video_token}This video shows a ",
             },
             {
                 "videos": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4"
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
                 ),
                 "text": f"{video_token}In the video I see a ",
             },
@@ -99,13 +99,13 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         audio_examples = [
             {
                 "audio": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
                 ),
                 "text": f"{audio_token}This is sound of a ",
             },
             {
                 "audio": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
                 ),
                 "text": f"{audio_token}Here I hear a ",
             },
@@ -419,7 +419,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
 
         audio_path = url_to_local_path(
-            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
         )
         messages = [
             {
@@ -442,7 +442,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What do you hear in this audio?"},
                                 {
                                     "type": "audio",
-                                    "url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                                    "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                                 },
                             ],
                         }
@@ -457,7 +457,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         pipe = pipeline("any-to-any", model="Qwen/Qwen2.5-Omni-3B", dtype="bfloat16")
 
         video_path = url_to_local_path(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4"
         )
         messages = [
             {
@@ -498,7 +498,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "Describe this video."},
                                 {
                                     "type": "video",
-                                    "video": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4",
+                                    "video": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4",
                                 },
                             ],
                         }
@@ -510,7 +510,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "Describe this video."},
                                 {
                                     "type": "video",
-                                    "video": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4",
+                                    "video": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4",
                                 },
                             ],
                         },

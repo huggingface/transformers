@@ -23,7 +23,7 @@ Each recipe below demonstrates a specific [`Trainer`] feature: custom loss funct
 
 ## Custom loss function
 
-Pass [`~Trainer#compute_loss_func`] to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute_loss) [`~Trainer.compute_loss`] instead.
+Pass [`~Trainer#compute_loss_func`] to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute-loss) [`~Trainer.compute_loss`] instead.
 
 The custom loss function must have the following signature:
 
@@ -51,7 +51,7 @@ trainer.train()
 ```
 
 > [!NOTE]
-> See the [subclassing guide](./trainer_customize#compute_loss) for more examples of overriding [`~Trainer.compute_loss`].
+> See the [subclassing guide](./trainer_customize#compute-loss) for more examples of overriding [`~Trainer.compute_loss`].
 
 ## Evaluating on start
 
@@ -156,6 +156,26 @@ args = TrainingArguments(
     dataloader_prefetch_factor=2,        # each worker preloads 2 batches ahead
 )
 ```
+
+## Group samples by length
+
+Use `train_sampling_strategy="group_by_length"` to batch examples with similar lengths and reduce padding. When you
+don't provide precomputed lengths, [`Trainer`] infers them from the first model input in each dataset item. This also
+works when processor-based multimodal datasets return [`BatchFeature`] objects, because they are mapping-like feature
+containers.
+
+```py
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="qwen3-vl-finetuned",
+    train_sampling_strategy="group_by_length",
+)
+```
+
+If a [`~datasets.Dataset`] already has a precomputed length column, [`Trainer`] uses that column instead. The default
+column name is `length`. Set `length_column_name` when your dataset uses another name. This strategy requires a
+dataset with a known length and is ignored for [`~datasets.IterableDataset`].
 
 ## Batch rebalance sampling
 

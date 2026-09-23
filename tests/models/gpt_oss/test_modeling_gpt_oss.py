@@ -28,6 +28,7 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    Mxfp4Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -218,7 +219,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
         # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
-            with open(RESULTS_PATH, "r") as f:
+            with open(RESULTS_PATH, "r", encoding="utf-8") as f:
                 expected_results = json.load(f)
 
             # Check if we have expected results for this configuration
@@ -369,7 +370,7 @@ if __name__ == "__main__":
         script_code = textwrap.dedent(script_code)
 
         # Write to temp file
-        with tempfile.NamedTemporaryFile("w", suffix="_worker.py", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix="_worker.py", delete=False) as tmp:
             tmp.write(script_code)
             tmp_path = tmp.name
 
@@ -454,7 +455,7 @@ if __name__ == "__main__":
 
         # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
-            with open(RESULTS_PATH, "r") as f:
+            with open(RESULTS_PATH, "r", encoding="utf-8") as f:
                 expected_results = json.load(f)
 
             # Check if we have expected results for this configuration
@@ -538,12 +539,15 @@ if __name__ == "__main__":
 
         model_id = f"openai/gpt-oss-{model}"
 
+        # The checkpoints ship as mxfp4 and `Mxfp4HfQuantizer.is_trainable` is False, so wherever mxfp4 is supported
+        # the expert weights stay `requires_grad=False` and everything behind the MoE branch gets no gradient.
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation=attn_impl,
             use_kernels=kernels,
+            quantization_config=Mxfp4Config(dequantize=True),
         )
         model_obj.train()
 
