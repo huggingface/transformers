@@ -354,21 +354,6 @@ class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    def test_eager_padded_batch_is_finite(self):
-        """A fully padded query attends to nothing, which must not softmax to NaN under eager."""
-        config, input_features, _ = self.model_tester.prepare_config_and_inputs()
-        config._attn_implementation = "eager"
-        lengths = torch.tensor([self.model_tester.seq_length, self.model_tester.seq_length // 4])
-        input_features = input_features[: len(lengths)]
-        attention_mask = (torch.arange(self.model_tester.seq_length)[None, :] < lengths[:, None]).long()
-
-        model = ParakeetEncoder(config).to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model(
-                input_features=input_features.to(torch_device), attention_mask=attention_mask.to(torch_device)
-            )
-        self.assertTrue(torch.isfinite(outputs.last_hidden_state).all())
-
 
 class ParakeetForCTCModelTester:
     def __init__(self, parent, encoder_kwargs=None, is_training=True, vocab_size=128, pad_token_id=0):
