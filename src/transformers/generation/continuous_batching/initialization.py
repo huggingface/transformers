@@ -177,8 +177,8 @@ def resolve_compile_configs(
     # For each config, priority is: explicit config, default config, fallback config, None
     if cb_config.varlen_compile_config is None:
         if cb_config.default_compile_level > 0:
-            # TODO: now that max_seqlen_k is bucketted, is that still True?
-            # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
+            # TODO: now that max_length_k is bucketted, is that still True?
+            # We don't use compile with flash varlen, because max_length_k is volatile and introduces recompilations
             if is_flash_attn:
                 varlen_config = None
             else:
