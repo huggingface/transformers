@@ -12,7 +12,7 @@ def get_jobs_to_run():
     # the caller (using GitHub api).
     # We can also use the following api to get the information if we don't have them before calling this script.
     # url = f"https://api.github.com/repos/huggingface/transformers/pulls/PULL_NUMBER/files?ref={pr_sha}"
-    with open("pr_files.txt") as fp:
+    with open("pr_files.txt", encoding="utf-8") as fp:
         pr_files = json.load(fp)
         pr_files = [{k: v for k, v in item.items() if k in ["filename", "status"]} for item in pr_files]
     pr_files = [item["filename"] for item in pr_files if item["status"] in ["added", "modified"]]
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     # (we avoid to checkout the repository using `actions/checkout` to reduce the run time, but mostly to avoid the potential security issue as much as possible)
     repo_content = []
     for filename in ["tests_dir.txt", "tests_models_dir.txt", "tests_quantization_dir.txt"]:
-        with open(filename) as fp:
+        with open(filename, encoding="utf-8") as fp:
             data = json.load(fp)
             data = [item["path"][len("tests/") :] for item in data if item["type"] == "dir"]
             repo_content.extend(data)
