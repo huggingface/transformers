@@ -598,6 +598,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
         ("zaya", "ZayaModel"),
+        ("zgcm", "ZgcmModel"),
     ]
 )
 
@@ -885,6 +886,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
         ("zaya", "ZayaForCausalLM"),
+        ("zgcm", "ZgcmForCausalLM"),
     ]
 )
 
