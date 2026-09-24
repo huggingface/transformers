@@ -44,8 +44,6 @@ if is_torch_available():
         GemmaForCausalLM,
         GemmaModel,
     )
-    from transformers.activations import GELUTanh
-    from transformers.models.gemma.modeling_gemma import GemmaMLP
 
 
 @require_torch
@@ -493,13 +491,11 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
 
-class GemmaMLPActivationTest(unittest.TestCase):
-    def test_legacy_gelu_activation(self):
+class GemmaConfigActivationTest(unittest.TestCase):
+    def test_legacy_gelu_activation_is_mapped_to_tanh_in_config(self):
         config = GemmaConfig(hidden_act="gelu")
-        mlp = GemmaMLP(config)
-        self.assertIsInstance(mlp.act_fn, GELUTanh)
+        self.assertEqual(config.hidden_act, "gelu_pytorch_tanh")
 
-    def test_correct_gelu_activation(self):
+    def test_correct_gelu_activation_is_preserved(self):
         config = GemmaConfig(hidden_act="gelu_pytorch_tanh")
-        mlp = GemmaMLP(config)
-        self.assertIsInstance(mlp.act_fn, GELUTanh)
+        self.assertEqual(config.hidden_act, "gelu_pytorch_tanh")
