@@ -154,6 +154,7 @@ class Blip2Config(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     num_query_tokens: int = 32
     image_text_hidden_size: int = 256
+    logit_scale_init_value: float = 2.6592
     image_token_index: int | None = None
     initializer_factor: float = 1.0
     initializer_range: float = 0.02

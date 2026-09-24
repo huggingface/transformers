@@ -1440,6 +1440,50 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_image_text_contrastive_loss(self):
+        config, input_ids, attention_mask, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = Blip2ForImageTextRetrieval(config).to(torch_device)
+        model.eval()
+        inputs = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values}
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        self.assertIsNone(outputs.loss)
+
+        with torch.no_grad():
+            outputs_with_loss = model(**inputs, return_loss=True)
+        self.assertIsNotNone(outputs_with_loss.loss)
+        self.assertEqual(outputs_with_loss.loss.shape, torch.Size([]))
+        self.assertTrue(torch.isfinite(outputs_with_loss.loss))
+
+        # returned logits must be unscaled, i.e. identical whether or not the loss is computed
+        torch.testing.assert_close(outputs_with_loss.logits_per_image, outputs.logits_per_image)
+
+    def test_image_text_contrastive_loss_backward(self):
+        config, input_ids, attention_mask, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = Blip2ForImageTextRetrieval(config).to(torch_device)
+        model.train()
+
+        outputs = model(
+            input_ids=input_ids, attention_mask=attention_mask, pixel_values=pixel_values, return_loss=True
+        )
+        outputs.loss.backward()
+        self.assertIsNotNone(model.logit_scale.grad)
+
+    def test_return_loss_with_matching_head_raises(self):
+        config, input_ids, attention_mask, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = Blip2ForImageTextRetrieval(config).to(torch_device)
+        model.eval()
+
+        with self.assertRaises(ValueError):
+            model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                pixel_values=pixel_values,
+                use_image_text_matching_head=True,
+                return_loss=True,
+            )
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
