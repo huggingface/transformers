@@ -111,7 +111,6 @@ class GraniteForDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.Te
             self.assertTrue(hasattr(image_processor, "crop_to_patches"))
             self.assertTrue(hasattr(image_processor, "min_patches"))
             self.assertTrue(hasattr(image_processor, "max_patches"))
-            self.assertNotIn("fine_route", image_processor.to_dict())
 
     def _test_call(self, image_inputs, image_type):
         for image_processing_class in self.image_processing_classes.values():

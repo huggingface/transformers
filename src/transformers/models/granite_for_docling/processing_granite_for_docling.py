@@ -28,7 +28,6 @@ from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import auto_docstring
-from .image_processing_granite_for_docling import GraniteForDoclingImageProcessorKwargs
 
 
 if TYPE_CHECKING:
@@ -37,7 +36,6 @@ if TYPE_CHECKING:
 
 class GraniteForDoclingProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
-    images_kwargs: GraniteForDoclingImageProcessorKwargs
 
 
 @auto_docstring
@@ -56,7 +54,6 @@ class GraniteForDoclingProcessor(ProcessorMixin):
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
         self.global_image_tag = "<global-img>"
         self.image_seq_len = image_seq_len
-        tokenizer.add_special_tokens({"additional_special_tokens": [self.fake_image_token, self.image_token]})
         self.fake_image_token_id = tokenizer.convert_tokens_to_ids(self.fake_image_token)
         self.global_image_token_id = tokenizer.convert_tokens_to_ids(self.global_image_tag)
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)

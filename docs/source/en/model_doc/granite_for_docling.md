@@ -187,7 +187,7 @@ for row in output:
     print(doclang.removesuffix(processor.tokenizer.eos_token).strip())
 ```
 
-Add `"fine_route": True` to `processor_kwargs` to route the whole batch through the fine path; `tile_fine_mask` in the inputs then marks the tiles that take it.
+Add `"fine_route": True` to `processor_kwargs` to route the whole batch through the fine path; `tile_fine_mask` in the inputs then marks the tiles that take it. Keep every processor option inside `processor_kwargs`, [`~ProcessorMixin.apply_chat_template`] does not merge them with loose keyword arguments.
 
 ### Export DocLang with Docling
 
@@ -215,8 +215,7 @@ The [DocLang](https://doclang.ai/) spec and `doclang` toolkit (validate / pack) 
 - A full page is long: budget `max_new_tokens` in the thousands, otherwise the DocLang is cut off silently.
 - Tiles are 512x512, laid out on the grid that best matches the page's aspect ratio, capped by `max_patches` (default 32) and 16 tiles per side. A page that fits in one tile gets no thumbnail.
 - The fine path quadruples the image tokens per tile. Use it for dense pages only, or let a checkpoint with a density router decide with [`~GraniteForDoclingForConditionalGeneration.predict_fine_route`].
-- Pass `image_hidden_states` instead of `pixel_values` to reuse the vision tower output across calls on the same page (see the [`~GraniteForDoclingForConditionalGeneration.forward`] arguments).
-- The multi-token prediction heads (`num_mtp_layers`) are not used by [`~GenerationMixin.generate`]; serving engines such as vLLM use them for speculative decoding.
+- Checkpoints may ship multi-token prediction heads (`num_mtp_layers`, weights under `mtp.*`). Serving engines such as vLLM use them for speculative decoding; transformers loads the checkpoint without them.
 
 ## GraniteForDoclingConfig
 
@@ -244,6 +243,11 @@ The [DocLang](https://doclang.ai/) spec and `doclang` toolkit (validate / pack) 
 
 [[autodoc]] GraniteForDoclingProcessor
     - __call__
+
+## GraniteForDoclingVisionModel
+
+[[autodoc]] GraniteForDoclingVisionModel
+    - forward
 
 ## GraniteForDoclingModel
 
