@@ -152,7 +152,7 @@ _flash_api_alternative_names = {"s_aux": "learnable_sink"}
 
 def _lazy_imports(
     implementation: str | None, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
-) -> tuple[Callable, ...]:
+) -> tuple[Callable, Callable, Callable, Callable, Callable]:
     """
     Lazy loads the respective flash attention implementations.
 
@@ -182,7 +182,7 @@ def _lazy_imports(
         from .integrations.npu_flash_attention import npu_flash_attn_with_kvcache as flash_attn_with_kvcache
 
     # Then try the flash attention packages, with fallback if the user did not request a specific implementation
-    if (implementation == "flash_attention_2" and is_fa2) or fa_fallback_version == 2:
+    elif (implementation == "flash_attention_2" and is_fa2) or fa_fallback_version == 2:
         from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
         from flash_attn.bert_padding import pad_input, unpad_input
 
@@ -212,7 +212,7 @@ def _lazy_imports(
         if flash_attn_varlen_func is None and (
             hasattr(kernel, "sparse_atten_func") or hasattr(kernel, "flash_attn_forward")
         ):
-            return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+            return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
         if flash_attn_varlen_func is None:
             raise ValueError(
                 f"Could not find the currently requested flash attention implementation at `{implementation}`."
@@ -771,11 +771,8 @@ def _flash_attention_forward(
 
     # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
     # Case 1. If position ids is provided and the position ids indicate packed sequences, see `_is_packed_sequence`.
-    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
-    # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
-    #
-    # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
-    # See #39121 for more information.
+    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is
+    # safe to use `flash_varlen_fn` knowing we already have all necessary the kwargs.
     is_fa_with_varlen_kwargs = all(x is not None for x in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k))
 
     # Contains at least one padding token in the sequence: unpad compute cu_seqlen and max_length from attention mask
@@ -790,6 +787,8 @@ def _flash_attention_forward(
         v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
     # Padding free, but cu_seqlens or max_seqlen are not provided: infer them from position_ids if sequence lengths vary
     elif _is_packed_sequence(position_ids, query_states.size(0)):  # this check is expensive so not precomputed
+        # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
+        # See #39121 for more information.
         q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
             query_states, key_states, value_states, position_ids
         )
