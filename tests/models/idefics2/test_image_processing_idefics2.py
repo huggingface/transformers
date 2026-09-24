@@ -25,6 +25,9 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 if is_vision_available():
     from PIL import Image
 
+    from transformers.models.idefics2.image_processing_idefics2 import convert_to_rgb as convert_to_rgb_torch
+    from transformers.models.idefics2.image_processing_pil_idefics2 import convert_to_rgb as convert_to_rgb_pil
+
 if is_torch_available():
     import torch
 
@@ -343,22 +346,13 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_convert_rgb_png_trns(self):
         """RGB PNGs with a tRNS chunk must composite onto white (#49003)."""
-        import io
-
-        from transformers.models.idefics2.image_processing_idefics2 import convert_to_rgb as convert_to_rgb_torch
-        from transformers.models.idefics2.image_processing_pil_idefics2 import convert_to_rgb as convert_to_rgb_pil
-
-        buffer = io.BytesIO()
         image = Image.new("RGB", (100, 100), (255, 0, 0))
         image.paste((0, 0, 255), (0, 0, 50, 50))
-        image.save(buffer, format="PNG", transparency=(255, 0, 0))
-        buffer.seek(0)
-        trns = Image.open(buffer)
-        self.assertEqual(trns.mode, "RGB")
-        self.assertEqual(trns.info.get("transparency"), (255, 0, 0))
+        image.info["transparency"] = (255, 0, 0)
+        self.assertEqual(image.mode, "RGB")
 
         for convert_to_rgb in (convert_to_rgb_torch, convert_to_rgb_pil):
-            out = convert_to_rgb(trns)
+            out = convert_to_rgb(image)
             self.assertEqual(out.mode, "RGB")
             self.assertEqual(out.getpixel((75, 75)), (255, 255, 255))
             self.assertEqual(out.getpixel((25, 25)), (0, 0, 255))
