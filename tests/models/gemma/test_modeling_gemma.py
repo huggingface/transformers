@@ -59,25 +59,6 @@ class GemmaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = GemmaModel
 
-    def create_and_check_legacy_hidden_act_remap(self):
-        # The Gemma 1.0 releases carry `hidden_act="gelu"`, which resolves to the exact erf GELU,
-        # but they were trained with the tanh approximation. See #49051.
-        logger = transformers_logging.get_logger("transformers.models.gemma.configuration_gemma")
-        logger.warning_once.cache_clear()
-        # CI runs with TRANSFORMERS_VERBOSITY=error, which would swallow the warning entirely.
-        with LoggingLevel(logging.WARNING):
-            with CaptureLogger(logger) as cl:
-                config = self.config_class(hidden_act="gelu")
-        logger.warning_once.cache_clear()
-
-        self.parent.assertEqual(
-            cl.out,
-            'We found `hidden_act="gelu"` in this Gemma config. This is a legacy value of the official '
-            "releases but it is meant to target the tanh approximation. Setting "
-            '`hidden_act="gelu_pytorch_tanh"` instead.\n',
-        )
-        self.parent.assertEqual(config.hidden_act, "gelu_pytorch_tanh")
-
 
 @require_torch
 class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
@@ -85,9 +66,6 @@ class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = GemmaForCausalLM if is_torch_available() else None
-
-    def test_legacy_hidden_act_is_remapped(self):
-        self.model_tester.create_and_check_legacy_hidden_act_remap()
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -101,6 +79,24 @@ class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
+
+    def test_legacy_hidden_act_is_remapped(self):
+        """Regression from #35235 fixed in #49051: gemma uses the tanh gelu approx instead of the exact variation"""
+
+        logger = transformers_logging.get_logger("transformers.models.gemma.configuration_gemma")
+        logger.warning_once.cache_clear()
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                config = self.model_tester.config_class(hidden_act="gelu")
+        logger.warning_once.cache_clear()
+
+        self.assertEqual(
+            cl.out,
+            'We found `hidden_act="gelu"` in this Gemma config. This is a legacy value of the official '
+            "releases but it is meant to target the tanh approximation. Setting "
+            '`hidden_act="gelu_pytorch_tanh"` instead.\n',
+        )
+        self.assertEqual(config.hidden_act, "gelu_pytorch_tanh")
 
 
 @slow
