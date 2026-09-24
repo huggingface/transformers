@@ -155,8 +155,6 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             else None
         )
 
-        self.all_tied_weights_keys = {}
-
         self.post_init()
 
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5) -> torch.Tensor:

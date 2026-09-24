@@ -82,7 +82,7 @@ class RadioModelTester:
         self.num_prefix_tokens = num_cls_tokens + num_registers
         self.seq_length = self.num_prefix_tokens + self.num_patches
 
-    def get_config(self):
+    def get_config(self, **kwargs):
         return RadioConfig(
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -102,6 +102,7 @@ class RadioModelTester:
             num_registers=self.num_registers,
             summary_idxs=self.summary_idxs,
             initializer_range=self.initializer_range,
+            **kwargs,
         )
 
     def prepare_config_and_inputs(self):
@@ -156,7 +157,8 @@ class RadioModelTester:
 
     def create_and_check_video_patch_projection(self, config, pixel_values):
         temporal_patch_size = 2
-        config.video_temporal_patch_size = temporal_patch_size
+        # `video_patch_dim` is derived in `__post_init__`, so it has to be set at construction
+        config = self.get_config(video_temporal_patch_size=temporal_patch_size)
         model = RadioModel(config=config)
         # the input conditioner normalizes single frames; packed video is normalized by the caller
         model.make_preprocessor_external()

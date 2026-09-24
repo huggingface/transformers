@@ -91,15 +91,10 @@ class RadioPatchEmbeddings(nn.Module):
         self.max_cols = config.max_img_size // config.patch_size
         num_positions = self.max_rows * self.max_cols
 
-        self.patch_projection = nn.Linear(config.num_channels * config.patch_size**2, config.hidden_size, bias=False)
+        self.patch_projection = nn.Linear(config.patch_dim, config.hidden_size, bias=False)
         self.video_patch_projection = (
-            # CODEPATH: video-capable checkpoints such as `nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16`
-            # set `video_temporal_patch_size`; image-only ones such as `nvidia/C-RADIOv4-H` leave it unset.
-            nn.Linear(
-                config.video_temporal_patch_size * config.num_channels * config.patch_size**2,
-                config.hidden_size,
-                bias=False,
-            )
+            # CODEPATH: video model `nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16` vs image-only `nvidia/C-RADIOv4-H`
+            nn.Linear(config.video_patch_dim, config.hidden_size, bias=False)
             if config.video_temporal_patch_size is not None
             else None
         )
@@ -129,21 +124,29 @@ class RadioPatchEmbeddings(nn.Module):
         return pos.flatten(2).permute(0, 2, 1)
 
     def forward(self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor | None = None) -> torch.Tensor:
+        # temporally-packed video stacks `video_temporal_patch_size` frames along the channel dim
+        if image_grid_hw is None and pixel_values.shape[1] != self.num_channels:
+            return self.embed_video(pixel_values)
+        return self.embed_image(pixel_values, image_grid_hw)
+
+    def embed_image(self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor | None = None) -> torch.Tensor:
+        """Embed images, given either as a dense `(batch, channels, height, width)` batch or, when
+        `image_grid_hw` is set, as the concatenated patches of images with differing grids."""
         if image_grid_hw is not None:
             return self._embed_packed_patches(pixel_values, image_grid_hw)
+        return self._embed_dense_patches(pixel_values, self.patch_projection)
 
-        # temporally-packed video stacks `video_temporal_patch_size` frames along the channel dim
-        is_video = pixel_values.shape[1] != self.num_channels
-        if is_video and self.video_patch_projection is None:
+    def embed_video(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        """Embed temporally-packed video frames, which carry `video_temporal_patch_size` frames per channel group."""
+        if self.video_patch_projection is None:
             raise ValueError(
                 f"Expected {self.num_channels} input channels, got {pixel_values.shape[1]}. Temporally-packed "
                 "video input requires `config.video_temporal_patch_size` to be set."
             )
-        patches = (
-            self.video_patch_projection(self._image_to_patches(pixel_values))
-            if is_video
-            else self.patch_projection(self._image_to_patches(pixel_values))
-        )
+        return self._embed_dense_patches(pixel_values, self.video_patch_projection)
+
+    def _embed_dense_patches(self, pixel_values: torch.Tensor, projection: nn.Linear) -> torch.Tensor:
+        patches = projection(self._image_to_patches(pixel_values))
         input_dims = (pixel_values.shape[-2] // self.patch_size, pixel_values.shape[-1] // self.patch_size)
         patches = patches + self._interpolate_position_embedding(input_dims, patches.dtype)
         prefix = self.cls_register_token.unsqueeze(0).expand(patches.shape[0], -1, -1)
@@ -204,7 +207,7 @@ class RadioAttention(Dinov2Attention):
                 query_states,
                 key_states,
                 value_states,
-                None,
+                attention_mask=None,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
                 max_length_q=max_seqlen,
@@ -214,12 +217,12 @@ class RadioAttention(Dinov2Attention):
             )
         else:
             # without a varlen kernel, attend within each image separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
             splits = [
-                torch.split(states, (cu_seqlens[1:] - cu_seqlens[:-1]).tolist(), dim=2)
-                for states in (query_states, key_states, value_states)
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
             ]
             outputs = [
-                attention_interface(self, query, key, value, None, **attention_kwargs, **kwargs)
+                attention_interface(self, query, key, value, attention_mask=None, **attention_kwargs, **kwargs)
                 for query, key, value in zip(*splits)
             ]
             attn_output = torch.cat([output[0] for output in outputs], dim=1)

@@ -37,9 +37,6 @@ AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: ImagesKwargs
     videos_kwargs: VideosKwargs
-    # `ProcessingKwargs` is a TypedDict, so `_defaults` is not inherited by subclasses and must be
-    # (re)declared. Left empty on purpose — no defaults are overridden here (`padding` already
-    # defaults to `False` in the tokenizer), so nothing needs to live in `processor_config.json`.
     _defaults = {}
 
 
@@ -70,30 +67,16 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             Number of frames collapsed into a single temporal patch by the model's video embedder.
         """
         self.video_temporal_patch_dim = video_temporal_patch_dim
-        self.image_token = "<image>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.video_token = "<video>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        self.audio_token = "<so_embedding>" if not hasattr(tokenizer, "audio_token") else tokenizer.audio_token
+        self.image_token = getattr(tokenizer, "image_token", "<image>")
+        self.video_token = getattr(tokenizer, "video_token", "<video>")
+        self.audio_token = getattr(tokenizer, "audio_token", "<so_embedding>")
         self.audio_start_token = "<so_start>"
         self.audio_end_token = "<so_end>"
-        self.image_start_token = (
-            "<img>" if not hasattr(tokenizer, "image_start_token") else tokenizer.image_start_token
-        )
-        self.image_end_token = "</img>" if not hasattr(tokenizer, "image_end_token") else tokenizer.image_end_token
-        self.image_token_id = (
-            tokenizer.image_token_id
-            if getattr(tokenizer, "image_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_token)
-        )
-        self.video_token_id = (
-            tokenizer.video_token_id
-            if getattr(tokenizer, "video_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.video_token)
-        )
-        self.audio_token_id = (
-            tokenizer.audio_token_id
-            if getattr(tokenizer, "audio_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.audio_token)
-        )
+        self.image_start_token = getattr(tokenizer, "image_start_token", "<img>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "</img>")
+        self.image_token_id = getattr(tokenizer, "image_token_id", tokenizer.convert_tokens_to_ids(self.image_token))
+        self.video_token_id = getattr(tokenizer, "video_token_id", tokenizer.convert_tokens_to_ids(self.video_token))
+        self.audio_token_id = getattr(tokenizer, "audio_token_id", tokenizer.convert_tokens_to_ids(self.audio_token))
 
         self.audio_sampling_rate = audio_sampling_rate
         self.audio_subsampling_factor = audio_subsampling_factor
