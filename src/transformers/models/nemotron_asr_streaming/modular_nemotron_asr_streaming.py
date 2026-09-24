@@ -22,6 +22,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -114,6 +115,14 @@ class NemotronAsrStreamingEncoderConfig(ParakeetEncoderConfig):
 
     sliding_window: int = 71
     default_num_lookahead_tokens: int = 13
+
+    attention_type = AttributeError()
+    attention_context_size = AttributeError()
+    local_attention_chunk_size = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        self.num_key_value_heads = self.num_attention_heads
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
     @property
     def subsampling_out_hidden_size(self) -> int:
@@ -574,6 +583,9 @@ class NemotronAsrStreamingEncoderAttention(ParakeetEncoderAttention):
     See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
     """
 
+    def _local_attention_forward(self, *args, **kwargs):
+        raise AttributeError("Not applicable to NemotronAsrStreaming: it uses a chunked-limited mask.")
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -944,6 +956,9 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         left_context = self.config.sliding_window - 1
         return left_context, num_lookahead_tokens
 
+    def change_attention_model(self, *args, **kwargs):
+        raise AttributeError("Not applicable to NemotronAsrStreaming: it uses a chunked-limited attention mask.")
+
 
 @dataclass
 class NemotronAsrStreamingRNNTOutput(ParakeetRNNTOutput):
@@ -979,6 +994,11 @@ class NemotronAsrStreamingForRNNT(
     ParakeetForRNNT, NemotronAsrStreamingPreTrainedModel, NemotronAsrStreamingGenerationMixin
 ):
     config: NemotronAsrStreamingConfig
+
+    def change_attention_model(self, *args, **kwargs):
+        raise AttributeError(
+            "Not applicable to NemotronAsrStreaming: it does not use Parakeet's sliding-window attention."
+        )
 
     def __init__(self, config: NemotronAsrStreamingConfig):
         super().__init__(config)

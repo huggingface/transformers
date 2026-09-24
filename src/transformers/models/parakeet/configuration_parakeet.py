@@ -40,6 +40,18 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         The dropout ratio for the positions in the input sequence.
     scale_input (`bool`, *optional*, defaults to `True`):
         Whether to scale the input embeddings.
+    attention_type (`str`, *optional*, defaults to `"rel_pos"`):
+        The self-attention pattern to use. `"rel_pos"` attends over the whole sequence, which caps the input at
+        `max_position_embeddings` subsampled frames. `"rel_pos_local_attn"` restricts every frame to the sliding
+        window given by `attention_context_size`, which makes both compute and memory linear in the input length
+        and lifts that cap. The two share the same weights, so a checkpoint trained with `"rel_pos"` can be run
+        with either — see [`~ParakeetEncoder.change_attention_model`].
+    attention_context_size (`list[int]`, *optional*):
+        Number of frames each frame attends to, as `[left, right]`. Required when `attention_type` is
+        `"rel_pos_local_attn"` and ignored otherwise.
+    local_attention_chunk_size (`int`, *optional*, defaults to 1024):
+        Number of query frames processed per iteration when `attention_type` is `"rel_pos_local_attn"`. Trades
+        peak memory against the number of iterations; it does not change the output.
 
     Example:
     ```python
@@ -80,9 +92,25 @@ class ParakeetEncoderConfig(PreTrainedConfig):
     max_position_embeddings: int = 5000
     scale_input: bool = True
     initializer_range: float = 0.02
+    attention_type: str = "rel_pos"
+    attention_context_size: list[int] | None = None
+    local_attention_chunk_size: int = 1024
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_attention_heads
+        if self.attention_type not in ("rel_pos", "rel_pos_local_attn"):
+            raise ValueError(
+                f"`attention_type` must be one of 'rel_pos' or 'rel_pos_local_attn', got '{self.attention_type}'."
+            )
+        if self.attention_type == "rel_pos_local_attn":
+            if self.attention_context_size is None:
+                raise ValueError("`attention_context_size` is required when `attention_type='rel_pos_local_attn'`.")
+            self.attention_context_size = list(self.attention_context_size)
+            if len(self.attention_context_size) != 2 or min(self.attention_context_size) < 0:
+                raise ValueError(
+                    "`attention_context_size` must be `[left, right]` with both values >= 0, got "
+                    f"{self.attention_context_size}."
+                )
         super().__post_init__(**kwargs)
 
 
