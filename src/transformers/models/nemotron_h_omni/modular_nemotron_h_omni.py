@@ -304,7 +304,14 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         token_id: int,
     ) -> torch.BoolTensor:
         """Locates the placeholder tokens of one modality and checks that each receives one feature vector."""
-        special_mask = input_ids == token_id
+        if input_ids is None:
+            special_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_mask = special_mask.all(-1)
+        else:
+            special_mask = input_ids == token_id
+
         num_tokens = special_mask.sum()
         torch_compilable_check(
             num_tokens * inputs_embeds.shape[-1] == features.numel(),
