@@ -33,7 +33,6 @@ from unittest import mock
 
 import torch
 from parameterized import parameterized
-from test_utils import make_fp8_experts
 
 import transformers.integrations.finegrained_fp8 as fg
 from transformers.integrations.finegrained_fp8 import (
@@ -42,6 +41,8 @@ from transformers.integrations.finegrained_fp8 import (
     fp8_grouped_mm_experts_forward,
 )
 from transformers.testing_utils import require_torch, torch_device
+
+from ..kernels.test_utils import make_fp8_experts
 
 
 def _add_one(x, *args, **kwargs):

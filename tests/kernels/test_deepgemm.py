@@ -43,7 +43,6 @@ from unittest import mock
 
 import torch
 from parameterized import parameterized
-from test_utils import make_experts, make_fp8_experts
 
 import transformers.integrations.deepgemm as dg
 from transformers.integrations.deepgemm import (
@@ -57,6 +56,8 @@ from transformers.testing_utils import (
     require_torch_greater_or_equal,
     torch_device,
 )
+
+from .test_utils import make_experts, make_fp8_experts
 
 
 def _add_one(x, *args, **kwargs):
