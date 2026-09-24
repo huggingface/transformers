@@ -6,7 +6,7 @@
 - **Removed:** the workarounds for torch_tpu#4158, #4161, #4148, #4160, #4159, #4141, #4142, #4146, #4147 and #4163. I also removed the skips for torch_tpu#4164 (device map) and #4166 (subprocess and spawned-rank tests). For those two the child process dies, but the test suite keeps running, so by your rule they go.
 - I kept the probes in `utils/tpu_ci/backend_gaps.py`, since they are neither tests nor workarounds. Two probe commit messages (`e557d2d104`, `34143bac58`) still mention workarounds that are now gone.
 
-## Test run
+## Fast test run
 Fast tests only (`RUN_SLOW` off), all 27 `IMPORTANT_MODELS`, on 8 × TPU v6e:
 
 | Passed | Failed | Skipped | Errors | Pass rate over attempted |
@@ -20,8 +20,31 @@ Fast tests only (`RUN_SLOW` off), all 27 `IMPORTANT_MODELS`, on 8 × TPU v6e:
   - The FSDP and TP tests (10) now fail earlier than before. `tpu_dist` refuses to initialise without `TORCH_TPU_SLICEBUILDER_ADDRESSES` and `TORCH_TPU_TOPOLOGY`, which only a launcher like torchrun sets.
   - `test_model_parallelism` fails inside accelerate with a `TypeError`. Shards meant for chip 1 stay on `tpu:0` (torch_tpu#4164), and accelerate then chokes while re-placing them.
 
+## Slow test run
+`RUN_SLOW=1`, all 27 `IMPORTANT_MODELS`, same machine and build, 2026-09-23 20:38 → 2026-09-24 08:56 UTC:
+
+| Passed | Failed | Skipped | Errors | Pass rate over attempted |
+|---|---|---|---|---|
+| 4224 | 402 | 3558 | 0 | 91.3% |
+
+- Every model produced a report and no pytest process crashed. The same 44 skips come from TPU gates on the branch.
+- Every fast-run failure shows up again, except two borderline precision comparisons that passed this time (`CLIPVisionModelTest::test_eager_matches_sdpa_inference_00_fp16_pad_left_sdpa_kernels`, `DetrModelTest::test_batching_equivalence`), so those flip from run to run.
+- The slow run has 98 more failures than the fast run (100 new, 2 gone). Most are what the plan expected from integration tests: 25 have no TPU entry in their `Expectations` (`No matching expectation found for ('tpu', None, None)`), and 27 produce text or logits that differ from the values recorded on other hardware. They need TPU reference values before they say anything about TPU. The known gaps account for most of the rest: bf16 precision (+19), the differentiable `attn_mask` (+8 in T5's export and integration tests).
+- One commit added: `474326f524 fix: fail a test that never finishes instead of waiting on it`. There was no crash, but `WhisperModelIntegrationTests::test_whisper_empty_longform` was still running after an hour and would have held up the run. `run_tpu_tests.sh` now passes `--timeout=${TEST_TIMEOUT:-3600}` to pytest, so such a test fails and is counted. Three whisper tests hit it.
+- Every failure is attributed; the per-cause table is in `tpu_report.md` in the dataset.
+
+### New, unexpected failures
+- **`aten::_upsample_bicubic2d_aa.out` is not implemented for TPU** (2). `test_can_compile_fast_video_processor` in internvl and smolvlm: the fast video processors resize with antialiased bicubic. Not filed yet.
+- **The TPU dynamo backend rejects `mode=`** (1). `LlamaModelTest::test_torch_compile_for_training` compiles with `mode="reduce-overhead"`, and `_default_backend_selector` raises `TypeError: Unexpected keyword arguments: {'mode': 'reduce-overhead'}`. Not filed yet.
+- **Device memory runs out under `accelerate.cpu_offload`** (1). The mistral3 integration tests keep Mistral-Small-24B on CPU and stream it to the chip layer by layer. Three tests on that model ran, but in `test_mistral3_integration_batched_generate_multi_image` the host-to-device copy fails with `RuntimeBufferAllocationFailure`. Offloaded weights may not be released from the chip; I haven't verified that.
+- **`device_map="auto"` leaves the model on CPU** (6). llama's two 7B logits tests, three qwen2_5_omni integration tests and `ViTModelIntegrationTest::test_inference_fp16` fail with `tensor is expected to be on tpu, got cpu`. accelerate finds no TPU to map to, which is a separate problem from the ignored device index (torch_tpu#4164).
+- **Whisper long-form generation is very slow on TPU.** The 8-clip long-form tests with beam search or temperature fallback (`test_whisper_empty_longform`, `test_whisper_longform_multi_batch_hard_prev_cond`, `test_whisper_longform_no_speech_detection`) had not finished after an hour. The whisper file alone takes 5 h 53 min, 3 h of it in those three timeouts.
+- **Test bug, not TPU-specific** (2). `WhisperModelIntegrationTests::test_speculative_decoding_{distil,non_distil}` load the model in float16 only when CUDA or XPU is available, but always cast the inputs to float16. On any other device that fails with `Input type (c10::Half) and bias type (float) should be the same`. A candidate upstream fix.
+- **Suspicious, not verified:** `CLIPTextModelTest::test_eager_matches_sdpa_inference_08_fp32_pad_left_sdpa_kernels` differs by a mean relative 0.49, far beyond bf16 rounding. It is counted under precision, but left padding creates fully masked rows, so this is more likely the masked-row leak (torch_tpu#4146).
+- **Environment:** the four CSM integration tests need access to the gated `sesame/csm-1b` for the token running the suite.
+
 ## Uploaded
-In `2026-09-23/ci_results_run_models_gpu/`:
+In `2026-09-23/ci_results_run_models_gpu/` (fast run) and `2026-09-24/ci_results_run_models_gpu/` (slow run):
 - `model_results.json`, the file the dashboard reads. I checked that the Hub copy matches the local file.
 - `model_results.md`, the generated summary.
 - `tpu_report.md`, a table attributing each failure to its gap. To respect the no-private-repo rule it names gaps by their probe names, not torch_tpu issue numbers.
@@ -31,6 +54,7 @@ The script that attributes failures is a one-off in the scratchpad; I didn't add
 ## Environment fixes
 - The container's `/etc/hosts` had lost its `localhost` line. That's likely from this morning's hostname change. pytest couldn't start, so the first launch died. I restored the loopback entries; the original is backed up as `etc_hosts.orig` in the session scratchpad.
 - The venv only had torch and torch_tpu. I installed the testing and media extras (timm, librosa, av and others) the same way the previous session did, and restarted the run so the numbers are comparable.
+- The slow tests also need `torchcodec` for their audio and video datasets. The PyPI wheels are CUDA builds (`libnvrtc.so.13` missing), so it has to come from the PyTorch CPU index. It also needs FFmpeg's shared libraries and `libpython3.13.so`, which the image lacked; I installed `ffmpeg` and `libpython3.13` with apt. The six models that had failed on it (gemma3n, internvl, qwen2_5_vl, smolvlm, speecht5, whisper) were re-run, and the slow numbers above use those re-runs.
 
 ## Running the suite
 
@@ -46,6 +70,15 @@ uv pip install --index-url https://download.pytorch.org/whl/cpu torchvision torc
     "torch==$(python -c 'import torch; print(torch.__version__.split("+")[0])')"
 uv pip install librosa av timm sentencepiece protobuf num2words
 getent hosts localhost   # must resolve, or pytest dies before collecting anything
+```
+
+For the slow tests, also `torchcodec`. It needs FFmpeg's shared libraries and `libpython`, and the
+PyPI wheels are CUDA builds, so take the CPU one:
+
+```bash
+apt-get install -y ffmpeg libpython3.13
+uv pip install --index-url https://download.pytorch.org/whl/cpu torchcodec \
+    "torch==$(python -c 'import torch; print(torch.__version__.split("+")[0])')"
 ```
 
 Leave out `pyctcdecode` (pins numpy < 2) and `phonemizer` (needs espeak). Nothing else may hold a
@@ -72,8 +105,14 @@ RUN_SLOW=1 bash utils/tpu_ci/run_tpu_tests.sh
 RUN_SLOW=1 TMP_CACHE=/mnt/cache/tmp bash utils/tpu_ci/run_tpu_tests.sh
 ```
 
-**Duration not measured yet:** the slow tests have never been run on TPU. They download real
-checkpoints, so expect them to take much longer than the fast run.
+This runs the fast tests too. It took **about 9.3 h** on the same machine: the per-model pytest
+times add up to 9.2 h, with the checkpoints already in the shared hub cache (`HF_HUB_CACHE`).
+`whisper` alone takes 5 h 53 min, 3 h of it in three long-form tests that hit the per-test timeout.
+Next are `mistral3` (34 min, a 24B checkpoint streamed through `cpu_offload`) and `vit` (23 min).
+Everything except whisper takes about 3.3 h.
+
+A single test that runs longer than `TEST_TIMEOUT` seconds (default 3600) is failed so the run moves
+on; the slowest tests that do finish take about 22 minutes.
 
 ## Uploading
 
