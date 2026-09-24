@@ -350,6 +350,8 @@ class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def __init__(self, config):
         super().__init__(config)
         self.num_experts = config.text_config.num_local_experts
