@@ -21,7 +21,7 @@
 #     "sentencepiece != 0.1.92",
 #     "protobuf",
 #     "rouge-score",
-#     "nltk",
+#     "nltk >= 3.9",
 #     "py7zr",
 #     "torch >= 1.3",
 #     "evaluate",
@@ -72,15 +72,16 @@ require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summ
 
 logger = logging.getLogger(__name__)
 
+# NLTK 3.9 replaced the pickled punkt data with punkt_tab, which is what sent_tokenize loads
 try:
-    nltk.data.find("tokenizers/punkt")
+    nltk.data.find("tokenizers/punkt_tab")
 except (LookupError, OSError):
     if is_offline_mode():
         raise LookupError(
             "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
         )
     with FileLock(".lock") as lock:
-        nltk.download("punkt", quiet=True)
+        nltk.download("punkt_tab", quiet=True)
 
 # A list of all multilingual tokenizer which require lang attribute.
 MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast]
@@ -734,7 +735,7 @@ def main():
                 )
                 predictions = [pred.strip() for pred in predictions]
                 output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
-                with open(output_prediction_file, "w") as writer:
+                with open(output_prediction_file, "w", encoding="utf-8") as writer:
                     writer.write("\n".join(predictions))
 
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}

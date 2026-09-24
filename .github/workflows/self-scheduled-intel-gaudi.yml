@@ -33,6 +33,8 @@ permissions:
 
 jobs:
   setup:
+    permissions:
+      contents: read
     if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     name: Setup
     runs-on: ubuntu-latest
@@ -110,6 +112,8 @@ jobs:
     secrets: inherit
 
   run_pipelines_torch_gpu:
+    permissions:
+      contents: read
     if: ${{ inputs.job == 'run_pipelines_torch_gpu' }}
     name: Pipelines
     strategy:
@@ -180,6 +184,8 @@ jobs:
           path: reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
 
   run_examples_gpu:
+    permissions:
+      contents: read
     if: ${{ inputs.job == 'run_examples_gpu' }}
     name: Examples directory
     strategy:
@@ -253,6 +259,8 @@ jobs:
           path: reports/${{ env.machine_type }}_run_examples_gpu_test_reports
 
   run_torch_cuda_extensions_gpu:
+    permissions:
+      contents: read
     if: ${{ inputs.job == 'run_torch_cuda_extensions_gpu' }}
     name: Intel Gaudi deepspeed tests
     strategy:
@@ -326,6 +334,8 @@ jobs:
           path: reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   run_quantization_torch_gpu:
+    permissions:
+      contents: read
     if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
     name: " "
     needs: setup

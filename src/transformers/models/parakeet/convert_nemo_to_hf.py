@@ -512,7 +512,7 @@ def main(
     filepath = cached_file(hf_repo_id, nemo_filename)
 
     model_files = extract_nemo_archive(filepath, os.path.dirname(filepath))
-    nemo_config = yaml.load(open(model_files["model_config"], "r"), Loader=yaml.FullLoader)
+    nemo_config = yaml.load(open(model_files["model_config"], "r", encoding="utf-8"), Loader=yaml.FullLoader)
 
     # When revision is given (e.g. "refs/pr/3"), both pushes target that existing PR branch.
     # Otherwise, write_processor creates a new PR and returns its revision for write_model.

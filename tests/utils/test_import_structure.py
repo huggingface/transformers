@@ -103,7 +103,7 @@ class TestImportStructures(unittest.TestCase):
                         backend_agnostic_import_structure[module].extend(objects)
 
                 for module, objects in backend_agnostic_import_structure.items():
-                    with open(self.models_path / architecture / f"{module}.py") as f:
+                    with open(self.models_path / architecture / f"{module}.py", encoding="utf-8") as f:
                         content = f.read()
                         _all = fetch__all__(content)
 
