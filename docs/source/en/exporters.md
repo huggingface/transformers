@@ -76,11 +76,29 @@ pip install transformers "torch==2.12.0" "onnx==1.21.0" "onnxscript==0.7.0" onnx
 ```
 
 </hfoption>
-<hfoption id="ExecuTorch">
+<hfoption id="ExecuTorch XNNPACK">
 
 ```bash
 pip install transformers "torch==2.12.0" "executorch==1.3.1"
 ```
+
+</hfoption>
+<hfoption id="ExecuTorch MLX">
+
+Requires macOS 14 or later on Apple Silicon. MLX is included in the macOS ARM64 ExecuTorch
+nightly wheels; it is not a separate package or extra. The following nightly pair was validated
+with the MLX exporter tests. Install it from the standard ExecuTorch nightly registry:
+
+```bash
+pip install transformers
+pip install \
+  "executorch==1.6.0.dev20260924" \
+  "torch==2.15.0.dev20260924" \
+  --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+```
+
+Install `torch` explicitly because nightly ExecuTorch wheels do not declare it as a dependency.
+For source builds, see the [MLX installation guide](https://docs.pytorch.org/executorch/main/backends/mlx/mlx-overview.html).
 
 </hfoption>
 <hfoption id="OpenVINO">
@@ -145,7 +163,10 @@ outputs = session.run(None, ort_inputs)
 </hfoption>
 <hfoption id="ExecuTorch">
 
-[`~exporters.ExecutorchConfig#backend`] defaults to `xnnpack` which targets the CPU and works on CPU-only installations. `cuda` targets the GPU and requires a CUDA-enabled environment. Requesting it without CUDA raises a `RuntimeError`.
+[`~exporters.ExecutorchConfig#backend`] selects the target: `xnnpack` (the default) for CPU,
+`mlx` for Apple Silicon GPU, or `cuda` for a CUDA-enabled GPU. Choose the corresponding
+[installation option](#installation). MLX execution requires the MLX delegate and its Metal libraries;
+requesting CUDA without a CUDA-enabled environment raises a `RuntimeError`.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -156,7 +177,7 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 
 exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 et_program = exporter.export(model, inputs, config=config)
 
 # save for on-device deployment
@@ -196,29 +217,6 @@ outputs = compiled(ov_inputs)
 
 </hfoption>
 </hfoptions>
-
-## MLX backend
-
-Use `backend="mlx"` for Apple Silicon GPU inference. Export requires an ExecuTorch installation
-with the MLX backend. Running the exported programs requires the MLX delegate and its Metal libraries.
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters import ExecutorchConfig, ExecutorchExporter
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype=torch.bfloat16).eval()
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = tokenizer("Hello, world!", return_tensors="pt")
-exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="mlx", dynamic=True)
-
-components = exporter.export_for_generation(model, inputs, config=config)
-```
-
-For [generation](#generative-models), pass cache outputs from one invocation as inputs to the next.
-Operator support depends on the installed MLX backend. Known lowering limitations include
-static-cache mutation outputs and some captured `None` inputs.
 
 ## Dynamic shapes
 
@@ -286,6 +284,8 @@ onnx_program = exporter.export(model, inputs, config=config)
 </hfoption>
 <hfoption id="ExecuTorch">
 
+The same explicit-shape configuration applies to XNNPACK and MLX.
+
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -300,7 +300,7 @@ seq = torch.export.Dim("seq", min=1, max=2048)
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(
-    backend="xnnpack",
+    backend="xnnpack",  # Use "mlx" on Apple Silicon.
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
     # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
     # guard wouldn't hold across the explicit symbolic range. Most LLMs need this under fine-grained
@@ -411,10 +411,13 @@ text = processor.apply_chat_template(messages, add_generation_prompt=True, token
 inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
 exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config)
 # components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
 ```
+
+The caller must feed the updated key/value cache tensors returned by each invocation into the next.
+This MLX export path supports `DynamicCache`, but rejects `StaticCache`.
 
 </hfoption>
 <hfoption id="OpenVINO">
@@ -509,11 +512,13 @@ components = exporter.export_for_generation(model, inputs, config=config, multi_
 </hfoption>
 <hfoption id="ExecuTorch">
 
+Multi-token decode is supported by both XNNPACK and MLX. Use `DynamicCache` for MLX.
+
 ```python
 from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
 # components["decode"] now accepts a variable number of query tokens
 ```
@@ -527,6 +532,10 @@ cache below — the merged decode writes each step's tokens into the fixed-size 
 cache handles where they land internally.
 
 ### Static KV cache
+
+> [!NOTE]
+> The ExecuTorch examples in this section, including zero-copy updates and the decode loop,
+> are **XNNPACK-only**. The MLX exporter rejects `StaticCache`; use `DynamicCache` with MLX.
 
 `generate()` grows a `DynamicCache` by default, reallocating as the sequence extends — a moving target
 for an exported graph. A **static** cache is a fixed-size buffer, allocated once and written in place at
@@ -565,7 +574,7 @@ components = exporter.export_for_generation(
 ```
 
 </hfoption>
-<hfoption id="ExecuTorch">
+<hfoption id="ExecuTorch XNNPACK">
 
 ```python
 from transformers import GenerationConfig
@@ -600,7 +609,7 @@ own arena. What that takes is the only per-backend part left:
   each pair to one device buffer, so the cache is read and updated in place across the loop with no host
   round-trips.
 
-- **ExecuTorch** — turn off the memory-planning allocations on [`ExecutorchConfig`] so the in-place
+- **ExecuTorch (XNNPACK)** — turn off the memory-planning allocations on [`ExecutorchConfig`] so the in-place
   write can land in the caller's own tensor (see the reference for what each flag does):
 
   ```python
@@ -741,7 +750,7 @@ for position in range(prompt_len, max_cache_len):
 ```
 
 </hfoption>
-<hfoption id="ExecuTorch">
+<hfoption id="ExecuTorch XNNPACK">
 
 ExecuTorch's on-device runtime is C++, and the in-place cache update relies on
 `Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
@@ -830,8 +839,8 @@ visible from the public `export` API, but the most common things to know:
 setting and `eager` also works (slower). Set one of them on the model before calling `export`
 if it's using something else.
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`.
-For `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
-`batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.
+For `ExecutorchExporter` with either XNNPACK or MLX, the exporter swaps MoE experts to
+`batched_mm` before export.
 
 ## Next steps
 
