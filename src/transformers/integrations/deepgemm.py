@@ -631,15 +631,6 @@ def _assert_half_precision_input(input: torch.Tensor) -> None:
         raise ValueError(f"DeepGEMM linear requires FP16 or BF16 activations, got {input.dtype}")
 
 
-def _assert_no_low_rank_adapters(self: torch.nn.Module) -> None:
-    """DeepGEMM runs the base weights alone, so an active adapter would be silently dropped."""
-    if any(getattr(self, "low_rank_adapters", {}).values()):
-        raise NotImplementedError(
-            "DeepGEMM experts cannot apply low-rank adapters; use "
-            "`experts_implementation='grouped_mm'` (or 'batched_mm'), or merge the adapter."
-        )
-
-
 def _assert_bf16_hidden_states(hidden_states: torch.Tensor) -> None:
     """Every DeepGEMM experts arm builds its intermediates and its output in bfloat16, so anything
     else silently changes the dtype the caller gets back."""
@@ -740,7 +731,6 @@ def deepgemm_experts_guards(
         def guarded(self, hidden_states, *args, **kwargs):
             _assert_bf16_hidden_states(hidden_states)
             _assert_no_gradient(hidden_states, "DeepGEMM experts")
-            _assert_no_low_rank_adapters(self)
             _assert_dynamic_activations(self)
             if not supports_post_expert_norm:
                 _assert_no_post_expert_norm(self)
