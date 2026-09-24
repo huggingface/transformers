@@ -1488,6 +1488,15 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
     # won't fix
 
+    def test_can_be_initialized_on_meta_with_default_config(self):
+        # `T5GemmaConfig` defaults to encoder-decoder, but these classes are encoder-only and
+        # `T5GemmaEncoderModel` deliberately rejects an encoder-decoder config. Build the default
+        # config in encoder-only mode so the meta-initialization check is meaningful here.
+        for model_class in self.all_model_classes:
+            default_config = model_class.config_class(is_encoder_decoder=False)
+            with torch.device("meta"):
+                _ = model_class(default_config)
+
     def setUp(self):
         self.model_tester = T5GemmaEncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(
