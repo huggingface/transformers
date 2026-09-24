@@ -270,11 +270,9 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         data["cols"] = [[int(grid[1]) for grid in sample] for sample in grids]
         return BatchFeature(data=data, tensor_type=return_tensors, skip_tensor_conversion=["rows", "cols"])
 
-    def get_number_of_image_patches(
-        self, height: int, width: int, images_kwargs: dict | None = None
-    ) -> tuple[int, int, int]:
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
-        A utility that returns the number of tiles for a given image size.
+        A utility that returns number patches for a given image size.
 
         Args:
             height (`int`):
@@ -284,26 +282,48 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
             images_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the image processor.
         Returns:
-            `tuple[int, int, int]`: Number of tiles (including the thumbnail) and the number of rows and columns
-            they form.
+            `int`: Number of patches per image.
         """
         images_kwargs = images_kwargs or {}
-        if not images_kwargs.get("crop_to_patches", self.crop_to_patches):
-            return 1, 1, 1
         min_patches = images_kwargs.get("min_patches", self.min_patches)
         max_patches = images_kwargs.get("max_patches", self.max_patches)
-        size = images_kwargs.get("size", self.size)
-        num_cols, num_rows = get_optimal_tiled_canvas(
-            (height, width), (size["height"], size["width"]), min_patches, max_patches
-        )
-        num_patches = num_rows * num_cols
-        if num_patches > 1:
-            num_patches += 1
-        return num_patches, num_rows, num_cols
+        patch_size = images_kwargs.get("patch_size", self.size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+
+        num_patches = 1
+        if crop_to_patches and max_patches > 1:
+            if isinstance(patch_size, dict):
+                patch_height, patch_width = patch_size["height"], patch_size["width"]
+            else:
+                patch_height, patch_width = patch_size.height, patch_size.width
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (height, width), (patch_height, patch_width), min_patches, max_patches
+            )
+            if num_columns * num_rows > 1:
+                num_patches += num_columns * num_rows
+
+        return num_patches
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
+
+    def get_tile_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int]:
+        """The `(num_rows, num_cols)` tile grid an image of this size is split into."""
+        images_kwargs = images_kwargs or {}
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        patch_size = images_kwargs.get("patch_size", self.size)
+        if not images_kwargs.get("crop_to_patches", self.crop_to_patches) or max_patches <= 1:
+            return 1, 1
+        if isinstance(patch_size, dict):
+            patch_height, patch_width = patch_size["height"], patch_size["width"]
+        else:
+            patch_height, patch_width = patch_size.height, patch_size.width
+        num_cols, num_rows = get_optimal_tiled_canvas(
+            (height, width), (patch_height, patch_width), min_patches, max_patches
+        )
+        return num_rows, num_cols
 
 
 __all__ = ["GraniteForDoclingImageProcessor"]
