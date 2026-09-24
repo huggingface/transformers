@@ -171,8 +171,6 @@ class VipLlavaModel(LlavaModel):
 
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     @auto_docstring
     def get_image_features(
         self,

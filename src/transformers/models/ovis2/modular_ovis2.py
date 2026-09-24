@@ -356,8 +356,6 @@ class Ovis2Model(LlavaModel):
 
 @auto_docstring
 class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMixin):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

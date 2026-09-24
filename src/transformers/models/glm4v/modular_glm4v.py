@@ -944,8 +944,6 @@ class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

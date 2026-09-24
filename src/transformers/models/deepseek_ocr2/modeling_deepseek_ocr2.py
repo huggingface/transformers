@@ -1557,9 +1557,6 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 @auto_docstring
 class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
-    # after `pack_image_features`: a class-level assignment before a raise-only method makes the
-    # modular converter drop that method from the generated file (and from Step3p7, which inherits it)
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: DeepseekOcr2Config):

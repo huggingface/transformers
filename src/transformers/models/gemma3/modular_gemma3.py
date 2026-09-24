@@ -771,8 +771,6 @@ class Gemma3Model(PaliGemmaModel):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     @can_return_tuple
     @auto_docstring
     def forward(

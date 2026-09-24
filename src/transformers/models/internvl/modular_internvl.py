@@ -591,8 +591,6 @@ class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     def forward(**super_kwargs):
         r"""
         Example:

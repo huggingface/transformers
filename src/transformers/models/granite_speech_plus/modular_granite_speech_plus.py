@@ -164,8 +164,7 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechCTCEncoder):
     encoder's final hidden states with an arbitrary subset of its intermediate hidden states.
     """
 )
-class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechForConditionalGeneration): ...
 
 
 __all__ = [

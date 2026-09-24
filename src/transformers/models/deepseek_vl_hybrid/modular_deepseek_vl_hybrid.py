@@ -348,8 +348,6 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(

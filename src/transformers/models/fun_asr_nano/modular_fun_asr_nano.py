@@ -516,8 +516,6 @@ class FunAsrNanoModel(AudioFlamingo3Model):
     """
 )
 class FunAsrNanoForConditionalGeneration(Qwen3ASRForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     def forward(self, **super_kwargs):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):

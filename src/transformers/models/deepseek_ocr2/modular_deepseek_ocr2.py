@@ -1072,10 +1072,6 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
     def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
 
-    # after `pack_image_features`: a class-level assignment before a raise-only method makes the
-    # modular converter drop that method from the generated file (and from Step3p7, which inherits it)
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(

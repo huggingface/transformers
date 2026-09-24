@@ -2319,7 +2319,6 @@ class Gemma3nModel(PaliGemmaModel):
     """
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
     accepts_loss_kwargs = False
 
     def get_per_layer_input_embeddings(self):

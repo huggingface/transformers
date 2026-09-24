@@ -260,8 +260,6 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
 
 
 class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     @can_return_tuple
     @auto_docstring
     def forward(self, **super_kwargs) -> tuple | QianfanOCRCausalLMOutputWithPast:

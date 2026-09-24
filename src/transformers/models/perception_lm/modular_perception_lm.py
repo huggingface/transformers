@@ -269,8 +269,6 @@ class PerceptionLMModel(LlavaModel):
 
 @auto_docstring
 class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -291,8 +291,6 @@ class LightOnOcrModel(Mistral3Model):
 
 
 class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
