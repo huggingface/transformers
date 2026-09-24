@@ -107,6 +107,8 @@ class EncodecConfig(PreTrainedConfig):
     codebook_size: int = 1024
     codebook_dim: int | None = None
     use_conv_shortcut: bool = True
+    # Gates `_tied_weights_keys` expansion: the decoder's quantizer is tied to the encoder's one.
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         self.codebook_dim = self.codebook_dim if self.codebook_dim is not None else self.hidden_size
@@ -151,5 +153,53 @@ class EncodecConfig(PreTrainedConfig):
     def num_quantizers(self) -> int:
         return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * self.codebook_nbits))
 
+    @property
+    def encoder_config(self):
+        return EncodecEncoderConfig(**self.to_dict())
 
-__all__ = ["EncodecConfig"]
+    @property
+    def decoder_config(self):
+        return EncodecDecoderConfig(**self.to_dict())
+
+
+@strict
+class EncodecEncoderConfig(EncodecConfig):
+    """
+    Configuration of the encoder half of EnCodec (SEANet encoder + residual vector quantizer). It shares every field with
+    [`EncodecConfig`] (see its documentation for the arguments), so it can be loaded directly from a full EnCodec
+    checkpoint.
+    """
+
+    model_type = "encodec_encoder"
+    base_config_key = "encoder_config"
+
+    @property
+    def encoder_config(self):
+        return None
+
+    @property
+    def decoder_config(self):
+        return None
+
+
+@strict
+class EncodecDecoderConfig(EncodecConfig):
+    """
+    Configuration of the decoder half of EnCodec (residual vector quantizer + SEANet decoder). It shares every field with
+    [`EncodecConfig`] (see its documentation for the arguments), so it can be loaded directly from a full EnCodec
+    checkpoint.
+    """
+
+    model_type = "encodec_decoder"
+    base_config_key = "decoder_config"
+
+    @property
+    def encoder_config(self):
+        return None
+
+    @property
+    def decoder_config(self):
+        return None
+
+
+__all__ = ["EncodecConfig", "EncodecEncoderConfig", "EncodecDecoderConfig"]
