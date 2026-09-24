@@ -68,7 +68,6 @@ class GraniteForDoclingModelTester(VLMModelTester):
         kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("num_tiles", 1)
         kwargs.setdefault("deepstack_visual_indexes", [1])
-        kwargs.setdefault("deepstack_attn_layers", [0])
         kwargs.setdefault("density_router_hidden_size", 8)
         super().__init__(parent, **kwargs)
 

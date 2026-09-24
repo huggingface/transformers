@@ -143,6 +143,7 @@ class GraniteForDoclingImageProcessorPil(PilBackend):
     min_patches = 1
     max_patches = 32
     fine_route = False
+    do_pad = True
 
     def __init__(self, **kwargs: Unpack[GraniteForDoclingImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -233,6 +234,7 @@ class GraniteForDoclingImageProcessorPil(PilBackend):
         min_patches: int = 1,
         max_patches: int = 32,
         fine_route: bool = False,
+        do_pad: bool = True,
         **kwargs,
     ) -> BatchFeature:
         # Pages are tiled one by one (grouping by shape is a torchvision-backend utility)
@@ -260,16 +262,14 @@ class GraniteForDoclingImageProcessorPil(PilBackend):
             tiles.append(sample_tiles)
             grids.append(sample_grids)
 
-        # One row of tiles per sample, padded to the largest sample with all-zero tiles that the model discards
-        tile_shape = next(tile.shape for sample_tiles in tiles for tile in sample_tiles)
-        max_num_tiles = max(len(sample_tiles) for sample_tiles in tiles)
-        pixel_values = np.zeros((len(tiles), max_num_tiles, *tile_shape), dtype=np.float32)
-        for i, sample_tiles in enumerate(tiles):
-            if sample_tiles:
-                pixel_values[i, : len(sample_tiles)] = np.stack(sample_tiles)
+        # One row of tiles per sample
+        if do_pad:
+            pixel_values = self.pad(tiles)
+        else:
+            pixel_values = np.stack([np.stack(sample_tiles) for sample_tiles in tiles])
         data = {"pixel_values": pixel_values}
         if fine_route:
-            tile_fine_mask = np.zeros((len(tiles), max_num_tiles), dtype=bool)
+            tile_fine_mask = np.zeros(pixel_values.shape[:2], dtype=bool)
             for i, sample_tiles in enumerate(tiles):
                 tile_fine_mask[i, : len(sample_tiles)] = True
             data["tile_fine_mask"] = tile_fine_mask
@@ -315,6 +315,19 @@ class GraniteForDoclingImageProcessorPil(PilBackend):
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
+
+    def pad(self, images: list[list[np.ndarray]], **kwargs) -> np.ndarray:
+        """
+        Pads the tiles of every sample to the largest number of tiles in the batch with all-zero tiles, which the
+        model discards. All tiles already share the same size.
+        """
+        tile_shape = next(tile.shape for sample_tiles in images for tile in sample_tiles)
+        max_num_tiles = max(len(sample_tiles) for sample_tiles in images)
+        pixel_values = np.zeros((len(images), max_num_tiles, *tile_shape), dtype=np.float32)
+        for i, sample_tiles in enumerate(images):
+            if sample_tiles:
+                pixel_values[i, : len(sample_tiles)] = np.stack(sample_tiles)
+        return pixel_values
 
     def get_tile_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int]:
         """The `(num_rows, num_cols)` tile grid an image of this size is split into."""
