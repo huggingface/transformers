@@ -135,7 +135,7 @@ class Zamba2RotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -574,7 +574,9 @@ def mamba2_chunk_scan(
     hidden_states = hidden_states * dt[..., None].float()
     A = A.to(hidden_states.dtype) * dt.float()
 
-    # Rearrange into blocks/chunks
+    # Rearrange into blocks/chunks. This fixes the layout the einsums below are written against:
+    # b = batch, c = chunk index, l and s = positions within a chunk, h = head, p = head_dim,
+    # n = ssm state. So hidden_states is (b, c, l, h, p) and B and C are (b, c, l, h, n).
     hidden_states, A, B, C = [reshape_into_chunks(tensor, pad_size, chunk_size) for tensor in (hidden_states, A, B, C)]
 
     A = A.permute(0, 3, 1, 2)
@@ -584,20 +586,23 @@ def mamba2_chunk_scan(
     # This is the analog of a causal mask
     L = torch.exp(segment_sum(A))
 
-    # Contraction of C and B to get G (attention-weights like)
-    G = (C[:, :, :, None, :, :] * B[:, :, None, :, :, :]).sum(dim=-1)
+    # Contraction of C and B to get G (attention-weights like): sum over the state n, leaving a
+    # position-by-position score per head. (b,c,l,h,n) x (b,c,s,h,n) -> (b,c,l,s,h).
+    G = torch.einsum("bclhn,bcshn->bclsh", C, B)
 
     # Compute M, equivalent to applying attention mask to weights
-    M = (G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]).sum(dim=-1)
+    M = G * L.permute(0, 2, 3, 4, 1)
 
-    # Compute Y_diag (apply to values)
-    Y_diag = (M[..., None] * hidden_states[:, :, None]).sum(dim=3)
+    # Compute Y_diag (apply to values): sum over the source position s. (b,c,l,s,h) x (b,c,s,h,p)
+    # -> (b,c,l,h,p).
+    Y_diag = torch.einsum("bclsh,bcshp->bclhp", M, hidden_states)
 
     # 2. Compute the state for each intra-chunk
     # (right term of low-rank factorization of off-diagonal blocks; B terms)
     decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
     B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
-    states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
+    # Sum over the positions l in the chunk: (b,c,l,h,n) x (b,c,l,h,p) -> (b,c,h,p,n).
+    states = torch.einsum("bclhn,bclhp->bchpn", B_decay, hidden_states)
 
     # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
     # (middle term of factorization of off-diag blocks; A terms)
@@ -608,17 +613,22 @@ def mamba2_chunk_scan(
     )
     states = torch.cat([previous_states, states], dim=1)
     decay_chunk = torch.exp(segment_sum(F.pad(A_cumsum[:, :, :, -1], (1, 0)))).transpose(1, 3)
-    new_states = (decay_chunk[..., None, None] * states[:, :, None, ...]).sum(dim=1)
+    # Sum over the source chunk z to get each chunk's start state: (b,z,c,h) x (b,z,h,p,n) -> (b,c,h,p,n).
+    new_states = torch.einsum("bzch,bzhpn->bchpn", decay_chunk, states)
     states, final_state = new_states[:, :-1], new_states[:, -1]
 
     # 4. Compute state -> output conversion per chunk
     # (left term of low-rank factorization of off-diagonal blocks; C terms)
     state_decay_out = torch.exp(A_cumsum)
-    C_times_states = C[..., None, :] * states[:, :, None, ...]
-    Y_off = C_times_states.sum(-1) * state_decay_out.permute(0, 2, 3, 1)[..., None]
+    # Sum over the state n again, now against each chunk's start state: (b,c,l,h,n) x (b,c,h,p,n)
+    # -> (b,c,l,h,p).
+    C_times_states = torch.einsum("bclhn,bchpn->bclhp", C, states)
+    Y_off = C_times_states * state_decay_out.permute(0, 2, 3, 1)[..., None]
 
-    # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
-    output = Y_diag + Y_off
+    # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks).
+    # `contiguous` because einsum may return a permuted view, and callers such as FalconH1Mixer
+    # call `.view()` on this return value, which a permuted view refuses.
+    output = (Y_diag + Y_off).contiguous()
     output = output.reshape(batch_size, -1, num_heads, head_dim)
 
     if D_residual is not None:
