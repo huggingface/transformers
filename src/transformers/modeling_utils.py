@@ -2548,8 +2548,8 @@ class PreTrainedModel(
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
-                    source_param = self.get_parameter(source_param_name)
-                    target_param = self.get_parameter(target_param_name)
+                    source_param = self.get_parameter_or_buffer(source_param_name)
+                    target_param = self.get_parameter_or_buffer(target_param_name)
 
                     # Skip check if both are disk offloaded. Tied tensors always
                     # share the same offload device as per `infer_auto_device_map`
@@ -4845,7 +4845,7 @@ class PreTrainedModel(
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
         for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
-            param = self.get_parameter(tied_param)
+            param = self.get_parameter_or_buffer(tied_param)
             setattr(param, "_is_hf_initialized", True)
 
         # Some custom code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,

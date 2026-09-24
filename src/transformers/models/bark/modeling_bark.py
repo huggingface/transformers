@@ -1354,9 +1354,9 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
             # decoding with encodec takes around 0.1% of the total generation time
             # to keep generation quality, we break batching
             out = [sample[:, :l].unsqueeze(0) for (sample, l) in zip(emb, output_lengths)]
-            audio_arr = [self.codec_model.decoder(sample).squeeze() for sample in out]
+            audio_arr = [self.codec_model.decoder.decoder(sample).squeeze() for sample in out]
         else:
-            out = self.codec_model.decoder(emb)
+            out = self.codec_model.decoder.decoder(emb)
             audio_arr = out.squeeze(1)  # squeeze the codebook dimension
 
         return audio_arr
