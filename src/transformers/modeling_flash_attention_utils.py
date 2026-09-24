@@ -132,7 +132,7 @@ _pad_fn = None
 _unpad_fn = None
 
 # function that processes kwargs, generalized to handle any supported kwarg within the function
-_process_varlen_kwargs_fn = None
+_process_flash_kwargs_fn = None
 _process_paged_kwargs_fn = None
 # exceptions where hf API doesn't match the original flash attention API
 _hf_api_to_flash_mapping = {
@@ -160,11 +160,14 @@ def _lazy_imports(
     is_fa4 = is_flash_attn_4_available()
     fa_fallback_version = 0 if implementation is not None else max(2 * int(is_fa2), 3 * int(is_fa3), 4 * int(is_fa4))
 
+    pad_input, unpad_input = _pad_input, _unpad_input
+
     is_paged, implementation = split_attention_implementation(implementation)
 
     # Try the flash attention package first
     if (implementation == "flash_attention_2" and is_fa2) or fa_fallback_version == 2:
         from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+        from flash_attn.bert_padding import pad_input, unpad_input
     elif is_torch_npu_available():
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
         from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
@@ -189,8 +192,8 @@ def _lazy_imports(
         flash_attn_func = getattr(kernel, "flash_attn_func", None)
         flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
         flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
-        # Some kernels ship their own attention entry point rather than a varlen function, already
-        # registered into ``ALL_ATTENTION_FUNCTIONS``, so preloading them here is a no-op.
+        # Some kernels, like the MSA kernel from minimax, ships its own attention entry point rather than a varlen
+        # function, so no need to scheck if it is None
         if flash_attn_varlen_func is None and (
             hasattr(kernel, "sparse_atten_func") or hasattr(kernel, "flash_attn_forward")
         ):
@@ -253,7 +256,7 @@ def lazy_import_flash_attention(
     if implementation is None and _loaded_implementation is None:
         raise ValueError("Could not find any flash attn implementation based on your environment.")
 
-    global _flash_fn, _flash_varlen_fn, _flash_paged_fn, _process_varlen_kwargs_fn, _process_paged_kwargs_fn
+    global _flash_fn, _flash_varlen_fn, _flash_paged_fn, _process_flash_kwargs_fn, _process_paged_kwargs_fn
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
@@ -265,12 +268,12 @@ def lazy_import_flash_attention(
         # Some kernels, like minimax_m3_vl's block spare kernel, have no varlen function. In this case, the varlen path
         # can never be used, so no need to build a processing function for it, just return a dict builder.
         is_varlen = _flash_varlen_fn is not None
-        _process_varlen_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn) if is_varlen else dict
+        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn) if is_varlen else dict
         # Similarly, some kernels don't have a kvcache function
         is_paged = _flash_paged_fn is not None
         _process_paged_kwargs_fn = _lazy_define_process_function(_flash_paged_fn) if is_paged else dict
 
-    return (_flash_fn, _flash_varlen_fn, _flash_paged_fn), (_process_varlen_kwargs_fn, _process_paged_kwargs_fn)
+    return (_flash_fn, _flash_varlen_fn, _flash_paged_fn), (_process_flash_kwargs_fn, _process_paged_kwargs_fn)
 
 
 def _prepare_unpad_state(
@@ -351,28 +354,6 @@ def _is_packed_sequence(position_ids: torch.Tensor | None, batch_size: int) -> b
         torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
     )
     return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
-
-
-def cast_to_flash_compatible_dtype(
-    module: torch.nn.Module, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """If the query is in float32, converts the query, key and value to a dtype compatible with flash attention."""
-    # Early exit if the query is not in float32
-    if query.dtype != torch.float32:
-        return query, key, value
-
-    # Otherwise, look for the right dtype to cast to
-    device_type = query.device.type
-    if torch.is_autocast_enabled(device_type):
-        target_dtype = torch.get_autocast_dtype(device_type)
-    # Handle the case where the model is quantized
-    elif hasattr(module.config, "_is_quantized"):
-        target_dtype = module.config.dtype
-    else:
-        target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
-
-    logger.warning_once(f"Casting fp32 inputs back to {target_dtype} for flash-attn compatibility.")
-    return query.to(target_dtype), key.to(target_dtype), value.to(target_dtype)
 
 
 class FlashAttentionKwargs(TypedDict, total=False):
@@ -472,16 +453,16 @@ def _process_flash_attention_kwargs(
 
     if s_aux is not None:
         if supports_mapping["s_aux"]:
-            flash_kwargs["s_aux"] = s_aux
+            flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
         elif supports_mapping["learnable_sink"]:
-            flash_kwargs["learnable_sink"] = s_aux
+            flash_kwargs["learnable_sink"] = s_aux  # FA4
 
     # The block table is named `block_table` in Tri Dao's kernels and `page_table` in vLLM's FA3 kernel
     if block_table is not None:
         if supports_mapping["block_table"]:
-            flash_kwargs["block_table"] = block_table
+            flash_kwargs["block_table"] = block_table  # FA2, FA3, ...
         elif supports_mapping["page_table"]:
-            flash_kwargs["page_table"] = block_table
+            flash_kwargs["page_table"] = block_table  # FA3 (vllm)
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
