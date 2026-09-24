@@ -207,7 +207,7 @@ def _lazy_imports(
         flash_attn_func = getattr(kernel, "flash_attn_func", None)
         flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
         flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
-        # Some kernels, like the MSA kernel from minimax, ships its own attention entry point rather than a varlen
+        # Some kernels, like the MSA kernel from minimax, ships their own attention entry point rather than a varlen
         # function, so no need to scheck if it is None
         if flash_attn_varlen_func is None and (
             hasattr(kernel, "sparse_atten_func") or hasattr(kernel, "flash_attn_forward")
