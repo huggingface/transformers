@@ -752,7 +752,7 @@ def _flash_attention_forward(
     )
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
-    flash_kwargs = partial(
+    flash_kwargs_fn = partial(
         process_flash_kwargs_fn,
         query_length=query_length,
         key_length=key_states.size(1),
@@ -773,68 +773,37 @@ def _flash_attention_forward(
     #
     # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.
-    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
-    is_fa_with_varlen_kwargs = all(
-        kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
-    )
+    is_fa_with_varlen_kwargs = all(x is not None for x in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k))
 
-    # Contains at least one padding token in the sequence
+    # Contains at least one padding token in the sequence: unpad compute cu_seqlen and max_length from attention mask
     if attention_mask is not None:
         q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
-
-        # TODO for now this is required to work with
-        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-        if "mps" in str(q.device):
-            cu_seq_lens_k = cu_seq_lens_k.clone()
-
-        out_unpad = flash_varlen_fn(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
+    # Padding free (i.e. sequences flattened into one total sequence) and cu_seqlen and max_length are provided
+    elif is_fa_with_varlen_kwargs:
+        q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
+        k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
+        v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
+    # Padding free, but cu_seqlens or max_seqlen are not provided: infer them from position_ids if sequence lengths vary
+    elif _is_packed_sequence(position_ids, query_states.size(0)):  # this check is expensive so not precomputed
+        q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
+            query_states, key_states, value_states, position_ids
         )
-        if isinstance(out_unpad, tuple):
-            out_unpad = out_unpad[0]
-
-        out = pad_fn(out_unpad, indices_q, query_states.size(0), query_length)
-
-    # Padding free, i.e. sequences flattened into one total sequence
-    elif is_fa_with_varlen_kwargs or is_fa_with_position_ids:
-        if cu_seq_lens_q is None or cu_seq_lens_k is None:
-            q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
-                query_states, key_states, value_states, position_ids
-            )
-        else:
-            q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
-            k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
-            v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
-
-        # TODO for now this is required to work with
-        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-        if "mps" in str(q.device):
-            cu_seq_lens_k = cu_seq_lens_k.clone()
-
-        out = flash_varlen_fn(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
-        )
-        if isinstance(out, tuple):
-            out = out[0]
-
-        out = out.view(query_states.size(0), -1, out.size(-2), out.size(-1))
-
-    # No padding
+    # Padding free and same sequence lengths: we can run flash (no varlen) and return early
     else:
-        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
-        if isinstance(out, tuple):
-            out = out[0]
+        out = flash_fn(query_states, key_states, value_states, **flash_kwargs_fn())
+        return out[0] if isinstance(out, tuple) else out
 
-    return out
+    # TODO for now this is required to work with
+    # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
+    cu_seq_lens_k = cu_seq_lens_k.clone() if "mps" in str(q.device) else cu_seq_lens_k
+
+    flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+    out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
+    out = out[0] if isinstance(out, tuple) else out
+
+    if attention_mask is not None:
+        return pad_fn(out, indices_q, query_states.size(0), query_length)
+
+    return out.view(query_states.size(0), -1, out.size(-2), out.size(-1))
