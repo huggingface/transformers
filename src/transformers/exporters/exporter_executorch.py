@@ -216,17 +216,22 @@ class ExecutorchExporter(DynamoExporter):
                 exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
                 apply_fx_program_fixes("executorch", exported_program)
                 apply_fx_node_fixes("executorch", exported_program.graph_module)
-                lowering_kwargs = {}
+                constant_methods = dict(config.constant_methods or {})
                 if off_graph_cache:
-                    lowering_kwargs["constant_methods"] = _get_executorch_off_graph_cache_geometry(
-                        exported_program, model.config
-                    )
+                    geometry = _get_executorch_off_graph_cache_geometry(exported_program, model.config)
+                    conflicts = constant_methods.keys() & geometry.keys()
+                    if conflicts:
+                        raise ValueError(
+                            "constant_methods cannot override off-graph cache geometry: "
+                            + ", ".join(sorted(conflicts))
+                        )
+                    constant_methods.update(geometry)
                 edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                     exported_program,
                     partitioner=partitioner,
                     compile_config=_get_edge_compile_config(config.backend),
                     transform_passes=_get_transform_passes(config.backend),
-                    **lowering_kwargs,
+                    constant_methods=constant_methods or None,
                 )
                 executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                     config=_get_backend_config(config)

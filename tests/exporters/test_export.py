@@ -1378,7 +1378,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(backend=backend, dynamic=dynamic, cache_implementation=cache_implementation)
+        config = ExecutorchConfig(
+            backend=backend,
+            dynamic=dynamic,
+            cache_implementation=cache_implementation,
+            constant_methods={"get_test_value": 42},
+        )
         tested_off_graph = False
 
         for model_class in self.all_generative_model_classes:
@@ -1428,8 +1433,25 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         self.assertFalse(signature.buffers_to_mutate)
                         self.assertFalse(signature.user_inputs_to_mutate)
                         self.assertEqual(len(signature.user_outputs), len(eager_outputs))
-                        # Serialize and load without executing MLX inference.
-                        Runtime.get().load_program(artifact.buffer)
+                        # Read constant methods without executing MLX inference.
+                        program = Runtime.get().load_program(artifact.buffer)
+                        self.assertEqual(
+                            program.method_names,
+                            {
+                                "forward",
+                                "get_test_value",
+                                "get_n_caches",
+                                "get_kv_heads",
+                                "get_head_dims",
+                                "get_windows",
+                            },
+                        )
+                        self.assertEqual(program.load_method("get_test_value").execute([]), [42])
+                    self.assertEqual(config.constant_methods, {"get_test_value": 42})
+                    conflicting_config = copy.deepcopy(config)
+                    conflicting_config.constant_methods = {"get_n_caches": 0}
+                    with self.assertRaisesRegex(ValueError, "constant_methods cannot override.*get_n_caches"):
+                        exporter.export(model, inputs, config=conflicting_config)
                 continue
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
@@ -1446,6 +1468,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
                     self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
+                    self.assertIn("get_test_value", program.config_methods)
+                    self.assertEqual(config.constant_methods, {"get_test_value": 42})
 
         if off_graph_cache and not tested_off_graph:
             self.skipTest("No model class supports the off-graph cache export configuration")

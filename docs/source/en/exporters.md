@@ -569,6 +569,12 @@ used during capture; it does not set off-graph runtime capacity. There is no `ma
 `ExecutorchConfig`: the runtime caller supplies its logical capacity limit and growth policy when constructing the
 cache. Lazy allocation does not mean the runtime has no capacity limit.
 
+Supply additional constant-returning methods with `ExecutorchConfig(constant_methods={...})`.
+For example, an LLM runner may require `get_vocab_size`, `get_activation_dtype`, `get_logits_to_keep_mode`,
+and `get_max_seq_len`. These are caller-supplied, not inferred by the exporter; their values must match
+that component's model and exported shape bounds. Cache geometry is still added automatically, and
+names that overlap the generated geometry methods are rejected. The supplied dictionary is not modified.
+
 The runtime caller must create and install a cache, bind its `llm_cache_registry_key` through
 load-time backend options for **both** artifacts, and reuse that cache for prefill and decode.
 Clear the runtime cache before starting an independent sequence. The returned component dictionary
