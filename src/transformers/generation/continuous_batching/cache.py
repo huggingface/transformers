@@ -394,23 +394,26 @@ class PagedAttentionCache:
     @torch.compiler.disable
     def update(
         self,
-        key_states: torch.Tensor,  # shape [1, seqlen_q, num_kv_heads, head_dim]
-        value_states: torch.Tensor,  # shape [1, seqlen_q, num_kv_heads, head_dim]
+        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
         layer_idx: int,
         read_index: list[torch.Tensor],  # one tensor per attention group
         write_index: list[torch.Tensor],  # one tensor per attention group
-    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [1, seqlen_q + past_length, num_kv_heads, head_dim]
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [1, num_kv_heads, seqlen_q + past_length, head_dim]
         """Updates the cache with new key-value states for a specific layer and retrieves the KV states needed for the
         attention computation. The actual work is dispatched to the allocator in charge of the layer, using the read
         and write indices prepared for its group."""
+        # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]
+        key_states, value_states = key_states.squeeze(0).transpose(0, 1), value_states.squeeze(0).transpose(0, 1)
+
         allocator = self.layer_to_allocator[layer_idx]
         layer_read_index = read_index[allocator.index]
         layer_write_index = write_index[allocator.index]
-        # Allocator update is done without the batch dimension
         key_states, value_states = allocator.update(
-            key_states.squeeze(0), value_states.squeeze(0), layer_idx, layer_read_index, layer_write_index
+            key_states, value_states, layer_idx, layer_read_index, layer_write_index
         )
-        return key_states.unsqueeze(0), value_states.unsqueeze(0)
+        # Return the KV states in the same shape it was passed. It will help when we unify with regular Cache.
+        return key_states.transpose(0, 1).unsqueeze(0), value_states.transpose(0, 1).unsqueeze(0)
 
     def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
         """Returns the K and V cache views for a block table update."""

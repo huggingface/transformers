@@ -63,7 +63,7 @@ def paged_attention_forward(
 
     # If no block table is provided, use flash_attn_varlen_func with read/write indices
     if block_table is None:
-        q, k, v = (x.transpose(1, 2) for x in (q, k, v))
+        # Paged cache update uses the same format as the regular Cache update so that one day they can be unified.
         k, v = cache.update(
             key_states=k,
             value_states=v,
@@ -71,7 +71,8 @@ def paged_attention_forward(
             read_index=kwargs["read_index"],
             write_index=kwargs["write_index"],
         )
-        q, k, v = (x.squeeze(0).contiguous() for x in (q, k, v))
+        # Because of the update format, we have to squeeze and transpose again, but it's cheap as they are CPU ops
+        q, k, v = (x.squeeze(0).transpose(0, 1).contiguous() for x in (q, k, v))
         custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
         attn_output = flash_attn_varlen_func(
             q,
