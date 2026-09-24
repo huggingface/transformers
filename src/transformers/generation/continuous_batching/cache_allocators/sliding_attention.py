@@ -27,6 +27,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
     supports_block_sharing = False
     supports_block_table = False
+    layer_type = "sliding_attention"
 
     def __init__(
         self,
@@ -134,8 +135,8 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
     def update(
         self,
-        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
-        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        key_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
+        value_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
         layer_idx: int,
         read_index: torch.Tensor,  # shape [seqlen_q + past_length]
         write_index: torch.Tensor,  # shape [seqlen_q]
@@ -152,9 +153,6 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         """
         # Select the shifted views of this layer's keys and values
         k_cache, v_cache = self._kv_token_views[layer_idx]
-        # Transpose the KV states to match the cache shape, after which shape is [seqlen_q, num_kv_heads, head_dim]
-        key_states = key_states.transpose(1, 2).squeeze(0)
-        value_states = value_states.transpose(1, 2).squeeze(0)
 
         # Case: write-only, no cache read. The input KV states already contain everything the attention needs.
         if read_index.numel() == 0:

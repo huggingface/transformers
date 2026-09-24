@@ -33,6 +33,13 @@ from .requests import RequestState, RequestStatus, get_device_and_memory_breakdo
 from .utils import find_head_dim, find_num_key_value_heads
 
 
+# Maps each attention type to the allocator class handling its cache
+ATTN_TYPE_TO_ALLOCATOR = {
+    FULL_ATTENTION: FullAttentionCacheAllocator,
+    SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
+}
+
+
 def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
     """Groups layers depending on their attention type.
 
@@ -51,21 +58,12 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
         return {FULL_ATTENTION: list(range(config.num_hidden_layers))}
 
     # Otherwise simply count the number of layers of each type, making sure they are supported at the same time
-    supported_attention_types = {FULL_ATTENTION, SLIDING_ATTENTION}
-
     layer_counts = {}
     for i, layer_type in enumerate(layer_types):
-        if layer_type not in supported_attention_types:
+        if layer_type not in ATTN_TYPE_TO_ALLOCATOR.keys():
             raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
     return layer_counts
-
-
-# Maps each attention type to the allocator class handling its cache
-ATTN_TYPE_TO_ALLOCATOR = {
-    FULL_ATTENTION: FullAttentionCacheAllocator,
-    SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
-}
 
 
 class PagedAttentionCache:
@@ -393,21 +391,26 @@ class PagedAttentionCache:
             for allocator, read_indices in zip(self.cache_allocators.values(), read_index):
                 read_indices.extend(allocator.get_read_indices(request_id, past_length, query_length))
 
+    @torch.compiler.disable
     def update(
         self,
-        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
-        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        key_states: torch.Tensor,  # shape [1, seqlen_q, num_kv_heads, head_dim]
+        value_states: torch.Tensor,  # shape [1, seqlen_q, num_kv_heads, head_dim]
         layer_idx: int,
         read_index: list[torch.Tensor],  # one tensor per attention group
         write_index: list[torch.Tensor],  # one tensor per attention group
-    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_q + past_length, num_kv_heads, head_dim]
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [1, seqlen_q + past_length, num_kv_heads, head_dim]
         """Updates the cache with new key-value states for a specific layer and retrieves the KV states needed for the
         attention computation. The actual work is dispatched to the allocator in charge of the layer, using the read
         and write indices prepared for its group."""
         allocator = self.layer_to_allocator[layer_idx]
         layer_read_index = read_index[allocator.index]
         layer_write_index = write_index[allocator.index]
-        return allocator.update(key_states, value_states, layer_idx, layer_read_index, layer_write_index)
+        # Allocator update is done without the batch dimension
+        key_states, value_states = allocator.update(
+            key_states.squeeze(0), value_states.squeeze(0), layer_idx, layer_read_index, layer_write_index
+        )
+        return key_states.unsqueeze(0), value_states.unsqueeze(0)
 
     def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
         """Returns the K and V cache views for a block table update."""

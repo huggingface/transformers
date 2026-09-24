@@ -63,7 +63,7 @@ def paged_attention_forward(
 
     # If no block table is provided, use flash_attn_varlen_func with read/write indices
     if block_table is None:
-        # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
+        q, k, v = (x.transpose(1, 2) for x in (q, k, v))
         k, v = cache.update(
             key_states=k,
             value_states=v,
@@ -71,11 +71,12 @@ def paged_attention_forward(
             read_index=kwargs["read_index"],
             write_index=kwargs["write_index"],
         )
+        q, k, v = (x.squeeze(0).contiguous() for x in (q, k, v))
         custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
         attn_output = flash_attn_varlen_func(
-            q.transpose(1, 2).squeeze(0).contiguous(),
-            k.contiguous(),
-            v.contiguous(),
+            q,
+            k,
+            v,
             cu_seq_lens_q.to(torch.int32),
             cu_seq_lens_k.to(torch.int32).clone(),
             max_seqlen_q,
@@ -97,10 +98,6 @@ def paged_attention_forward(
 
     if v_head_dim != head_dim:
         attn_output = attn_output[..., :v_head_dim]
-        # flash_kwargs = {"s_aux": kwargs["s_aux"]} if "s_aux" in kwargs else {}  # this is only available in VLLM's FA3
-        # attn_output = _paged_decode_forward(
-        #     module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **flash_kwargs
-        # )
     return attn_output, None
 
 
