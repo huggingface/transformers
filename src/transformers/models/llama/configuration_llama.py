@@ -82,6 +82,16 @@ class LlamaConfig(PreTrainedConfig):
     attention_dropout: int | float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
+    flashnorm_folded: bool = False
+    """
+    Whether the checkpoint was produced by FlashNorm Proposition 1 weight folding
+    (arXiv:2407.09577). When ``True``, the RMSNorms are instantiated with
+    ``has_weight=False``: their per-channel weight is treated as the all-ones
+    identity (folded into the next linear layer at conversion time), and the
+    runtime forward path skips the per-channel multiply via PyTorch's
+    ``F.rms_norm(weight=None)`` C++ kernel. Default ``False``; existing
+    Llama checkpoints are unaffected.
+    """
 
     def __post_init__(self, **kwargs):
         if self.head_dim is None:
