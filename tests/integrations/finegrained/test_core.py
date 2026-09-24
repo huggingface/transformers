@@ -730,7 +730,9 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
 
         plan = self._planned()
-        style = lambda name: _get_parameter_tp_plan(f"layers.3.mlp.experts.{name}", plan)  # noqa: E731
+
+        def style(name):
+            return _get_parameter_tp_plan(f"layers.3.mlp.experts.{name}", plan)
 
         for name in ("gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_weight_global_scale"):
             self.assertEqual(style(name), "grouped_gemm", name)
@@ -753,7 +755,9 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
             "layers.*.mlp.experts": "moe_tp_experts",
         }
         plan = self._planned(raw=base)
-        style = lambda n: _get_parameter_tp_plan(f"layers.3.mlp.experts.{n}", plan)  # noqa: E731
+
+        def style(name):
+            return _get_parameter_tp_plan(f"layers.3.mlp.experts.{name}", plan)
 
         # the weight keeps the style the MODEL declared — `packed_colwise` is the strided split a
         # concatenated `[gate; up]` checkpoint needs, since the interleave into the kernels' row

@@ -600,10 +600,8 @@ def finegrained_grouped_mm_experts_forward(self, hidden_states, top_k_index, top
 
 
 class FineGrainedExperts(_FineGrainedModule, nn.Module):
-    # Per-`_experts_implementation` rewrite of parallel-layer kinds in the TP/EP plan. The default
-    # kind is impl-agnostic; some impls need a distinct one (megamoe needs no gradient-sync hooks
-    # and an EP `process_group` injection). Declared here so the quantizer does not have to know
-    # about impl-specific TP needs — extend when adding an impl.
+    # the plan kinds an `_experts_implementation` needs in place of the impl-agnostic default
+    # (megamoe wants no gradient-sync hooks and an EP `process_group`); extend when adding an impl
     _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
         "deepgemm_megamoe": {"moe_tp_experts": "megamoe_experts", "ep_router": "megamoe_router"},
     }
@@ -926,10 +924,9 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
                     **storage_for(module_name),
                 )
             elif isinstance(module, nn.Linear) and hasattr(module, "n_groups"):
-                # Block-diagonal grouped linear (DSv4's `DeepseekV4GroupedLinear`), recognised by
-                # the attribute the swap needs rather than by its class NAME: a plain
-                # `FineGrainedLinear` would collapse the groups into one giant linear and yield
-                # the wrong output dim.
+                # block-diagonal grouped linear (DSv4), matched on the attribute the swap needs
+                # rather than the class name: a plain `FineGrainedLinear` collapses the groups
+                # and gets the output dim wrong
                 new_module = FineGrainedGroupedLinear(
                     in_features_per_group=module.in_features,
                     out_features=module.out_features,

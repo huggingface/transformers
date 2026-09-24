@@ -94,10 +94,9 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
                 target_patterns="mlp.experts.down_proj_scale_inv",
                 operations=merge,
             ),
-            # every second-level global of a layer in ONE converter: the gate|up stack's two
-            # calibrated halves merge into one global per expert by folding the up half's onto
-            # the down projection, so the weight globals and the down's input scale have to be
-            # decided together (`FineGrainedWeightGlobals`)
+            # every second-level global of a layer in ONE converter: folding the gate|up stack's
+            # two halves into one moves the up half's onto the down projection, so they decide
+            # together (`FineGrainedWeightGlobals`)
             WeightConverter(
                 source_patterns=[
                     rf"{expert}gate_proj\.weight_scale_2",
