@@ -13,6 +13,8 @@
 # limitations under the License.
 """DPT model configuration"""
 
+from typing import Literal
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
@@ -86,6 +88,7 @@ class DPTConfig(PreTrainedConfig):
             config_class=AutoConfig,
             model_type="bit",
             init_kwargs={
+                "model_type": "bit",
                 "global_padding": "same",
                 "layer_type": "bottleneck",
                 "depths": [3, 4, 9],
@@ -114,7 +117,7 @@ class DPTConfig(PreTrainedConfig):
     is_hybrid: bool = False
     qkv_bias: bool | None = True
     backbone_out_indices: list[int] | tuple[int, ...] | None = (2, 5, 8, 11)
-    readout_type: str = "project"
+    readout_type: Literal["ignore", "add", "project"] = "project"
     reassemble_factors: list[int | float] | tuple[int | float, ...] = (4, 2, 1, 0.5)
     neck_hidden_sizes: list[int] | tuple[int, ...] = (96, 192, 384, 768)
     fusion_hidden_size: int = 256
@@ -133,12 +136,11 @@ class DPTConfig(PreTrainedConfig):
     pooler_act: str = "tanh"
 
     def __post_init__(self, **kwargs):
-        if self.readout_type not in ["ignore", "add", "project"]:
-            raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
-
         # DPT creates backbone depending on model arch (is_hybrid) and on user-provided dict
         # Base class cannot handle complex inter-dependencies between config fields and sub-configs
         if self.is_hybrid:
+            if isinstance(self.backbone_config, dict):
+                self.backbone_config.setdefault("model_type", "bit")
             self.backbone_config = self.sub_configs_defaults["backbone_config"].create_subconfig(
                 "backbone_config", self.backbone_config, **kwargs
             )
