@@ -13,11 +13,20 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma model."""
 
+import json
+import os
+import tempfile
 import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    GemmaConfig,
+    is_torch_available,
+)
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     DeviceProperties,
@@ -43,6 +52,8 @@ if is_torch_available():
         GemmaForCausalLM,
         GemmaModel,
     )
+    from transformers.activations import GELUTanh
+    from transformers.models.gemma.modeling_gemma import GemmaMLP
 
 
 @require_torch
@@ -70,6 +81,51 @@ class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
+
+
+@require_torch
+class GemmaLegacyActivationTest(unittest.TestCase):
+    """The Gemma 1.0 checkpoints ship `hidden_act="gelu"` but were trained with the tanh
+    approximation, so `GemmaConfig` remaps the legacy value. See #49051."""
+
+    def test_legacy_value_is_remapped(self):
+        self.assertEqual(GemmaConfig(hidden_act="gelu").hidden_act, "gelu_pytorch_tanh")
+
+    def test_legacy_value_is_remapped_when_loaded_from_a_config_dict(self):
+        # from_dict is the path every config on the Hub takes, and the five Gemma 1.0 repos
+        # are the whole affected population, so this is the case that actually matters.
+        config_dict = GemmaConfig().to_dict()
+        config_dict["hidden_act"] = "gelu"
+        self.assertEqual(GemmaConfig.from_dict(config_dict).hidden_act, "gelu_pytorch_tanh")
+
+    def test_corrected_value_is_persisted(self):
+        # save_pretrained writing the legacy value straight back out is how derivative
+        # checkpoints inherited it in the first place.
+        config = GemmaConfig(hidden_act="gelu")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "config.json"), encoding="utf-8") as config_file:
+                self.assertEqual(json.load(config_file)["hidden_act"], "gelu_pytorch_tanh")
+
+    def test_default_is_unchanged(self):
+        self.assertEqual(GemmaConfig().hidden_act, "gelu_pytorch_tanh")
+
+    def test_deliberate_activations_are_left_alone(self):
+        for hidden_act in ("gelu_pytorch_tanh", "gelu_new", "silu", "relu"):
+            with self.subTest(hidden_act=hidden_act):
+                self.assertEqual(GemmaConfig(hidden_act=hidden_act).hidden_act, hidden_act)
+
+    def test_mlp_uses_the_tanh_approximation(self):
+        config = GemmaConfig(
+            hidden_act="gelu",
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            num_key_value_heads=1,
+            head_dim=8,
+        )
+        self.assertIsInstance(GemmaMLP(config).act_fn, GELUTanh)
 
 
 @slow
