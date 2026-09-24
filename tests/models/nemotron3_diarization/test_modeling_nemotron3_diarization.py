@@ -273,9 +273,8 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
     def setUp(self):
         super().setUp()
         self.checkpoint_name = "nvidia/Nemotron-3-Diarization"
-        self.revision = "refs/pr/1"
         self.bucket = "hf-internal-testing/nemotron3-diarization-integration-test"
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, revision=self.revision)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
     def _load_sample(self, name):
         sampling_rate = self.processor.feature_extractor.sampling_rate
@@ -292,7 +291,7 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
 
     def _load_model(self, **config_overrides):
         return AutoModelForAudioFrameClassification.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device, **config_overrides
+            self.checkpoint_name, device_map=torch_device, **config_overrides
         )
 
     def _low_latency_offline_model(self):
