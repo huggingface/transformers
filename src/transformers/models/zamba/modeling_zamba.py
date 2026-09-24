@@ -341,8 +341,8 @@ def mamba_selective_scan(
     elif (
         use_associative_scan
         and associative_scan is not None
-        and is_torchdynamo_compiling()
-        and not is_torchdynamo_exporting()
+        # There is no onnx translation for this op so we rely on the normal sequential path then
+        and (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
     ):
 
         def combine_fn(left, right):
