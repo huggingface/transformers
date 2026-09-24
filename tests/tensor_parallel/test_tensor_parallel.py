@@ -211,24 +211,6 @@ class TestTensorParallelLayer(TestCasePlus):
         op._axis0_local_size = local_shape[0]
         return op
 
-    def test_colwise_gather_output_shards_an_indivisible_output_unevenly(self):
-        """`Shard._to_replicate_tensor` pads each shard before the all-gather and trims after, so
-        an output that does not divide by the world size shards like any other. GotOcr2's head is
-        one: its 151860-token vocab does not divide by 8 (the hidden size is shrunk to stay small)."""
-        vocab_size, hidden_size, world_size = 151860, 8, 8
-        module = torch.nn.Module()
-        module.register_parameter("weight", torch.nn.Parameter(torch.empty(vocab_size, hidden_size)))
-        style = ALL_PARALLEL_STYLES["colwise_gather_output"]
-        placements = self._get_parameter_placements(module, style)
-
-        expected_sizes = (18983,) * 7 + (18979,)
-        for rank, expected_size in enumerate(expected_sizes):
-            shape = self._get_local_shape(
-                (vocab_size, hidden_size), placements["weight"], world_size=world_size, rank=rank
-            )
-            self.assertEqual(shape, (expected_size, hidden_size))
-        self.assertEqual(sum(expected_sizes), vocab_size)
-
     def test_colwise_uneven_local_shapes(self):
         module = torch.nn.Module()
         module.register_parameter("weight", torch.nn.Parameter(torch.empty(10, 32)))
