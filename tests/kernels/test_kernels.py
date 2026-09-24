@@ -44,6 +44,7 @@ from transformers.testing_utils import (
     require_kernels,
     require_rocm,
     require_torch_accelerator,
+    scoped_kernels,
     slow,
     torch_device,
 )
@@ -57,8 +58,9 @@ if is_kernels_available():
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
 
-@require_kernels
 @slow
+@require_torch_accelerator
+@scoped_kernels
 class TestHubKernels(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):
@@ -431,7 +433,7 @@ class TestKernelsEnv(TestCasePlus):
         try:
             with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
                 importlib.reload(hub_kernels_pkg)
-                self.assertFalse(hub_kernels_pkg._kernels_enabled)
+                self.assertFalse(hub_kernels_pkg._kernels_enabled())
         finally:
             hub_kernels_pkg.__dict__.clear()
             hub_kernels_pkg.__dict__.update(original_state)
@@ -444,7 +446,7 @@ class TestKernelsEnv(TestCasePlus):
         try:
             with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
                 importlib.reload(hub_kernels_pkg)
-                self.assertTrue(hub_kernels_pkg._kernels_enabled)
+                self.assertTrue(hub_kernels_pkg._kernels_enabled())
         finally:
             hub_kernels_pkg.__dict__.clear()
             hub_kernels_pkg.__dict__.update(original_state)
@@ -472,6 +474,8 @@ class TestKernelUtilities(TestCasePlus):
         for s in invalid:
             self.assertFalse(is_kernel(s))
 
+    @require_torch_accelerator
+    @scoped_kernels
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.ModuleType("sentinel_kernel_module")
 
@@ -513,6 +517,8 @@ class TestKernelUtilities(TestCasePlus):
         # Cleanup cache entry to avoid growth across tests
         _KERNEL_MODULE_MAPPING.pop(name, None)
 
+    @require_torch_accelerator
+    @scoped_kernels
     def test_lazy_load_kernel_version(self):
         name = "causal-conv1d"
         version_spec = ">=0.0.4,<0.1.0"
@@ -796,7 +802,8 @@ class TestAttentionKernelRegistration(TestCasePlus):
         self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
 
-@require_kernels
+@require_torch_accelerator
+@scoped_kernels
 class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):
