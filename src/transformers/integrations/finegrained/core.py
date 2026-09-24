@@ -536,69 +536,17 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         return y
 
 
-def _moe_operands(kernel, module) -> dict:
-    """Everything the kernels' MoE forwards take from the module: the two projections with their
-    scales (held swizzled for dot_scaled chains), the per-expert globals and biases,
-    and the activation — a ``get_supported_act_fns()`` name the gate_up epilogue fuses, else the
-    module's own GLU as a callable the kernels run on the host, so any activation works without a
-    kernel change."""
-    up = module.gate_up_name
-
-    act_name = module.act_fn_name
-    fused = act_name in kernel.get_supported_act_fns() and (module.swiglu_alpha is None or act_name == "silu")
-    if fused:
-        act_fn = act_name
-    else:
-        act_fn = module._apply_gate if module.has_gate else module.act_fn
-
-    # A named norm is fused into the reduce; anything else runs as a callable on the routed rows.
-    # Fusing is off under intra-expert TP: those rows are a partial sum, so the all-reduce the
-    # module's wrapped forward does has to happen first (`_hf_tp_input_reduce` marks it).
-    post_expert_norm, norm_weight, norm_eps = None, None, 1e-6
-    if module.has_post_expert_norm:
-        fusable = module.post_expert_norm_name in kernel.get_supported_norms()
-        if not fusable or getattr(module.post_expert_norm, "_hf_tp_input_reduce", False):
-            post_expert_norm = module.post_expert_norm
-        else:
-            norm = module.post_expert_norm
-            post_expert_norm, norm_weight = module.post_expert_norm_name, norm.weight
-            # the model owns this module, so take epsilon under either name; `nn.RMSNorm` leaves
-            # it None and resolves to the dtype's own
-            eps = _first_attr(norm, "eps", "variance_epsilon", raise_error=False)
-            norm_eps = float(eps) if eps is not None else torch.finfo(norm.weight.dtype).eps
-
-    return {
-        **{
-            f"{kernel_proj}{slot}": getattr(module, f"{held_proj}{slot}")
-            for kernel_proj, held_proj in (("gate_up_proj", up), ("down_proj", "down_proj"))
-            for slot in ("", "_scale_inv", "_weight_global_scale", "_input_global_scale", "_activation_scale", "_bias")
-        },
-        # a supported activation NAME is fused into the gate_up epilogue; any other callable
-        # leaves that GEMM plain and runs on the host between the two
-        "act_fn": act_fn,
-        "gate": module.has_gate,
-        "swiglu_alpha": module.swiglu_alpha,
-        "swiglu_limit": module.swiglu_limit,
-        "activation_format": module.activation_format,
-        # a supported norm NAME is folded into the routing-weighted reduce, one pass ahead of it
-        # computing the rows' rsqrt; any other callable is applied to the routed rows before it
-        "post_expert_norm": post_expert_norm,
-        "post_expert_norm_weight": norm_weight,
-        "post_expert_norm_eps": norm_eps,
-    }
-
-
 def finegrained_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
     """Batched (decode) experts forward: one program per routed row."""
     kernel = load_finegrained_kernel()
-    return kernel.moe_fused_batched(hidden_states, top_k_index, top_k_weights, **_moe_operands(kernel, self))
+    return kernel.moe_fused_batched(hidden_states, top_k_index, top_k_weights, **self._moe_operands(kernel))
 
 
 def finegrained_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
     """Grouped (prefill) experts forward: one on-device routing pass, then the chain over the
     expert-sorted schedule, scattering back to routed rows (EP-sentinel rows skipped)."""
     kernel = load_finegrained_kernel()
-    return kernel.moe_fused_grouped(hidden_states, top_k_index, top_k_weights, **_moe_operands(kernel, self))
+    return kernel.moe_fused_grouped(hidden_states, top_k_index, top_k_weights, **self._moe_operands(kernel))
 
 
 class FineGrainedExperts(_FineGrainedModule, nn.Module):
@@ -607,6 +555,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
     _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
         "deepgemm_megamoe": {"moe_tp_experts": "megamoe_experts", "ep_router": "megamoe_router"},
     }
+    # a projection's operands, by the suffix they carry on the module and in the kernels' arguments:
+    # the weight, its scale grid, the NVFP4 weight and activation globals, a static activation scale, a bias
+    _projection_slots = ("", "_scale_inv", "_weight_global_scale", "_input_global_scale", "_activation_scale", "_bias")
 
     def __init__(
         self,
@@ -727,18 +678,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
                 continue
 
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate_up_act_scale = (
-                self.gate_up_proj_activation_scale[expert_idx] if self.activation_scheme == "static" else None
-            )
-            proj_out = self.expert_linear(
-                current_state, self.gate_up_name, expert_idx, activation_scale=gate_up_act_scale
-            )
+            proj_out = self.expert_linear(hidden_states[token_idx], self.gate_up_name, expert_idx)
             proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
-            down_act_scale = (
-                self.down_proj_activation_scale[expert_idx] if self.activation_scheme == "static" else None
-            )
-            proj_out = self.expert_linear(proj_out, "down_proj", expert_idx, activation_scale=down_act_scale)
+            proj_out = self.expert_linear(proj_out, "down_proj", expert_idx)
             if self.has_post_expert_norm:
                 proj_out = self.post_expert_norm(proj_out)
             routing_weights = top_k_weights[token_idx, top_k_pos, None]
@@ -746,38 +688,87 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             final_hidden_states.index_add_(0, token_idx, weighted_out.to(final_hidden_states.dtype))
         return final_hidden_states.to(hidden_states.dtype)
 
-    def expert_linear(
-        self, input: torch.Tensor, proj: str, expert_idx: int, activation_scale: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        """One expert's ``proj`` as a dense linear: the same weight, scale (one expert's slice of a
-        swizzled stack is the ``(1, ...)`` artifact ``matmul_2d`` reads), bias, NVFP4 global and
-        activation format the fused forwards hand the kernels."""
-        weight = getattr(self, proj)[expert_idx]
-        bias = getattr(self, f"{proj}_bias")
-        bias = bias[expert_idx] if bias is not None else None
-        scale = getattr(self, f"{proj}_scale_inv")
-        weight_global_scale = getattr(self, f"{proj}_weight_global_scale")
-        weight_global_scale = weight_global_scale[expert_idx] if weight_global_scale is not None else None
-        # None under weight-only, which registers no input global at all. `% numel` picks this
-        # expert's, or the single one gate_up holds because its rows are quantized pre-routing.
-        input_global_scale = getattr(self, f"{proj}_input_global_scale")
-        input_global_scale = (
-            input_global_scale.reshape(-1)[expert_idx % input_global_scale.numel()].reshape(1)
-            if input_global_scale is not None
-            else None
+    def expert_linear(self, input: torch.Tensor, proj: str, expert_idx: int) -> torch.Tensor:
+        """One expert's ``proj`` as a dense linear, over that expert's slice of the projection's operands."""
+        weight, scale, weight_global, input_global, activation_scale, bias = (
+            getattr(self, f"{proj}{slot}") for slot in self._projection_slots
         )
+        weight = weight[expert_idx]
+        # one expert's slice of a swizzled stack is the `(1, ...)` artifact `matmul_2d` reads
+        scale = scale[expert_idx : expert_idx + 1] if scale.ndim == 5 else scale[expert_idx]
+        # None where the checkpoint fills no such slot
+        weight_global, activation_scale, bias = (
+            operand[expert_idx] if operand is not None else None for operand in (weight_global, activation_scale, bias)
+        )
+        # gate_up holds ONE input global, its rows being quantized pre-routing; down one per expert
+        if input_global is not None and proj == "down_proj":
+            input_global = input_global[expert_idx : expert_idx + 1]
+
         return finegrained_linear(
             input,
             weight,
-            scale[expert_idx : expert_idx + 1] if scale.ndim == 5 else scale[expert_idx],
+            scale,
             self.block_size,
             bias=bias,
             activation_scale=activation_scale,
             allow_deepgemm=not self._deepgemm_disabled,
-            weight_global_scale=weight_global_scale,
-            input_global_scale=input_global_scale,
+            weight_global_scale=weight_global,
+            input_global_scale=input_global,
             activation_format=self.activation_format,
         )
+
+    def _moe_operands(self, kernel) -> dict:
+        """Everything the kernels' MoE forwards take from the module: the two projections with their
+        scales (held swizzled for dot_scaled chains), the per-expert globals and biases,
+        and the activation — a ``get_supported_act_fns()`` name the gate_up epilogue fuses, else the
+        module's own GLU as a callable the kernels run on the host, so any activation works without a
+        kernel change.
+
+        A method rather than a function so an adapter library can extend it per module: PEFT overrides
+        it to add its LoRA factors, which the kernels then apply on the routed rows between the GEMMs
+        (`expert_linear` is the eager loop's counterpart)."""
+        act_name = self.act_fn_name
+        fused = act_name in kernel.get_supported_act_fns() and (self.swiglu_alpha is None or act_name == "silu")
+        if fused:
+            act_fn = act_name
+        else:
+            act_fn = self._apply_gate if self.has_gate else self.act_fn
+
+        # A named norm is fused into the reduce; anything else runs as a callable on the routed rows.
+        # Fusing is off under intra-expert TP: those rows are a partial sum, so the all-reduce the
+        # module's wrapped forward does has to happen first (`_hf_tp_input_reduce` marks it).
+        post_expert_norm, norm_weight, norm_eps = None, None, 1e-6
+        if self.has_post_expert_norm:
+            fusable = self.post_expert_norm_name in kernel.get_supported_norms()
+            if not fusable or getattr(self.post_expert_norm, "_hf_tp_input_reduce", False):
+                post_expert_norm = self.post_expert_norm
+            else:
+                norm = self.post_expert_norm
+                post_expert_norm, norm_weight = self.post_expert_norm_name, norm.weight
+                # the model owns this module, so take epsilon under either name; `nn.RMSNorm` leaves
+                # it None and resolves to the dtype's own
+                eps = _first_attr(norm, "eps", "variance_epsilon", raise_error=False)
+                norm_eps = float(eps) if eps is not None else torch.finfo(norm.weight.dtype).eps
+
+        return {
+            **{
+                f"{kernel_proj}{slot}": getattr(self, f"{held_proj}{slot}")
+                for kernel_proj, held_proj in (("gate_up_proj", self.gate_up_name), ("down_proj", "down_proj"))
+                for slot in self._projection_slots
+            },
+            # a supported activation NAME is fused into the gate_up epilogue; any other callable
+            # leaves that GEMM plain and runs on the host between the two
+            "act_fn": act_fn,
+            "gate": self.has_gate,
+            "swiglu_alpha": self.swiglu_alpha,
+            "swiglu_limit": self.swiglu_limit,
+            "activation_format": self.activation_format,
+            # a supported norm NAME is folded into the routing-weighted reduce, one pass ahead of it
+            # computing the rows' rsqrt; any other callable is applied to the routed rows before it
+            "post_expert_norm": post_expert_norm,
+            "post_expert_norm_weight": norm_weight,
+            "post_expert_norm_eps": norm_eps,
+        }
 
 
 class FineGrainedExpertsInterface(ExpertsInterface):

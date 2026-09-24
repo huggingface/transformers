@@ -509,7 +509,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         kernel.get_supported_act_fns.return_value = ("silu",)
         kernel.get_supported_norms.return_value = ()
         for module, calibrated in ((static, True), (dynamic, False)):
-            operands = fg._moe_operands(kernel, module)
+            operands = module._moe_operands(kernel)
             for projection in ("gate_up_proj", "down_proj"):
                 with self.subTest(scheme=module.activation_scheme, projection=projection):
                     scale = operands[f"{projection}_activation_scale"]
@@ -607,10 +607,11 @@ class FineGrainedFusedNormGateTest(unittest.TestCase):
         module.has_post_expert_norm = True
         module.post_expert_norm = norm
         module.post_expert_norm_name = "input_scaled_rms_norm"
+        module._projection_slots = fg.FineGrainedExperts._projection_slots
         kernel = mock.Mock()
         kernel.get_supported_act_fns.return_value = ("silu",)
         kernel.get_supported_norms.return_value = ("input_scaled_rms_norm",)
-        return fg._moe_operands(kernel, module), module
+        return fg.FineGrainedExperts._moe_operands(module, kernel), module
 
     def test_a_fusable_norm_fuses_when_nothing_reduces_its_input(self):
         operands, _ = self._operands(input_reduce=False)
@@ -1037,8 +1038,9 @@ class FineGrainedDeepGemmDispatchTest(unittest.TestCase):
     and silently return garbage) and an SM100 perf one. They cover different cases — block-FP8
     scales have no swizzled layout, so the first never fires for the shape the second catches."""
 
-    def _routed_to(self, *, sm100, scale_ndim):
-        """Which backend a block-FP8 linear reaches, given arch and scale layout."""
+    def _routed_to(self, *, sm100, scale_ndim, trains=False):
+        """Which backend a block-FP8 linear reaches, given arch, scale layout, and whether the call
+        needs a gradient."""
         kernel, _ = _fake_bundle()
         w = torch.randn(32, 64).to(torch.float8_e4m3fn)
         s = torch.randn(*([1, 1, 1, 1, 1][:scale_ndim] if scale_ndim > 2 else [1, 1]))
@@ -1052,7 +1054,8 @@ class FineGrainedDeepGemmDispatchTest(unittest.TestCase):
             mock.patch.object(deepgemm, "is_sm100", return_value=sm100),
             mock.patch.object(fg, "deepgemm_fp8_fp4_linear") as dg,
         ):
-            fg.finegrained_linear(torch.randn(4, 64, dtype=torch.bfloat16), w, s, block_size=[128, 128])
+            x = torch.randn(4, 64, dtype=torch.bfloat16, requires_grad=trains)
+            fg.finegrained_linear(x, w, s, block_size=[128, 128])
         return "deepgemm" if dg.called else "triton"
 
     def test_sm100_never_prefers_deepgemm(self):
@@ -1060,6 +1063,31 @@ class FineGrainedDeepGemmDispatchTest(unittest.TestCase):
 
     def test_pre_sm100_still_uses_deepgemm(self):
         self.assertEqual(self._routed_to(sm100=False, scale_ndim=2), "deepgemm")
+
+    def test_deepgemm_refuses_a_call_that_needs_a_gradient(self):
+        """DeepGEMM has no backward pass: every entry point fails a call that needs a gradient,
+        before touching the kernel."""
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size = 256, 128
+        experts = fg.FineGrainedExperts(cfg, block_size=(128, 128), weight_format="fp8")
+        experts._deepgemm_disabled = False
+        hs = torch.randn(2, 256, dtype=torch.bfloat16, requires_grad=True)
+        routing = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
+        w, s = torch.randn(32, 256).to(torch.float8_e4m3fn), torch.ones(1, 2)
+        calls = [
+            ("DeepGEMM linear", lambda: deepgemm.deepgemm_fp8_fp4_linear(hs, w, s, block_size=(128, 128))),
+            ("DeepGEMM experts", lambda: deepgemm.deepgemm_fp8_fp4_experts_forward(experts, hs, *routing)),
+            ("DeepGEMM experts", lambda: deepgemm.deepgemm_fp8_fp4_megamoe_experts_forward(experts, hs, *routing)),
+        ]
+        with mock.patch.object(deepgemm, "load_deepgemm_kernel") as load:
+            for backend, call in calls:
+                with self.assertRaisesRegex(NotImplementedError, f"{backend} has no backward pass"):
+                    call()
+        load.assert_not_called()
+
+    def test_a_linear_that_needs_a_gradient_prefers_triton(self):
+        """Where DeepGEMM would otherwise win, a call that needs a gradient still goes to triton."""
+        self.assertEqual(self._routed_to(sm100=False, scale_ndim=2, trains=True), "triton")
 
     def test_swizzled_scales_never_reach_deepgemm(self):
         """Correctness gate, and it must hold on any arch — not just where the perf gate does."""
