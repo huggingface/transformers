@@ -28,6 +28,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -434,13 +435,11 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
-class ZambaModelIntegrationTest(unittest.TestCase):
-    model = None
-    tokenizer = None
-
+class ZambaModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     @slow
     def setUpClass(cls):
+        super().setUpClass()
         model_id = "Zyphra/Zamba-7B-v1"
         cls.model = ZambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, use_mamba_kernels=False)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
