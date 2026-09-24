@@ -155,17 +155,19 @@ class DtensorShardOperation:
 
         # MoE path
         # tensor_idx identifies the axis-0 piece in param space (not in source.shape).
+        normalized_dim_placements = [
+            (mesh_dim, placement, self._normalize_param_dim(placement.dim)) for mesh_dim, placement in dim_placements
+        ]
+
         # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
-        if not self._owns_expert(tensor_idx, dim_placements):
+        has_axis0_shard = any(param_dim == 0 for _, _, param_dim in normalized_dim_placements)
+        owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
+        if has_axis0_shard and not owns_tensor_idx:
             return None
 
         # a 0-dim per-expert value has no axis to slice, so this rank takes it whole
         if not source_shape:
             return source[...].to(device=device, dtype=dtype)
-
-        normalized_dim_placements = [
-            (mesh_dim, placement, self._normalize_param_dim(placement.dim)) for mesh_dim, placement in dim_placements
-        ]
 
         # `param_dim` indexes the full parameter layout [N, in, out] (expert axis first).
         # In per-expert loading, leading axis is absent ([in, out]).
@@ -321,13 +323,6 @@ class DtensorShardOperation:
     def _normalize_param_dim(self, dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
         return dim if dim >= 0 else self.param_ndim + dim
-
-    def _owns_expert(self, tensor_idx: int, dim_placements: list) -> bool:
-        """Whether this rank holds expert `tensor_idx`. True when nothing shards axis 0 — the
-        experts are replicated, so every rank owns every one of them."""
-        if not any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements):
-            return True
-        return self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
 
 
 def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTensor:

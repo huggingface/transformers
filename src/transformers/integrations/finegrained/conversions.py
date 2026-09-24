@@ -32,6 +32,7 @@ from .core import (
     _FP8_MIN,
     FineGrainedExperts,
     WeightFormat,
+    _cdiv,
     _FineGrainedModule,
     _get_ue8m0_dtype,
     load_finegrained_kernel,
@@ -39,7 +40,7 @@ from .core import (
 )
 
 
-def _keyed_by_target(input_dict: dict, target_patterns) -> dict:
+def keyed_by_target(input_dict: dict, target_patterns) -> dict:
     """A converter's ops see their single tensor under the SOURCE pattern until an op re-keys it to the
     target (the core ops do; the loader then expands the target into the full name) — so a
     layout op that is first in its converter re-keys the same way. Multi-tensor dicts (a
@@ -50,7 +51,7 @@ def _keyed_by_target(input_dict: dict, target_patterns) -> dict:
     return input_dict
 
 
-def _held_scale(model, full_layer_name, key):
+def held_scale(model, full_layer_name, key):
     """The finegrained module and its ``*_scale_inv`` Parameter a converter output fills, else
     ``(None, None)``. A converter emitting several tensors names them fully (key); a single target's
     name arrives as the pattern, its full name (with the ``_scale_inv`` suffix) in ``full_layer_name``."""
@@ -66,20 +67,6 @@ def _held_scale(model, full_layer_name, key):
 def as_container(scale: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     """The same bytes under a same-width dtype (uint8 <-> e8m0), an exact numeric cast otherwise."""
     return scale.view(dtype) if scale.element_size() == dtype.itemsize else scale.to(dtype)
-
-
-def _global_role(key: str) -> tuple[str, str]:
-    """What a global-scale key holds, for a checkpoint key and a module target alike: which
-    projection it belongs to, and which of modelopt's two levels it is — the weight's second-level
-    global (``weight_scale_2``) or the calibrated activation one (``input_scale``).
-
-    This runs while the converters are being BUILT, against raw checkpoint keys, so the vLLM-style
-    `w1`/`w2`/`w3` names are still in play and have not been renamed to `gate/down/up_proj` yet.
-    Matched on path SEGMENTS: the default is gate_up, so a loose `"w2" in key` would silently
-    bucket a down global as one."""
-    down = any(seg == "w2" or seg.startswith("down_proj") for seg in key.split("."))
-    level = "input" if "input_scale" in key or "input_global" in key else "weight"
-    return ("down" if down else "gate_up"), level
 
 
 class _FineGrainedOp(ConversionOps):
@@ -106,7 +93,7 @@ class FineGrainedInterleaveGateUp(_FineGrainedOp):
     save wherever the checkpoint's row order differs from the one the experts hold."""
 
     def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
-        input_dict = _keyed_by_target(input_dict, target_patterns)
+        input_dict = keyed_by_target(input_dict, target_patterns)
         experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None) if model else None
         if experts is None or not (experts.is_concatenated and experts.holds_interleaved_gate_up):
             return input_dict
@@ -130,7 +117,7 @@ class FineGrainedScaleContainer(_FineGrainedOp):
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         out = {}
-        for key, value in _keyed_by_target(input_dict, target_patterns).items():
+        for key, value in keyed_by_target(input_dict, target_patterns).items():
             value = value[0] if isinstance(value, list) else value
             if self.inverse:
                 # one checkpoint, one container, recorded on the modules at load; e8m0 is only
@@ -140,7 +127,7 @@ class FineGrainedScaleContainer(_FineGrainedOp):
                 if container is not None and value.dtype == _get_ue8m0_dtype():
                     value = as_container(value, container)
             else:
-                module, held = _held_scale(model, full_layer_name, key)
+                module, held = held_scale(model, full_layer_name, key)
                 if held is not None and value.dtype != held.dtype:
                     module.scale_container_dtype = value.dtype
                     value = as_container(value, held.dtype)
@@ -155,7 +142,7 @@ class FineGrainedSwizzleScales(_FineGrainedOp):
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         out = {}
-        for key, value in _keyed_by_target(input_dict, target_patterns).items():
+        for key, value in keyed_by_target(input_dict, target_patterns).items():
             value = value[0] if isinstance(value, list) else value
             out[key] = self._unswizzle(value) if self.inverse else self._swizzle(key, value, model, full_layer_name)
         return out
@@ -170,7 +157,7 @@ class FineGrainedSwizzleScales(_FineGrainedOp):
 
     @staticmethod
     def _swizzle(key, value, model, full_layer_name):
-        _, held = _held_scale(model, full_layer_name, key)
+        _, held = held_scale(model, full_layer_name, key)
         if held is None or held.ndim != 5 or value.ndim == 5:
             return value
         return load_finegrained_kernel().swizzle_mx_scales(value)
@@ -183,7 +170,7 @@ class FineGrainedPackedBlocks(_FineGrainedOp):
 
     def convert(self, input_dict, target_patterns=None, **kwargs):
         out = {}
-        for key, value in _keyed_by_target(input_dict, target_patterns).items():
+        for key, value in keyed_by_target(input_dict, target_patterns).items():
             value = value[0] if isinstance(value, list) else value
             if "_scales" in key:  # a converter that carries the scale alongside (the dequant chain)
                 out[key] = value
@@ -202,7 +189,7 @@ class FineGrainedViewPackedInt8(_FineGrainedOp):
     def convert(self, input_dict, target_patterns=None, **kwargs):
         held, want = (torch.int8, torch.uint8) if self.inverse else (torch.uint8, torch.int8)
         out = {}
-        for key, value in _keyed_by_target(input_dict, target_patterns).items():
+        for key, value in keyed_by_target(input_dict, target_patterns).items():
             value = value[0] if isinstance(value, list) else value
             out[key] = value.view(want) if torch.is_tensor(value) and value.dtype == held else value
         return out
@@ -220,15 +207,29 @@ class FineGrainedWeightGlobals(_FineGrainedOp):
     global keeps the requant on the range the e4m3 block scales were chosen for. Rescaling the up
     half's block scales instead would re-round them against codes chosen for the old global."""
 
+    @staticmethod
+    def role(key: str) -> tuple[str, str]:
+        """What a global-scale key holds, for a checkpoint key and a module target alike: which
+        projection it belongs to, and which of modelopt's two levels it is — the weight's
+        second-level global (``weight_scale_2``) or the calibrated activation one (``input_scale``).
+
+        This runs while the converters are being BUILT, against raw checkpoint keys, so the
+        vLLM-style `w1`/`w2`/`w3` names are still in play and have not been renamed to
+        `gate/down/up_proj` yet. Matched on path SEGMENTS: the default is gate_up, so a loose
+        `"w2" in key` would silently bucket a down global as one."""
+        down = any(seg == "w2" or seg.startswith("down_proj") for seg in key.split("."))
+        level = "input" if "input_scale" in key or "input_global" in key else "weight"
+        return ("down" if down else "gate_up"), level
+
     def convert(self, input_dict, target_patterns=None, model=None, **kwargs):
         sources = defaultdict(dict)
         for key, value in input_dict.items():
             # the loader hands a converter's tensors in a list; unwrapped, a fused `(E, 2)` pair
             # reads as `(1, 2E)` and the per-half fold below silently does not fire
-            sources[_global_role(key)][key] = value[0] if isinstance(value, list) and len(value) == 1 else value
+            sources[self.role(key)][key] = value[0] if isinstance(value, list) and len(value) == 1 else value
         globals_ = {}
         for target in target_patterns:
-            if role_sources := sources.get(_global_role(target)):
+            if role_sources := sources.get(self.role(target)):
                 # one (E, calibrated projections) fp32 tensor, gate column first: two sources are
                 # the stack's halves, one is the fused (E, 2) pair or a single projection's (E,)
                 columns = []
@@ -236,7 +237,7 @@ class FineGrainedWeightGlobals(_FineGrainedOp):
                     value = torch.stack(value, dim=0) if isinstance(value, list) else value
                     columns.append(value.float().reshape(value.shape[0], -1))
                 globals_[target] = torch.cat(columns, dim=1)
-        targets = {_global_role(target): target for target in globals_}
+        targets = {self.role(target): target for target in globals_}
         stack = targets.get(("gate_up", "weight"))
 
         # a stack calibrated per half keeps the gate's global; the up half's leaves as a ratio,
@@ -368,7 +369,7 @@ class FineGrainedQuantize(_FineGrainedOp):
         prefix = key.rsplit(".", 1)[0] + ".weight" if key.endswith(".weight") else key
         module, scale_name = holder if holder is not None else (None, None)
         value = self._as_expert_rows(module, key.rsplit(".", 1)[1], value)
-        held_scale = getattr(module, scale_name) if module is not None else None
+        held = getattr(module, scale_name) if module is not None else None
         format_spec = weight_formats()[module.weight_format] if module is not None else None
         if format_spec is None or format_spec.scale_group is None:
             if module is not None and module.block_size:
@@ -384,8 +385,8 @@ class FineGrainedQuantize(_FineGrainedOp):
                 )
                 block = tuple(config_block) if config_block else (value.shape[-2], value.shape[-1])
             ue8m0 = (
-                held_scale.dtype == _get_ue8m0_dtype()
-                if held_scale is not None
+                held.dtype == _get_ue8m0_dtype()
+                if held is not None
                 else self.hf_quantizer.quantization_config.scale_fmt == "ue8m0"
             )
             weight, scale = self._quantize_block_fp8(value, block, ue8m0)
@@ -402,8 +403,8 @@ class FineGrainedQuantize(_FineGrainedOp):
                 f"accelerator, but the weight is on {value.device.type}"
             )
         weight, scale, global_scale = self._quantize_group(value, format_spec)
-        scale = as_container(scale, held_scale.dtype)
-        if held_scale.ndim == 5:
+        scale = as_container(scale, held.dtype)
+        if held.ndim == 5:
             scale = load_finegrained_kernel().swizzle_mx_scales(scale)
         out = {key: weight, f"{prefix}_scale_inv": scale}
         if global_scale is not None:
@@ -542,12 +543,18 @@ class FineGrainedDequantize(_FineGrainedOp):
         except Exception:
             # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
-        if rows % scale_rows or cols % scale_cols:
+        # the grid ROUNDS UP, so it does not invert to the block (DSv3's `(576, 7168)` ships a
+        # `(5, 56)` grid against a 128x128 block); only guess when no config reproduces it
+        configured = getattr(getattr(self.hf_quantizer, "quantization_config", None), "weight_block_size", None)
+        if configured and (_cdiv(rows, configured[0]), _cdiv(cols, configured[1])) == (scale_rows, scale_cols):
+            block_m, block_n = configured
+        elif rows % scale_rows or cols % scale_cols:
             raise ValueError(
                 f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
             )
-        block_m = rows // scale_rows
-        block_n = cols // scale_cols
+        else:
+            block_m = rows // scale_rows
+            block_n = cols // scale_cols
         # the math runs in fp32 either way (``float8_e8m0fnu`` has no ``mul`` kernel); the
         # destination parameter's dtype wins when known, so an eager module keeps the model's
         if output_dtype is None:
@@ -560,9 +567,13 @@ class FineGrainedDequantize(_FineGrainedOp):
         else:
             s_fp32 = scales.to(torch.float32)
         original_shape = quantized_fp32.shape
-        blocked = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
+        # pad out to whole blocks so a ceil-rounded grid lines up, then crop back
+        pad_m, pad_n = -rows % block_m, -cols % block_n
+        padded = torch.nn.functional.pad(quantized_fp32, (0, pad_n, 0, pad_m))
+        blocked = padded.reshape(-1, scale_rows, block_m, scale_cols, block_n)
         per_block = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
-        return (blocked * per_block).to(output_dtype).reshape(original_shape)
+        out = (blocked * per_block).reshape(*original_shape[:-2], rows + pad_m, cols + pad_n)
+        return out[..., :rows, :cols].to(output_dtype)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
         if model is None or full_layer_name is None:

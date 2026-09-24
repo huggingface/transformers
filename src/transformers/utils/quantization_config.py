@@ -1701,9 +1701,6 @@ def subtree_patterns(globs: list[str]) -> list[str]:
     return patterns
 
 
-_CATCH_ALL = [".*"]  # the targets of a group that takes whatever no other group claimed
-
-
 @dataclass
 class FineGrainedGroup:
     """One set of modules and the format they are quantized in.
@@ -1714,7 +1711,7 @@ class FineGrainedGroup:
     """
 
     quant_method: str
-    targets: list[str] = field(default_factory=lambda: list(_CATCH_ALL))
+    targets: list[str] = field(default_factory=lambda: [".*"])  # default: whatever no other group claimed
     activation_format: str | None = None
     activation_scheme: str = "dynamic"
     weight_block_size: tuple[int, int] | None = None
@@ -1772,14 +1769,14 @@ def group_from_config_groups(spec: dict) -> FineGrainedGroup | None:
         if target.startswith("re:"):
             targets.append(target[3:])
         elif target == "Linear":  # every linear — the catch-all, in their spelling
-            targets.extend(_CATCH_ALL)
+            targets.append(".*")
         else:  # a class name we cannot resolve to module paths here
             return None
     activations = spec.get("input_activations") or {}
     act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
     return FineGrainedGroup(
         quant_method=quant_method,
-        targets=targets or list(_CATCH_ALL),
+        targets=targets or [".*"],
         activation_format=formats.get(act_key) if activations else None,
         activation_scheme="dynamic" if activations.get("dynamic", True) else "static",
     )
@@ -1925,14 +1922,14 @@ class FineGrainedConfig(QuantizationConfigMixin):
         that order. Two targeted groups claiming the same module is ambiguous, and says so.
         """
         claimed = [
-            name for name, group in self.groups.items() if group.targets != _CATCH_ALL and group.matches(module_name)
+            name for name, group in self.groups.items() if group.targets != [".*"] and group.matches(module_name)
         ]
         if len(claimed) > 1:
             raise ValueError(f"{module_name!r} is claimed by more than one group: {claimed}")
         if claimed:
             return self.groups[claimed[0]]
         for group in self.groups.values():
-            if group.targets == _CATCH_ALL:
+            if group.targets == [".*"]:
                 return group
         raise KeyError(f"no group covers {module_name!r}; groups: {list(self.groups)}")
 

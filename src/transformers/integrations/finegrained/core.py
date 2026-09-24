@@ -356,7 +356,7 @@ def finegrained_linear(
             # arch/input combos DeepGEMM has no kernel for, and raises its own error if it cannot.
             logger.warning_once(
                 f"DeepGEMM declined this call, falling back to Triton. Reason: {e} "
-                "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
+                "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for finegrained linear entirely."
             )
 
     kernel = load_finegrained_kernel()
@@ -823,7 +823,7 @@ def disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     launches it against the wrong context and produces garbage. (Build-time fix: compile DeepGEMM
     with `DG_JIT_USE_RUNTIME_API=1` for a context-free `cudaKernel_t` loader; until our wheel picks
     that up we avoid single-process multi-device.) Setting `_deepgemm_disabled` routes both the
-    linear and experts paths through Triton/grouped_mm. A model that fits on one device keeps
+    linear and experts paths through our triton kernels. A model that fits on one device keeps
     DeepGEMM even with other GPUs visible; TP/EP put one device per process, so this is a no-op
     there."""
     quantized_modules = [m for m in model.modules() if isinstance(m, _FineGrainedModule)]
@@ -837,8 +837,8 @@ def disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     for m in quantized_modules:
         m._deepgemm_disabled = True
     logger.warning_once(
-        "This FP8 model spans multiple CUDA devices in one process; routing its FP8 linear and experts "
-        "layers through Triton/grouped_mm instead of DeepGEMM (DeepGEMM's cached kernels are bound to a "
+        "This finegrained quantized model spans multiple CUDA devices in one process; routing its linear and experts "
+        "layers through our triton kernels instead of DeepGEMM (DeepGEMM's cached kernels are bound to a "
         "single CUDA context and corrupt across devices). Run tensor/expert parallel (one device per "
         "process) to use the faster DeepGEMM path."
     )
@@ -938,10 +938,8 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
                     **storage_for(module_name),
                 )
             if new_module is not None:
-                # The kernels take raw pointers, so every operand must be a plain tensor. This is
-                # what tells the TP layer to hand local shards rather than DTensors
-                # (`should_use_local_tensors`); without it a dense linear sees DTensors whenever
-                # grad is enabled, since its inference fast path only covers `not is_grad_enabled`.
+                # the kernels take raw pointers, so the TP layer must hand local shards and not
+                # DTensors, whatever `should_use_local_tensors` would decide from grad mode alone
                 new_module._hf_quantized_needs_local_tp = True
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
