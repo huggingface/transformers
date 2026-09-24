@@ -153,9 +153,7 @@ class GraniteForDoclingConfig(PreTrainedConfig):
         reduced by `scale_factor ** 2`.
     deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[3, 7, 10]`):
         Indices of the vision encoder layers whose output is projected and added to the image token positions after
-        the corresponding `deepstack_attn_layers`. Index 0 is the output of the first layer.
-    deepstack_attn_layers (`list[int]`, *optional*, defaults to `[0, 1, 2]`):
-        Text decoder layers after which the corresponding DeepStack features are added.
+        the first decoder layers, one decoder layer per entry. Index 0 is the output of the first vision layer.
     use_fine_route (`bool`, *optional*, defaults to `True`):
         Whether to build the fine connector path, which shuffles pixels by half of `scale_factor` and yields four
         times as many image tokens per tile. Checkpoints trained with the coarse path only set it to `False`.
@@ -180,7 +178,6 @@ class GraniteForDoclingConfig(PreTrainedConfig):
     scale_factor: int = 4
     pad_token_id: int | None = 100256
     deepstack_visual_indexes: list[int] | None = None
-    deepstack_attn_layers: list[int] | None = None
     use_fine_route: bool = True
     density_router_hidden_size: int | None = None
     density_router_threshold: float = 0.4
@@ -199,10 +196,6 @@ class GraniteForDoclingConfig(PreTrainedConfig):
 
         if self.deepstack_visual_indexes is None:
             self.deepstack_visual_indexes = [3, 7, 10]
-        if self.deepstack_attn_layers is None:
-            self.deepstack_attn_layers = [0, 1, 2]
-        if len(self.deepstack_visual_indexes) != len(self.deepstack_attn_layers):
-            raise ValueError("`deepstack_visual_indexes` and `deepstack_attn_layers` must have the same length.")
         if self.density_router_hidden_size is not None and not self.use_fine_route:
             raise ValueError("The density router selects the fine connector path, it needs `use_fine_route=True`.")
 

@@ -144,6 +144,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
     min_patches = 1
     max_patches = 32
     fine_route = False
+    do_pad = True
 
     def __init__(self, **kwargs: Unpack[GraniteForDoclingImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -230,6 +231,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         min_patches: int = 1,
         max_patches: int = 32,
         fine_route: bool = False,
+        do_pad: bool = True,
         **kwargs,
     ) -> BatchFeature:
         # Pages of the same size get the same grid, so they are tiled together
@@ -256,10 +258,13 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         tiles = reorder_images(tiles_grouped, grouped_images_index, is_nested=True)
         grids = reorder_images(grids_grouped, grouped_images_index, is_nested=True)
 
-        # One row of tiles per sample, padded to the largest sample with all-zero tiles that the model discards
+        # One row of tiles per sample
         tile_shape = next(tiles_tensor.shape[1:] for tiles_list in tiles for tiles_tensor in tiles_list)
         sample_tiles = [torch.cat(tiles_list) if tiles_list else torch.zeros(0, *tile_shape) for tiles_list in tiles]
-        pixel_values = nn.utils.rnn.pad_sequence(sample_tiles, batch_first=True)
+        if do_pad:
+            pixel_values = self.pad(sample_tiles)
+        else:
+            pixel_values = torch.stack(sample_tiles)
         data = {"pixel_values": pixel_values}
         if fine_route:
             data["tile_fine_mask"] = nn.utils.rnn.pad_sequence(
@@ -307,6 +312,13 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
+
+    def pad(self, images: list["torch.Tensor"], **kwargs) -> "torch.Tensor":
+        """
+        Pads the tiles of every sample, `(num_tiles, num_channels, height, width)`, to the largest number of tiles
+        in the batch with all-zero tiles, which the model discards. All tiles already share the same size.
+        """
+        return nn.utils.rnn.pad_sequence(images, batch_first=True)
 
     def get_tile_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int]:
         """The `(num_rows, num_cols)` tile grid an image of this size is split into."""

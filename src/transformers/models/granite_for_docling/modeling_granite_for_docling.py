@@ -465,15 +465,15 @@ class GraniteForDoclingTextModel(GraniteForDoclingTextPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         visual_pos_masks: torch.BoolTensor | None = None,
-        deepstack_visual_embeds: dict[int, torch.Tensor] | None = None,
+        deepstack_visual_embeds: list[torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
         visual_pos_masks (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Positions of the image tokens that receive the DeepStack features.
-        deepstack_visual_embeds (`dict[int, torch.Tensor]`, *optional*):
-            DeepStack features of shape `(num_image_tokens, hidden_size)`, keyed by the index of the decoder layer
-            after which they are added to the hidden states at `visual_pos_masks`.
+        deepstack_visual_embeds (`list[torch.Tensor]`, *optional*):
+            DeepStack features, each of shape `(num_image_tokens, hidden_size)`. Entry `i` is added to the hidden
+            states at `visual_pos_masks` after decoder layer `i`.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -512,16 +512,28 @@ class GraniteForDoclingTextModel(GraniteForDoclingTextPreTrainedModel):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-            if deepstack_visual_embeds is not None and layer_idx in deepstack_visual_embeds:
-                visual_embeds = deepstack_visual_embeds[layer_idx].to(hidden_states.device, hidden_states.dtype)
-                visual_pos_masks = visual_pos_masks.to(hidden_states.device)
-                hidden_states[visual_pos_masks, :] = hidden_states[visual_pos_masks, :].clone() + visual_embeds
+            if deepstack_visual_embeds is not None and layer_idx in range(len(deepstack_visual_embeds)):
+                hidden_states = self._deepstack_process(
+                    hidden_states,
+                    visual_pos_masks,
+                    deepstack_visual_embeds[layer_idx],
+                )
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
+    def _deepstack_process(
+        self, hidden_states: torch.Tensor, visual_pos_masks: torch.Tensor, visual_embeds: torch.Tensor
+    ):
+        visual_pos_masks = visual_pos_masks.to(hidden_states.device)
+        visual_embeds = visual_embeds.to(hidden_states.device, hidden_states.dtype)
+        hidden_states = hidden_states.clone()
+        local_this = hidden_states[visual_pos_masks, :] + visual_embeds
+        hidden_states[visual_pos_masks, :] = local_this
+        return hidden_states
 
 
 class GraniteForDoclingPositionEmbedding(nn.Module):
@@ -1135,10 +1147,7 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
             image_outputs = self.get_image_features(pixel_values, tile_fine_mask=tile_fine_mask, return_dict=True)
             image_hidden_states = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             router_logits = image_outputs.router_logits
-            deepstack_visual_embeds = {
-                layer_idx: features.reshape(-1, features.shape[-1])
-                for layer_idx, features in zip(self.config.deepstack_attn_layers, image_outputs.deepstack_features)
-            }
+            deepstack_visual_embeds = image_outputs.deepstack_features
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_hidden_states)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask.unsqueeze(-1), image_hidden_states)
             visual_pos_masks = special_image_mask
