@@ -36,6 +36,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -596,3 +597,30 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check that loss does not error out
         _ = output.loss
+
+
+@require_torch
+class PaliGemmaFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-PaliGemmaForConditionalGeneration"
+    all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("text", "image")
+    # PaliGemma is prefix-LM style — plain text prompt, no chat template required
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if cls.processor is not None and cls.processor.image_seq_length is None:
+            # Tiny hub repo doesn't store image_seq_length in preprocessor_config.json;
+            # compute it from model config: (image_size // patch_size) ** 2
+            config = PaliGemmaConfig.from_pretrained(cls.model_id)
+            num_image_tokens = config.text_config.num_image_tokens
+            cls.processor.image_processor.image_seq_length = num_image_tokens
+            cls.processor.image_seq_length = num_image_tokens
+
+    def _prepare_model_inputs(self, model, inputs):
+        # Tiny model config.image_token_id may be a random default; sync from processor
+        image_token_id = getattr(self.processor, "image_token_id", None)
+        if image_token_id is not None and hasattr(model.config, "image_token_id"):
+            if model.config.image_token_id != image_token_id:
+                model.config.image_token_id = image_token_id
+        return inputs

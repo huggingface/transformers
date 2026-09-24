@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -1648,3 +1649,19 @@ class TestAsymmetricT5(unittest.TestCase):
         # num_hidden_layers is passed to T5Config as num_layers
         model = self.build_model_and_check_forward_pass(num_hidden_layers=2)
         assert len(model.decoder.block) == len(model.encoder.block) == 2
+
+
+@require_torch
+class T5FastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-T5ForConditionalGeneration"
+    all_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("text",)
+
+    def _prepare_model_inputs(self, model, inputs):
+        import torch
+
+        # T5 is seq2seq; bare forward without decoder_input_ids fails
+        inputs["decoder_input_ids"] = (
+            torch.ones((inputs["input_ids"].shape[0], 1), dtype=torch.long) * model.config.decoder_start_token_id
+        )
+        return inputs
