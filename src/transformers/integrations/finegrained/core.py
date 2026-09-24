@@ -309,7 +309,8 @@ def finegrained_linear(
          pre-SM100 shapes it supports (FP4, UE8M0 SFs, 128×128 block FP8). Never on SM100,
          where Triton is tuned per shape and is the only path reading pre-swizzled scales.
       2. Triton finegrained fallback everywhere else: SM100, an ``activation_scale``
-         (DeepGEMM is dynamic-only), or any shape DeepGEMM declined.
+         (DeepGEMM is dynamic-only), a call that needs a gradient (DeepGEMM has no backward),
+         or any shape DeepGEMM declined.
 
     Args:
         input: (..., K) bf16/fp16 activations.
@@ -333,6 +334,7 @@ def finegrained_linear(
             (``"bf16"`` = weight-only).
     """
     if prefers_deepgemm_linear(
+        input,
         weight,
         weight_scale_inv,
         block_size=block_size,

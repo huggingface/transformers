@@ -380,37 +380,12 @@ class DeepGemmForwardTest(unittest.TestCase):
                 forward(_Experts(), torch.zeros(2, 4, dtype=torch.float16), None, None)
             self.assertIn("bfloat16", str(caught.exception))
 
-    def test_post_expert_norm_runs_on_the_reducing_arms_and_is_refused_by_megamoe(self):
-        """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm has nowhere to
-        go and is refused. The other arms reduce in `_combine_routed_output`, so the norm rides the
-        rows just before it — the same place the reference forwards apply it."""
+    def test_megamoe_refuses_a_post_expert_norm(self):
+        """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm has nowhere to go."""
         import transformers.integrations.deepgemm as dg
 
-        applied = []
-
-        class _Norm(torch.nn.Module):
-            def forward(self, rows):
-                applied.append(tuple(rows.shape))
-                return rows
-
-        class _Experts(torch.nn.Module):
-            has_post_expert_norm = True
-
-            def __init__(self):
-                super().__init__()
-                self.post_expert_norm = _Norm()
-
-        module = _Experts()
-        rows = torch.randn(4, 8)
-        # the reducing arms: the norm is applied and the rows pass through
-        self.assertIs(dg._apply_post_expert_norm(module, rows), rows)
-        self.assertEqual(applied, [(4, 8)])
-
-        # a model declaring no norm is untouched
-        plain = torch.nn.Module()
-        self.assertIs(dg._apply_post_expert_norm(plain, rows), rows)
-
-        # mega moe still refuses, and only mega moe
+        module = torch.nn.Module()
+        module.has_post_expert_norm = True
         with self.assertRaises(NotImplementedError):
             dg._assert_no_post_expert_norm(module)
 

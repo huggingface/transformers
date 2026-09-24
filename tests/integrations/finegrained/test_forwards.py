@@ -246,7 +246,7 @@ class FineGrainedForwardTest(unittest.TestCase):
                 row = inter @ dequantized["down_proj"][e].t()
                 if post_norm is not None:
                     row = post_norm(row.to(x.dtype)).float()
-                out[token] += row * float(wts[token, slot])
+                out[token] += row * wts[token, slot].float()
         return out
 
     def test_modelopt_nvfp4_experts_merge_their_globals_and_fuse_the_post_norm(self):
