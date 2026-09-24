@@ -43,17 +43,6 @@ logger = logging.get_logger(__name__)
 
 class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Gemma4UnifiedImageProcessorKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "return_mm_token_type_ids": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-        },
-        "audio_kwargs": {},
-        "videos_kwargs": {"return_metadata": True},
-    }
 
 
 @auto_docstring
@@ -71,6 +60,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         image_seq_length: int = 280,
         audio_seq_length: int = 750,
         audio_ms_per_token: int = 40,
+        subprocessor_call_kwargs: Gemma4UnifiedProcessorKwargs | None = None,
         **kwargs,
     ):
         r"""
@@ -83,6 +73,8 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             Milliseconds of audio per output soft token. Used to dynamically compute
             the number of audio placeholder tokens as ``ceil(duration_ms / audio_ms_per_token)``.
             The default of 40 comes from the SSCP convolution's 4× time reduction on 10ms frames.
+        subprocessor_call_kwargs ([`Gemma4UnifiedProcessorKwargs`], *optional*):
+            Default kwargs passed to any subprocessor calls.
         """
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
@@ -108,12 +100,25 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         self.boa_token = getattr(tokenizer, "boa_token", None)
         self.eoa_token = getattr(tokenizer, "eoa_token", None)
 
+        if subprocessor_call_kwargs is None:
+            subprocessor_call_kwargs = {
+                "text_kwargs": {
+                    "padding": True,
+                    "return_mm_token_type_ids": True,
+                },
+                "images_kwargs": {
+                    "do_convert_rgb": True,
+                },
+                "videos_kwargs": {"return_metadata": True},
+            }
+
         super().__init__(
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             tokenizer=tokenizer,
             video_processor=video_processor,
             chat_template=chat_template,
+            subprocessor_call_kwargs=subprocessor_call_kwargs,
             **kwargs,
         )
 
@@ -227,9 +232,9 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
+        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
+        images_kwargs = merged_kwargs.get("images_kwargs", {})
 
-        images_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("images_kwargs", {})
-        images_kwargs.update(kwargs)
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
             images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
@@ -257,8 +262,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
             patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
             pooling_kernel_size = (
                 videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size
