@@ -20,6 +20,7 @@ import pytest
 
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     require_torch_greater_or_equal,
     slow,
@@ -28,6 +29,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -434,7 +436,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
-class ZambaModelIntegrationTest(unittest.TestCase):
+class ZambaModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model = None
     tokenizer = None
 
@@ -539,8 +541,8 @@ class ZambaModelIntegrationTest(unittest.TestCase):
         output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
         expected_text = self.tokenizer.decode(output[0].tolist())
 
-        torch._dynamo.reset()
-        torch.cuda.empty_cache()
+        del model
+        cleanup(torch_device, gc_collect=True)
 
         # Opt-in: use_associative_scan=True → compiled associative scan
         model = ZambaForCausalLM.from_pretrained(
