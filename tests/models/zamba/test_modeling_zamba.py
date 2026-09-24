@@ -443,6 +443,7 @@ class ZambaModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     @slow
     def setUpClass(cls):
+        super().setUpClass()
         model_id = "Zyphra/Zamba-7B-v1"
         cls.model = ZambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, use_mamba_kernels=False)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
