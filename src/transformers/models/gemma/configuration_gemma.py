@@ -86,16 +86,11 @@ class GemmaConfig(PreTrainedConfig):
     use_bidirectional_attention: bool | None = None
 
     def __post_init__(self, **kwargs):
-        # The Gemma 1.0 checkpoints were released with `hidden_act="gelu"`, which resolves to the exact
-        # erf GELU, but they were trained with the tanh approximation. `GemmaMLP` used to correct this
-        # by reading `hidden_activation`; #35235 dropped that field and left the legacy value in force.
-        # Remapping here rather than in the model means `save_pretrained` and anything reading the
-        # config (exporters, other runtimes) see the corrected value too.
+        # #35235 dropped this conversion which we now handle here instead
         if self.hidden_act == "gelu":
             logger.warning_once(
-                '`hidden_act="gelu"` on a Gemma config is the legacy value from the original Gemma 1.0 '
-                "releases and resolves to the exact erf GELU, while these checkpoints were trained with "
-                'the tanh approximation. Setting `hidden_act="gelu_pytorch_tanh"` instead.'
+                'We found `hidden_act="gelu"` in this Gemma config. This is a legacy value of the official '
+                'releases but it is meant to target the tanh approximation. Setting `hidden_act="gelu_pytorch_tanh"` instead.'
             )
             self.hidden_act = "gelu_pytorch_tanh"
 
