@@ -533,7 +533,7 @@ class GraniteForDoclingPositionEmbedding(nn.Module):
         super().__init__()
         self.embed_dim = embed_dim
         self.grid_size = grid_size
-        self.register_buffer("pos_embed", self.build(embed_dim, grid_size), persistent=False)
+        self.pos_embed = nn.Buffer(self.build(embed_dim, grid_size), persistent=False)
 
     @staticmethod
     def build(embed_dim: int, grid_size: int) -> torch.Tensor:
@@ -547,15 +547,6 @@ class GraniteForDoclingPositionEmbedding(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return hidden_states + self.pos_embed.to(hidden_states.dtype)
-
-
-class GraniteForDoclingProjection(nn.Module):
-    def __init__(self, config: GraniteForDoclingVisionConfig, scale_factor: int):
-        super().__init__()
-        self.proj = nn.Linear(config.hidden_size * (scale_factor**2), config.out_hidden_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.proj(hidden_states)
 
 
 class GraniteForDoclingDeepStackMerger(nn.Module):
@@ -582,7 +573,9 @@ class GraniteForDoclingConnector(nn.Module):
         self.scale_factor = config.scale_factor
         text_hidden_size = config.out_hidden_size
         tokens_per_side = config.image_size // config.patch_size
-        self.modality_projection = GraniteForDoclingProjection(config, self.scale_factor)
+        self.modality_projection = nn.Linear(
+            config.hidden_size * (self.scale_factor**2), config.out_hidden_size, bias=False
+        )
         self.ln_in = nn.LayerNorm(config.hidden_size)
         self.ln_mid = nn.LayerNorm(text_hidden_size)
         self.mlp_fc2 = nn.Linear(text_hidden_size, text_hidden_size, bias=False)
@@ -982,6 +975,7 @@ class GraniteForDoclingVisionModel(GraniteForDoclingPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1218,7 +1212,7 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
 )
 class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
-    # The multi-token prediction heads of a checkpoint are used by serving engines, not by `generate`
+    # Some checkpoints carry extra prediction heads under `mtp.*` for serving engines; they are not part of this model
     _keys_to_ignore_on_load_unexpected = [r"^mtp\."]
 
     def __init__(self, config):

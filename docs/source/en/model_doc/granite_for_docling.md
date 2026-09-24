@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 The page is split into tiles of 512x512 pixels laid out on the grid that best matches its aspect ratio, plus a thumbnail of the whole page when there is more than one tile. A vision encoder embeds every tile, and a pixel-shuffle connector maps vision patches to image tokens. Intermediate vision encoder states are projected as well and added to the image tokens after the first decoder layers. A dense Granite-style text decoder then generates the DocLang.
 
-The same modeling code loads different GraniteForDocling sizes and configurations through `text_config` and `vision_config`. Checkpoints may add a high-resolution connector path (`use_fine_route`) that emits four times as many image tokens per tile, a density router (`density_router_hidden_size`) that predicts from the vision encoder features whether a page needs that fine path, and multi-token prediction heads (`num_mtp_layers`).
+The same modeling code loads different GraniteForDocling sizes and configurations through `text_config` and `vision_config`. Checkpoints may add a high-resolution connector path (`use_fine_route`) that emits four times as many image tokens per tile and a density router (`density_router_hidden_size`) that predicts from the vision encoder features whether a page needs that fine path.
 
 You can find all the original GraniteForDocling checkpoints under the [docling-project](https://huggingface.co/docling-project) organization.
 
@@ -187,7 +187,7 @@ for row in output:
     print(doclang.removesuffix(processor.tokenizer.eos_token).strip())
 ```
 
-Add `"fine_route": True` to `processor_kwargs` to route the whole batch through the fine path; `tile_fine_mask` in the inputs then marks the tiles that take it. Keep every processor option inside `processor_kwargs`, [`~ProcessorMixin.apply_chat_template`] does not merge them with loose keyword arguments.
+Add `"fine_route": True` to `processor_kwargs` to route the whole batch through the fine path; `tile_fine_mask` in the inputs then marks the tiles that take it.
 
 ### Export DocLang with Docling
 
@@ -215,7 +215,6 @@ The [DocLang](https://doclang.ai/) spec and `doclang` toolkit (validate / pack) 
 - A full page is long: budget `max_new_tokens` in the thousands, otherwise the DocLang is cut off silently.
 - Tiles are 512x512, laid out on the grid that best matches the page's aspect ratio, capped by `max_patches` (default 32) and 16 tiles per side. A page that fits in one tile gets no thumbnail.
 - The fine path quadruples the image tokens per tile. Use it for dense pages only, or let a checkpoint with a density router decide with [`~GraniteForDoclingForConditionalGeneration.predict_fine_route`].
-- Checkpoints may ship multi-token prediction heads (`num_mtp_layers`, weights under `mtp.*`). Serving engines such as vLLM use them for speculative decoding; transformers loads the checkpoint without them.
 
 ## GraniteForDoclingConfig
 

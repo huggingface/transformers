@@ -150,13 +150,6 @@ class GraniteForDoclingConfig(Idefics3Config):
         the corresponding `deepstack_attn_layers`. Index 0 is the output of the first layer.
     deepstack_attn_layers (`list[int]`, *optional*, defaults to `[0, 1, 2]`):
         Text decoder layers after which the corresponding DeepStack features are added.
-    num_mtp_layers (`int`, *optional*, defaults to 0):
-        Number of multi-token prediction heads stored in the checkpoint under `mtp.*`. Serving engines such as vLLM
-        use them for speculative decoding; transformers does not load them.
-    mtp_num_attention_heads (`int`, *optional*):
-        Number of attention heads in each multi-token prediction head. Defaults to `text_config.num_attention_heads`.
-    mtp_intermediate_size (`int`, *optional*):
-        Feed-forward size of each multi-token prediction head. Defaults to `text_config.intermediate_size`.
     use_fine_route (`bool`, *optional*, defaults to `True`):
         Whether to build the fine connector path, which shuffles pixels by half of `scale_factor` and yields four
         times as many image tokens per tile. Checkpoints trained with the coarse path only set it to `False`.
@@ -178,9 +171,6 @@ class GraniteForDoclingConfig(Idefics3Config):
     pad_token_id: int | None = 100256
     deepstack_visual_indexes: list[int] | None = None
     deepstack_attn_layers: list[int] | None = None
-    num_mtp_layers: int = 0
-    mtp_num_attention_heads: int | None = None
-    mtp_intermediate_size: int | None = None
     use_fine_route: bool = True
     density_router_hidden_size: int | None = None
     density_router_threshold: float = 0.4
@@ -709,7 +699,7 @@ class GraniteForDoclingPositionEmbedding(nn.Module):
         super().__init__()
         self.embed_dim = embed_dim
         self.grid_size = grid_size
-        self.register_buffer("pos_embed", self.build(embed_dim, grid_size), persistent=False)
+        self.pos_embed = nn.Buffer(self.build(embed_dim, grid_size), persistent=False)
 
     @staticmethod
     def build(embed_dim: int, grid_size: int) -> torch.Tensor:
@@ -723,15 +713,6 @@ class GraniteForDoclingPositionEmbedding(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return hidden_states + self.pos_embed.to(hidden_states.dtype)
-
-
-class GraniteForDoclingProjection(nn.Module):
-    def __init__(self, config: GraniteForDoclingVisionConfig, scale_factor: int):
-        super().__init__()
-        self.proj = nn.Linear(config.hidden_size * (scale_factor**2), config.out_hidden_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.proj(hidden_states)
 
 
 class GraniteForDoclingDeepStackMerger(nn.Module):
@@ -758,7 +739,9 @@ class GraniteForDoclingConnector(Idefics3Connector):
         self.scale_factor = config.scale_factor
         text_hidden_size = config.out_hidden_size
         tokens_per_side = config.image_size // config.patch_size
-        self.modality_projection = GraniteForDoclingProjection(config, self.scale_factor)
+        self.modality_projection = nn.Linear(
+            config.hidden_size * (self.scale_factor**2), config.out_hidden_size, bias=False
+        )
         self.ln_in = nn.LayerNorm(config.hidden_size)
         self.ln_mid = nn.LayerNorm(text_hidden_size)
         self.mlp_fc2 = nn.Linear(text_hidden_size, text_hidden_size, bias=False)
@@ -918,6 +901,7 @@ class GraniteForDoclingVisionModel(Idefics3VisionTransformer):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1150,7 +1134,7 @@ class GraniteForDoclingModel(Idefics3Model):
     """
 )
 class GraniteForDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
-    # The multi-token prediction heads of a checkpoint are used by serving engines, not by `generate`
+    # Some checkpoints carry extra prediction heads under `mtp.*` for serving engines; they are not part of this model
     _keys_to_ignore_on_load_unexpected = [r"^mtp\."]
 
     def predict_fine_route(self, pixel_values: torch.FloatTensor) -> torch.BoolTensor:
