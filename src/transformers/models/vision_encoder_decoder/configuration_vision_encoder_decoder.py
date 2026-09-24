@@ -34,7 +34,10 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
     >>> from transformers import BertConfig, ViTConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel
 
     >>> # Initializing a ViT & BERT style configuration
-    >>> config = VisionEncoderDecoderConfig()
+    >>> config_encoder = ViTConfig()
+    >>> config_decoder = BertConfig()
+
+    >>> config = VisionEncoderDecoderConfig(encoder=config_encoder, decoder=config_decoder)
 
     >>> # Initializing a ViTBert model (with random weights) from a ViT & google-bert/bert-base-uncased style configurations
     >>> model = VisionEncoderDecoderModel(config=config)

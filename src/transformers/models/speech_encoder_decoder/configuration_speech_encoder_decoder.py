@@ -34,7 +34,10 @@ class SpeechEncoderDecoderConfig(PreTrainedConfig):
     >>> from transformers import BertConfig, Wav2Vec2Config, SpeechEncoderDecoderConfig, SpeechEncoderDecoderModel
 
     >>> # Initializing a Wav2Vec2 & BERT style configuration
-    >>> config = SpeechEncoderDecoderConfig()
+    >>> config_encoder = Wav2Vec2Config()
+    >>> config_decoder = BertConfig()
+
+    >>> config = SpeechEncoderDecoderConfig(encoder=config_encoder, decoder=config_decoder)
 
     >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2 & google-bert/bert-base-uncased style configurations
     >>> model = SpeechEncoderDecoderModel(config=config)

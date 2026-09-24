@@ -30,7 +30,10 @@ class VisionTextDualEncoderConfig(PreTrainedConfig):
     >>> from transformers import ViTConfig, BertConfig, VisionTextDualEncoderConfig, VisionTextDualEncoderModel
 
     >>> # Initializing a BERT and ViT configuration
-    >>> config = VisionTextDualEncoderConfig(projection_dim=512)
+    >>> config_vision = ViTConfig()
+    >>> config_text = BertConfig()
+
+    >>> config = VisionTextDualEncoderConfig(vision_config=config_vision, text_config=config_text, projection_dim=512)
 
     >>> # Initializing a BERT and ViT model (with random weights)
     >>> model = VisionTextDualEncoderModel(config=config)
