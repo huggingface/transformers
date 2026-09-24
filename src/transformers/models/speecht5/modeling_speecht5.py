@@ -431,7 +431,7 @@ class SpeechT5RelativePositionalEncoding(torch.nn.Module):
 
     def forward(self, hidden_states):
         seq_len = hidden_states.shape[1]
-        pos_seq = torch.arange(0, seq_len).to(device=hidden_states.device, dtype=torch.long)
+        pos_seq = torch.arange(0, seq_len, device=hidden_states.device, dtype=torch.long)
         pos_seq = pos_seq[:, None] - pos_seq[None, :]
 
         pos_seq = torch.where(pos_seq < -self.max_length, -self.max_length, pos_seq)

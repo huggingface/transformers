@@ -23,11 +23,12 @@ on:
   pull_request_review_comment:
     types: [created]
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   forward-to-serge-app:
+    permissions: {}
     if: |
       github.repository == 'huggingface/transformers' && (
       (

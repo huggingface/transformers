@@ -58,7 +58,7 @@ from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2TopKRouter,
     apply_rotary_pos_emb,
 )
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer
+from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
@@ -162,6 +162,9 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        raise NotImplementedError("No need to inherit")
+
 
 # NOTE: can copy from qwen vision config!
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
@@ -244,6 +247,11 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         """Append the new token's `idx_k` to the cache and return the full history."""
         self.idx_keys = idx_k if self.idx_keys is None else torch.cat([self.idx_keys, idx_k], dim=-2)
         return self.idx_keys
+
+    def reset(self) -> None:
+        super().reset()
+        # Dropped rather than zeroed, as `update_index` grows them by concatenation, like the main states
+        self.idx_keys = None
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
@@ -751,7 +759,7 @@ class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded * self.inv_freq.float()
             cos = freqs.cos() * self.attention_scaling
@@ -918,9 +926,12 @@ class MiniMaxM3VLModelOutputWithPast(LlavaModelOutputWithPast):
     video_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_video_patches, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
     video_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class MiniMaxM3VLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -940,9 +951,15 @@ class MiniMaxM3VLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     video_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_video_patches, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed):
+        Load-balancing auxiliary loss for the sparse modules.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
     video_hidden_states: torch.FloatTensor | None = None
+    aux_loss: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
@@ -1083,6 +1100,7 @@ class MiniMaxM3VLModel(LlavaModel):
             attentions=getattr(outputs, "attentions", None),
             image_hidden_states=image_features,
             video_hidden_states=video_features,
+            router_logits=getattr(outputs, "router_logits", None),
         )
 
 
@@ -1111,9 +1129,14 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLCausalLMOutputWithPast:
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1124,6 +1147,7 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -1136,9 +1160,22 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.config.text_config.num_experts,
+                self.config.text_config.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(loss.device)
+
         return MiniMaxM3VLCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
+            router_logits=outputs.router_logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -1157,7 +1194,7 @@ class MiniMaxM3VLImageProcessor(Qwen2VLImageProcessor):
     def __init__(self, **kwargs: Unpack[MiniMaxM3VLImageProcessorKwargs]):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        size = dict(self.size) if size is None else size
         # The default size saved in offcial ckpt isn't correct and wasn't used prev!
         # Override with the correct, new default value in that case
         if size == [672, 672]:

@@ -15,7 +15,6 @@ import collections
 import copy
 import inspect
 import math
-import os
 import os.path
 import random
 import re
@@ -25,6 +24,7 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
+from typing import get_args
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -1253,7 +1253,7 @@ class ModelTesterMixin(ExportTesterMixin):
         # This is used to get the addition year of the model
         filename = inspect.getfile(config.__class__)
         # No easy way to get model addition date -> check copyright year on top of file
-        with open(filename) as file:
+        with open(filename, encoding="utf-8") as file:
             source_code = file.read()
         addition_year = 0  # if we cannot find it, set it to 0 (i.e. oldest)
         if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
@@ -5870,6 +5870,47 @@ class ModelTesterMixin(ExportTesterMixin):
                         with torch.no_grad():
                             _ = model(**all_inputs)
 
+    def test_output_router_logits_from_config(self):
+        """`config.output_router_logits` turns the router logits on, and an explicit forward argument wins over it.
+        A head that wraps a MoE backbone has to resolve the flag against the config like the backbone does, otherwise
+        the config setting is silently ignored."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not hasattr(config.get_text_config(decoder=True), "output_router_logits"):
+            self.skipTest("This model has no `output_router_logits` in its config.")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                return_type = model_class.forward.__annotations__.get("return")
+                output_fields = set().union(
+                    *(getattr(t, "__dataclass_fields__", {}).keys() for t in (get_args(return_type) or (return_type,)))
+                )
+                if "router_logits" not in output_fields:
+                    self.skipTest(f"{model_class.__name__} does not declare router_logits in its output type.")
+
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+                model.config.get_text_config(decoder=True).output_router_logits = False
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                inputs.pop("output_router_logits", None)
+
+                with torch.no_grad():
+                    explicit = model(**inputs, output_router_logits=True)
+                    if not explicit.router_logits:
+                        self.skipTest(f"{model_class.__name__} was built without any sparse layer.")
+                    self.assertFalse(model(**inputs).router_logits, "router logits returned with the flag off")
+
+                    model.config.get_text_config(decoder=True).output_router_logits = True
+                    from_config = model(**inputs)
+                    self.assertTrue(from_config.router_logits, "`config.output_router_logits=True` was ignored")
+                    if getattr(explicit, "aux_loss", None) is not None:
+                        self.assertIsNotNone(
+                            from_config.aux_loss, "`config.output_router_logits=True` skipped the aux loss"
+                        )
+                    self.assertFalse(
+                        model(**inputs, output_router_logits=False).router_logits,
+                        "an explicit `output_router_logits=False` did not win over the config",
+                    )
+
     def test_format_of_can_record_outputs(self):
         """Test that that the attribute `_can_record_outputs` is correctly set for a model. It must either be "None" or
         a dictionnary with output names as keys and a recorder or list of recorders as values. A recorder can be an
@@ -6313,6 +6354,63 @@ class ModelTesterMixin(ExportTesterMixin):
         cos, sin = rope_module(hidden_states, position_ids)
         self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
 
+    def test_model_rope_with_partial_rotation(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
+
+        if not hasattr(text_config, "rope_parameters"):
+            self.skipTest("This model does not have RoPE")
+
+        if not hasattr(text_config, "vocab_size"):
+            self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
+
+        n_required_args = sum(
+            p.default is inspect.Parameter.empty
+            and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY, p.POSITIONAL_ONLY)
+            and p.name != "self"
+            for p in inspect.signature(base_model_class.forward).parameters.values()
+        )
+        if n_required_args > 1:
+            self.skipTest("This model requires more than single main input, skip for now as it's not supported")
+
+        input_ids = ids_tensor([1, 10], text_config.vocab_size)
+        model_kwargs = {}
+        if base_model_class.main_input_name != "input_ids":
+            model_kwargs[base_model_class.main_input_name] = input_dict[base_model_class.main_input_name][:1]
+        else:
+            model_kwargs = {"input_ids": input_ids}
+
+        if config.is_encoder_decoder:
+            model_kwargs["decoder_input_ids"] = input_ids.clone()
+
+        if "partial_rotary_factor" not in text_config.rope_parameters:
+            self.skipTest("This model does not have partial rope supported")
+
+        # Run with partial rotary factor set to a values less than one, should not raise any shape errors
+        # If tested already has a value > 1, use it since that might affect to other config field values
+        default_partial_rotation = text_config.rope_parameters["partial_rotary_factor"]
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "default",
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": 0.5 if default_partial_rotation >= 1.0 else default_partial_rotation,
+            },
+        )
+        model = base_model_class(config)
+        model.to(torch_device).eval()
+        model(**model_kwargs)
+
 
 global_rng = random.Random()
 
@@ -6450,7 +6548,7 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
-    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
+    config.rope_parameters = copy.deepcopy(getattr(config, "rope_parameters", {}) or {})
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
     # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
