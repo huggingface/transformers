@@ -84,29 +84,29 @@ python run_glue.py \
 ## Text classification
 As an alternative, we can use the script [`run_classification.py`](./run_classification.py) to fine-tune models on a single/multi-label classification task. 
 
-The following example fine-tunes BERT on the `en` subset of  [`amazon_reviews_multi`](https://huggingface.co/datasets/defunct-datasets/amazon_reviews_multi) dataset.
+The following example fine-tunes BERT on the [`dbpedia_14`](https://huggingface.co/datasets/fancyzhx/dbpedia_14) dataset.
 We can specify the metric, the label column and also choose which text columns to use jointly for classification.
 ```bash
-dataset="defunct-datasets/amazon_reviews_multi"
-subset="en"
+dataset="fancyzhx/dbpedia_14"
 python run_classification.py \
     --model_name_or_path  google-bert/bert-base-uncased \
     --dataset_name ${dataset} \
-    --dataset_config_name ${subset} \
     --shuffle_train_dataset \
     --metric_name accuracy \
-    --text_column_name "review_title,review_body,product_category" \
+    --text_column_name "title,content" \
     --text_column_delimiter "\n" \
-    --label_column_name stars \
+    --label_column_name label \
     --do_train \
     --do_eval \
     --max_seq_length 512 \
     --per_device_train_batch_size 32 \
     --learning_rate 2e-5 \
     --num_train_epochs 1 \
-    --output_dir /tmp/${dataset}_${subset}/
+    --max_train_samples 20000 \
+    --max_eval_samples 5000 \
+    --output_dir /tmp/dbpedia_14/
 ```
-Training for 1 epoch results in acc of around 0.5958 for review_body only and 0.659 for title+body+category.
+Training on 20,000 samples for 1 epoch results in an accuracy of around 0.97. Remove `--max_train_samples` and `--max_eval_samples` to train and evaluate on the full dataset.
 
 The following is a multi-label classification example. It fine-tunes BERT on the `reuters21578` dataset hosted on our [hub](https://huggingface.co/datasets/ucirvine/reuters21578):
 ```bash
