@@ -92,116 +92,107 @@ else:
 logger = logging.get_logger(__name__)
 
 
-def _resample_to_interpolation(resample):
-    if resample is None:
-        return None
-    try:
-        return {2: "bilinear", 3: "bicubic"}.get(int(resample))
-    except (TypeError, ValueError):
-        name = getattr(resample, "name", str(resample)).upper()
-        return "bicubic" if "BICUBIC" in name else "bilinear" if "BILINEAR" in name else None
-
-
-def _resize_normalize_target(size, crop):
-    """Resize target the kernel can reproduce as `(resize_size, crop_size, resize_mode)`, `None` to fall back.
-
-    The kernel crops inside the resized image, so a crop larger than the resize target, which the default path
-    reaches by zero-padding, falls back.
-    """
-    if size is None:
-        return None
-    if size.shortest_edge and not size.longest_edge:
-        if crop is None or not (crop.height and crop.width) or size.shortest_edge < max(crop.height, crop.width):
-            return None
-        return size.shortest_edge, (crop.height, crop.width), "shortest_edge"
-    if size.height and size.width:
-        if crop is None or (crop.height, crop.width) == (size.height, size.width):
-            return (size.height, size.width), None, "square"
-        if not (crop.height and crop.width) or crop.height > size.height or crop.width > size.width:
-            return None
-        return (size.height, size.width), (crop.height, crop.width), "square"
-    return None
-
-
-def _per_channel_stats(stats, channels):
-    """Normalization stats as one value per channel, `None` when they do not describe these images."""
-    if isinstance(stats, (int, float)):
-        return [float(stats)] * channels
-    if stats is None or len(stats) != channels:
-        return None
-    return [float(stat) for stat in stats]
-
-
 _KERNEL_DEVICE_TYPE = "cuda"
-_KERNEL_REPO = "Molbap/kernel_image_resize"
-# Pinned by tag: `version=1` resolution does not find the tag of a repo outside `kernels-community`.
-_KERNEL_REVISION = "v1.0.0"
 
 
-def _kernel_channel_count(images):
-    """Channel count when the batch is uint8 CHW on one CUDA device, `None` when the kernel cannot run on it."""
-    if not images or any(not isinstance(image, torch.Tensor) or image.ndim != 3 for image in images):
+@register_processing_kernel("connected_component_areas", repo_id="kernels-community/cv-utils", version=1)
+def _connected_component_areas_kernel(kernel, regions):
+    """Area of the 8-connected component of every pixel of a boolean `(batch_size, 1, height, width)` tensor."""
+    if regions.device.type != _KERNEL_DEVICE_TYPE:
         return None
-    reference = images[0]
-    if reference.device.type != _KERNEL_DEVICE_TYPE or any(
-        image.dtype != torch.uint8 or image.device != reference.device or image.shape[0] != reference.shape[0]
+    height, width = regions.shape[-2:]
+    padded_regions = torch.nn.functional.pad(regions.to(torch.uint8), (0, width % 2, 0, height % 2))
+    _, areas = kernel.cc_2d(padded_regions.contiguous(), get_counts=True)
+    return areas[..., :height, :width]
+
+
+_KERNEL_INTERPOLATIONS = {2: "bilinear", 3: "bicubic"}
+
+
+def _resize_kernel_arguments(images, resample, rescale_factor, image_mean, image_std):
+    """Interpolation and per-channel stats for the resize kernels, `None` when they cannot process these inputs."""
+    if not images or any(
+        not isinstance(image, torch.Tensor)
+        or image.ndim != 3
+        or image.dtype != torch.uint8
+        or image.device != images[0].device
+        or image.shape[0] != images[0].shape[0]
         for image in images
     ):
         return None
-    return reference.shape[0]
+    interpolation = _KERNEL_INTERPOLATIONS.get(resample)
+    channels = images[0].shape[0]
+    image_mean = [image_mean] * channels if isinstance(image_mean, (int, float)) else list(image_mean)
+    image_std = [image_std] * channels if isinstance(image_std, (int, float)) else list(image_std)
+    if images[0].device.type != _KERNEL_DEVICE_TYPE or interpolation is None or len(image_mean) != channels:
+        return None
+    return interpolation, image_mean, image_std, rescale_factor
 
 
-@register_processing_kernel("resize_normalize", repo_id=_KERNEL_REPO, version=None, revision=_KERNEL_REVISION)
-def _resize_normalize_kernel(kernel, images, **kwargs):
-    if kwargs.get("do_pad") or not (kwargs.get("do_resize") and kwargs.get("do_normalize")):
+@register_processing_kernel("resize_normalize", repo_id="kernels-community/cv-utils", version=1)
+def _resize_normalize_kernel(kernel, images, size, crop_size, resample, rescale_factor, image_mean, image_std):
+    """Resize every image to `size`, center crop to `crop_size` when given, then rescale and normalize."""
+    arguments = _resize_kernel_arguments(images, resample, rescale_factor, image_mean, image_std)
+    if arguments is None:
         return None
-    channels = _kernel_channel_count(images)
-    if channels is None:
+    interpolation, image_mean, image_std, rescale_factor = arguments
+    crop = (crop_size.height, crop_size.width) if crop_size is not None else None
+    if crop is not None and not all(crop):
         return None
-    image_mean = _per_channel_stats(kwargs.get("image_mean"), channels)
-    image_std = _per_channel_stats(kwargs.get("image_std"), channels)
-    interpolation = _resample_to_interpolation(kwargs.get("resample"))
-    target = _resize_normalize_target(
-        kwargs.get("size"), kwargs.get("crop_size") if kwargs.get("do_center_crop") else None
-    )
-    if image_mean is None or image_std is None or interpolation is None or target is None:
+    if size.height and size.width:
+        if crop is not None and (crop[0] > size.height or crop[1] > size.width):
+            return None
+        resize, resize_mode = (size.height, size.width), "square"
+    elif size.shortest_edge and not size.longest_edge and crop is not None and size.shortest_edge >= max(crop):
+        resize, resize_mode = size.shortest_edge, "shortest_edge"
+    else:
         return None
-    resize_size, crop_size, resize_mode = target
-    rescale_factor = float(kwargs["rescale_factor"]) if kwargs.get("do_rescale") else 1.0
-    pixel_values = kernel.resize_normalize(
+    return kernel.resize_normalize(
         images,
-        resize_size,
+        resize,
         image_mean,
         image_std,
         rescale_factor=rescale_factor,
         resample=interpolation,
         antialias=True,
-        crop_size=crop_size,
+        crop_size=crop,
         resize_mode=resize_mode,
+        round_to_uint8=True,
     )
-    return BatchFeature(data={"pixel_values": list(pixel_values)}, tensor_type=kwargs.get("return_tensors"))
 
 
-@register_processing_kernel("resize_normalize_ragged", repo_id=_KERNEL_REPO, version=None, revision=_KERNEL_REVISION)
-def _resize_normalize_ragged_kernel(kernel, images, target_sizes, **kwargs):
-    """One launch for a batch where every image has its own output size, as dynamic-resolution VLMs need."""
-    channels = _kernel_channel_count(images)
-    if channels is None or len(target_sizes) != len(images):
+@register_processing_kernel("resize_normalize_patchify", repo_id="kernels-community/cv-utils", version=1)
+def _resize_normalize_patchify_kernel(
+    kernel,
+    frames,
+    target_sizes,
+    items,
+    resample,
+    rescale_factor,
+    image_mean,
+    image_std,
+    patch_size,
+    merge_size,
+    temporal_patch_size,
+):
+    """Resize every frame to its target size, normalize, and write the flattened patches of every item in order."""
+    arguments = _resize_kernel_arguments(frames, resample, rescale_factor, image_mean, image_std)
+    if arguments is None:
         return None
-    image_mean = _per_channel_stats(kwargs.get("image_mean"), channels)
-    image_std = _per_channel_stats(kwargs.get("image_std"), channels)
-    interpolation = _resample_to_interpolation(kwargs.get("resample"))
-    if image_mean is None or image_std is None or interpolation is None:
-        return None
-    rescale_factor = float(kwargs["rescale_factor"]) if kwargs.get("do_rescale") else 1.0
-    return kernel.resize_normalize_ragged_output(
-        images,
-        [(int(height), int(width)) for height, width in target_sizes],
+    interpolation, image_mean, image_std, rescale_factor = arguments
+    return kernel.resize_normalize_patchify(
+        frames,
+        target_sizes,
+        items,
         image_mean,
         image_std,
         rescale_factor,
         interpolation,
         True,
+        patch_size,
+        merge_size,
+        temporal_patch_size,
+        round_to_uint8=True,
     )
 
 
@@ -463,60 +454,6 @@ class TorchvisionBackend(BaseImageProcessor):
 
         return images
 
-    def resize_normalize_batch(
-        self,
-        images: list["torch.Tensor"],
-        target_sizes: list[tuple[int, int]],
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        disable_grouping: bool | None = None,
-    ) -> list["torch.Tensor"]:
-        """Resize every image to its own target size, then rescale and normalize it.
-
-        Processors whose output size depends on the input, such as the dynamic-resolution vision language models,
-        compute `target_sizes` themselves and call this once for the whole batch. The default implementation groups
-        the batch by shape and loops, which is what those processors used to write inline. A registered kernel does
-        the whole batch in one launch, which is why the loop lives here instead of in each processor.
-
-        The target of a group is read from its first image, so images that share an input shape must share a target.
-        That holds for a rule computed from the input size, such as `smart_resize`.
-        """
-        if self.use_kernels:
-            pixel_values = run_processing_kernel(
-                "resize_normalize_ragged",
-                images,
-                target_sizes,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                image_mean=image_mean,
-                image_std=image_std,
-            )
-            if pixel_values is not None:
-                return list(pixel_values)
-
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        target_per_group = {}
-        for image_index, (group_key, _) in grouped_images_index.items():
-            if isinstance(image_index, int):
-                target_per_group.setdefault(group_key, target_sizes[image_index])
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            target_height, target_width = target_per_group[shape]
-            stacked_images = self.resize(
-                image=stacked_images,
-                size=SizeDict(height=int(target_height), width=int(target_width)),
-                resample=resample,
-            )
-            processed_images_grouped[shape] = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-        return reorder_images(processed_images_grouped, grouped_images_index)
-
     def center_crop(
         self,
         image: "torch.Tensor",
@@ -565,26 +502,19 @@ class TorchvisionBackend(BaseImageProcessor):
         **kwargs,
     ) -> BatchFeature:
         """Preprocess using Torchvision backend (fast, GPU-accelerated)."""
-        if self.use_kernels:
+        if self.use_kernels and do_resize and do_rescale and do_normalize and not do_pad:
             pixel_values = run_processing_kernel(
                 "resize_normalize",
                 images,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_center_crop=do_center_crop,
-                crop_size=crop_size,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                do_pad=do_pad,
-                return_tensors=return_tensors,
+                size,
+                crop_size if do_center_crop else None,
+                resample,
+                rescale_factor,
+                image_mean,
+                image_std,
             )
             if pixel_values is not None:
-                return pixel_values
-
+                return BatchFeature(data={"pixel_values": list(pixel_values)}, tensor_type=return_tensors)
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}

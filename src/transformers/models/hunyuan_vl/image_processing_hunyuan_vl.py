@@ -226,6 +226,27 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        if self.use_kernels and do_resize and do_rescale and do_normalize:
+            kernel_output = self._resize_normalize_patchify_kernel(
+                images,
+                size,
+                resample,
+                rescale_factor,
+                image_mean,
+                image_std,
+                patch_size,
+                temporal_patch_size,
+                merge_size,
+            )
+            if kernel_output is not None:
+                pixel_values, image_grid_thw = kernel_output
+                return BatchFeature(
+                    data={
+                        "pixel_values": pixel_values,
+                        "image_grid_thw": torch.tensor(image_grid_thw, dtype=torch.long),
+                    },
+                    tensor_type=return_tensors,
+                )
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -264,6 +285,10 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
+
+    def _resize_normalize_patchify_kernel(self, *args, **kwargs):
+        """The kernel writes the Qwen2-VL patch order and resamples with `resample`, HunYuanVL needs neither."""
+        return None
 
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None

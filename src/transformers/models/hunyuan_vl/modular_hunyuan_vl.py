@@ -421,6 +421,10 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
 
         return flatten_patches, grid_h, grid_w
 
+    def _resize_normalize_patchify_kernel(self, *args, **kwargs):
+        """The kernel writes the Qwen2-VL patch order and resamples with `resample`, HunYuanVL needs neither."""
+        return None
+
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None
     ) -> tuple[int, int]:
