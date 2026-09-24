@@ -89,11 +89,12 @@ def _install_class_baseline_hook(cls) -> None:
         return
     original = getattr(static, "__func__", static)
     if getattr(original, "_memory_cleanup_reads_baseline", False):
-        return  # this class or an ancestor, whose wrapper binds to the real `cls` anyway
+        # `class Child(MemoryCleanupTestCase): pass` reuses the inherited wrapper, bound to Child.
+        return
 
     def set_up_class(inner_cls, *args, **kwargs):
-        # `__dict__`, not `getattr`: an inherited baseline is the ancestor's, and a subclass wrapper that
-        # already recorded one must survive the body calling `super().setUpClass()`.
+        # Preserve the first reading when TestHubKernels calls super().setUpClass().
+        # `__dict__` excludes a parent's baseline that getattr(Child, ...) would inherit.
         if _memory_leak_settings()[0] is not None and "_memory_cleanup_class_baseline" not in inner_cls.__dict__:
             inner_cls._memory_cleanup_class_baseline = _device_memory_allocated()
         return original(inner_cls, *args, **kwargs)
@@ -128,7 +129,7 @@ class MemoryCleanupMixin:
     Leak checks warn by default when more than 10 MiB remains allocated on the device after cleanup.
     `TRANSFORMERS_TEST_MEMORY_LEAK_MIB=<n>` overrides the threshold; an empty value disables checking.
     `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` fails leaking tests instead of warning.
-    The same threshold is applied again at the class boundary, against a baseline read before `setUpClass`,
+    The same threshold is applied again at the class boundary (against a baseline read before `setUpClass`),
     since a leaked class fixture sits inside every test's own baseline and so reports zero on all of them.
 
     Known leak, still unfixed: compiling with `cache_implementation="static"` leaves memory in the cache.
