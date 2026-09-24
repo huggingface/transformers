@@ -430,6 +430,7 @@ class ZambaMambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_mamba_act]
 
         self.use_fast_kernels = config.use_mamba_kernels
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
@@ -580,7 +581,7 @@ class ZambaMambaMixer(nn.Module):
                     return_last_state=output_final_state,
                     # Old model: only when user request it explicitly
                     use_mambapy=False,
-                    use_associative_scan=False,
+                    use_associative_scan=self.use_associative_scan,
                 )
 
                 if output_final_state:
@@ -688,7 +689,7 @@ class ZambaMambaDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         transformer_hidden_states: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -948,11 +949,6 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1044,12 +1040,6 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,

@@ -23,7 +23,11 @@ from parameterized import parameterized
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    AnnotationFormatTestMixin,
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+)
 
 
 if is_torch_available():
@@ -33,7 +37,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class YolosImageProcessingTester:
+class YolosImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -125,17 +129,6 @@ class YolosImageProcessingTester:
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
@@ -198,7 +191,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -243,7 +236,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
     def test_call_pytorch_with_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
@@ -296,7 +289,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         annotations_0 = {"image_id": 39769, "annotations": target}
@@ -416,7 +409,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         annotation_0 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}

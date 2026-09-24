@@ -67,7 +67,6 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
-    from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -381,42 +380,6 @@ def _patch_avg_pool2d(original):
     return patch
 
 
-@register_patch("executorch", "torch.bucketize")
-def _patch_bucketize(original):
-    """Decompose bucketize into a broadcasted comparison + sum.
-
-    The portable runtime ships no `bucketize.Tensor_out` kernel (used by VLM vision position ids —
-    idefics2/3, smolvlm, phi4_multimodal). `boundaries` is 1-D and sorted, so the bucket index is
-    just the count of boundaries below each value — comparison and sum, both portable ops.
-    """
-
-    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
-        below = (boundaries <= input.unsqueeze(-1)) if right else (boundaries < input.unsqueeze(-1))
-        result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("executorch", "torch.searchsorted")
-def _patch_searchsorted(original):
-    """Decompose searchsorted into a broadcasted comparison + sum (no portable kernel; same idea as
-    bucketize). ``sorted_sequence`` is sorted, so the insertion index is the count of entries below.
-    """
-
-    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
-        if side is not None:
-            right = side == "right"
-        seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
-        below = (seq <= val) if right else (seq < val)
-        result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
-
-    return patch
-
-
 @register_patch("executorch", "torch.nn.functional.adaptive_avg_pool2d")
 def _patch_adaptive_avg_pool2d(original):
     """Decompose adaptive_avg_pool2d (no portable adaptive-pool kernel).
@@ -508,23 +471,6 @@ def _patch_bernoulli(_original):
         probs = input if p is None else p
         result = (torch.rand_like(input) < probs).to(input.dtype)
         return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion. `aot_autograd` and
-    `gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering passes."""
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            return mask_function(*broadcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-
-        return _expanded
 
     return patch
 
@@ -631,30 +577,6 @@ def _patch_expand(original):
         if 0 in result.stride():
             return result.clone(memory_format=torch.contiguous_format)
         return result
-
-    return patch
-
-
-@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
-def _patch_reshape(original):
-    """Materialise a non-contiguous input before ``reshape``.
-
-    ExecuTorch's edge-lowering reshape reference refuses a non-contiguous input (e.g. the
-    ``transpose(1, 2).reshape(...)`` in the packed vision-attention forward). A plain
-    ``.contiguous()`` gets folded away by functionalization, but a ``.clone()`` survives. Eager
-    ``reshape`` already copies a non-contiguous tensor, so this adds no extra work — it just moves
-    the copy where ExecuTorch's lowering needs it.
-
-    The clone must force ``contiguous_format``: a bare ``.clone()`` defaults to
-    ``preserve_format``, keeping a transposed dim-order (e.g. ``[0, 2, 1]``) that ExecuTorch's
-    clone lowering can't map to a ``torch.memory_format`` (``Failed to map a given dim_order`` —
-    hit by xcodec2's ISTFT head).
-    """
-
-    def patch(input, *shape, **kwargs):
-        if not input.is_contiguous():
-            input = input.clone(memory_format=torch.contiguous_format)
-        return original(input, *shape, **kwargs)
 
     return patch
 
@@ -1076,13 +998,13 @@ def _patch_flatc_compile_nonfinite(original):
     """
 
     def patch(output_dir, schema_path, json_path):
-        with open(json_path) as f:
+        with open(json_path, encoding="utf-8") as f:
             data = f.read()
         fixed = data
         for pattern, repl in _JSON_NONFINITE_SUBS:
             fixed = pattern.sub(repl, fixed)
         if fixed != data:
-            with open(json_path, "w") as f:
+            with open(json_path, "w", encoding="utf-8") as f:
                 f.write(fixed)
         return original(output_dir, schema_path, json_path)
 

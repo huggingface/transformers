@@ -20,13 +20,12 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="skt/A.X-K2")
 @strict
-class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class AXK2Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*):
         Number of expert groups for grouped routing, used by the larger A.X-K2 releases. `None` (the
@@ -149,7 +148,7 @@ class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
         # Indexer cache needed so DSA to indicate correct cache
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
 
         super().__post_init__(**kwargs)
 

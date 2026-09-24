@@ -41,7 +41,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         inputs = processor(text=input_str, images=image_input)
 
@@ -59,148 +59,8 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(inputs["flattened_patches"][0].shape[0], max_patch)
             self.assertEqual(inputs["flattened_patches"][0].shape[1], expected_hidden_size[i])
 
-    @require_torch
-    @require_vision
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", max_patches=1024, patch_size={"height": 8, "width": 8})
-        print("image_processor", image_processor)
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(len(inputs["flattened_patches"][0][0]), 194)
-
-    @require_torch
-    @require_vision
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", max_patches=4096)
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, max_patches=1024)
-        self.assertEqual(len(inputs["flattened_patches"][0]), 1024)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            max_patches=1024,
-            padding="max_length",
-            max_length=76,
-        )
-
-        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
-        self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs(batch_size=2)
-        image_input = self.prepare_image_inputs(batch_size=2)
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            max_patches=1024,
-            padding="longest",
-            max_length=76,
-        )
-
-        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
-
-        self.assertEqual(len(inputs["decoder_input_ids"][0]), 5)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"max_patches": 1024},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
-
-        self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"max_patches": 1024},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
-
-        self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
+    # Rewrite as Pix2Strict processor applies custom normalization, we can't check `out.mean()`
+    def _check_modality_outputs(self, inputs: dict, modality: str):
+        input_key = getattr(self, f"{modality}_input_name")
+        if modality in ["image"]:
+            self.assertEqual(len(inputs[input_key][0]), 2048)

@@ -119,10 +119,6 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
             self, config_class=UnivNetConfig, has_text_modality=False, common_properties=["num_mel_bins"]
         )
 
-    @unittest.skip(reason="fix this once it gets more usage")
-    def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
-
     def test_config(self):
         self.config_tester.run_common_tests()
 

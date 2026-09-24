@@ -17,7 +17,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -42,6 +41,7 @@ from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vTextModel,
+    Glm4vTextRotaryEmbedding,
     Glm4vVisionModel,
     Glm4vVisionRotaryEmbedding,
 )
@@ -107,6 +107,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
     vocab_size: int = 151424
     max_position_embeddings: int = 65536
     attention_bias: bool = True
+    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.0001
     use_qk_norm = AttributeError()
     num_mtp_layers = AttributeError()
@@ -140,6 +141,15 @@ class Glm4vMoeConfig(Glm4vConfig):
 
     image_token_id: int = 151363
     video_token_id: int = 151364
+
+
+class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class Glm4vMoeTextAttention(Glm4Attention):
@@ -228,12 +238,6 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {}
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Glm4vMoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
@@ -361,9 +365,14 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -375,6 +384,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -385,10 +395,12 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         aux_loss = None
-        if kwargs.get("output_router_logits", False):
+        if output_router_logits:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 import importlib.metadata
 import os
 
@@ -35,7 +34,6 @@ def find_adapter_config_file(
     revision: str | None = None,
     local_files_only: bool = False,
     subfolder: str = "",
-    _commit_hash: str | None = None,
 ) -> str | None:
     r"""
     Simply checks if the model stored on the Hub or locally is an adapter model or not, return the path of the adapter
@@ -91,7 +89,6 @@ def find_adapter_config_file(
             revision=revision,
             local_files_only=local_files_only,
             subfolder=subfolder,
-            _commit_hash=_commit_hash,
             _raise_exceptions_for_gated_repo=False,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
@@ -105,7 +102,7 @@ def check_peft_version(min_version: str) -> None:
     Checks if the version of PEFT is compatible.
 
     Args:
-        version (`str`):
+        min_version (`str`):
             The version of PEFT to check against.
     """
     if not is_peft_available():

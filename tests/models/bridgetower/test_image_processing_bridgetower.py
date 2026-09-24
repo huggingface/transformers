@@ -18,11 +18,11 @@ import unittest
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
 
 
-class BridgeTowerImageProcessingTester:
+class BridgeTowerImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -67,23 +67,8 @@ class BridgeTowerImageProcessingTester:
             "size_divisor": self.size_divisor,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        return self.size["shortest_edge"], self.size["shortest_edge"]
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
+        return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]
 
 
 @require_torch
@@ -113,7 +98,11 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        dummy_image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+            )
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

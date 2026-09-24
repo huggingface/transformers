@@ -441,7 +441,7 @@ By pairing a pretrained speech model with a pretrained text model, the warm-star
 As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEncoderDecoderModel` framework. First create an empty repo on `hf.co`:
 
 ```bash
-hf repo create wav2vec2-2-bart-base
+hf repos create wav2vec2-2-bart-base
 git clone https://huggingface.co/<your-user-name>/wav2vec2-2-bart-base
 cd wav2vec2-2-bart-base
 ```

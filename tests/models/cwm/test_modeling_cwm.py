@@ -17,15 +17,14 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -87,13 +86,7 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 @slow
-class CwmIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class CwmIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_cwm_integration(self):
@@ -109,7 +102,7 @@ class CwmIntegrationTest(unittest.TestCase):
 
         for i, layer in enumerate(model.model.layers):
             expected_type = model.config.layer_types[i]
-            self.assertEqual(layer.attention_type, expected_type)
+            self.assertEqual(layer.self_attn.layer_type, expected_type)
             if expected_type == "sliding_attention":
                 self.assertEqual(layer.self_attn.sliding_window, model.config.sliding_window)
 

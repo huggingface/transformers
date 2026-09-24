@@ -191,7 +191,7 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
     def resize(
         self,
@@ -221,6 +221,42 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
             size=SizeDict(height=resized_height, width=resized_width),
             resample=resample,
         )
+
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
+        size = videos_kwargs.get("size", None) or self.size
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        patch_expand_factor = videos_kwargs.get("patch_expand_factor", None) or self.patch_expand_factor
+
+        resized_height, resized_width = smart_resize(
+            num_frames,
+            height,
+            width,
+            temporal_factor=temporal_patch_size,
+            factor=patch_size * merge_size * patch_expand_factor,
+            min_pixels=size["shortest_edge"],
+            max_pixels=size["longest_edge"],
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t * grid_h * grid_w
 
     def patchify(
         self,

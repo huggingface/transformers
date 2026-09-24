@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from .bros import *
     from .byt5 import *
     from .camembert import *
+    from .canary import *
     from .canine import *
     from .chameleon import *
     from .chinese_clip import *
@@ -164,6 +165,7 @@ if TYPE_CHECKING:
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
+    from .fun_asr_nano import *
     from .funnel import *
     from .fuyu import *
     from .gemma import *
@@ -181,6 +183,7 @@ if TYPE_CHECKING:
     from .glm4_moe_lite import *
     from .glm4v import *
     from .glm4v_moe import *
+    from .glm5_next import *
     from .glm46v import *
     from .glm_image import *
     from .glm_moe_dsa import *
@@ -200,6 +203,7 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite4_vision import *
     from .granite_speech import *
+    from .granite_speech5 import *
     from .granite_speech_plus import *
     from .granite_swa import *
     from .granitemoe import *
@@ -220,7 +224,9 @@ if TYPE_CHECKING:
     from .hunyuan_v1_moe import *
     from .hunyuan_vl import *
     from .hy_v3 import *
+    from .hy_v4 import *
     from .hyperclovax import *
+    from .hyperclovax_vision_v2 import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -238,6 +244,7 @@ if TYPE_CHECKING:
     from .jetmoe import *
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
+    from .kimi_linear import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
@@ -284,6 +291,7 @@ if TYPE_CHECKING:
     from .mimo_v2_flash import *
     from .minicpm3 import *
     from .minicpmv4_6 import *
+    from .minicpmv4_7 import *
     from .minimax import *
     from .minimax_m2 import *
     from .minimax_m3_vl import *
@@ -322,8 +330,12 @@ if TYPE_CHECKING:
     from .nanochat import *
     from .nemotron import *
     from .nemotron3_5_asr import *
+    from .nemotron3_diarization import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
+    from .nemotron_h_omni import *
+    from .neomme import *
+    from .neucodec import *
     from .nllb import *
     from .nllb_moe import *
     from .nomic_bert import *
@@ -402,6 +414,7 @@ if TYPE_CHECKING:
     from .qwen3_omni_moe import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
+    from .qwen4_exp import *
     from .radio import *
     from .rag import *
     from .recurrent_gemma import *
@@ -481,6 +494,7 @@ if TYPE_CHECKING:
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *
+    from .vibevoice import *
     from .vibevoice_acoustic_tokenizer import *
     from .vibevoice_asr import *
     from .video_llama_3 import *
