@@ -284,8 +284,6 @@ onnx_program = exporter.export(model, inputs, config=config)
 </hfoption>
 <hfoption id="ExecuTorch">
 
-The same explicit-shape configuration applies to XNNPACK and MLX.
-
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -416,9 +414,6 @@ components = exporter.export_for_generation(model, inputs, config=config)
 # components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
 ```
 
-The caller must feed the updated key/value cache tensors returned by each invocation into the next.
-This MLX export path supports `DynamicCache`, but rejects `StaticCache`.
-
 </hfoption>
 <hfoption id="OpenVINO">
 
@@ -511,8 +506,6 @@ components = exporter.export_for_generation(model, inputs, config=config, multi_
 
 </hfoption>
 <hfoption id="ExecuTorch">
-
-Multi-token decode is supported by both XNNPACK and MLX. Use `DynamicCache` for MLX.
 
 ```python
 from transformers.exporters import ExecutorchExporter, ExecutorchConfig
