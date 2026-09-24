@@ -93,6 +93,7 @@ class GemmaMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
 
         # Guard for legacy Gemma 1.0 checkpoints that use exact "gelu" instead of "gelu_pytorch_tanh"
         if config.hidden_act == "gelu":
