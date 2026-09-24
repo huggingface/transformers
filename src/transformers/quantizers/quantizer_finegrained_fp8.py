@@ -1,8 +1,18 @@
+import warnings
 from typing import TYPE_CHECKING
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
+
+
+warnings.warn(
+    "`transformers.quantizers.quantizer_finegrained_fp8` is frozen and receives no new recipes. `FineGrainedConfig` supersedes it "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only); this module will be removed in a future "
+    "release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 if is_torch_available():
@@ -26,11 +36,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        logger.warning_once(
-            "`FineGrainedFP8Config` is frozen for backward compatibility and receives no new "
-            "recipes. `FineGrainedConfig` supersedes it (block-FP8, MXFP8, MXFP4, NVFP4, "
-            "weight-only)."
-        )
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():

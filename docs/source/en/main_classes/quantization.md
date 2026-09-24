@@ -100,6 +100,11 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 ## FineGrainedConfig
 
+> [!WARNING]
+> `FineGrainedConfig` supersedes `FineGrainedFP8Config`, `Mxfp4Config` and `NVFP4Config`, which are
+> frozen and will be removed in a future release. The `fp8`, `mxfp8`, `mxfp4` and `nvfp4`
+> `quant_method` keys already route here, so existing checkpoints need no change.
+
 [[autodoc]] FineGrainedConfig
 
 ## FineGrainedGroup

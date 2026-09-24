@@ -13,12 +13,22 @@
 # limitations under the License.
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 from ..utils import is_kernels_available, is_torch_available, logging
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
+
+
+warnings.warn(
+    "`transformers.quantizers.quantizer_nvfp4` is frozen and receives no new recipes. `FineGrainedConfig` supersedes it "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only); this module will be removed in a future "
+    "release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -50,10 +60,6 @@ class NVFP4HfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        logger.warning_once(
-            "`NVFP4Config` is frozen for backward compatibility and receives no new recipes. "
-            "`FineGrainedConfig` supersedes it (block-FP8, MXFP8, MXFP4, NVFP4, weight-only)."
-        )
 
     def validate_environment(self, device_map, **kwargs):
         if self.pre_quantized:

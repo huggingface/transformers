@@ -38,7 +38,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         DeepseekV4Model,
-        FineGrainedFP8Config,
+        FineGrainedConfig,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -239,7 +239,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
     """End-to-end check on the published DeepSeek-V4-Flash checkpoint.
 
     Loads the real 43-layer FP8 weights, dequantizes on the fly via
-    :class:`FineGrainedFP8Config`, and greedy-generates a continuation of a fixed
+    :class:`FineGrainedConfig`, and greedy-generates a continuation of a fixed
     prompt. The forward path that this test covers is everything past the typical
     tiny-config tests can reach: the per-layer FP8 dequant in
     ``update_weight_conversions``, the ``compress_ratios → layer_types`` config
@@ -270,7 +270,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         )
     )
     def test_v4_flash_dequantized_generation(self):
-        quantization_config = FineGrainedFP8Config(dequantize=True)
+        quantization_config = FineGrainedConfig(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -388,7 +388,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             ),
         ]
 
-        quantization_config = FineGrainedFP8Config(dequantize=True)
+        quantization_config = FineGrainedConfig(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -432,7 +432,7 @@ import torch.distributed as dist
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
-from transformers.utils.quantization_config import FineGrainedFP8Config
+from transformers.utils.quantization_config import FineGrainedConfig
 
 
 LOADTIME_DISPATCH = {loadtime_dispatch!r}
