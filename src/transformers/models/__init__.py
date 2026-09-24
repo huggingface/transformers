@@ -333,6 +333,7 @@ if TYPE_CHECKING:
     from .nemotron3_diarization import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
+    from .nemotron_h_omni import *
     from .neomme import *
     from .neucodec import *
     from .nllb import *
