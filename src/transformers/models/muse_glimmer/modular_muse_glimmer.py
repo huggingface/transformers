@@ -422,8 +422,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
         fps = fps if fps is not None else self.fps
         num_frames = num_frames if num_frames is not None else self.num_frames
@@ -445,7 +444,6 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         self,
         videos: list[torch.Tensor],
         do_resize: bool,
-        do_convert_rgb: bool,
         resample: PILImageResampling | tvF.InterpolationMode | int | None,
         do_rescale: bool,
         rescale_factor: float,
@@ -464,8 +462,6 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     stacked_videos,
