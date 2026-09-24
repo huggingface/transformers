@@ -333,6 +333,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mimo_v2_flash", "MiMoV2FlashModel"),
         ("minicpm3", "MiniCPM3Model"),
         ("minicpmv4_6", "MiniCPMV4_6Model"),
+        ("minicpmv4_7", "MiniCPMV4_7Model"),
+        ("minicpmv4_7_vision", "MiniCPMV4_7VisionModel"),
         ("minimax", "MiniMaxModel"),
         ("minimax_m2", "MiniMaxM2Model"),
         ("minimax_m3_vl", "MiniMaxM3VLModel"),
@@ -373,6 +375,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
         ("nemotron3_5_asr", "Nemotron3_5AsrForRNNT"),
+        ("nemotron3_diarization", "Nemotron3DiarizationModel"),
+        ("nemotron3_diarization_audio", "Nemotron3DiarizationAudioModel"),
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),
         ("nemotron_h", "NemotronHModel"),
@@ -1148,6 +1152,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("llava_next_video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
         ("minicpmv4_6", "MiniCPMV4_6ForConditionalGeneration"),
+        ("minicpmv4_7", "MiniCPMV4_7ForConditionalGeneration"),
         ("minimax_m3_vl", "MiniMaxM3SparseForConditionalGeneration"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mistral4", "Mistral4ForCausalLM"),
@@ -1844,6 +1849,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("data2vec-audio", "Data2VecAudioForAudioFrameClassification"),
+        ("nemotron3_diarization", "Nemotron3DiarizationForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
         ("wav2vec2-bert", "Wav2Vec2BertForAudioFrameClassification"),

@@ -237,7 +237,7 @@ def main():
     else:
         repo_id = data_args.dataset_name
         filename = "id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset")))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: str(k) for k, v in id2label.items()}
 

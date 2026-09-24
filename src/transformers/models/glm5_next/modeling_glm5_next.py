@@ -272,7 +272,7 @@ class Glm5NextTextHyperConnection(nn.Module):
 
     def __init__(self, config: Glm5NextTextConfig):
         super().__init__()
-        self.hc_mult = config.hc_mult  # number of streams, refered as N below
+        self.hc_mult = config.hc_mult  # number of streams, referred as N below
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = Glm5NextTextUnweightedRMSNorm(eps=config.rms_norm_eps)
@@ -303,7 +303,7 @@ class Glm5NextTextHyperConnection(nn.Module):
         flattened = self.input_norm(flattened)
         # Mix the streams together to infer the weight coefficients
         flattened = F.linear(flattened, self.fn.float())
-        # Split the weight cofficients
+        # Split the weight coefficients
         pre_w, post_w, comb_w = flattened.split([hc, hc, hc * hc], dim=-1)
         pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
@@ -1488,7 +1488,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             attention_mask = attention_mask.bool()
 
             causal_mask_mapping = {
-                "deepseek_sparse_attention": attention_mask,
+                "indexed_attention": attention_mask,
                 "linear_attention": attention_mask,
             }
 
@@ -1782,7 +1782,7 @@ class Glm5NextVisionRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded * self.inv_freq.float()
             cos = freqs.cos() * self.attention_scaling
@@ -2432,7 +2432,7 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             )
         attention_mask = attention_mask.bool()
 
-        return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
+        return {"indexed_attention": attention_mask, "linear_attention": attention_mask}
 
 
 __all__ = [

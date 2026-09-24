@@ -49,9 +49,8 @@ CHECKER_CONFIG = {
         ".github/scripts/codeowners_for_review_action",
     ],
     "check_args": [],
-    # Nothing here is auto-fixable, but `make style` should still surface findings while you are
-    # writing the comment, so this runs in --fix mode instead of being skipped as check-only.
-    "fix_args": [],
+    # Nothing here is auto-fixable, but `make style` should fail on findings so they get fixed manually.
+    "fix_args": ["--fail-on-findings"],
     # For the reviewer resolver, which supplies the file ownership used to skip owners' own comments.
     "needs_requirements": True,
 }
@@ -694,7 +693,8 @@ def collect_findings(
     files = _iter_python_files(targets, excludes)
     if diff_only:
         files = _filter_files_to_patch(files)
-        print(f"Restricting noisy comment scan to {len(files)} Python file(s) changed in this patch.", flush=True)
+        if _patch_added_lines() is not None:
+            print(f"Restricting noisy comment scan to {len(files)} Python file(s) changed in this patch.", flush=True)
 
     if progress:
         _show_progress(0, len(files))
