@@ -144,7 +144,6 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
     def test_mtp_heads_of_a_checkpoint_are_ignored(self):
         # Serving engines use the multi-token prediction heads; transformers loads the checkpoint without them
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_mtp_layers = 2
         model = GraniteForDoclingForConditionalGeneration(config).to(torch_device).eval()
         state_dict = model.state_dict()
         state_dict["mtp.blocks.0.proj.weight"] = torch.zeros(2, 2)

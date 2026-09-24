@@ -156,13 +156,6 @@ class GraniteForDoclingConfig(PreTrainedConfig):
         the corresponding `deepstack_attn_layers`. Index 0 is the output of the first layer.
     deepstack_attn_layers (`list[int]`, *optional*, defaults to `[0, 1, 2]`):
         Text decoder layers after which the corresponding DeepStack features are added.
-    num_mtp_layers (`int`, *optional*, defaults to 0):
-        Number of multi-token prediction heads stored in the checkpoint under `mtp.*`. Serving engines such as vLLM
-        use them for speculative decoding; transformers does not load them.
-    mtp_num_attention_heads (`int`, *optional*):
-        Number of attention heads in each multi-token prediction head. Defaults to `text_config.num_attention_heads`.
-    mtp_intermediate_size (`int`, *optional*):
-        Feed-forward size of each multi-token prediction head. Defaults to `text_config.intermediate_size`.
     use_fine_route (`bool`, *optional*, defaults to `True`):
         Whether to build the fine connector path, which shuffles pixels by half of `scale_factor` and yields four
         times as many image tokens per tile. Checkpoints trained with the coarse path only set it to `False`.
@@ -188,9 +181,6 @@ class GraniteForDoclingConfig(PreTrainedConfig):
     pad_token_id: int | None = 100256
     deepstack_visual_indexes: list[int] | None = None
     deepstack_attn_layers: list[int] | None = None
-    num_mtp_layers: int = 0
-    mtp_num_attention_heads: int | None = None
-    mtp_intermediate_size: int | None = None
     use_fine_route: bool = True
     density_router_hidden_size: int | None = None
     density_router_threshold: float = 0.4
