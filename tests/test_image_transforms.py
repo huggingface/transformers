@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import unittest
 
 import numpy as np
@@ -565,7 +566,7 @@ class ImageTransformsTester(unittest.TestCase):
     @require_vision
     def test_convert_to_rgb(self):
         # Test that an RGBA image is converted to RGB
-        image = np.array([[[1, 2, 3, 4], [5, 6, 7, 8]]], dtype=np.uint8)
+        image = np.array([[[1, 2, 3, 0], [5, 6, 7, 255]]], dtype=np.uint8)
         pil_image = PIL.Image.fromarray(image)
         self.assertEqual(pil_image.mode, "RGBA")
         self.assertEqual(pil_image.size, (2, 1))
@@ -579,7 +580,10 @@ class ImageTransformsTester(unittest.TestCase):
         rgb_image = convert_to_rgb(pil_image)
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
-        self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[1, 2, 3], [5, 6, 7]]], dtype=np.uint8)))
+        self.assertTrue(np.array_equal(np.array(rgb_image), np.array([[[255, 255, 255], [5, 6, 7]]])))
+
+        semi_transparent = PIL.Image.new("RGBA", (1, 1), (255, 0, 0, 128))
+        self.assertEqual(convert_to_rgb(semi_transparent).getpixel((0, 0)), (255, 127, 127))
 
         # Test that a grayscale image is converted to RGB
         image = np.array([[0, 255]], dtype=np.uint8)
@@ -590,6 +594,32 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
         self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
+
+    @parameterized.expand(["RGB", "L", "P"])
+    def test_convert_to_rgb_png_transparency(self, mode):
+        image = PIL.Image.new(mode, (2, 1))
+        if mode == "RGB":
+            image.putdata([(255, 0, 0), (0, 0, 255)])
+            transparency = (255, 0, 0)
+        elif mode == "L":
+            image.putdata([0, 128])
+            transparency = 0
+        else:
+            image.putpalette([255, 0, 0, 0, 0, 255] + [0] * (256 * 3 - 6))
+            image.putdata([0, 1])
+            transparency = 0
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG", transparency=transparency)
+        buffer.seek(0)
+        image = PIL.Image.open(buffer)
+        self.assertEqual(image.mode, mode)
+        self.assertEqual(image.info["transparency"], transparency)
+
+        rgb_image = convert_to_rgb(image)
+        self.assertEqual(rgb_image.mode, "RGB")
+        self.assertEqual(rgb_image.getpixel((0, 0)), (255, 255, 255))
+        self.assertEqual(rgb_image.getpixel((1, 0)), (128, 128, 128) if mode == "L" else (0, 0, 255))
 
     def test_flip_channel_order(self):
         # fmt: off
