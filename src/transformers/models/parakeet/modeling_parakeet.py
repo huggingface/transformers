@@ -552,7 +552,6 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
 
     def __init__(self, config: ParakeetEncoderConfig):
         super().__init__(config)
-        self.config = config
         self.gradient_checkpointing = False
 
         self.dropout = config.dropout
