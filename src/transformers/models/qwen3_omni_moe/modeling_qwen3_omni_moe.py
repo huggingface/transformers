@@ -3258,19 +3258,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
 
         return position_ids
 
-    def _expand_inputs_for_generation(self, expand_size=1, is_encoder_decoder=False, input_ids=None, **model_kwargs):
-        position_ids = model_kwargs.pop("position_ids", None)
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-        if position_ids is not None:
-            batch_dim = 1 if position_ids.ndim == 3 else 0
-            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
-        return input_ids, model_kwargs
-
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens

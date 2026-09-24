@@ -251,7 +251,7 @@ class NemotronHOmniModelTestMixin:
         tester = self.model_tester
         grid_size = tester.image_size // tester.patch_size
         pixel_values = floats_tensor([tester.batch_size * grid_size**2, 3 * tester.patch_size**2])
-        image_grid_hw = torch.tensor([[grid_size, grid_size]] * tester.batch_size)
+        image_grid_hw = torch.tensor([[grid_size, grid_size]] * tester.batch_size, device=torch_device)
         return tester.get_config(), {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
 
     def _video_features_prepare_config_and_inputs(self):
