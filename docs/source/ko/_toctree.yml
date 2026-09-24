@@ -144,7 +144,7 @@
     - local: perf_train_gpu_one
       title: GPU
     - local: perf_train_cpu
-      title: CPU에서 훈련
+      title: CPU
     - local: perf_train_special
       title: Apple 실리콘에서 PyTorch 학습
     - local: in_translation
