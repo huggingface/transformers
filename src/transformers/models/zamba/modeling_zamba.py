@@ -338,7 +338,12 @@ def mamba_selective_scan(
         scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
         ssm_state = all_states[:, -1]
 
-    elif use_associative_scan and associative_scan is not None and is_torchdynamo_compiling() and not is_torchdynamo_exporting():
+    elif (
+        use_associative_scan
+        and associative_scan is not None
+        and is_torchdynamo_compiling()
+        and not is_torchdynamo_exporting()
+    ):
 
         def combine_fn(left, right):
             a_left, b_left = left
