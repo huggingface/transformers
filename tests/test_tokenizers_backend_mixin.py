@@ -591,3 +591,48 @@ Hey how are you doing"""  # noqa: W293
                     text,
                     f"Roundtrip failed for {model_id} on sample {text!r}",
                 )
+
+
+@require_tokenizers
+class TokenizersBackendBosEosReflectionTest(unittest.TestCase):
+    """
+    `add_bos_token` / `add_eos_token` should reflect a baked `TemplateProcessing` post-processor without
+    rebuilding it. The flags used to stay `False` even when the post-processor was adding bos/eos.
+    """
+
+    @staticmethod
+    def _build(single, pair, special_tokens):
+        from tokenizers import Tokenizer, models, processors
+        from tokenizers.pre_tokenizers import Whitespace
+
+        tokenizer = Tokenizer(
+            models.WordLevel(vocab={"<s>": 0, "</s>": 1, "hello": 2, "world": 3, "[UNK]": 4}, unk_token="[UNK]")
+        )
+        tokenizer.pre_tokenizer = Whitespace()
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=single, pair=pair, special_tokens=special_tokens
+        )
+        return TokenizersBackend(tokenizer_object=tokenizer, bos_token="<s>", eos_token="</s>", unk_token="[UNK]")
+
+    def test_eos_only_template(self):
+        tok = self._build("$A </s>", "$A </s> $B </s>", [("</s>", 1)])
+        self.assertTrue(tok.add_eos_token)
+        self.assertFalse(tok.add_bos_token)
+        # flags are inferred from the post-processor, not rebuilt from them: tokenization is unchanged
+        self.assertEqual(tok("hello")["input_ids"], [2, 1])
+
+    def test_bos_only_template(self):
+        tok = self._build("<s> $A", "<s> $A $B", [("<s>", 0)])
+        self.assertTrue(tok.add_bos_token)
+        self.assertFalse(tok.add_eos_token)
+        self.assertEqual(tok("hello")["input_ids"], [0, 2])
+
+    def test_bos_and_eos_template(self):
+        tok = self._build("<s> $A </s>", "<s> $A </s> $B </s>", [("<s>", 0), ("</s>", 1)])
+        self.assertTrue(tok.add_bos_token)
+        self.assertTrue(tok.add_eos_token)
+
+    def test_no_special_token_template(self):
+        tok = self._build("$A", "$A $B", [])
+        self.assertFalse(tok.add_bos_token)
+        self.assertFalse(tok.add_eos_token)
