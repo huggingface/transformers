@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -37,6 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
         GPT2Tokenizer,
@@ -214,6 +216,18 @@ class OPTModelTester:
         self.parent.assertTrue(mocked_create_causal_mask.called)
         self.parent.assertIsNone(mocked_create_causal_mask.call_args.kwargs["attention_mask"])
 
+    def create_and_check_compiled_forward_dispatches_to_flash_attention(self, config, inputs_dict):
+        """
+        The dense mask must not reach sdpa: flash attention rejects any `attn_mask`, so a compiled forward
+        with the flash backend forced only runs if the mask creation was skipped.
+        """
+        config._attn_implementation = "sdpa"
+        model = OPTModel(config).to(torch_device, torch.float16).eval()
+        compiled_model = torch.compile(model, dynamic=False)
+
+        with torch.no_grad(), sdpa_kernel([SDPBackend.FLASH_ATTENTION]):
+            compiled_model(inputs_dict["input_ids"], attention_mask=None)
+
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -283,6 +297,12 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_attention_mask_is_not_overwritten_for_causal_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_attention_mask_is_not_overwritten_for_causal_mask(*config_and_inputs)
+
+    @require_torch_gpu
+    @require_torch_fp16
+    def test_compiled_forward_dispatches_to_flash_attention(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_compiled_forward_dispatches_to_flash_attention(*config_and_inputs)
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
