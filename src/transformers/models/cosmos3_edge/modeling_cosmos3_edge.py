@@ -1127,6 +1127,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
 @auto_docstring
 class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     config_class = Cosmos3EdgeConfig
     accepts_loss_kwargs = False
 

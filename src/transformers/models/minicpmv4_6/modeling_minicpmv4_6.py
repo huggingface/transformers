@@ -760,6 +760,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
 
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: MiniCPMV4_6Config):
         super().__init__(config)

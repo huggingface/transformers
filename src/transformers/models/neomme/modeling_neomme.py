@@ -620,6 +620,7 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
         "lm_head.weight": "model.embed_tokens.word_embeddings.weight",
         "unembedding_projection.weight": "model.embed_tokens.embedding_projection.weight",
     }
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)

@@ -705,6 +705,8 @@ class Granite4VisionModel(LlavaNextModel):
 
 
 class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

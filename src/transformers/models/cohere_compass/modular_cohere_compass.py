@@ -475,6 +475,8 @@ class CohereCompassModel(Qwen3VLModel):
     """
 )
 class CohereCompassForConditionalGeneration(Qwen3VLForConditionalGeneration, CohereCompassPreTrainedModel):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def __init__(self, config: CohereCompassConfig):
         super().__init__(config)
         self.logit_scale = config.text_config.logit_scale

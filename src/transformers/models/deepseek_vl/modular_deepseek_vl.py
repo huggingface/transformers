@@ -145,6 +145,8 @@ class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
     def generate(self):
         raise AttributeError("Not needed for DeepseekVL")
 
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
 
 class DeepseekVLImageProcessorPil(JanusImageProcessorPil):
     def postprocess(self):

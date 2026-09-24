@@ -288,6 +288,8 @@ class GotOcr2Model(LlavaModel):
 
 
 class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     @can_return_tuple
     @auto_docstring
     def forward(

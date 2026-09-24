@@ -1094,6 +1094,7 @@ class MiniMaxM3VLModel(LlavaModel):
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
 class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
     config: MiniMaxM3VLConfig
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def get_image_features(self, pixel_values, image_grid_thw, **kwargs):
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)

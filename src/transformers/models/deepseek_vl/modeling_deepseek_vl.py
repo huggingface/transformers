@@ -228,6 +228,8 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
     output_modalities = ("text",)
     _can_compile_fullgraph = True
 
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def __init__(self, config: DeepseekVLConfig):
         super().__init__(config)
         self.config = config

@@ -1535,6 +1535,7 @@ def load_balancing_loss_func(
 
 class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
@@ -1861,6 +1862,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
 
 # Keep aliases for BC
 class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def __init__(self, *args, **kwargs):
         logger.warning_once(
             "`Ernie4_5_VL_MoeForConditionalGeneration` is deprecated; "

@@ -794,6 +794,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def get_video_features(self):

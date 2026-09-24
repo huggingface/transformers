@@ -979,6 +979,7 @@ class Step3p7Model(DeepseekOcr2Model):
 
 
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     config: Step3p7Config
 
 

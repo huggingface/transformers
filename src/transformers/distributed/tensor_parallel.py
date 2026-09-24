@@ -171,23 +171,6 @@ class ColwiseParallel(TensorParallelLayer):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
-    def validate_param(self, module, param, mesh, parameter_name=None):
-        meta = module._parameters.get(param)
-        gathers_output = isinstance(self.output_layouts, Replicate)
-        if meta is None or not gathers_output:
-            return
-
-        shard_dim = 1 if isinstance(module, torch.nn.Embedding) else meta.ndim - 2
-        output_size = meta.shape[shard_dim]
-        tp_size = mesh.size()
-        if output_size % tp_size != 0:
-            parameter_name = parameter_name or param
-            layer_name = parameter_name.rsplit(".", 1)[0]
-            raise ValueError(
-                f"The output size of `{layer_name}` ({output_size}) must be divisible by the tensor parallel size "
-                f"({tp_size}) when gathering a colwise output."
-            )
-
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:

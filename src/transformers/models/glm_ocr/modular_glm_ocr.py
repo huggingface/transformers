@@ -303,6 +303,7 @@ class GlmOcrModel(Glm4vModel):
 
 
 class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     pass
 
 

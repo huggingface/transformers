@@ -1056,6 +1056,8 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1212,6 +1214,8 @@ class Ernie4_5_VLMoeImageProcessor(Qwen2VLImageProcessor):
 
 # Keep aliases for BC
 class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def __init__(self, *args, **kwargs):
         logger.warning_once(
             "`Ernie4_5_VL_MoeForConditionalGeneration` is deprecated; "

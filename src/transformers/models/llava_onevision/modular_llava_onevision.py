@@ -698,6 +698,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
 
 class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring

@@ -1147,6 +1147,8 @@ class Gemma4UnifiedModel(Gemma4Model):
 
 
 class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

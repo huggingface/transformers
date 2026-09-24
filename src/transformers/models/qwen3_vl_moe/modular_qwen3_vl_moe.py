@@ -334,6 +334,8 @@ class Qwen3VLMoeCausalLMOutputWithPast(Qwen3VLCausalLMOutputWithPast):
 
 
 class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,

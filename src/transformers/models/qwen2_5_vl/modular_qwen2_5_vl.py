@@ -555,6 +555,7 @@ class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 

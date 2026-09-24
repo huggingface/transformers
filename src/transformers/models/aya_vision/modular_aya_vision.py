@@ -195,6 +195,8 @@ class AyaVisionModel(LlavaModel):
 
 
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

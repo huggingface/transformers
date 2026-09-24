@@ -1847,6 +1847,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     config: Qwen3OmniMoeThinkerConfig
     base_model_prefix = "thinker"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _no_split_modules = [
         "Qwen3OmniMoeAudioEncoder",
         "Qwen3OmniMoeVisionEncoder",
