@@ -563,7 +563,7 @@ def main():
                     vocab_dict[data_args.target_language] = lang_dict
 
                 # save vocab dict to be loaded into tokenizer
-                with open(vocab_file, "w") as file:
+                with open(vocab_file, "w", encoding="utf-8") as file:
                     json.dump(vocab_dict, file)
 
         tokenizer_kwargs = {

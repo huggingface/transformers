@@ -25,6 +25,7 @@ from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
+    is_torchdynamo_exporting,
     is_tracing,
 )
 
@@ -257,7 +258,11 @@ def _ignore_causal_mask_sdpa(
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
     # `ignore_causal_mask = True` if we are not tracing
-    if is_tracing(padding_mask):
+    # NOTE: under `torch.compile` we can still skip, but only if we do not have to read the values of the
+    # `padding_mask`. This requires torch>=2.14: before pytorch#176499, dynamo replaced
+    # `torch.compiler.is_exporting()` by a constant `True`, so older versions keep the previous behavior of
+    # never skipping while compiling.
+    if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
         return False
     # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
     if local_attention_size is not None and kv_length >= local_attention_size:
@@ -291,7 +296,7 @@ def _can_skip_bidirectional_mask_xpu(
     - Skip if no padding and no local attention constraint
     """
 
-    if is_tracing(padding_mask):
+    if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
         return False
 
     # Check local attention constraint (same as CUDA)
@@ -327,7 +332,7 @@ def _ignore_bidirectional_mask_sdpa(
     # When using `torch.export` or `torch.onnx.dynamo_export`, we need to avoid to check the contents of the mask;
     # otherwise, we will encounter dynamic control flows
     if (
-        not is_tracing(padding_mask)
+        not (is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)))
         and (padding_mask is None or padding_mask.all())
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)
@@ -1506,10 +1511,8 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "compressed_sparse_attention": create_sliding_window_causal_mask,
     "heavily_compressed_attention": create_sliding_window_causal_mask,
     "minimax_m3_sparse": create_causal_mask,
-    # DSA always needs to materialize the mask to account for causality (no SDPA `is_cauasal` shortcut)
-    "deepseek_sparse_attention": partial(create_causal_mask, allow_is_causal_skip=False),
-    # Force mask creation as needed in Qwen's DSA implementation
-    "qwen_sparse_attention": partial(create_causal_mask, allow_is_causal_skip=False),
+    # Indexers always needs to materialize the mask to account for causality (no SDPA `is_causal` shortcut)
+    "indexed_attention": partial(create_causal_mask, allow_is_causal_skip=False),
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
     "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},

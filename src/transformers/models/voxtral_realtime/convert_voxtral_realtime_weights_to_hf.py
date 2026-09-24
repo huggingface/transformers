@@ -239,7 +239,7 @@ def write_model(
     # --------------
 
     config_path = cached_file(input_path_or_repo, config_name)
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         original_config = json.load(f)
 
     config = convert_config(original_config)
