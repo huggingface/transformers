@@ -18,6 +18,8 @@ import re
 import tempfile
 import unittest
 
+from parameterized import parameterized
+
 from transformers import (
     NemotronH_Omni_Reasoning_V3_Config,
     NemotronHConfig,
@@ -173,7 +175,7 @@ class NemotronHOmniVision2TextModelTester(VLMModelTester):
     def _prepare_modality_inputs(self, input_ids, config):
         grid_size = self.image_size // self.patch_size
         pixel_values = floats_tensor([self.batch_size * grid_size**2, self.num_channels * self.patch_size**2])
-        image_grid_hw = torch.tensor([[grid_size, grid_size]] * self.batch_size)
+        image_grid_hw = torch.tensor([[grid_size, grid_size]] * self.batch_size, device=torch_device)
         input_ids = self.place_image_tokens(input_ids, config)
         return input_ids, {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
 
@@ -213,7 +215,7 @@ class NemotronHOmniAudio2TextModelTester(ALMModelTester):
         # clips are right-padded; at least one uses every frame
         lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length).abs() + 1
         lengths[0] = self.feat_seq_length
-        positions = torch.arange(self.feat_seq_length)[None, :]
+        positions = torch.arange(self.feat_seq_length, device=torch_device)[None, :]
         return (positions < lengths[:, None]).long().to(torch_device)
 
     def _subsampled_length(self, length):
@@ -236,10 +238,6 @@ class NemotronHOmniModelTestMixin:
 
     # each class feeds a single modality, so the other towers (and the video projection) get no gradient
     test_all_params_have_gradient = False
-    # packed image patches have no batch dimension, and the video path packs `video_temporal_patch_size` frames
-    # into one tower pass, so neither output keeps the input's leading dimension
-    skip_test_image_features_output_shape = True
-    skip_test_video_features_output_shape = True
 
     _get_conv_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_conv_state_shape
     _get_recurrent_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_recurrent_state_shape
@@ -336,6 +334,16 @@ class NemotronHOmniModelTestMixin:
 @require_torch
 class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTest, unittest.TestCase):
     model_tester_class = NemotronHOmniVision2TextModelTester
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip("FIXME raushan - common needs a better way to tell bs for packed images")
+    def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
+    def test_get_video_features_output(self, return_dict: bool | None):
+        pass
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)

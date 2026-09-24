@@ -211,10 +211,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
                 for features, (grid_height, grid_width) in zip(image_features, image_grid_hw.tolist())
             ]
         )
+        split_sizes = (image_grid_hw.prod(-1) // 2**2).tolist()
+        pooler_output = torch.split(self.multi_modal_projector(image_features), split_sizes)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=self.multi_modal_projector(image_features),
+            pooler_output=pooler_output,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
@@ -229,7 +231,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         num_frames, channels, height, width = pixel_values_videos.shape
 
         # Frames are consumed in groups of `temporal_patch_dim`; repeat the last frame to fill the
-        # final group so the packed reshape below is exact.
+        # final group so the packed reshape below is exact. FIXME: raushan - do it in processing
         if num_frames % temporal_patch_dim != 0:
             padding = pixel_values_videos[-1:].expand(
                 temporal_patch_dim - (num_frames % temporal_patch_dim), -1, -1, -1
@@ -242,11 +244,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         )
         vision_outputs = self.vision_model(packed, **kwargs)
         patch_size = self.vision_model.patch_size
+        pooler_output = self.project_vision_features(
+            vision_outputs.features, height // patch_size, width // patch_size
+        )
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=self.project_vision_features(
-                vision_outputs.features, height // patch_size, width // patch_size
-            ),
+            pooler_output=pooler_output,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
@@ -343,23 +346,20 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(
-                pixel_values, image_grid_thw, return_dict=True, **kwargs
+                pixel_values, image_grid_hw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-            )
+            mm_encoder_outputs["video"] = self.get_video_features(pixel_values_videos, return_dict=True, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_embeds, self.image_token_id)
+            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_embeds, self.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
