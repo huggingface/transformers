@@ -35,7 +35,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -46,9 +46,6 @@ from .configuration_granite_for_docling import (
 )
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(
     custom_intro="""
     Base class for GraniteForDocling model outputs, with potential hidden states and attentions.
@@ -57,8 +54,6 @@ logger = logging.get_logger(__name__)
 @dataclass
 class GraniteForDoclingBaseModelOutputWithPast(ModelOutput):
     r"""
-    deepstack_image_features (`list[torch.FloatTensor]`, *optional*):
-        Projected intermediate vision features needed to reuse `image_hidden_states` with DeepStack.
     router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
         Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
         given.
@@ -70,7 +65,6 @@ class GraniteForDoclingBaseModelOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
-    deepstack_image_features: list[torch.FloatTensor] | None = None
     router_logits: torch.FloatTensor | None = None
 
 
@@ -86,8 +80,6 @@ class GraniteForDoclingCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    deepstack_image_features (`list[torch.FloatTensor]`, *optional*):
-        Projected intermediate vision features needed to reuse `image_hidden_states` with DeepStack.
     router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
         Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
         given.
@@ -100,7 +92,6 @@ class GraniteForDoclingCausalLMOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
-    deepstack_image_features: list[torch.FloatTensor] | None = None
     router_logits: torch.FloatTensor | None = None
 
 
@@ -112,11 +103,11 @@ class GraniteForDoclingCausalLMOutputWithPast(ModelOutput):
 @dataclass
 class GraniteForDoclingImageFeaturesOutput(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`torch.FloatTensor`):
-        Image features projected to the text hidden size, of shape `(num_tiles, image_seq_len, hidden_size)`, or
-        `(num_image_tokens, hidden_size)` when tiles are routed to different connector paths.
+    pooler_output (`torch.FloatTensor` of shape `(num_image_tokens, hidden_size)`):
+        Image tokens of all tiles in tile order, projected to the text hidden size. A tile yields `image_seq_len`
+        tokens on the coarse connector path and four times as many on the fine path.
     deepstack_features (`list[torch.FloatTensor]`, *optional*):
-        One projected intermediate vision encoder hidden state per entry of `config.deepstack_attn_layers`, with
+        One projected intermediate vision encoder hidden state per entry of `config.deepstack_visual_indexes`, with
         the same layout as `pooler_output`.
     router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
         Logits of the density router, one per sample. Returned when the model has a router.
@@ -124,53 +115,6 @@ class GraniteForDoclingImageFeaturesOutput(BaseModelOutputWithPooling):
 
     deepstack_features: list[torch.FloatTensor] | None = None
     router_logits: torch.FloatTensor | None = None
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class GraniteForDoclingTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        GraniteForDoclingTextRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class GraniteForDoclingTextMLP(nn.Module):
-    """
-    MLP layer for shared experts
-
-    Args:
-        config:
-            Configuration object with model hyperparameters.
-    """
-
-    def __init__(self, config: GraniteForDoclingTextConfig):
-        super().__init__()
-
-        self.input_size = config.hidden_size
-        self.hidden_size = config.shared_intermediate_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = nn.Linear(self.input_size, self.hidden_size * 2, bias=False)
-        self.output_linear = nn.Linear(self.hidden_size, self.input_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.input_linear(hidden_states)
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        hidden_states = self.output_linear(hidden_states)
-        return hidden_states
 
 
 def rotate_half(x):
@@ -311,6 +255,126 @@ class GraniteForDoclingTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class GraniteForDoclingTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        GraniteForDoclingTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class GraniteForDoclingTextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+class GraniteForDoclingTextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: GraniteForDoclingTextConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.self_attn = GraniteForDoclingTextAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = GraniteForDoclingTextMLP(config)
+        self.input_layernorm = GraniteForDoclingTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GraniteForDoclingTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.residual_multiplier = config.residual_multiplier
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states * self.residual_multiplier
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states * self.residual_multiplier
+
+        return hidden_states
+
+
+@auto_docstring
+class GraniteForDoclingTextPreTrainedModel(PreTrainedModel):
+    config: GraniteForDoclingTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["GraniteForDoclingTextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": GraniteForDoclingTextDecoderLayer,
+        "attentions": GraniteForDoclingTextAttention,
+    }
+
+
 class GraniteForDoclingTextRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: GraniteForDoclingTextConfig, device=None):
@@ -368,85 +432,6 @@ class GraniteForDoclingTextRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-class GraniteForDoclingTextDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: GraniteForDoclingTextConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = GraniteForDoclingTextAttention(config=config, layer_idx=layer_idx)
-        self.input_layernorm = GraniteForDoclingTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GraniteForDoclingTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.residual_multiplier = config.residual_multiplier
-        self.shared_mlp = GraniteForDoclingTextMLP(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states * self.residual_multiplier
-
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.shared_mlp(hidden_states)
-        hidden_states = residual + hidden_states * self.residual_multiplier
-        return hidden_states
-
-
-@auto_docstring
-class GraniteForDoclingTextPreTrainedModel(PreTrainedModel):
-    config: GraniteForDoclingTextConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["GraniteForDoclingTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": GraniteForDoclingTextDecoderLayer,
-        "attentions": GraniteForDoclingTextAttention,
-    }
 
 
 @auto_docstring
@@ -539,72 +524,70 @@ class GraniteForDoclingTextModel(GraniteForDoclingTextPreTrainedModel):
         )
 
 
-class GraniteForDoclingDeepStackMerger(nn.Module):
-    def __init__(self, config: GraniteForDoclingConfig, scale_factor: int):
+class GraniteForDoclingPositionEmbedding(nn.Module):
+    """
+    Fixed 2D sine-cosine position embedding of the `grid_size x grid_size` image tokens of a tile, in row-major order.
+    """
+
+    def __init__(self, embed_dim: int, grid_size: int):
         super().__init__()
-        merged_dim = config.vision_config.hidden_size * (scale_factor**2)
+        self.embed_dim = embed_dim
+        self.grid_size = grid_size
+        self.register_buffer("pos_embed", self.build(embed_dim, grid_size), persistent=False)
+
+    @staticmethod
+    def build(embed_dim: int, grid_size: int) -> torch.Tensor:
+        omega = torch.arange(embed_dim // 4, dtype=torch.float32) / (embed_dim // 4)
+        omega = 1.0 / 10000**omega
+        positions = torch.arange(grid_size, dtype=torch.float32)
+        rows, cols = torch.meshgrid(positions, positions, indexing="ij")
+        out_cols = cols.reshape(-1, 1) * omega
+        out_rows = rows.reshape(-1, 1) * omega
+        return torch.cat([out_cols.sin(), out_cols.cos(), out_rows.sin(), out_rows.cos()], dim=1)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return hidden_states + self.pos_embed.to(hidden_states.dtype)
+
+
+class GraniteForDoclingProjection(nn.Module):
+    def __init__(self, config: GraniteForDoclingVisionConfig, scale_factor: int):
+        super().__init__()
+        self.proj = nn.Linear(config.hidden_size * (scale_factor**2), config.out_hidden_size, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.proj(hidden_states)
+
+
+class GraniteForDoclingDeepStackMerger(nn.Module):
+    def __init__(self, config: GraniteForDoclingVisionConfig, scale_factor: int):
+        super().__init__()
+        merged_dim = config.hidden_size * (scale_factor**2)
         self.norm = nn.LayerNorm(merged_dim)
-        self.fc1 = nn.Linear(merged_dim, config.text_config.hidden_size)
+        self.fc1 = nn.Linear(merged_dim, config.out_hidden_size)
         self.act = nn.GELU()
-        self.fc2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size)
+        self.fc2 = nn.Linear(config.out_hidden_size, config.out_hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.fc2(self.act(self.fc1(self.norm(hidden_states))))
 
 
-class GraniteForDoclingSimpleMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        input_size = config.vision_config.hidden_size * (config.scale_factor**2)
-        output_size = config.text_config.hidden_size
-        self.proj = nn.Linear(input_size, output_size, bias=False)
-
-    def forward(self, x):
-        return self.proj(x)
-
-
-def build_2d_sincos_position_embedding(embed_dim: int, grid_size: int) -> torch.Tensor:
-    """
-    Returns fixed 2D sine-cosine position embeddings of shape `(grid_size**2, embed_dim)` for a square grid of tokens
-    in row-major order.
-    """
-    omega = torch.arange(embed_dim // 4, dtype=torch.float32) / (embed_dim // 4)
-    omega = 1.0 / 10000**omega
-    positions = torch.arange(grid_size, dtype=torch.float32)
-    rows, cols = torch.meshgrid(positions, positions, indexing="ij")
-    out_cols = cols.reshape(-1, 1) * omega
-    out_rows = rows.reshape(-1, 1) * omega
-    return torch.cat([out_cols.sin(), out_cols.cos(), out_rows.sin(), out_rows.cos()], dim=1)
-
-
-def merge_tile_routes(tile_fine_mask: torch.Tensor, coarse: torch.Tensor, fine: torch.Tensor) -> torch.Tensor:
-    """
-    Interleaves per-tile features projected on the coarse and fine paths back into tile order, flattened to
-    `(num_image_tokens, hidden_size)`.
-    """
-    tiles = [None] * tile_fine_mask.shape[0]
-    for tile_idx, features in zip((~tile_fine_mask).nonzero(as_tuple=True)[0].tolist(), coarse):
-        tiles[tile_idx] = features
-    for tile_idx, features in zip(tile_fine_mask.nonzero(as_tuple=True)[0].tolist(), fine):
-        tiles[tile_idx] = features
-    return torch.cat(tiles, dim=0)
-
-
 class GraniteForDoclingConnector(nn.Module):
-    def __init__(self, config: GraniteForDoclingConfig):
+    """
+    Turns the vision encoder output of each tile into image tokens, on a coarse path (`scale_factor`) or a fine path
+    (half the factor, four times as many tokens), and projects the DeepStack taps the same way.
+    """
+
+    def __init__(self, config: GraniteForDoclingVisionConfig):
         super().__init__()
         self.scale_factor = config.scale_factor
-        self.modality_projection = GraniteForDoclingSimpleMLP(config)
-        text_hidden_size = config.text_config.hidden_size
-        tokens_per_tile = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
-        self.ln_in = nn.LayerNorm(config.vision_config.hidden_size)
+        text_hidden_size = config.out_hidden_size
+        tokens_per_side = config.image_size // config.patch_size
+        self.modality_projection = GraniteForDoclingProjection(config, self.scale_factor)
+        self.ln_in = nn.LayerNorm(config.hidden_size)
         self.ln_mid = nn.LayerNorm(text_hidden_size)
         self.mlp_fc2 = nn.Linear(text_hidden_size, text_hidden_size, bias=False)
         self.ln_out = nn.LayerNorm(text_hidden_size)
-        self.pos_embed_2d = nn.Buffer(
-            build_2d_sincos_position_embedding(text_hidden_size, int(tokens_per_tile**0.5) // self.scale_factor),
-            persistent=False,
-        )
+        self.pos_embed = GraniteForDoclingPositionEmbedding(text_hidden_size, tokens_per_side // self.scale_factor)
         self.deepstack_mergers = nn.ModuleList(
             [GraniteForDoclingDeepStackMerger(config, self.scale_factor) for _ in config.deepstack_visual_indexes]
         )
@@ -612,16 +595,12 @@ class GraniteForDoclingConnector(nn.Module):
         # Fine path: pixel shuffle by half the factor, four times as many image tokens per tile
         self.fine_scale_factor = self.scale_factor // 2
         self.proj_fine = None
+        self.pos_embed_fine = None
         self.deepstack_mergers_fine = None
         if config.use_fine_route:
-            self.proj_fine = nn.Linear(
-                config.vision_config.hidden_size * (self.fine_scale_factor**2), text_hidden_size, bias=False
-            )
-            self.pos_embed_2d_fine = nn.Buffer(
-                build_2d_sincos_position_embedding(
-                    text_hidden_size, int(tokens_per_tile**0.5) // self.fine_scale_factor
-                ),
-                persistent=False,
+            self.proj_fine = nn.Linear(config.hidden_size * (self.fine_scale_factor**2), text_hidden_size, bias=False)
+            self.pos_embed_fine = GraniteForDoclingPositionEmbedding(
+                text_hidden_size, tokens_per_side // self.fine_scale_factor
             )
             self.deepstack_mergers_fine = nn.ModuleList(
                 [
@@ -641,51 +620,71 @@ class GraniteForDoclingConnector(nn.Module):
         x = x.reshape(bsz, int(seq / (scale_factor**2)), embed_dim * (scale_factor**2))
         return x
 
-    def forward(self, image_hidden_states: torch.Tensor, tile_fine_mask: torch.Tensor | None = None) -> torch.Tensor:
-        return self._route(
-            image_hidden_states,
+    def forward(
+        self,
+        image_hidden_states: torch.Tensor,
+        deepstack_hidden_states: list[torch.Tensor],
+        tile_fine_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        # Image tokens of all tiles in tile order, `(num_image_tokens, hidden_size)`
+        if tile_fine_mask is None or not tile_fine_mask.any():
+            image_features = self._project(image_hidden_states, fine=False).flatten(0, 1)
+            deepstack_features = [
+                self._deepstack(slot, hidden_states, fine=False).flatten(0, 1)
+                for slot, hidden_states in enumerate(deepstack_hidden_states)
+            ]
+            return image_features, deepstack_features
+
+        if self.proj_fine is None:
+            raise ValueError("This model has no fine connector path (`config.use_fine_route=False`).")
+        coarse_mask = ~tile_fine_mask
+        image_features = self.merge_tile_routes(
             tile_fine_mask,
-            lambda hidden_states: self._project(hidden_states, fine=False),
-            lambda hidden_states: self._project(hidden_states, fine=True),
+            self._project(image_hidden_states[coarse_mask], fine=False),
+            self._project(image_hidden_states[tile_fine_mask], fine=True),
         )
+        deepstack_features = [
+            self.merge_tile_routes(
+                tile_fine_mask,
+                self._deepstack(slot, hidden_states[coarse_mask], fine=False),
+                self._deepstack(slot, hidden_states[tile_fine_mask], fine=True),
+            )
+            for slot, hidden_states in enumerate(deepstack_hidden_states)
+        ]
+        return image_features, deepstack_features
 
     def _project(self, image_hidden_states: torch.Tensor, fine: bool) -> torch.Tensor:
         hidden_states = self.ln_in(image_hidden_states)
         if fine:
-            hidden_states = self.proj_fine(self.pixel_shuffle(hidden_states, self.fine_scale_factor))
-            hidden_states = hidden_states + self.pos_embed_2d_fine.to(hidden_states.dtype)
+            hidden_states = self.pos_embed_fine(
+                self.proj_fine(self.pixel_shuffle(hidden_states, self.fine_scale_factor))
+            )
         else:
-            hidden_states = self.modality_projection(self.pixel_shuffle(hidden_states, self.scale_factor))
-            hidden_states = hidden_states + self.pos_embed_2d.to(hidden_states.dtype)
+            hidden_states = self.pos_embed(
+                self.modality_projection(self.pixel_shuffle(hidden_states, self.scale_factor))
+            )
         hidden_states = nn.functional.gelu(self.ln_mid(hidden_states))
         return self.ln_out(self.mlp_fc2(hidden_states))
 
-    def _route(self, image_hidden_states: torch.Tensor, tile_fine_mask: torch.Tensor | None, coarse_fn, fine_fn):
-        if tile_fine_mask is None or not tile_fine_mask.any():
-            return coarse_fn(image_hidden_states)
-        if self.proj_fine is None:
-            raise ValueError("This model has no fine connector path (`config.use_fine_route=False`).")
-        if tile_fine_mask.all():
-            return fine_fn(image_hidden_states)
-        return merge_tile_routes(
-            tile_fine_mask,
-            coarse_fn(image_hidden_states[~tile_fine_mask]),
-            fine_fn(image_hidden_states[tile_fine_mask]),
-        )
-
-    def deepstack(
-        self, slot: int, image_hidden_states: torch.Tensor, tile_fine_mask: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        return self._route(
-            image_hidden_states,
-            tile_fine_mask,
-            lambda hidden_states: self.deepstack_mergers[slot](
-                self.pixel_shuffle(hidden_states.contiguous(), self.scale_factor)
-            ),
-            lambda hidden_states: self.deepstack_mergers_fine[slot](
+    def _deepstack(self, slot: int, hidden_states: torch.Tensor, fine: bool) -> torch.Tensor:
+        if fine:
+            return self.deepstack_mergers_fine[slot](
                 self.pixel_shuffle(hidden_states.contiguous(), self.fine_scale_factor)
-            ),
-        )
+            )
+        return self.deepstack_mergers[slot](self.pixel_shuffle(hidden_states.contiguous(), self.scale_factor))
+
+    @staticmethod
+    def merge_tile_routes(tile_fine_mask: torch.Tensor, coarse: torch.Tensor, fine: torch.Tensor) -> torch.Tensor:
+        """
+        Interleaves per-tile features projected on the coarse and fine paths back into tile order, flattened to
+        `(num_image_tokens, hidden_size)`.
+        """
+        tiles = [None] * tile_fine_mask.shape[0]
+        for tile_idx, features in zip((~tile_fine_mask).nonzero(as_tuple=True)[0].tolist(), coarse):
+            tiles[tile_idx] = features
+        for tile_idx, features in zip(tile_fine_mask.nonzero(as_tuple=True)[0].tolist(), fine):
+            tiles[tile_idx] = features
+        return torch.cat(tiles, dim=0)
 
 
 class GraniteForDoclingDensityRouter(nn.Module):
@@ -715,61 +714,6 @@ class GraniteForDoclingDensityRouter(nn.Module):
         )
         sample_features = sample_features / num_tiles.clamp(min=1).unsqueeze(-1)
         return self.fc2(self.act(self.fc1(self.norm(sample_features)))).squeeze(-1)
-
-
-class GraniteForDoclingMTPBlock(GradientCheckpointingLayer):
-    def __init__(self, config: GraniteForDoclingConfig):
-        super().__init__()
-        hidden_size = config.text_config.hidden_size
-        self.input_norm = GraniteForDoclingTextRMSNorm(hidden_size, eps=config.text_config.rms_norm_eps)
-        self.embed_norm = GraniteForDoclingTextRMSNorm(hidden_size, eps=config.text_config.rms_norm_eps)
-        self.proj = nn.Linear(2 * hidden_size, hidden_size, bias=False)
-        self.transformer_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_size,
-            nhead=config.mtp_num_attention_heads or config.text_config.num_attention_heads,
-            dim_feedforward=config.mtp_intermediate_size or config.text_config.intermediate_size,
-            dropout=0.0,
-            activation="gelu",
-            batch_first=True,
-            norm_first=True,
-        )
-
-    def forward(self, hidden_states: torch.Tensor, token_embeddings: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.proj(
-            torch.cat([self.input_norm(hidden_states), self.embed_norm(token_embeddings)], dim=-1)
-        )
-        causal_mask = nn.Transformer.generate_square_subsequent_mask(
-            hidden_states.shape[1], device=hidden_states.device, dtype=hidden_states.dtype
-        )
-        return self.transformer_layer(hidden_states, src_mask=causal_mask, is_causal=True)
-
-
-class GraniteForDoclingMTP(nn.Module):
-    """
-    Multi-token prediction heads. Head `i` reads the hidden states of the previous head (the decoder for head 0) and
-    the embeddings of the tokens `i + 1` positions ahead, and predicts the tokens `i + 2` positions ahead.
-    """
-
-    def __init__(self, config: GraniteForDoclingConfig):
-        super().__init__()
-        self.blocks = nn.ModuleList([GraniteForDoclingMTPBlock(config) for _ in range(config.num_mtp_layers)])
-
-    def forward(
-        self, hidden_states: torch.Tensor, input_ids: torch.LongTensor, embed_tokens: nn.Module
-    ) -> list[torch.Tensor]:
-        """
-        Returns the hidden states of every head. Position `t` of head `i` (of shape `(batch_size, sequence_length -
-        i - 2, hidden_size)`) predicts token `t + i + 2`.
-        """
-        head_hidden_states = []
-        sequence_length = hidden_states.shape[1]
-        for offset, block in enumerate(self.blocks, start=1):
-            span = sequence_length - offset - 1
-            if span <= 0:
-                break
-            hidden_states = block(hidden_states[:, :span], embed_tokens(input_ids[:, offset : offset + span]))
-            head_hidden_states.append(hidden_states)
-        return head_hidden_states
 
 
 class GraniteForDoclingVisionEmbeddings(nn.Module):
@@ -908,7 +852,7 @@ class GraniteForDoclingPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GraniteForDoclingVisionAttention", "GraniteForDoclingTextDecoderLayer"]
+    _no_split_modules = ["GraniteForDoclingEncoderLayer", "GraniteForDoclingTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -917,20 +861,8 @@ class GraniteForDoclingPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, GraniteForDoclingConnector):
-            for name in ("pos_embed_2d", "pos_embed_2d_fine"):
-                buffer = getattr(module, name, None)
-                if buffer is not None:
-                    init.copy_(
-                        buffer, build_2d_sincos_position_embedding(buffer.shape[-1], int(buffer.shape[0] ** 0.5))
-                    )
-        elif isinstance(module, GraniteForDoclingMTPBlock):
-            # Start each head as the sum of the decoder hidden state and the token embedding
-            eye = torch.eye(module.proj.out_features)
-            init.copy_(module.proj.weight, torch.cat([eye, eye], dim=1))
-        elif isinstance(module, nn.MultiheadAttention):
-            init.normal_(module.in_proj_weight, mean=0.0, std=self.config.text_config.initializer_range)
-            init.zeros_(module.in_proj_bias)
+        if isinstance(module, GraniteForDoclingPositionEmbedding):
+            init.copy_(module.pos_embed, module.build(module.embed_dim, module.grid_size))
 
 
 class GraniteForDoclingVisionMLP(nn.Module):
@@ -1018,10 +950,11 @@ class GraniteForDoclingEncoder(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The GraniteForDocling Vision Transformer Model outputting raw image embedding.
+    The vision encoder of GraniteForDocling with its connector on top: embeds the tiles of a page and returns the
+    image tokens of every tile together with the projected DeepStack features.
     """
 )
-class GraniteForDoclingVisionTransformer(GraniteForDoclingPreTrainedModel):
+class GraniteForDoclingVisionModel(GraniteForDoclingPreTrainedModel):
     config: GraniteForDoclingVisionConfig
     input_modalities = ("image",)
     _can_record_outputs = {
@@ -1037,6 +970,7 @@ class GraniteForDoclingVisionTransformer(GraniteForDoclingPreTrainedModel):
         self.encoder = GraniteForDoclingEncoder(config)
         self.patch_size = config.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.connector = GraniteForDoclingConnector(config)
 
         self.post_init()
 
@@ -1050,42 +984,42 @@ class GraniteForDoclingVisionTransformer(GraniteForDoclingPreTrainedModel):
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
-        pixel_values,
-        patch_attention_mask: torch.BoolTensor | None = None,
+        pixel_values: torch.FloatTensor,
+        tile_fine_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> tuple | GraniteForDoclingImageFeaturesOutput:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(num_tiles, num_channels, image_size, image_size)`):
+            The tiles to embed.
+        tile_fine_mask (`torch.BoolTensor` of shape `(num_tiles,)`, *optional*):
+            Tiles to route through the fine connector path, which yields four times as many image tokens per tile.
+        """
         batch_size = pixel_values.size(0)
-        if patch_attention_mask is None:
-            patch_size = self.patch_size
-            patch_attention_mask = torch.ones(
-                (
-                    batch_size,
-                    pixel_values.size(2) // patch_size,
-                    pixel_values.size(3) // patch_size,
-                )
-            )
-            patch_attention_mask = patch_attention_mask.to(dtype=torch.bool, device=pixel_values.device)
-
+        patch_attention_mask = torch.ones(
+            (batch_size, pixel_values.size(2) // self.patch_size, pixel_values.size(3) // self.patch_size),
+            dtype=torch.bool,
+            device=pixel_values.device,
+        )
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-
-        patch_attention_mask = patch_attention_mask.view(batch_size, -1)
-        # Create the correct attention mask based on the attention implementation
-        patch_attention_mask = create_bidirectional_mask(
+        attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
-            attention_mask=patch_attention_mask,
+            attention_mask=patch_attention_mask.view(batch_size, -1),
         )
 
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=patch_attention_mask,
-        )
+        # The outputs of the layers in `deepstack_visual_indexes` feed the DeepStack mergers
+        deepstack_hidden_states = []
+        for layer_idx, encoder_layer in enumerate(self.encoder.layers):
+            hidden_states = encoder_layer(hidden_states, attention_mask)
+            if layer_idx in self.config.deepstack_visual_indexes:
+                deepstack_hidden_states.append(hidden_states)
+        last_hidden_state = self.post_layernorm(hidden_states)
 
-        last_hidden_state = encoder_outputs.last_hidden_state
-        last_hidden_state = self.post_layernorm(last_hidden_state)
-
-        return BaseModelOutput(
+        image_features, deepstack_features = self.connector(last_hidden_state, deepstack_hidden_states, tile_fine_mask)
+        return GraniteForDoclingImageFeaturesOutput(
             last_hidden_state=last_hidden_state,
+            pooler_output=image_features,
+            deepstack_features=deepstack_features,
         )
 
 
@@ -1101,17 +1035,17 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = GraniteForDoclingVisionTransformer._from_config(config.vision_config)
-        self.connector = GraniteForDoclingConnector(config)
+        # The connector lives in the vision model, which returns image tokens and DeepStack features
+        self.vision_model = GraniteForDoclingVisionModel._from_config(config.vision_config)
+        self.text_model = GraniteForDoclingTextModel._from_config(config.text_config)
+        self.density_router = None
+        if config.density_router_hidden_size is not None:
+            self.density_router = GraniteForDoclingDensityRouter(config)
 
         self.image_seq_len = int(
             ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
         )
         self.image_token_id = self.config.image_token_id
-        self.text_model = GraniteForDoclingTextModel._from_config(config.text_config)
-        self.density_router = None
-        if config.density_router_hidden_size is not None:
-            self.density_router = GraniteForDoclingDensityRouter(config)
 
         self.post_init()
 
@@ -1135,9 +1069,8 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`, *optional*):
             Tiles to route through the fine connector path, which yields four times as many image tokens per tile.
         """
-        batch_size, num_tiles, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
-        pixel_values = pixel_values.view(batch_size * num_tiles, *pixel_values.shape[2:])
+        batch_size, num_tiles = pixel_values.shape[:2]
+        pixel_values = pixel_values.to(dtype=self.dtype).flatten(0, 1)  # fp16 compatibility
 
         # Remove padding tiles - padding tiles are full 0.
         nb_values_per_image = pixel_values.shape[1:].numel()
@@ -1146,26 +1079,21 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
         if tile_fine_mask is not None:
             tile_fine_mask = tile_fine_mask.reshape(-1)[real_images_inds].to(pixel_values.device)
 
-        # The intermediate hidden states feed the DeepStack mergers
-        kwargs["output_hidden_states"] = True
-        image_outputs = self.vision_model(pixel_values=pixel_values, return_dict=True, **kwargs)
-        image_hidden_states = image_outputs.last_hidden_state
-        image_features = self.connector(image_hidden_states, tile_fine_mask)
-        # `hidden_states[0]` is the patch embedding output, so the output of vision layer `i` is `hidden_states[i + 1]`
-        deepstack_features = [
-            self.connector.deepstack(slot, image_outputs.hidden_states[vision_layer_idx + 1], tile_fine_mask)
-            for slot, vision_layer_idx in enumerate(self.config.deepstack_visual_indexes)
-        ]
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values, tile_fine_mask=tile_fine_mask, return_dict=True, **kwargs
+        )
         router_logits = None
         if self.density_router is not None:
             tile_sample_index = torch.arange(batch_size, device=pixel_values.device).repeat_interleave(num_tiles)
-            router_logits = self.density_router(image_hidden_states, tile_sample_index[real_images_inds], batch_size)
+            router_logits = self.density_router(
+                vision_outputs.last_hidden_state, tile_sample_index[real_images_inds], batch_size
+            )
         return GraniteForDoclingImageFeaturesOutput(
-            last_hidden_state=image_hidden_states,
-            pooler_output=image_features,
-            hidden_states=image_outputs.hidden_states,
-            attentions=image_outputs.attentions,
-            deepstack_features=deepstack_features,
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=vision_outputs.pooler_output,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+            deepstack_features=vision_outputs.deepstack_features,
             router_logits=router_logits,
         )
 
@@ -1187,29 +1115,14 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
-        deepstack_image_features: list[torch.FloatTensor] | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteForDoclingBaseModelOutputWithPast:
         r"""
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`, *optional*):
             Tiles to route through the fine connector path, which yields four times as many image tokens per tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(num_tiles, image_seq_len, hidden_size)`, or `(num_tiles, 4 * image_seq_len, hidden_size)` on the fine route):
-            The hidden states of the image encoder after modality projection. Pass this instead of `pixel_values`
-            to reuse a previous call's vision-tower output and skip recomputing it. When DeepStack is configured,
-            also pass the matching `deepstack_image_features`. Do not pass this with `pixel_values`.
-        deepstack_image_features (`list[torch.FloatTensor]`, *optional*):
-            Intermediate projected image features returned by `get_image_features` or a previous forward call.
-            Required when reusing `image_hidden_states` with DeepStack.
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if self.training and self.text_model.gradient_checkpointing and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-            )
-            use_cache = False
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1220,35 +1133,18 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(self.device)
 
+        image_hidden_states = None
         deepstack_visual_embeds = None
         visual_pos_masks = None
         router_logits = None
-        if pixel_values is not None and image_hidden_states is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and image_hidden_states at the same time. To reuse a "
-                "previous call's image_hidden_states, remove pixel_values from the inputs instead of passing both."
-            )
-        if pixel_values is not None and deepstack_image_features is not None:
-            raise ValueError("Pass either pixel_values or deepstack_image_features, not both.")
-        elif pixel_values is not None:
+        if pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, tile_fine_mask=tile_fine_mask, return_dict=True)
-            image_hidden_states = image_outputs.pooler_output
+            image_hidden_states = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             router_logits = image_outputs.router_logits
-            deepstack_image_features = image_outputs.deepstack_features
-
-        if image_hidden_states is None and deepstack_image_features is not None:
-            raise ValueError("deepstack_image_features requires image_hidden_states.")
-        if image_hidden_states is not None:
-            if deepstack_image_features is None and self.config.deepstack_attn_layers:
-                raise ValueError("Reusing image_hidden_states with DeepStack also requires deepstack_image_features.")
-            if deepstack_image_features is not None:
-                if len(deepstack_image_features) != len(self.config.deepstack_attn_layers):
-                    raise ValueError("deepstack_image_features must match the configured DeepStack layers.")
-                deepstack_visual_embeds = {
-                    layer_idx: features.reshape(-1, features.shape[-1])
-                    for layer_idx, features in zip(self.config.deepstack_attn_layers, deepstack_image_features)
-                }
-            image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
+            deepstack_visual_embeds = {
+                layer_idx: features.reshape(-1, features.shape[-1])
+                for layer_idx, features in zip(self.config.deepstack_attn_layers, image_outputs.deepstack_features)
+            }
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_hidden_states)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask.unsqueeze(-1), image_hidden_states)
             visual_pos_masks = special_image_mask
@@ -1270,7 +1166,6 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_hidden_states,
-            deepstack_image_features=deepstack_image_features,
             router_logits=router_logits,
         )
 
@@ -1323,6 +1218,8 @@ class GraniteForDoclingModel(GraniteForDoclingPreTrainedModel):
 )
 class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    # The multi-token prediction heads of a checkpoint are used by serving engines, not by `generate`
+    _keys_to_ignore_on_load_unexpected = [r"^mtp\."]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1331,9 +1228,6 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
 
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.vocab_size = config.text_config.vocab_size
-        self.mtp = None
-        if config.num_mtp_layers > 0:
-            self.mtp = GraniteForDoclingMTP(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1374,8 +1268,6 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
-        deepstack_image_features: list[torch.FloatTensor] | None = None,
         labels: torch.LongTensor | None = None,
         router_labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
@@ -1385,11 +1277,6 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
         r"""
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`, *optional*):
             Tiles to route through the fine connector path, which yields four times as many image tokens per tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(num_tiles, image_seq_len, hidden_size)`, or `(num_tiles, 4 * image_seq_len, hidden_size)` on the fine route):
-            Projected image features to reuse instead of `pixel_values`. When DeepStack is configured, also pass the
-            matching `deepstack_image_features`.
-        deepstack_image_features (`list[torch.FloatTensor]`, *optional*):
-            Intermediate projected image features returned by `get_image_features` or a previous forward call.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `GraniteForDoclingForConditionalGeneration`).
@@ -1402,14 +1289,13 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
         Example:
 
         ```python
-        >>> import torch
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> from transformers.image_utils import load_image
 
         >>> image = load_image("https://huggingface.co/docling-project/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png")
 
         >>> processor = AutoProcessor.from_pretrained("docling-project/granite-for-docling-500m")
-        >>> model = AutoModelForImageTextToText.from_pretrained("docling-project/granite-for-docling-500m", dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModelForImageTextToText.from_pretrained("docling-project/granite-for-docling-500m", device_map="auto")
 
         >>> messages = [
         ...     {
@@ -1423,8 +1309,8 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
         >>> prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=1024)
-        >>> print(processor.decode(generated_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=4096)
+        >>> print(processor.decode(generated_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False))
         ```"""
         outputs = self.model(
             input_ids=input_ids,
@@ -1434,8 +1320,6 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             tile_fine_mask=tile_fine_mask,
-            image_hidden_states=image_hidden_states,
-            deepstack_image_features=deepstack_image_features,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
@@ -1452,24 +1336,6 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-            if self.mtp is not None and input_ids is not None:
-                # Head `offset` at position `t` predicts token `t + offset + 1`. `shift_labels`, when a sequence
-                # parallel trainer passes it, already holds token `t + 1` at position `t` and replaces `labels`.
-                shift_labels = kwargs.get("shift_labels")
-                mtp_targets = labels[:, 1:] if shift_labels is None else shift_labels
-                mtp_losses = []
-                for offset, head_hidden_states in enumerate(
-                    self.mtp(hidden_states, input_ids, self.get_input_embeddings()), start=1
-                ):
-                    head_logits = self.lm_head(head_hidden_states) / self.config.text_config.logits_scaling
-                    head_labels = mtp_targets[:, offset : offset + head_hidden_states.shape[1]]
-                    mtp_losses.append(
-                        nn.functional.cross_entropy(
-                            head_logits.reshape(-1, head_logits.shape[-1]).float(), head_labels.reshape(-1)
-                        )
-                    )
-                if mtp_losses:
-                    loss = loss + self.config.mtp_loss_weight * torch.stack(mtp_losses).mean()
         if router_labels is not None and outputs.router_logits is not None:
             router_loss = self.config.density_router_loss_weight * nn.functional.binary_cross_entropy_with_logits(
                 outputs.router_logits.float(), router_labels.to(outputs.router_logits.device).float()
@@ -1483,7 +1349,6 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
-            deepstack_image_features=outputs.deepstack_image_features,
             router_logits=outputs.router_logits,
         )
 
@@ -1501,48 +1366,6 @@ class GraniteForDoclingForConditionalGeneration(GraniteForDoclingPreTrainedModel
         """
         return self.model.predict_fine_route(pixel_values)
 
-    def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(*args, is_first_iteration=is_first_iteration, **kwargs)
-        if not is_first_iteration and model_inputs.get("past_key_values") is not None:
-            model_inputs.pop("image_hidden_states", None)
-            model_inputs.pop("deepstack_image_features", None)
-        return model_inputs
-
-    def _expand_inputs_for_generation(self, expand_size=1, is_encoder_decoder=False, input_ids=None, **model_kwargs):
-        image_hidden_states = model_kwargs.pop("image_hidden_states", None)
-        deepstack_image_features = model_kwargs.pop("deepstack_image_features", None)
-        if image_hidden_states is not None and expand_size > 1:
-            if input_ids is None:
-                raise ValueError("Expanding reused image features requires input_ids to locate the image tokens.")
-            image_token_counts = (input_ids == self.config.image_token_id).sum(dim=1).tolist()
-
-            def expand_features(features):
-                if features.ndim == 3:
-                    if any(count % features.shape[1] for count in image_token_counts):
-                        raise ValueError("Image token counts do not match the reused image features.")
-                    split_sizes = [count // features.shape[1] for count in image_token_counts]
-                elif features.ndim == 2:
-                    split_sizes = image_token_counts
-                else:
-                    raise ValueError("Reused image features must have two or three dimensions.")
-                if sum(split_sizes) != features.shape[0]:
-                    raise ValueError("Image token counts do not match the reused image features.")
-                parts = features.split(split_sizes, dim=0)
-                return torch.cat([part for part in parts for _ in range(expand_size)], dim=0)
-
-            image_hidden_states = expand_features(image_hidden_states)
-            if deepstack_image_features is not None:
-                deepstack_image_features = [expand_features(features) for features in deepstack_image_features]
-
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size, is_encoder_decoder=is_encoder_decoder, input_ids=input_ids, **model_kwargs
-        )
-        if image_hidden_states is not None:
-            model_kwargs["image_hidden_states"] = image_hidden_states
-        if deepstack_image_features is not None:
-            model_kwargs["deepstack_image_features"] = deepstack_image_features
-        return input_ids, model_kwargs
-
 
 __all__ = [
     "GraniteForDoclingForConditionalGeneration",
@@ -1550,4 +1373,5 @@ __all__ = [
     "GraniteForDoclingPreTrainedModel",
     "GraniteForDoclingTextModel",
     "GraniteForDoclingTextPreTrainedModel",
+    "GraniteForDoclingVisionModel",
 ]

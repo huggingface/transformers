@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GraniteForDocling model."""
 
+import tempfile
 import unittest
 
 from huggingface_hub import hf_hub_download
@@ -68,7 +69,6 @@ class GraniteForDoclingModelTester(VLMModelTester):
         kwargs.setdefault("num_tiles", 1)
         kwargs.setdefault("deepstack_visual_indexes", [1])
         kwargs.setdefault("deepstack_attn_layers", [0])
-        kwargs.setdefault("num_mtp_layers", 2)
         kwargs.setdefault("density_router_hidden_size", 8)
         super().__init__(parent, **kwargs)
 
@@ -83,6 +83,8 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = GraniteForDoclingModelTester
     # The fine connector path only receives gradients when tiles are routed to it
     test_all_params_have_gradient = False
+    # Image tokens of all tiles come flattened in tile order, not one row per image
+    skip_test_image_features_output_shape = True
 
     def test_fine_route_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -100,21 +102,22 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
             mixed_mask[0] = True
             mixed = model.get_image_features(pixel_values, tile_fine_mask=mixed_mask)
 
-        self.assertEqual(coarse.pooler_output.shape, (batch_size, coarse_tokens, hidden_size))
-        self.assertEqual(fine.pooler_output.shape, (batch_size, fine_tokens, hidden_size))
-        # Mixed routes are flattened in tile order: the first tile is fine, the others coarse
+        # Image tokens come flattened in tile order (one tile per sample here)
+        self.assertEqual(coarse.pooler_output.shape, (batch_size * coarse_tokens, hidden_size))
+        self.assertEqual(fine.pooler_output.shape, (batch_size * fine_tokens, hidden_size))
+        # Mixed routes: the first tile is fine, the others coarse
         self.assertEqual(mixed.pooler_output.shape, (fine_tokens + (batch_size - 1) * coarse_tokens, hidden_size))
-        torch.testing.assert_close(mixed.pooler_output[:fine_tokens], fine.pooler_output[0])
-        torch.testing.assert_close(mixed.pooler_output[fine_tokens:], coarse.pooler_output[1:].flatten(0, 1))
+        torch.testing.assert_close(mixed.pooler_output[:fine_tokens], fine.pooler_output[:fine_tokens])
+        torch.testing.assert_close(mixed.pooler_output[fine_tokens:], coarse.pooler_output[coarse_tokens:])
         for coarse_features, fine_features, mixed_features in zip(
             coarse.deepstack_features, fine.deepstack_features, mixed.deepstack_features
         ):
-            self.assertEqual(coarse_features.shape, (batch_size, coarse_tokens, hidden_size))
-            self.assertEqual(fine_features.shape, (batch_size, fine_tokens, hidden_size))
-            torch.testing.assert_close(mixed_features[:fine_tokens], fine_features[0])
-            torch.testing.assert_close(mixed_features[fine_tokens:], coarse_features[1:].flatten(0, 1))
+            self.assertEqual(coarse_features.shape, (batch_size * coarse_tokens, hidden_size))
+            self.assertEqual(fine_features.shape, (batch_size * fine_tokens, hidden_size))
+            torch.testing.assert_close(mixed_features[:fine_tokens], fine_features[:fine_tokens])
+            torch.testing.assert_close(mixed_features[fine_tokens:], coarse_features[coarse_tokens:])
 
-    def test_mtp_and_router_losses(self):
+    def test_router_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = GraniteForDoclingForConditionalGeneration(config).to(torch_device)
         model.train()
@@ -127,69 +130,31 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
         self.assertTrue(torch.isfinite(outputs.loss))
         outputs.loss.backward()
         for name, parameter in model.named_parameters():
-            if name.startswith(("mtp.", "model.density_router.")):
+            if name.startswith("model.density_router."):
                 self.assertIsNotNone(parameter.grad, f"{name} has no gradient")
 
-        # Without the optional heads the same inputs still run and the loss is the language modeling loss only
-        config.num_mtp_layers = 0
+        # Without the router the same inputs still run and the loss is the language modeling loss only
         config.density_router_hidden_size = None
         model = GraniteForDoclingForConditionalGeneration(config).to(torch_device).eval()
-        self.assertIsNone(model.mtp)
         self.assertIsNone(model.model.density_router)
         outputs = model(**inputs_dict, labels=inputs_dict["input_ids"])
         self.assertIsNone(outputs.router_logits)
         self.assertTrue(torch.isfinite(outputs.loss))
 
-    def test_mtp_heads_keep_all_valid_prediction_positions(self):
+    def test_mtp_heads_of_a_checkpoint_are_ignored(self):
+        # Serving engines use the multi-token prediction heads; transformers loads the checkpoint without them
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_mtp_layers = 4
+        config.num_mtp_layers = 2
         model = GraniteForDoclingForConditionalGeneration(config).to(torch_device).eval()
-        input_ids = torch.randint(0, config.text_config.vocab_size, (2, 10), device=torch_device)
-        embed_tokens = model.get_input_embeddings()
-
-        with torch.no_grad():
-            hidden_states = embed_tokens(input_ids)
-            head_hidden_states = model.mtp(hidden_states, input_ids, embed_tokens)
-
-        self.assertEqual([states.shape[1] for states in head_hidden_states], [8, 7, 6, 5])
-
-    def test_reusing_image_features_preserves_deepstack(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = GraniteForDoclingForConditionalGeneration(config).to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"]
-        pixel_values = inputs_dict["pixel_values"]
-
-        with torch.no_grad():
-            direct = model(input_ids=input_ids, pixel_values=pixel_values, use_cache=False)
-            reused = model(
-                input_ids=input_ids,
-                image_hidden_states=direct.image_hidden_states,
-                deepstack_image_features=direct.deepstack_image_features,
-                use_cache=False,
+        state_dict = model.state_dict()
+        state_dict["mtp.blocks.0.proj.weight"] = torch.zeros(2, 2)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, state_dict=state_dict)
+            reloaded, info = GraniteForDoclingForConditionalGeneration.from_pretrained(
+                tmp_dir, output_loading_info=True
             )
-            for num_beams, use_cache in ((1, True), (1, False), (2, True)):
-                generated_direct = model.generate(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    max_new_tokens=2,
-                    num_beams=num_beams,
-                    use_cache=use_cache,
-                    bad_words_ids=[[config.image_token_id]],
-                )
-                generated_reused = model.generate(
-                    input_ids=input_ids,
-                    image_hidden_states=direct.image_hidden_states,
-                    deepstack_image_features=direct.deepstack_image_features,
-                    max_new_tokens=2,
-                    num_beams=num_beams,
-                    use_cache=use_cache,
-                    bad_words_ids=[[config.image_token_id]],
-                )
-                torch.testing.assert_close(generated_reused, generated_direct)
-
-        torch.testing.assert_close(reused.logits, direct.logits)
-        with self.assertRaisesRegex(ValueError, "also requires deepstack_image_features"):
-            model(input_ids=input_ids, image_hidden_states=direct.image_hidden_states, use_cache=False)
+        self.assertFalse(info["unexpected_keys"])
+        self.assertFalse(hasattr(reloaded, "mtp"))
 
     def test_predict_fine_route(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -243,22 +208,26 @@ class GraniteForDoclingModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(len(features.deepstack_features), len(config.deepstack_visual_indexes))
         for slot, vision_layer_idx in enumerate(config.deepstack_visual_indexes):
             with torch.no_grad():
-                expected = model.connector.deepstack(slot, layer_outputs[vision_layer_idx])
-            torch.testing.assert_close(features.deepstack_features[slot], expected)
+                expected = model.vision_model.connector._deepstack(slot, layer_outputs[vision_layer_idx], fine=False)
+            torch.testing.assert_close(features.deepstack_features[slot], expected.flatten(0, 1))
 
     def test_coarse_only_checkpoint(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.density_router_hidden_size = None
-        config.use_fine_route = False
+        # The connector setting is mirrored into the vision config when the config is built
+        config.use_fine_route = config.vision_config.use_fine_route = False
         model = GraniteForDoclingModel(config).to(torch_device).eval()
-        self.assertIsNone(model.connector.proj_fine)
-        self.assertIsNone(model.connector.deepstack_mergers_fine)
+        self.assertIsNone(model.vision_model.connector.proj_fine)
+        self.assertIsNone(model.vision_model.connector.deepstack_mergers_fine)
         self.assertFalse([name for name in model.state_dict() if "_fine" in name])
 
         pixel_values = inputs_dict["pixel_values"]
         with torch.no_grad():
             coarse = model.get_image_features(pixel_values)
-        self.assertEqual(coarse.pooler_output.shape[1], self.model_tester.num_image_tokens)
+        self.assertEqual(
+            coarse.pooler_output.shape,
+            (pixel_values.shape[0] * self.model_tester.num_image_tokens, config.text_config.hidden_size),
+        )
         with self.assertRaises(ValueError):
             model.get_image_features(
                 pixel_values, tile_fine_mask=torch.ones(pixel_values.shape[0], 1, dtype=torch.bool)

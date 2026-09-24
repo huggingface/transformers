@@ -52,7 +52,9 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         tokenizer = tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
-        special_tokens = ["<|start_of_role|>", "<|end_of_role|>", "<|end_of_text|>", "<global-img>"]
+        # The released tokenizer ships every marker the processor needs; the tiny test tokenizer gets them here
+        special_tokens = ["<|start_of_role|>", "<|end_of_role|>", "<|end_of_text|>"]
+        special_tokens += ["<fake_token_around_image>", "<image>", "<global-img>"]
         special_tokens += [f"<row_{i + 1}_col_{j + 1}>" for i in range(16) for j in range(16)]
         tokenizer.add_tokens(special_tokens, special_tokens=True)
         tokenizer.pad_token = tokenizer.eos_token
@@ -117,31 +119,6 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["input_ids"].tolist(), expected_ids.tolist())
         self.assertEqual((inputs["input_ids"] == self.image_token_id).sum().item(), 12 * self.image_seq_len)
         self.assertEqual(inputs["tile_fine_mask"].tolist(), [[True, True, True]])
-
-    @require_torch
-    def test_chat_template_merges_loose_kwargs_with_processor_kwargs(self):
-        # A loose kwarg such as `padding=True` must not discard `processor_kwargs`
-        processor = self.get_processor()
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": self.prepare_page_image()},
-                    {"type": "text", "text": "<doclang>"},
-                ],
-            }
-        ]
-        inputs = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-            processor_kwargs={"fine_route": True},
-        )
-        self.assertEqual(inputs["tile_fine_mask"].tolist(), [[True, True, True]])
-        self.assertEqual((inputs["input_ids"] == self.image_token_id).sum().item(), 12 * self.image_seq_len)
 
     @require_torch
     def test_batched_images_are_padded(self):

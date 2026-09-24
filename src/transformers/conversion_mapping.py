@@ -146,6 +146,18 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # GraniteForDocling checkpoints store the decoder MLP fused (`shared_mlp.input_linear` = [gate; up]) and the
+        # connector next to the vision encoder; the model keeps the standard Granite MLP and hosts the connector in
+        # the vision model.
+        "granite_for_docling": [
+            WeightConverter(
+                source_patterns="shared_mlp.input_linear.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"shared_mlp\.output_linear\.", target_patterns=r"mlp.down_proj."),
+            WeightRenaming(source_patterns=r"model\.connector\.", target_patterns=r"model.vision_model.connector."),
+        ],
         "hy_v4": [
             # General HC prefix which is dropped
             WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),

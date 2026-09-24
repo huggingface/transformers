@@ -29,20 +29,32 @@ from ...utils import auto_docstring
 @strict
 class GraniteForDoclingVisionConfig(PreTrainedConfig):
     r"""
-    Configuration of the SigLIP-style vision encoder that embeds every 512x512 tile of a page. The outputs of the
-    layers listed in `GraniteForDoclingConfig.deepstack_visual_indexes` are tapped as well.
+    Configuration of the SigLIP-style vision encoder that embeds every 512x512 tile of a page, and of the connector
+    that turns its outputs into image tokens. The connector settings are mirrored from [`GraniteForDoclingConfig`],
+    which is where they are set.
+
+    out_hidden_size (`int`, *optional*, defaults to 1024):
+        Hidden size of the text decoder that the connector projects to.
+    scale_factor (`int`, *optional*, defaults to 4):
+        Pixel shuffle factor of the connector. Each tile of `(image_size // patch_size) ** 2` vision tokens is
+        reduced by `scale_factor ** 2`.
+    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[3, 7, 10]`):
+        Indices of the vision encoder layers whose output is projected by the DeepStack mergers. Index 0 is the
+        output of the first layer.
+    use_fine_route (`bool`, *optional*, defaults to `True`):
+        Whether to build the fine connector path, which shuffles pixels by half of `scale_factor` and yields four
+        times as many image tokens per tile.
 
     Example:
 
     ```python
-    >>> from transformers import GraniteForDoclingVisionConfig
-    >>> from transformers.models.granite_for_docling.modeling_granite_for_docling import GraniteForDoclingVisionTransformer
+    >>> from transformers import GraniteForDoclingVisionConfig, GraniteForDoclingVisionModel
 
     >>> # Initializing a GraniteForDoclingVisionConfig with docling-project/granite-for-docling-500m style configuration
     >>> configuration = GraniteForDoclingVisionConfig()
 
-    >>> # Initializing a GraniteForDoclingVisionTransformer (with random weights) from the docling-project/granite-for-docling-500m style configuration
-    >>> model = GraniteForDoclingVisionTransformer(configuration)
+    >>> # Initializing a GraniteForDoclingVisionModel (with random weights) from the docling-project/granite-for-docling-500m style configuration
+    >>> model = GraniteForDoclingVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -62,14 +74,33 @@ class GraniteForDoclingVisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
+    out_hidden_size: int = 1024
+    scale_factor: int = 4
+    deepstack_visual_indexes: list[int] | None = None
+    use_fine_route: bool = True
+
+    def __post_init__(self, **kwargs):
+        if self.deepstack_visual_indexes is None:
+            self.deepstack_visual_indexes = [3, 7, 10]
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="docling-project/granite-for-docling-500m")
 @strict
 class GraniteForDoclingTextConfig(PreTrainedConfig):
     r"""
-    shared_intermediate_size (`int`, *optional*, defaults to 2048):
-        Dimension of the gated MLP of each decoder layer.
+    ```python
+    >>> from transformers import GraniteForDoclingTextModel, GraniteForDoclingTextConfig
+
+    >>> # Initializing a GraniteForDoclingText granite_for_docling_text-3b style configuration
+    >>> configuration = GraniteForDoclingTextConfig()
+
+    >>> # Initializing a model from the granite_for_docling_text-7b style configuration
+    >>> model = GraniteForDoclingTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "granite_for_docling_text"
@@ -99,12 +130,12 @@ class GraniteForDoclingTextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
+    mlp_bias: bool = False
     embedding_multiplier: float | int = 12.0
     logits_scaling: float | int = 4.0
     residual_multiplier: float | int = 0.263
     attention_multiplier: float | int = 0.015625
     base_config_key = "text_config"
-    shared_intermediate_size: int = 2048
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -126,16 +157,12 @@ class GraniteForDoclingConfig(PreTrainedConfig):
     deepstack_attn_layers (`list[int]`, *optional*, defaults to `[0, 1, 2]`):
         Text decoder layers after which the corresponding DeepStack features are added.
     num_mtp_layers (`int`, *optional*, defaults to 0):
-        Number of multi-token prediction heads on top of the decoder. From the hidden state at position `t`, the
-        language modeling head predicts token `t + 1` and head `i` predicts token `t + i + 2`, so head 0 predicts the
-        token after the one `lm_head` predicts. They add an auxiliary loss when `labels` are given. Serving engines
-        such as vLLM can use the same heads for speculative decoding; `generate` does not.
+        Number of multi-token prediction heads stored in the checkpoint under `mtp.*`. Serving engines such as vLLM
+        use them for speculative decoding; transformers does not load them.
     mtp_num_attention_heads (`int`, *optional*):
         Number of attention heads in each multi-token prediction head. Defaults to `text_config.num_attention_heads`.
     mtp_intermediate_size (`int`, *optional*):
         Feed-forward size of each multi-token prediction head. Defaults to `text_config.intermediate_size`.
-    mtp_loss_weight (`float`, *optional*, defaults to 0.3):
-        Weight of the multi-token prediction loss, averaged over the heads, relative to the language modeling loss.
     use_fine_route (`bool`, *optional*, defaults to `True`):
         Whether to build the fine connector path, which shuffles pixels by half of `scale_factor` and yields four
         times as many image tokens per tile. Checkpoints trained with the coarse path only set it to `False`.
@@ -164,7 +191,6 @@ class GraniteForDoclingConfig(PreTrainedConfig):
     num_mtp_layers: int = 0
     mtp_num_attention_heads: int | None = None
     mtp_intermediate_size: int | None = None
-    mtp_loss_weight: float = 0.3
     use_fine_route: bool = True
     density_router_hidden_size: int | None = None
     density_router_threshold: float = 0.4
@@ -189,6 +215,12 @@ class GraniteForDoclingConfig(PreTrainedConfig):
             raise ValueError("`deepstack_visual_indexes` and `deepstack_attn_layers` must have the same length.")
         if self.density_router_hidden_size is not None and not self.use_fine_route:
             raise ValueError("The density router selects the fine connector path, it needs `use_fine_route=True`.")
+
+        # The vision model owns the connector, so it needs the connector settings and the decoder width
+        self.vision_config.out_hidden_size = self.text_config.hidden_size
+        self.vision_config.scale_factor = self.scale_factor
+        self.vision_config.deepstack_visual_indexes = list(self.deepstack_visual_indexes)
+        self.vision_config.use_fine_route = self.use_fine_route
         super().__post_init__(**kwargs)
 
 

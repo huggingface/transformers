@@ -20,10 +20,12 @@
 from functools import lru_cache
 
 import torch
+from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -59,15 +61,17 @@ class GraniteForDoclingImageProcessorKwargs(ImagesKwargs, total=False):
     fine_route: bool
 
 
-# The tokenizer has tile position markers from `<row_1_col_1>` to `<row_16_col_16>`.
+# The tokenizer has tile position markers from `<row_1_col_1>` to `<row_16_col_16>`, so no tile grid may exceed 16
+# tiles per side, whatever `max_patches` allows.
 MAX_TILES_PER_SIDE = 16
 
 
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
     """
-    Computes all `(num_columns, num_rows)` tile grids holding between `min_image_tiles` and `max_image_tiles` tiles,
-    with at most `MAX_TILES_PER_SIDE` tiles per side.
+    Computes all `(num_columns, num_rows)` tile grids holding between `min_image_tiles` and `max_image_tiles` tiles.
+    Unlike the GotOcr2 version, no grid has more than `MAX_TILES_PER_SIDE` tiles per side, the largest tile position
+    marker the tokenizer knows.
     """
     max_tiles_per_side = min(max_image_tiles, MAX_TILES_PER_SIDE)
     aspect_ratios = [
@@ -87,11 +91,8 @@ def get_optimal_tiled_canvas(
     max_image_tiles: int,
 ) -> tuple[int, int]:
     """
-    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
-    original image aspect ratio.
-    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
-    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
-    excessive tiling.
+    Same selection as the GotOcr2 version (closest aspect ratio, ties broken towards more tiles while the page area
+    exceeds half the canvas), over the grids of `get_all_supported_aspect_ratios` above.
     """
     possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
 
@@ -217,6 +218,7 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         crop_to_patches: bool = True,
         min_patches: int = 1,
@@ -224,56 +226,43 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
         fine_route: bool = False,
         **kwargs,
     ) -> BatchFeature:
-        pixel_values, rows, cols = [], [], []
-        for sample in images:
-            sample_tiles, sample_rows, sample_cols = [], [], []
-            for image in sample:
-                if crop_to_patches:
-                    num_cols, num_rows = get_optimal_tiled_canvas(
-                        tuple(image.shape[-2:]), (size.height, size.width), min_patches, max_patches
-                    )
-                    tiles = self.crop_image_to_patches(
-                        image[None], min_patches, max_patches, patch_size=size, resample=resample
-                    )[0]
-                else:
-                    num_cols = num_rows = 1
-                    tiles = self.resize(image, size, resample=resample)[None]
-                sample_tiles.append(tiles)
-                sample_rows.append(num_rows)
-                sample_cols.append(num_cols)
-            # A text-only sample of the batch has no tiles
-            if sample_tiles:
-                sample_tiles = self.rescale_and_normalize(
-                    torch.cat(sample_tiles), do_rescale, rescale_factor, do_normalize, image_mean, image_std
-                )
-            pixel_values.append(sample_tiles)
-            rows.append(sample_rows)
-            cols.append(sample_cols)
-
-        # Pad the samples to the same number of tiles with all-zero tiles, which the model discards.
-        max_num_tiles = max(len(tiles) for tiles in pixel_values)
-        first_tiles = next(tiles for tiles in pixel_values if len(tiles) > 0)
-        padded_pixel_values = torch.zeros(
-            len(pixel_values),
-            max_num_tiles,
-            *first_tiles.shape[1:],
-            dtype=first_tiles.dtype,
-            device=first_tiles.device,
+        # Pages of the same size get the same grid, so they are tiled together
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, disable_grouping=disable_grouping, is_nested=True
         )
-        tile_fine_mask = torch.zeros(len(pixel_values), max_num_tiles, dtype=torch.bool)
-        for i, tiles in enumerate(pixel_values):
-            if len(tiles) > 0:
-                padded_pixel_values[i, : tiles.shape[0]] = tiles
-                tile_fine_mask[i, : tiles.shape[0]] = fine_route
+        tiles_grouped, grids_grouped = {}, {}
+        for shape, stacked_images in grouped_images.items():
+            if crop_to_patches:
+                num_cols, num_rows = get_optimal_tiled_canvas(
+                    tuple(stacked_images.shape[-2:]), (size.height, size.width), min_patches, max_patches
+                )
+                stacked_tiles = self.crop_image_to_patches(
+                    stacked_images, min_patches, max_patches, patch_size=size, resample=resample
+                )
+            else:
+                num_cols = num_rows = 1
+                stacked_tiles = self.resize(stacked_images, size, resample=resample)[:, None]
+            stacked_tiles = self.rescale_and_normalize(
+                stacked_tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            tiles_grouped[shape] = stacked_tiles
+            grids_grouped[shape] = torch.tensor([[num_rows, num_cols]] * stacked_tiles.shape[0])
+        tiles = reorder_images(tiles_grouped, grouped_images_index, is_nested=True)
+        grids = reorder_images(grids_grouped, grouped_images_index, is_nested=True)
 
-        data = {"pixel_values": padded_pixel_values}
+        # One row of tiles per sample, padded to the largest sample with all-zero tiles that the model discards
+        tile_shape = next(tiles_tensor.shape[1:] for tiles_list in tiles for tiles_tensor in tiles_list)
+        sample_tiles = [torch.cat(tiles_list) if tiles_list else torch.zeros(0, *tile_shape) for tiles_list in tiles]
+        pixel_values = nn.utils.rnn.pad_sequence(sample_tiles, batch_first=True)
+        data = {"pixel_values": pixel_values}
         if fine_route:
-            data["tile_fine_mask"] = tile_fine_mask
-        encoding = BatchFeature(data=data, tensor_type=return_tensors)
-        # Lists of different lengths, only needed by the processor to build the prompt
-        encoding["rows"] = rows
-        encoding["cols"] = cols
-        return encoding
+            data["tile_fine_mask"] = nn.utils.rnn.pad_sequence(
+                [torch.ones(len(tiles), dtype=torch.bool) for tiles in sample_tiles], batch_first=True
+            )
+        # The tile grids are lists of different lengths, only the processor reads them to build the prompt
+        data["rows"] = [[int(grid[0]) for grid in sample] for sample in grids]
+        data["cols"] = [[int(grid[1]) for grid in sample] for sample in grids]
+        return BatchFeature(data=data, tensor_type=return_tensors, skip_tensor_conversion=["rows", "cols"])
 
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None
@@ -309,11 +298,6 @@ class GraniteForDoclingImageProcessor(TorchvisionBackend):
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
-    def to_dict(self):
-        encoder_dict = super().to_dict()
-        encoder_dict.pop("fine_route", None)
-        return encoder_dict
 
 
 __all__ = ["GraniteForDoclingImageProcessor"]

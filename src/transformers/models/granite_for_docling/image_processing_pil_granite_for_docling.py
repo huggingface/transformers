@@ -37,10 +37,10 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 
 
-# The tokenizer has tile position markers from `<row_1_col_1>` to `<row_16_col_16>`.
+# The tokenizer has tile position markers from `<row_1_col_1>` to `<row_16_col_16>`, so no tile grid may exceed 16
+# tiles per side, whatever `max_patches` allows.
 MAX_TILES_PER_SIDE = 16
 
 
@@ -70,8 +70,9 @@ class GraniteForDoclingImageProcessorKwargs(ImagesKwargs, total=False):
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
     """
-    Computes all `(num_columns, num_rows)` tile grids holding between `min_image_tiles` and `max_image_tiles` tiles,
-    with at most `MAX_TILES_PER_SIDE` tiles per side.
+    Computes all `(num_columns, num_rows)` tile grids holding between `min_image_tiles` and `max_image_tiles` tiles.
+    Unlike the GotOcr2 version, no grid has more than `MAX_TILES_PER_SIDE` tiles per side, the largest tile position
+    marker the tokenizer knows.
     """
     max_tiles_per_side = min(max_image_tiles, MAX_TILES_PER_SIDE)
     aspect_ratios = [
@@ -91,11 +92,8 @@ def get_optimal_tiled_canvas(
     max_image_tiles: int,
 ) -> tuple[int, int]:
     """
-    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
-    original image aspect ratio.
-    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
-    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
-    excessive tiling.
+    Same selection as the GotOcr2 version (closest aspect ratio, ties broken towards more tiles while the page area
+    exceeds half the canvas), over the grids of `get_all_supported_aspect_ratios` above.
     """
     possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
 
@@ -119,7 +117,6 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
-@requires(backends=("vision",))
 @auto_docstring(
     custom_intro="""
     PIL backend of [`GraniteForDoclingImageProcessor`]: the same 512x512 tiling, thumbnail, tile padding and
@@ -151,28 +148,47 @@ class GraniteForDoclingImageProcessorPil(PilBackend):
         max_patches: int,
         use_thumbnail: bool = True,
         patch_size: SizeDict | None = None,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
         The number of patches and their grid arrangement are determined by the original image size,
         the target patch size and the minimum and maximum number of patches.
         The aspect ratio of the patches grid is chosen to be the closest to the original image aspect ratio.
+
+        Args:
+            image (`np.ndarray`):
+                The image to be cropped.
+            min_patches (`int`):
+                The minimum number of patches to be extracted from the image.
+            max_patches (`int`):
+                The maximum number of patches to be extracted from the image.
+            use_thumbnail (`bool`, *optional*, defaults to `True`):
+                Whether to add a thumbnail image to the list of cropped patches.
+            patch_size (`SizeDict`, *optional*):
+                The size of the output patches.
+            resample (`PILImageResampling | int | None`, *optional*):
+                Resampling filter to use when resizing.
         """
+        # Ensure image is in CHW format for processing
         input_data_format = infer_channel_dimension_format(image)
         image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
 
         patch_size_height, patch_size_width = patch_size.height, patch_size.width
         original_height, original_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        # find the closest aspect ratio to the target
         num_columns, num_rows = get_optimal_tiled_canvas(
             (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
         )
 
+        # calculate the target width and height
         target_width = patch_size_width * num_columns
         target_height = patch_size_height * num_rows
         num_blocks = num_columns * num_rows
 
+        # resize the image so that each patch is of patch_size
         resized_image = self.resize(image, SizeDict(height=target_height, width=target_width), resample=resample)
+        # split the image into patches
         processed_images = []
         for i in range(num_blocks):
             column = i % num_columns
@@ -183,7 +199,9 @@ class GraniteForDoclingImageProcessorPil(PilBackend):
                 (column + 1) * patch_size_width,
                 (row + 1) * patch_size_height,
             )
+            # split the image (images are CHW format)
             patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
+            # Convert back to original format
             patch_image = to_channel_dimension_format(patch_image, input_data_format, ChannelDimension.FIRST)
             processed_images.append(patch_image)
 
@@ -211,59 +229,47 @@ class GraniteForDoclingImageProcessorPil(PilBackend):
         fine_route: bool = False,
         **kwargs,
     ) -> BatchFeature:
-        pixel_values, rows, cols = [], [], []
+        sample_tiles, rows, cols = [], [], []
         for sample in images:
-            sample_tiles, sample_rows, sample_cols = [], [], []
+            tiles, sample_rows, sample_cols = [], [], []
             for image in sample:
                 if crop_to_patches:
                     num_cols, num_rows = get_optimal_tiled_canvas(
                         tuple(image.shape[-2:]), (size.height, size.width), min_patches, max_patches
                     )
-                    tiles = np.stack(
-                        self.crop_image_to_patches(
-                            image, min_patches, max_patches, patch_size=size, resample=resample
-                        ),
-                        axis=0,
+                    image_tiles = self.crop_image_to_patches(
+                        image, min_patches, max_patches, patch_size=size, resample=resample
                     )
                 else:
                     num_cols = num_rows = 1
-                    tiles = self.resize(image, size, resample=resample)[None]
-                sample_tiles.append(tiles)
-                sample_rows.append(num_rows)
-                sample_cols.append(num_cols)
-            if sample_tiles:
-                sample_tiles = np.concatenate(sample_tiles, axis=0)
-                processed_tiles = []
-                for tile in sample_tiles:
+                    image_tiles = [self.resize(image, size, resample=resample)]
+                for tile in image_tiles:
                     if do_rescale:
                         tile = self.rescale(tile, rescale_factor)
                     if do_normalize:
                         tile = self.normalize(tile, image_mean, image_std)
-                    processed_tiles.append(tile)
-                sample_tiles = np.stack(processed_tiles, axis=0)
-            pixel_values.append(sample_tiles)
+                    tiles.append(tile)
+                sample_rows.append(num_rows)
+                sample_cols.append(num_cols)
+            sample_tiles.append(tiles)
             rows.append(sample_rows)
             cols.append(sample_cols)
 
-        max_num_tiles = max(len(tiles) for tiles in pixel_values)
-        first_tiles = next(tiles for tiles in pixel_values if len(tiles) > 0)
-        padded_pixel_values = np.zeros(
-            (len(pixel_values), max_num_tiles, *first_tiles.shape[1:]),
-            dtype=first_tiles.dtype,
-        )
-        tile_fine_mask = np.zeros((len(pixel_values), max_num_tiles), dtype=bool)
-        for i, tiles in enumerate(pixel_values):
-            if len(tiles) > 0:
-                padded_pixel_values[i, : tiles.shape[0]] = tiles
-                tile_fine_mask[i, : tiles.shape[0]] = fine_route
-
-        data = {"pixel_values": padded_pixel_values}
+        # One row of tiles per sample, padded to the largest sample with all-zero tiles that the model discards
+        max_num_tiles = max(len(tiles) for tiles in sample_tiles)
+        tile_shape = next(tiles[0].shape for tiles in sample_tiles if tiles)
+        pixel_values = np.zeros((len(sample_tiles), max_num_tiles, *tile_shape), dtype=np.float32)
+        tile_fine_mask = np.zeros((len(sample_tiles), max_num_tiles), dtype=bool)
+        for i, tiles in enumerate(sample_tiles):
+            if tiles:
+                pixel_values[i, : len(tiles)] = np.stack(tiles)
+                tile_fine_mask[i, : len(tiles)] = fine_route
+        data = {"pixel_values": pixel_values}
         if fine_route:
             data["tile_fine_mask"] = tile_fine_mask
-        encoding = BatchFeature(data=data, tensor_type=return_tensors)
-        encoding["rows"] = rows
-        encoding["cols"] = cols
-        return encoding
+        data["rows"] = rows
+        data["cols"] = cols
+        return BatchFeature(data=data, tensor_type=return_tensors, skip_tensor_conversion=["rows", "cols"])
 
     def get_number_of_image_patches(
         self, height: int, width: int, images_kwargs: dict | None = None
@@ -299,11 +305,6 @@ class GraniteForDoclingImageProcessorPil(PilBackend):
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
-    def to_dict(self):
-        encoder_dict = super().to_dict()
-        encoder_dict.pop("fine_route", None)
-        return encoder_dict
 
 
 __all__ = ["GraniteForDoclingImageProcessorPil"]
