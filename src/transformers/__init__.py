@@ -373,6 +373,7 @@ else:
         "DynamicIndexedLayer",
         "DynamicLayer",
         "EncoderDecoderCache",
+        "Fp8QuantizedLayer",
         "HQQQuantizedLayer",
         "QuantizedCache",
         "QuantoQuantizedLayer",
@@ -498,6 +499,7 @@ if TYPE_CHECKING:
     from .cache_utils import DynamicIndexedLayer as DynamicIndexedLayer
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
+    from .cache_utils import Fp8QuantizedLayer as Fp8QuantizedLayer
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
