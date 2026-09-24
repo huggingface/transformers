@@ -197,6 +197,23 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_attention_mask_is_not_overwritten_for_causal_mask(self, config, inputs_dict):
+        """
+        OPT needs a dense 2D mask to compute its learned positional embeddings, but it must not leak into
+        `create_causal_mask`, otherwise sdpa can never rely on its `is_causal` argument.
+        """
+        config._attn_implementation = "sdpa"
+        model = OPTModel(config).to(torch_device).eval()
+
+        with patch(
+            "transformers.models.opt.modeling_opt.create_causal_mask", wraps=create_causal_mask
+        ) as mocked_create_causal_mask:
+            with torch.no_grad():
+                model(inputs_dict["input_ids"], attention_mask=None)
+
+        self.parent.assertTrue(mocked_create_causal_mask.called)
+        self.parent.assertIsNone(mocked_create_causal_mask.call_args.kwargs["attention_mask"])
+
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -264,22 +281,8 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_attention_mask_is_not_overwritten_for_causal_mask(self):
-        """
-        OPT needs a dense 2D mask to compute its learned positional embeddings, but it must not leak into
-        `create_causal_mask`, otherwise sdpa can never rely on its `is_causal` argument.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        config._attn_implementation = "sdpa"
-        model = OPTModel(config).to(torch_device).eval()
-
-        with patch(
-            "transformers.models.opt.modeling_opt.create_causal_mask", wraps=create_causal_mask
-        ) as mocked_create_causal_mask:
-            with torch.no_grad():
-                model(inputs_dict["input_ids"], attention_mask=None)
-
-        self.assertTrue(mocked_create_causal_mask.called)
-        self.assertIsNone(mocked_create_causal_mask.call_args.kwargs["attention_mask"])
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_attention_mask_is_not_overwritten_for_causal_mask(*config_and_inputs)
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
