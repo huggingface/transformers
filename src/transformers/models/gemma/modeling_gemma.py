@@ -95,17 +95,6 @@ class GemmaMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-        # Guard for legacy Gemma 1.0 checkpoints that use exact "gelu" instead of "gelu_pytorch_tanh"
-        if config.hidden_act == "gelu":
-            logger.warning_once(
-                "The `hidden_act` config value 'gelu' is deprecated for Gemma. "
-                "Setting activation function to `gelu_pytorch_tanh` to match the original model's training. "
-                "Please use `gelu_pytorch_tanh` instead of `gelu` in your config to silence this warning."
-            )
-            self.act_fn = ACT2FN["gelu_pytorch_tanh"]
-        else:
-            self.act_fn = ACT2FN[config.hidden_act]
-
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj

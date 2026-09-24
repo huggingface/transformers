@@ -19,7 +19,6 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
@@ -102,6 +101,16 @@ class GemmaConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     use_bidirectional_attention: bool | None = None
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if self.hidden_act == "gelu":
+            logger.warning_once(
+                "The `hidden_act` config value 'gelu' is deprecated for Gemma. "
+                "Setting activation function to `gelu_pytorch_tanh` to match the original model's training. "
+                "Please use `gelu_pytorch_tanh` instead of `gelu` in your config to silence this warning."
+            )
+            self.hidden_act = "gelu_pytorch_tanh"
+
 
 class GemmaTextScaledWordEmbedding(nn.Embedding):
     """
@@ -143,17 +152,6 @@ class GemmaMLP(LlamaMLP):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-
-        # Guard for legacy Gemma 1.0 checkpoints that use exact "gelu" instead of "gelu_pytorch_tanh"
-        if config.hidden_act == "gelu":
-            logger.warning_once(
-                "The `hidden_act` config value 'gelu' is deprecated for Gemma. "
-                "Setting activation function to `gelu_pytorch_tanh` to match the original model's training. "
-                "Please use `gelu_pytorch_tanh` instead of `gelu` in your config to silence this warning."
-            )
-            self.act_fn = ACT2FN["gelu_pytorch_tanh"]
-        else:
-            self.act_fn = ACT2FN[config.hidden_act]
 
 
 class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
