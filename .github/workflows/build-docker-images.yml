@@ -237,8 +237,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-        
-      - 
+
+      -
         name: Pull and save docker image to cache
         run: |
           image="huggingface/transformers-pytorch-amd-gpu"
@@ -333,5 +333,42 @@ jobs:
         with:
           slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
           title: 🤗 Results of the transformers-quantization-latest-gpu build
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
+  xpu-ci-image:
+    permissions:
+      contents: read
+    name: "PyTorch XPU"
+    runs-on:
+      group: aws-general-8-plus
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Login to DockerHub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ./docker/transformers-pytorch-xpu
+          push: true
+          tags: huggingface/xpu_ci${{ inputs.image_postfix }}
+
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@63657f571a92cc9759159442936061c51d6d9ae4 # main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-pytorch-xpu docker build
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

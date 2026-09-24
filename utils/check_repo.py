@@ -314,6 +314,7 @@ IGNORE_NON_TESTED = (
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
     ]
 )
 
