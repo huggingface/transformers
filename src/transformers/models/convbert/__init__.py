@@ -24,7 +24,6 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from ..bert.tokenization_bert import BertTokenizer as ConvBertTokenizerFast
     from .configuration_convbert import *
     from .modeling_convbert import *
     from .tokenization_convbert import *

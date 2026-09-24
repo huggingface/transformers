@@ -24,8 +24,6 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from ..bert.tokenization_bert import BertTokenizer as LayoutLMTokenizer
-    from ..bert.tokenization_bert import BertTokenizer as LayoutLMTokenizerFast
     from .configuration_layoutlm import *
     from .modeling_layoutlm import *
 else:
