@@ -60,7 +60,7 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
     # Otherwise simply count the number of layers of each type, making sure they are supported at the same time
     layer_counts = {}
     for i, layer_type in enumerate(layer_types):
-        if layer_type not in ATTN_TYPE_TO_ALLOCATOR.keys():
+        if layer_type not in ATTN_TYPE_TO_ALLOCATOR:
             raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
     return layer_counts
