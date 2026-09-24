@@ -1028,7 +1028,7 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded * self.inv_freq.float()
             cos = freqs.cos() * self.attention_scaling
@@ -1288,7 +1288,7 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             cos = freqs.cos() * self.attention_scaling
@@ -2518,7 +2518,7 @@ class Qwen3OmniMoeRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -3087,27 +3087,17 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
             generation_step = -1
             residual_codes = None
         if position_ids is None:
-            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-            if past_key_values_length == 0 or self.rope_deltas is None:
-                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-                position_ids, rope_deltas = self.get_rope_index(
-                    talker_input_ids,
-                    image_grid_thw,
-                    video_grid_thw,
-                    attention_mask,
-                    use_audio_in_video,
-                    audio_feature_lengths,
-                    video_second_per_grid,
-                )
-                rope_deltas = rope_deltas - delta0
-                self.rope_deltas = rope_deltas
-            else:
-                batch_size, seq_length = input_ids.shape
-                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
-                position_ids = torch.arange(seq_length, device=input_ids.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+            position_ids = self.compute_3d_position_ids(
+                inputs_embeds,
+                talker_input_ids=talker_input_ids,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                use_audio_in_video=use_audio_in_video,
+                audio_feature_lengths=audio_feature_lengths,
+                video_second_per_grid=video_second_per_grid,
+            )
 
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=None,
@@ -3188,6 +3178,111 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
 
+    def compute_3d_position_ids(
+        self,
+        inputs_tensor: torch.Tensor,
+        talker_input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        image_grid_thw: torch.Tensor | None = None,
+        video_grid_thw: torch.Tensor | None = None,
+        use_audio_in_video: bool | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        video_second_per_grid: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, seq_length = inputs_tensor.shape[:2]
+        past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        has_multimodal_data = audio_feature_lengths is not None or any(
+            grid is not None and grid.numel() > 0 for grid in (image_grid_thw, video_grid_thw)
+        )
+        if past_length == 0 or self.rope_deltas is None:
+            if attention_mask is None:
+                attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long, device=inputs_tensor.device)
+            if talker_input_ids is not None and has_multimodal_data:
+                position_ids, rope_deltas = self.get_rope_index(
+                    talker_input_ids,
+                    image_grid_thw,
+                    video_grid_thw,
+                    attention_mask,
+                    use_audio_in_video or False,
+                    audio_feature_lengths,
+                    video_second_per_grid,
+                )
+            else:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                rope_deltas = torch.zeros(batch_size, 1, dtype=torch.long, device=inputs_tensor.device)
+            self.rope_deltas = rope_deltas - (1 - attention_mask).sum(dim=-1).unsqueeze(1)
+        else:
+            delta = (past_length + self.rope_deltas).to(inputs_tensor.device)
+            position_ids = torch.arange(seq_length, device=inputs_tensor.device)
+            position_ids = position_ids.view(1, -1).expand(batch_size, -1).add(delta)
+            position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+        return position_ids
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Overwritten -- requires 3D position ids
+
+        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+        attention_mask = model_kwargs.get("attention_mask")
+        padding_length = (1 - attention_mask).sum(dim=-1, keepdim=True) if attention_mask is not None else 0
+
+        # Early exit in case we are continuing generation from past kv
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.rope_deltas is not None:
+            # Talker stores deltas relative to the physical cache length, which includes padding.
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1) + self.rope_deltas + padding_length
+            position_ids = torch.cat([text_positions[None, ...], vision_positions], dim=0)
+            return position_ids
+
+        # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
+        if "talker_input_ids" in model_kwargs and model_kwargs["talker_input_ids"] is not None:
+            inputs_tensor = model_kwargs["talker_input_ids"]
+
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
+        has_multimodal_data = model_kwargs.get("audio_feature_lengths") is not None or any(
+            grid is not None and grid.numel() > 0
+            for grid in (model_kwargs.get("image_grid_thw"), model_kwargs.get("video_grid_thw"))
+        )
+        if is_input_ids and attention_mask is not None and has_multimodal_data:
+            vision_positions, rope_deltas = self.get_rope_index(
+                inputs_tensor,
+                image_grid_thw=model_kwargs.get("image_grid_thw"),
+                video_grid_thw=model_kwargs.get("video_grid_thw"),
+                attention_mask=attention_mask,
+                use_audio_in_video=model_kwargs.get("use_audio_in_video") or False,
+                audio_seqlens=model_kwargs.get("audio_feature_lengths"),
+                second_per_grids=model_kwargs.get("video_second_per_grid"),
+            )
+            self.rope_deltas = rope_deltas - padding_length
+        else:
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.rope_deltas = (
+                torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device) - padding_length
+            )
+
+        # Concatenate "text + vision" positions into [4, bs, seq-len]
+        text_positions = text_positions[None, ...]
+        position_ids = torch.cat([text_positions, vision_positions], dim=0)
+
+        return position_ids
+
+    def _expand_inputs_for_generation(self, expand_size=1, is_encoder_decoder=False, input_ids=None, **model_kwargs):
+        position_ids = model_kwargs.pop("position_ids", None)
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+        if position_ids is not None:
+            batch_dim = 1 if position_ids.ndim == 3 else 0
+            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
+        return input_ids, model_kwargs
+
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
@@ -3222,9 +3317,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
-
-        # Qwen3-Omni will prepare position ids in forward with deltas
-        inputs["position_ids"] = None
 
         # TODO(raushan, gante): Refactor this part to a utility function
         if not is_first_iteration and kwargs.get("use_cache", True):

@@ -32,7 +32,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, is_rocm_platform
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -106,7 +106,7 @@ class OpenAIPrivacyFilterRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = freqs
@@ -407,11 +407,11 @@ class OpenAIPrivacyFilterPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules = []
     # metal-flash-sdpa carries the sliding-window + attention-sink path on MPS (Apple Silicon);
     # the others remain the defaults on CUDA.
-    _compatible_flash_implementations = [
-        "kernels-community/vllm-flash-attn3",
-        "flash_attention_4",
-        "kernels-community/metal-flash-sdpa",
-    ]
+    _compatible_flash_implementations = (
+        ["kernels-community/aiter-flash-attn"]
+        if is_rocm_platform()
+        else ["kernels-community/vllm-flash-attn3", "flash_attention_4", "kernels-community/metal-flash-sdpa"]
+    )
     _keep_in_fp32_modules_strict = ["sinks"]
 
     @torch.no_grad()

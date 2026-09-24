@@ -37,7 +37,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_rocm_platform
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -190,7 +190,7 @@ class GptOssRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = freqs
@@ -389,18 +389,17 @@ class GptOssPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),
         "hidden_states": GptOssDecoderLayer,
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
-    _compatible_flash_implementations = [
-        "kernels-community/vllm-flash-attn3",
-        "flash_attention_4",
-        "kernels-community/metal-flash-sdpa",
-    ]
+    _compatible_flash_implementations = (
+        ["kernels-community/aiter-flash-attn"]
+        if is_rocm_platform()
+        else ["kernels-community/vllm-flash-attn3", "flash_attention_4", "kernels-community/metal-flash-sdpa"]
+    )
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -600,11 +599,6 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

@@ -198,6 +198,7 @@ class GlmAsrAttention(LlamaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -219,7 +220,7 @@ class GlmAsrAttention(LlamaAttention):
             query_states,
             key_states,
             value_states,
-            attention_mask=None,
+            attention_mask=attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -402,10 +403,6 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
