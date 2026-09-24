@@ -237,9 +237,8 @@ class GraniteForDoclingProcessor(ProcessorMixin):
             num_image_tokens = []
             num_image_patches = []
             for height, width in image_sizes:
-                num_patches, num_rows, num_cols = self.image_processor.get_number_of_image_patches(
-                    height, width, kwargs
-                )
+                num_patches = self.image_processor.get_number_of_image_patches(height, width, kwargs)
+                num_rows, num_cols = self.image_processor.get_tile_grid(height, width, kwargs)
                 image_prompt = self.replace_image_token({"rows": [[num_rows]], "cols": [[num_cols]]}, 0, **kwargs)
                 num_image_tokens.append(len(self.tokenizer(image_prompt, add_special_tokens=False)["input_ids"]))
                 num_image_patches.append(num_patches)

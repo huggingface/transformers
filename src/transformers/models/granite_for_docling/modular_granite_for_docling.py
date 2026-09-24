@@ -319,36 +319,22 @@ class GraniteForDoclingImageProcessor(GotOcr2ImageProcessor):
         data["cols"] = [[int(grid[1]) for grid in sample] for sample in grids]
         return BatchFeature(data=data, tensor_type=return_tensors, skip_tensor_conversion=["rows", "cols"])
 
-    def get_number_of_image_patches(
-        self, height: int, width: int, images_kwargs: dict | None = None
-    ) -> tuple[int, int, int]:
-        """
-        A utility that returns the number of tiles for a given image size.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `tuple[int, int, int]`: Number of tiles (including the thumbnail) and the number of rows and columns
-            they form.
-        """
+    def get_tile_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int]:
+        """The `(num_rows, num_cols)` tile grid an image of this size is split into."""
         images_kwargs = images_kwargs or {}
-        if not images_kwargs.get("crop_to_patches", self.crop_to_patches):
-            return 1, 1, 1
         min_patches = images_kwargs.get("min_patches", self.min_patches)
         max_patches = images_kwargs.get("max_patches", self.max_patches)
-        size = images_kwargs.get("size", self.size)
+        patch_size = images_kwargs.get("patch_size", self.size)
+        if not images_kwargs.get("crop_to_patches", self.crop_to_patches) or max_patches <= 1:
+            return 1, 1
+        if isinstance(patch_size, dict):
+            patch_height, patch_width = patch_size["height"], patch_size["width"]
+        else:
+            patch_height, patch_width = patch_size.height, patch_size.width
         num_cols, num_rows = get_optimal_tiled_canvas(
-            (height, width), (size["height"], size["width"]), min_patches, max_patches
+            (height, width), (patch_height, patch_width), min_patches, max_patches
         )
-        num_patches = num_rows * num_cols
-        if num_patches > 1:
-            num_patches += 1
-        return num_patches, num_rows, num_cols
+        return num_rows, num_cols
 
 
 @auto_docstring(
@@ -385,9 +371,10 @@ class GraniteForDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
         fine_route: bool = False,
         **kwargs,
     ) -> BatchFeature:
-        sample_tiles, rows, cols = [], [], []
+        # Pages are tiled one by one (grouping by shape is a torchvision-backend utility)
+        tiles, grids = [], []
         for sample in images:
-            tiles, sample_rows, sample_cols = [], [], []
+            sample_tiles, sample_grids = [], []
             for image in sample:
                 if crop_to_patches:
                     num_cols, num_rows = get_optimal_tiled_canvas(
@@ -404,59 +391,45 @@ class GraniteForDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
                         tile = self.rescale(tile, rescale_factor)
                     if do_normalize:
                         tile = self.normalize(tile, image_mean, image_std)
-                    tiles.append(tile)
-                sample_rows.append(num_rows)
-                sample_cols.append(num_cols)
-            sample_tiles.append(tiles)
-            rows.append(sample_rows)
-            cols.append(sample_cols)
+                    sample_tiles.append(tile)
+                sample_grids.append((num_rows, num_cols))
+            tiles.append(sample_tiles)
+            grids.append(sample_grids)
 
         # One row of tiles per sample, padded to the largest sample with all-zero tiles that the model discards
-        max_num_tiles = max(len(tiles) for tiles in sample_tiles)
-        tile_shape = next(tiles[0].shape for tiles in sample_tiles if tiles)
-        pixel_values = np.zeros((len(sample_tiles), max_num_tiles, *tile_shape), dtype=np.float32)
-        tile_fine_mask = np.zeros((len(sample_tiles), max_num_tiles), dtype=bool)
-        for i, tiles in enumerate(sample_tiles):
-            if tiles:
-                pixel_values[i, : len(tiles)] = np.stack(tiles)
-                tile_fine_mask[i, : len(tiles)] = fine_route
+        tile_shape = next(tile.shape for sample_tiles in tiles for tile in sample_tiles)
+        max_num_tiles = max(len(sample_tiles) for sample_tiles in tiles)
+        pixel_values = np.zeros((len(tiles), max_num_tiles, *tile_shape), dtype=np.float32)
+        for i, sample_tiles in enumerate(tiles):
+            if sample_tiles:
+                pixel_values[i, : len(sample_tiles)] = np.stack(sample_tiles)
         data = {"pixel_values": pixel_values}
         if fine_route:
+            tile_fine_mask = np.zeros((len(tiles), max_num_tiles), dtype=bool)
+            for i, sample_tiles in enumerate(tiles):
+                tile_fine_mask[i, : len(sample_tiles)] = True
             data["tile_fine_mask"] = tile_fine_mask
-        data["rows"] = rows
-        data["cols"] = cols
+        # The tile grids are lists of different lengths, only the processor reads them to build the prompt
+        data["rows"] = [[grid[0] for grid in sample] for sample in grids]
+        data["cols"] = [[grid[1] for grid in sample] for sample in grids]
         return BatchFeature(data=data, tensor_type=return_tensors, skip_tensor_conversion=["rows", "cols"])
 
-    def get_number_of_image_patches(
-        self, height: int, width: int, images_kwargs: dict | None = None
-    ) -> tuple[int, int, int]:
-        """
-        A utility that returns the number of tiles for a given image size.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `tuple[int, int, int]`: Number of tiles (including the thumbnail) and the number of rows and columns
-            they form.
-        """
+    def get_tile_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int]:
+        """The `(num_rows, num_cols)` tile grid an image of this size is split into."""
         images_kwargs = images_kwargs or {}
-        if not images_kwargs.get("crop_to_patches", self.crop_to_patches):
-            return 1, 1, 1
         min_patches = images_kwargs.get("min_patches", self.min_patches)
         max_patches = images_kwargs.get("max_patches", self.max_patches)
-        size = images_kwargs.get("size", self.size)
+        patch_size = images_kwargs.get("patch_size", self.size)
+        if not images_kwargs.get("crop_to_patches", self.crop_to_patches) or max_patches <= 1:
+            return 1, 1
+        if isinstance(patch_size, dict):
+            patch_height, patch_width = patch_size["height"], patch_size["width"]
+        else:
+            patch_height, patch_width = patch_size.height, patch_size.width
         num_cols, num_rows = get_optimal_tiled_canvas(
-            (height, width), (size["height"], size["width"]), min_patches, max_patches
+            (height, width), (patch_height, patch_width), min_patches, max_patches
         )
-        num_patches = num_rows * num_cols
-        if num_patches > 1:
-            num_patches += 1
-        return num_patches, num_rows, num_cols
+        return num_rows, num_cols
 
 
 class GraniteForDoclingProcessorKwargs(ProcessingKwargs, total=False):
@@ -517,9 +490,8 @@ class GraniteForDoclingProcessor(Idefics3Processor):
             num_image_tokens = []
             num_image_patches = []
             for height, width in image_sizes:
-                num_patches, num_rows, num_cols = self.image_processor.get_number_of_image_patches(
-                    height, width, kwargs
-                )
+                num_patches = self.image_processor.get_number_of_image_patches(height, width, kwargs)
+                num_rows, num_cols = self.image_processor.get_tile_grid(height, width, kwargs)
                 image_prompt = self.replace_image_token({"rows": [[num_rows]], "cols": [[num_cols]]}, 0, **kwargs)
                 num_image_tokens.append(len(self.tokenizer(image_prompt, add_special_tokens=False)["input_ids"]))
                 num_image_patches.append(num_patches)

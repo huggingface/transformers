@@ -178,8 +178,8 @@ class GraniteForDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.Te
             encoding = image_processor(wide_image, return_tensors="pt")
             self.assertEqual((encoding["rows"], encoding["cols"]), ([[1]], [[16]]))
             self.assertEqual(encoding["pixel_values"].shape, (1, 17, 3, 20, 20))
-            num_patches, num_rows, num_cols = image_processor.get_number_of_image_patches(20, 1000)
-            self.assertEqual((num_patches, num_rows, num_cols), (17, 1, 16))
+            self.assertEqual(image_processor.get_number_of_image_patches(20, 1000), 17)
+            self.assertEqual(image_processor.get_tile_grid(20, 1000), (1, 16))
 
     def test_nested_images_are_padded(self):
         for image_processing_class in self.image_processing_classes.values():
