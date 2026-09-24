@@ -3955,7 +3955,7 @@ class GenerationMixin(ContinuousMixin):
                 valid_tokens = valid_tokens[:, :tokens_budget]
             # This is for eos tokens
             if eos_token_id is not None:
-                eos_positions = torch.isin(valid_tokens, eos_token_id.to(valid_tokens.device)).nonzero()
+                eos_positions = torch.isin(valid_tokens[0, :], eos_token_id.to(valid_tokens.device)).nonzero()
                 if eos_positions.numel() > 0:
                     num_drafted = eos_positions[0].item() + 1
                     valid_tokens = valid_tokens[:, :num_drafted]
