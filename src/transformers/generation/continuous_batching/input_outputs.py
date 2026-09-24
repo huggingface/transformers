@@ -117,7 +117,7 @@ class ContinuousBatchingIOs:
         # Setup static tensors and compute stream
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
-        self.compute_stream = (torch.cuda.Stream(device=self.device) if device.type == "cuda" else None)
+        self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
         if hasattr(torch, "npu") and device.type == "npu":
             self.compute_stream = torch.npu.Stream(device=self.device)
         elif hasattr(torch, "xpu") and device.type == "xpu":
