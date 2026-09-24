@@ -40,8 +40,8 @@ class PagedAttentionArgs(TypedDict):
         cu_seq_lens_q: Cumulative sequence lengths for queries, used for variable-length batching.
         cu_seq_lens_k: Cumulative sequence lengths for keys/values. Can be a tensor or dictionary mapping layer
             types (e.g., "full_attention", "sliding_attention") to tensors for hybrid models.
-        max_seqlen_q: Maximum query sequence length in the batch.
-        max_seqlen_k: Maximum key/value sequence length. Can be an int or dictionary for hybrid models.
+        max_length_q: Maximum query sequence length in the batch.
+        max_length_k: Maximum key/value sequence length. Can be an int or dictionary for hybrid models.
         write_index: List of tensors indicating where to write new KV states in the cache, one per attention group.
         read_index: List of tensors indicating which cache positions to read from, one per attention group.
         logits_indices: Tensor indicating which positions in the output should be used for next-token prediction.
@@ -57,8 +57,8 @@ class PagedAttentionArgs(TypedDict):
     position_ids: torch.Tensor
     cu_seq_lens_q: torch.Tensor
     cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor]
-    max_seqlen_q: int
-    max_seqlen_k: int | dict[str, int]
+    max_length_q: int
+    max_length_k: int | dict[str, int]
     write_index: list[torch.Tensor]
     read_index: list[torch.Tensor]
     logits_indices: torch.Tensor
@@ -171,8 +171,8 @@ class ContinuousBatchingIOs:
         self.output_ids.zero_()
         self.total_seqlen_q = 0
         self.total_seqlen_k: dict[str, int] = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
-        self.max_seqlen_q = 0
-        self.max_seqlen_k: dict[str, int] = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
+        self.max_length_q = 0
+        self.max_length_k: dict[str, int] = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
 
         # If the attention mask is needed, it is allocated separately
         if attn_mask_is_needed(self.config):
@@ -222,8 +222,8 @@ class ContinuousBatchingIOs:
         # Transfer scalar attributes
         other.total_seqlen_q = self.total_seqlen_q
         other.total_seqlen_k = dict(self.total_seqlen_k)
-        other.max_seqlen_q = self.max_seqlen_q
-        other.max_seqlen_k = dict(self.max_seqlen_k)
+        other.max_length_q = self.max_length_q
+        other.max_length_k = dict(self.max_length_k)
         # Transfer static tensors
         maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
         with maybe_stream:
@@ -256,7 +256,7 @@ class ContinuousBatchingIOs:
         self._bulk_input_tensor[: self.static_inputs, : q_len + 1].zero_()
         if full_reset:
             self._bulk_input_tensor[self.static_inputs :] = self.logits_processors_defaults
-        self.max_seqlen_q = 0
+        self.max_length_q = 0
 
         # Reset the logits indices and output ids
         self.logits_indices[:b_size].zero_()
@@ -264,7 +264,7 @@ class ContinuousBatchingIOs:
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
-            self.max_seqlen_k[layer_type] = 0
+            self.max_length_k[layer_type] = 0
             self.total_seqlen_k[layer_type] = 0
             if self.attention_mask is not None:
                 self.attention_mask[layer_type][:, :, :q_len, : q_len + kv_len].fill_(
@@ -384,13 +384,13 @@ class ContinuousBatchingIOs:
             input_ids.extend(state.tokens_to_process)
             position_ids.extend(range(past_length, past_length + query_length))
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
-            self.max_seqlen_q = max(self.max_seqlen_q, query_length)
+            self.max_length_q = max(self.max_length_q, query_length)
 
             # Accumulate the key sequence lengths for the current request
             for layer_type, cache_allocator in self.cache.cache_allocators.items():
                 seqlen_k = cache_allocator.get_seqlen_k(past_length, query_length)
                 cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + seqlen_k)
-                self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], seqlen_k)
+                self.max_length_k[layer_type] = max(self.max_length_k[layer_type], seqlen_k)
 
             # We extend the read and write indices for the cache, or fill the block table if the kernel can read and
             # write the cache itself
@@ -486,11 +486,11 @@ class ContinuousBatchingIOs:
             input_ids=self.input_ids[:q_size].unsqueeze(0),
             position_ids=self.position_ids[:q_size].unsqueeze(0),
             cu_seq_lens_q=self.cumulative_seqlens_q[: num_sequences + 1],
-            max_seqlen_q=self.max_seqlen_q,
+            max_length_q=self.max_length_q,
             logits_indices=self.logits_indices[:num_sequences],
             logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :num_sequences],
             cu_seq_lens_k={},
-            max_seqlen_k={},
+            max_length_k={},
             attention_mask=None if self.attention_mask is None else {},
             read_index=[],
             write_index=[],
@@ -501,18 +501,18 @@ class ContinuousBatchingIOs:
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:  # TODO: add per-path padding
-            self.max_seqlen_q = q_size  # keep max_seqlen_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q
-            # Additionally, if there are CUDA graphs, we need to pad max_seqlen_k so graph capture will work regardless
+            self.max_length_q = q_size  # keep max_length_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q
+            # Additionally, if there are CUDA graphs, we need to pad max_length_k so graph capture will work regardless
             # of the future Q / KV lengths of the next batches
             if not self.use_block_table and self.use_cuda_graph_varlen:
-                self.max_seqlen_k = {
-                    layer_type: pad_to_pow2(self.max_seqlen_k[layer_type], self.cache.max_tokens_read, 1024)
-                    for layer_type in self.max_seqlen_k.keys()
+                self.max_length_k = {
+                    layer_type: pad_to_pow2(self.max_length_k[layer_type], self.cache.max_tokens_read, 1024)
+                    for layer_type in self.max_length_k.keys()
                 }
 
-        # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
+        # When using block table, max_length_q and max_length_k are not used by flash_attn_with_kvcache, so we set them
         # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
-        kwargs["max_seqlen_q"] = 1 if self.use_block_table else self.max_seqlen_q
+        kwargs["max_length_q"] = 1 if self.use_block_table else self.max_length_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(len(self.cache.cache_allocators)):
@@ -528,7 +528,7 @@ class ContinuousBatchingIOs:
         # For the attributes that are dict of tensors, we first fill the dict with the actual values
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
             kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: num_sequences + 1]
-            kwargs["max_seqlen_k"][layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
+            kwargs["max_length_k"][layer_type] = 1 if self.use_block_table else self.max_length_k[layer_type]
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
                 kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
@@ -536,7 +536,7 @@ class ContinuousBatchingIOs:
         # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
         if len(self.cumulative_seqlens_k.keys()) == 1:
             kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"].popitem()[1]  # type: ignore
-            kwargs["max_seqlen_k"] = kwargs["max_seqlen_k"].popitem()[1]  # type: ignore
+            kwargs["max_length_k"] = kwargs["max_length_k"].popitem()[1]  # type: ignore
             if self.attention_mask is not None:
                 kwargs["attention_mask"] = kwargs["attention_mask"].popitem()[1]  # type: ignore
 
@@ -553,7 +553,7 @@ class ContinuousBatchingIOs:
         if self.use_block_table:
             return (self.num_q_tokens,)
         # Keys for varlen path
-        return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
+        return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values())
 
     def get_graph(self, prefix: str = "") -> torch.cuda.CUDAGraph | None:
         key = self._get_graph_key()

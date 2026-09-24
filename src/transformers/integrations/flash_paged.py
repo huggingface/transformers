@@ -16,8 +16,8 @@ def paged_attention_forward(
     cache: PagedAttentionCache,
     cu_seq_lens_q: torch.Tensor,
     cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor],
-    max_seqlen_q: int,
-    max_seqlen_k: int | dict[str, int],
+    max_length_q: int,
+    max_length_k: int | dict[str, int],
     block_table: torch.Tensor | None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
@@ -34,8 +34,8 @@ def paged_attention_forward(
            of the sequences in the batch, used to index into q.
         cu_seq_lens_k: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
            of the sequences in the batch, used to index into kv.
-        max_seqlen_q: int. Maximum query sequence length in the batch.
-        max_seqlen_k: int. Maximum key sequence length in the batch.
+        max_length_q: int. Maximum query sequence length in the batch.
+        max_length_k: int. Maximum key sequence length in the batch.
         block_table: (num_groups, batch_size, max_blocks_per_seq), dtype int32. Block table for paged KV cache.
             If provided, uses flash_attn_with_kvcache for fused attention + cache update. For each request, the block
             table is a vector of size (max_blocks_per_seq,) with indices indicating the physical location of the cache
@@ -59,7 +59,7 @@ def paged_attention_forward(
     layer_type = "full_attention" if sliding_window == (-1, -1) else "sliding_attention"
     if isinstance(cu_seq_lens_k, dict):
         cu_seq_lens_k = cu_seq_lens_k[layer_type]
-        max_seqlen_k = max_seqlen_k[layer_type]
+        max_length_k = max_length_k[layer_type]
 
     # If no block table is provided, use flash_attn_varlen_func with read/write indices
     if block_table is None:
@@ -79,8 +79,8 @@ def paged_attention_forward(
             v,
             cu_seq_lens_q.to(torch.int32),
             cu_seq_lens_k.to(torch.int32).clone(),
-            max_seqlen_q,
-            max_seqlen_k,
+            max_length_q,
+            max_length_k,
             softmax_scale=module.scaling,
             causal=True,  # kind of a must, it automatically aligns the mask for q < k
             window_size=sliding_window,  # -1 means infinite context window
