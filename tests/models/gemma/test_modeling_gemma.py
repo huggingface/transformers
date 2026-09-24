@@ -43,7 +43,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
@@ -55,10 +54,14 @@ if is_torch_available():
     )
 
 
-class GemmaConfigTester(ConfigTester):
-    def test_legacy_hidden_act_is_remapped(self):
-        # Regression test for #49051: the Gemma 1.0 releases carry `hidden_act="gelu"`, which
-        # resolves to the exact erf GELU, but they were trained with the tanh approximation.
+@require_torch
+class GemmaModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = GemmaModel
+
+    def create_and_check_legacy_hidden_act_remap(self):
+        # The Gemma 1.0 releases carry `hidden_act="gelu"`, which resolves to the exact erf GELU,
+        # but they were trained with the tanh approximation. See #49051.
         logger = transformers_logging.get_logger("transformers.models.gemma.configuration_gemma")
         logger.warning_once.cache_clear()
         # CI runs with TRANSFORMERS_VERBOSITY=error, which would swallow the warning entirely.
@@ -75,16 +78,6 @@ class GemmaConfigTester(ConfigTester):
         )
         self.parent.assertEqual(config.hidden_act, "gelu_pytorch_tanh")
 
-    def run_common_tests(self):
-        self.test_legacy_hidden_act_is_remapped()
-        return super().run_common_tests()
-
-
-@require_torch
-class GemmaModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = GemmaModel
-
 
 @require_torch
 class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
@@ -93,9 +86,8 @@ class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = GemmaForCausalLM if is_torch_available() else None
 
-    def setUp(self):
-        super().setUp()
-        self.config_tester = GemmaConfigTester(self, config_class=self.model_tester.config_class)
+    def test_legacy_hidden_act_is_remapped(self):
+        self.model_tester.create_and_check_legacy_hidden_act_remap()
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
