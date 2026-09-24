@@ -14,7 +14,6 @@
 
 import gc
 import unittest
-from unittest import skip
 
 import accelerate
 
@@ -106,7 +105,6 @@ class HqqConfigTest(unittest.TestCase):
 @require_torch_accelerator
 @require_accelerate
 @require_hqq
-@skip("skip for now until we add back support")
 class HQQTest(unittest.TestCase):
     def tearDown(self):
         cleanup()
@@ -164,7 +162,6 @@ class HQQTest(unittest.TestCase):
 @require_torch_multi_accelerator
 @require_accelerate
 @require_hqq
-@skip("skip for now until we add back support")
 class HQQTestMultiGPU(unittest.TestCase):
     def tearDown(self):
         cleanup()
@@ -188,7 +185,6 @@ class HQQTestMultiGPU(unittest.TestCase):
 @require_torch_accelerator
 @require_accelerate
 @require_hqq
-@skip("skip for now until we add back support")
 class HQQTestBias(unittest.TestCase):
     def tearDown(self):
         cleanup()
@@ -245,7 +241,6 @@ class HQQTestBias(unittest.TestCase):
 @require_torch_accelerator
 @require_accelerate
 @require_hqq
-@skip("skip for now until we add back support")
 class HQQSerializationTest(unittest.TestCase):
     def tearDown(self):
         cleanup()
