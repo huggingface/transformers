@@ -112,7 +112,7 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
 
         default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
-            "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
+            "full_attention": {"rope_type": "default", "rope_theta": 1_000_000.0},
         }
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
