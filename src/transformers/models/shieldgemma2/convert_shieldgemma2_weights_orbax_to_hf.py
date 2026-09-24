@@ -216,8 +216,6 @@ def convert_siglip_weight(
     else:
         raise ValueError(f"Unexpected path `{path}`.")
 
-    if "vision" in normalized_path:
-        print(normalized_path)
     return normalized_path, updated_weights
 
 
