@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma model."""
 
+import logging
 import unittest
 
 import pytest
@@ -22,13 +23,14 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     is_torch_available,
-    logging,
 )
+from transformers import logging as transformers_logging
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     CaptureLogger,
     DeviceProperties,
     Expectations,
+    LoggingLevel,
     cleanup,
     get_device_properties,
     require_bitsandbytes,
@@ -57,10 +59,12 @@ class GemmaConfigTester(ConfigTester):
     def test_legacy_hidden_act_is_remapped(self):
         # Regression test for #49051: the Gemma 1.0 releases carry `hidden_act="gelu"`, which
         # resolves to the exact erf GELU, but they were trained with the tanh approximation.
-        logger = logging.get_logger("transformers.models.gemma.configuration_gemma")
+        logger = transformers_logging.get_logger("transformers.models.gemma.configuration_gemma")
         logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
-            config = self.config_class(hidden_act="gelu")
+        # CI runs with TRANSFORMERS_VERBOSITY=error, which would swallow the warning entirely.
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                config = self.config_class(hidden_act="gelu")
         logger.warning_once.cache_clear()
 
         self.parent.assertEqual(
