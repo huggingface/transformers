@@ -77,9 +77,6 @@ AUTO_GENERATED_BANNER = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 """
 
-# TODO(guarin): Apply banner to all files. Disabled for now to keep initial PR diff small.
-BANNER_PATHS = {MODELS_INIT_PATH}
-
 INIT_TEMPLATE = """from typing import TYPE_CHECKING
 
 from {dots}utils import _LazyModule
@@ -143,7 +140,7 @@ def generate_init(init_path: Path, import_lines: list[str], module_names: list[s
         return ""
 
     module_path = init_path.parent.relative_to(REPO_ROOT).as_posix()
-    banner = AUTO_GENERATED_BANNER.format(module_path=module_path) if init_path in BANNER_PATHS else ""
+    banner = AUTO_GENERATED_BANNER.format(module_path=module_path)
     dots = "." * (len(init_path.relative_to(MODELS_PATH).parts) + 1)
     imports = "".join(f"    {line}\n" for line in import_lines)
     license_header = get_license_header(init_path=init_path, module_names=module_names)
