@@ -61,6 +61,45 @@ class GraniteForDoclingImageProcessorKwargs(ImagesKwargs, total=False):
     fine_route: bool
 
 
+@lru_cache(maxsize=100)
+def get_optimal_tiled_canvas(
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
+) -> tuple[int, int]:
+    """
+    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
+    original image aspect ratio.
+    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
+    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
+    excessive tiling.
+    """
+    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
+
+    original_height, original_width = original_image_size
+    target_tile_height, target_tile_width = target_tile_size
+    aspect_ratio = original_width / original_height
+    area = original_width * original_height
+
+    # find the grid with the best aspect ratio
+    best_ratio_diff = float("inf")
+    best_grid = (1, 1)
+    for grid in possible_tile_arrangements:
+        grid_aspect_ratio = grid[0] / grid[1]
+        ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
+        if ratio_diff < best_ratio_diff:
+            best_ratio_diff = ratio_diff
+            best_grid = grid
+        elif ratio_diff == best_ratio_diff:
+            # if the aspect ratio difference is the same, we favor the grid with more patches
+            # until the area covered by the patches is more than twice the original image area
+            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
+                best_grid = grid
+
+    return best_grid
+
+
 # The tokenizer has tile position markers from `<row_1_col_1>` to `<row_16_col_16>`, so no tile grid may exceed 16
 # tiles per side, whatever `max_patches` allows.
 MAX_TILES_PER_SIDE = 16
@@ -81,39 +120,6 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
         if min_image_tiles <= width * height <= max_image_tiles
     ]
     return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
-
-
-@lru_cache(maxsize=100)
-def get_optimal_tiled_canvas(
-    original_image_size: tuple[int, int],
-    target_tile_size: tuple[int, int],
-    min_image_tiles: int,
-    max_image_tiles: int,
-) -> tuple[int, int]:
-    """
-    Same selection as the GotOcr2 version (closest aspect ratio, ties broken towards more tiles while the page area
-    exceeds half the canvas), over the grids of `get_all_supported_aspect_ratios` above.
-    """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
-
-    original_height, original_width = original_image_size
-    target_tile_height, target_tile_width = target_tile_size
-    aspect_ratio = original_width / original_height
-    area = original_width * original_height
-
-    best_ratio_diff = float("inf")
-    best_grid = (1, 1)
-    for grid in possible_tile_arrangements:
-        grid_aspect_ratio = grid[0] / grid[1]
-        ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
-        if ratio_diff < best_ratio_diff:
-            best_ratio_diff = ratio_diff
-            best_grid = grid
-        elif ratio_diff == best_ratio_diff:
-            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
-                best_grid = grid
-
-    return best_grid
 
 
 @auto_docstring(
