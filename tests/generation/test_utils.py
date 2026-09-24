@@ -5525,6 +5525,32 @@ class GenerationIntegrationTests(unittest.TestCase):
         output = tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertEqual(output, EXPECTED_TEXT)
 
+    def test_model_generation_config_with_stop_strings_saved(self):
+        """
+        Model's generation config can be saved with `stop_strings`.
+        Loading it shouldn't raise errors if users try to generate without
+        passing a tokenizer arg. Users shouldn't need to guess which model
+        has `stop_strings` and what extra args it needs to just generate.
+        """
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        model.generation_config.stop_strings = ["</s>"]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir)
+
+            second_model = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            second_model = second_model.to(torch_device)
+
+            model_inputs = tokenizer(["Write a poem about the market crashing in summer"], return_tensors="pt")
+            model_inputs = model_inputs.to(torch_device)
+
+            # Test that generate works without us passing a tokenizer
+            self.assertEqual(second_model.generation_config.stop_strings, ["</s>"])
+            self.assertTrue(second_model.generation_config._tokenizer is not None)
+            second_model.generate(**model_inputs, do_sample=False)
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):

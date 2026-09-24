@@ -575,6 +575,15 @@ class GenerationMixin(ContinuousMixin):
                 except OSError:  # there is no custom generate function
                     pass
 
+        if self.generation_config.stop_strings is not None:
+            # lazy import due to circular dependency
+            from ..models.auto import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **repo_loading_kwargs
+            )
+            self.generation_config._tokenizer = tokenizer
+
     def load_custom_generate(
         self,
         pretrained_model_name_or_path: str | os.PathLike | None = None,
@@ -2376,7 +2385,7 @@ class GenerationMixin(ContinuousMixin):
         Extracts and returns the generation mode related keyword arguments from the provided kwargs.
         """
         generation_mode_kwargs = {
-            "tokenizer": kwargs.pop("tokenizer", None),
+            "tokenizer": kwargs.pop("tokenizer", self.generation_config._tokenizer),
             "assistant_tokenizer": kwargs.pop("assistant_tokenizer", None),
             "assistant_model": assistant_model,
             "streamer": streamer,
