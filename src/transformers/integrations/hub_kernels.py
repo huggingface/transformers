@@ -797,6 +797,10 @@ _FLASH_ATTN_KERNEL_VERSION_MAPPING: dict[int, int] = {
     # FA4 is still in beta -> only v0 has been released
     4: 0,
 }
+# Attention kernel repo -> major version, for repos that need a specific version outside of the mapping above.
+_ATTN_KERNEL_REPO_VERSION_MAPPING: dict[str, int] = {
+    "kernels-community/aiter-flash-attn": 2,
+}
 _DEFAULT_ATTN_KERNEL_VERSION = 1
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -812,6 +816,8 @@ def is_kernel(attn_implementation: str | None) -> bool:
 
 def get_attn_kernel_version(repo_id: str) -> int:
     """Return the major version of the hub kernel repo `repo_id` to load, e.g. `3` for `kernels-community/flash-attn2`."""
+    if repo_id in _ATTN_KERNEL_REPO_VERSION_MAPPING:
+        return _ATTN_KERNEL_REPO_VERSION_MAPPING[repo_id]
     for flash_attn_version, kernel_version in _FLASH_ATTN_KERNEL_VERSION_MAPPING.items():
         if is_flash_attention_requested(requested_attention_implementation=repo_id, version=flash_attn_version):
             return kernel_version

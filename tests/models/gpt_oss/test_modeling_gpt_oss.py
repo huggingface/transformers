@@ -121,10 +121,12 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         """
         from kernels import get_kernel
 
+        from transformers.integrations.hub_kernels import get_attn_kernel_version
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         expected_kernel = _FA3_KERNEL
         # `kernels>=0.15` requires an explicit version/revision pin on `get_kernel(...)`.
-        flash = get_kernel(expected_kernel, version=1)
+        flash = get_kernel(expected_kernel, version=get_attn_kernel_version(expected_kernel))
         if flash is None:
             self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
 
@@ -197,10 +199,12 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from transformers.distributed import DistributedConfig
     from transformers.testing_utils import torch_device
+    from transformers.utils import is_rocm_platform
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        device = "rocm" if is_rocm_platform() else torch_device
+        return f"device={device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     input_text = [
         "Roses are red, violets",
