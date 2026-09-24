@@ -38,10 +38,10 @@ class PagedAttentionArgs(TypedDict):
             attention implementation doesn't require explicit masks.
         position_ids: Position IDs tensor of shape `(1, total_query_tokens)`.
         cu_seq_lens_q: Cumulative sequence lengths for queries, used for variable-length batching.
-        cu_seq_lens_k: Cumulative sequence lengths for keys/values. Can be a tensor or dictionary mapping layer
-            types (e.g., "full_attention", "sliding_attention") to tensors for hybrid models.
+        cu_seq_lens_k: Cumulative sequence lengths for keys/values. It's a dictionary mapping layer types
+            (e.g., "full_attention", "sliding_attention") to tensors for hybrid models.
         max_length_q: Maximum query sequence length in the batch.
-        max_length_k: Maximum key/value sequence length. Can be an int or dictionary for hybrid models.
+        max_length_k: Maximum key/value sequence length. It's a dictionary for hybrid models.
         write_index: List of tensors indicating where to write new KV states in the cache, one per attention group.
         read_index: List of tensors indicating which cache positions to read from, one per attention group.
         logits_indices: Tensor indicating which positions in the output should be used for next-token prediction.
@@ -50,15 +50,16 @@ class PagedAttentionArgs(TypedDict):
             cache update. More information in src/transformers/integrations/flash_paged.py
         logits_processor_args: List of tensors containing the arguments for the logits processors, one per request.
         use_cache: Whether to use caching (always `False` in continuous batching as the cache is managed externally).
+        is_causal: Determined internally. SDPA / eager are never causal (custom mask) while flash always is (no mask)
     """
 
     input_ids: torch.Tensor
     attention_mask: torch.Tensor | dict[str, torch.Tensor] | None
     position_ids: torch.Tensor
     cu_seq_lens_q: torch.Tensor
-    cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor]
+    cu_seq_lens_k: dict[str, torch.Tensor]
     max_length_q: int
-    max_length_k: int | dict[str, int]
+    max_length_k: dict[str, int]
     write_index: list[torch.Tensor]
     read_index: list[torch.Tensor]
     logits_indices: torch.Tensor
@@ -66,6 +67,7 @@ class PagedAttentionArgs(TypedDict):
     block_table: torch.Tensor | None
     logits_processor_args: torch.Tensor
     use_cache: bool
+    is_causal: bool
 
 
 class ContinuousBatchingIOs:
@@ -497,6 +499,7 @@ class ContinuousBatchingIOs:
             cache=self.cache,
             block_table=self.block_table[:, :num_sequences] if self.use_block_table else None,
             use_cache=False,
+            is_causal=self.attention_mask is None,  # False for SDPA and eager, True for flash
         )
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
@@ -533,12 +536,9 @@ class ContinuousBatchingIOs:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
                 kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
 
-        # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
-        if len(self.cumulative_seqlens_k.keys()) == 1:
-            kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"].popitem()[1]  # type: ignore
-            kwargs["max_length_k"] = kwargs["max_length_k"].popitem()[1]  # type: ignore
-            if self.attention_mask is not None:
-                kwargs["attention_mask"] = kwargs["attention_mask"].popitem()[1]  # type: ignore
+        # The masking utils expect a single tensor if the model has only one layer type
+        if len(self.cumulative_seqlens_k.keys()) == 1 and self.attention_mask is not None:
+            kwargs["attention_mask"] = kwargs["attention_mask"].popitem()[1]  # type: ignore
 
         return kwargs
 

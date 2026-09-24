@@ -19,6 +19,7 @@ def paged_attention_forward(
     max_length_q: int,
     max_length_k: int | dict[str, int],
     block_table: torch.Tensor | None,
+    sliding_window: int | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     """Performs the forward pass of attention with paged key-value cache. This function handles the cache updates and
@@ -54,23 +55,21 @@ def paged_attention_forward(
         module.config._attn_implementation
     )
 
-    # Retrieve the cumulative sequence lengths for the current layer
-    sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window - 1, 0)
-    layer_type = "full_attention" if sliding_window == (-1, -1) else "sliding_attention"
-    if isinstance(cu_seq_lens_k, dict):
-        cu_seq_lens_k = cu_seq_lens_k[layer_type]
-        max_length_k = max_length_k[layer_type]
+    # The cache.update expects these in the kwargs  # NOTE: temporay, this whole function is going to be removed
+    kwargs["cu_seq_lens_k"], kwargs["max_length_k"], kwargs["block_table"] = cu_seq_lens_k, max_length_k, block_table
+    # Updates the cache and selects the right kwargs for this layer
+    k, v = cache.update(
+        key_states=k,
+        value_states=v,
+        layer_idx=module.layer_idx,
+        kwargs=kwargs,
+    )
+    cu_seq_lens_k: torch.Tensor = kwargs["cu_seq_lens_k"]
+    max_length_k: int = kwargs["max_length_k"]
+    sliding_window: tuple[int, int] = (-1, -1) if sliding_window is None else (sliding_window - 1, sliding_window - 1)
 
     # If no block table is provided, use flash_attn_varlen_func with read/write indices
     if block_table is None:
-        # Paged cache update uses the same format as the regular Cache update so that one day they can be unified.
-        k, v = cache.update(
-            key_states=k,
-            value_states=v,
-            layer_idx=module.layer_idx,
-            read_index=kwargs["read_index"],
-            write_index=kwargs["write_index"],
-        )
         # Because of the update format, we have to squeeze and transpose again, but it's cheap as they are CPU ops
         q, k, v = (x.squeeze(0).transpose(0, 1).contiguous() for x in (q, k, v))
         custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}

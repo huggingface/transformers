@@ -391,29 +391,43 @@ class PagedAttentionCache:
             for allocator, read_indices in zip(self.cache_allocators.values(), read_index):
                 read_indices.extend(allocator.get_read_indices(request_id, past_length, query_length))
 
-    @torch.compiler.disable
+    @torch.compiler.disable  # does not play well with the views of the cache tensor
     def update(
         self,
         key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
         value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
         layer_idx: int,
-        read_index: list[torch.Tensor],  # one tensor per attention group
-        write_index: list[torch.Tensor],  # one tensor per attention group
+        kwargs: dict[str, Any],  # updated in place
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [1, num_kv_heads, seqlen_q + past_length, head_dim]
-        """Updates the cache with new key-value states for a specific layer and retrieves the KV states needed for the
-        attention computation. The actual work is dispatched to the allocator in charge of the layer, using the read
-        and write indices prepared for its group."""
-        # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]
-        key_states, value_states = key_states.squeeze(0).transpose(0, 1), value_states.squeeze(0).transpose(0, 1)
-
+        """Updates the cache or the kwargs before entering the flash attention wrapper. The kwargs are updated in place.
+        For an index-based update, the keys and values are actually updated to seqlen "seqlen_q + past_length". For a
+        block table update, the KV states are untouched but the kwargs are filled with what is needed to call flash.
+        """
         allocator = self.layer_to_allocator[layer_idx]
-        layer_read_index = read_index[allocator.index]
-        layer_write_index = write_index[allocator.index]
-        key_states, value_states = allocator.update(
-            key_states, value_states, layer_idx, layer_read_index, layer_write_index
-        )
-        # Return the KV states in the same shape it was passed. It will help when we unify with regular Cache.
-        return key_states.transpose(0, 1).unsqueeze(0), value_states.transpose(0, 1).unsqueeze(0)
+
+        # Select the right keywords arguments for this layer. These are always needed.
+        kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][allocator.layer_type].to(torch.int32)
+        kwargs["max_length_k"] = kwargs["max_length_k"][allocator.layer_type]
+
+        # Block table "update": no real update, just prepare the kwargs for the flash call, which will update the cache
+        block_table = kwargs.get("block_table")
+        if block_table is not None:
+            k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
+            kwargs["block_table"] = block_table[allocator.index]
+            kwargs["k_cache"] = k_cache
+            kwargs["v_cache"] = v_cache
+
+        # Index-based update: actually update the cache and return full KV
+        else:
+            read_index = kwargs["read_index"][allocator.index]
+            write_index = kwargs["write_index"][allocator.index]
+            # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]. We also return the
+            # KV states in the same shape they were passed. It will help when we unify with regular Cache.
+            key_states, value_states = (x.squeeze(0).transpose(0, 1) for x in (key_states, value_states))
+            key_states, value_states = allocator.update(key_states, value_states, layer_idx, read_index, write_index)
+            key_states, value_states = (x.transpose(0, 1).unsqueeze(0) for x in (key_states, value_states))
+
+        return key_states, value_states
 
     def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
         """Returns the K and V cache views for a block table update."""
