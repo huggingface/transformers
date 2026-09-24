@@ -35,7 +35,11 @@ from ...tokenization_utils_base import AddedToken
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor, GotOcr2ImageProcessorKwargs
+from ..got_ocr2.image_processing_got_ocr2 import (
+    GotOcr2ImageProcessor,
+    GotOcr2ImageProcessorKwargs,
+    get_optimal_tiled_canvas,
+)
 from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteModel, GranitePreTrainedModel
@@ -238,39 +242,6 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
         if min_image_tiles <= width * height <= max_image_tiles
     ]
     return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
-
-
-@lru_cache(maxsize=100)
-def get_optimal_tiled_canvas(
-    original_image_size: tuple[int, int],
-    target_tile_size: tuple[int, int],
-    min_image_tiles: int,
-    max_image_tiles: int,
-) -> tuple[int, int]:
-    """
-    Same selection as the GotOcr2 version (closest aspect ratio, ties broken towards more tiles while the page area
-    exceeds half the canvas), over the grids of `get_all_supported_aspect_ratios` above.
-    """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
-
-    original_height, original_width = original_image_size
-    target_tile_height, target_tile_width = target_tile_size
-    aspect_ratio = original_width / original_height
-    area = original_width * original_height
-
-    best_ratio_diff = float("inf")
-    best_grid = (1, 1)
-    for grid in possible_tile_arrangements:
-        grid_aspect_ratio = grid[0] / grid[1]
-        ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
-        if ratio_diff < best_ratio_diff:
-            best_ratio_diff = ratio_diff
-            best_grid = grid
-        elif ratio_diff == best_ratio_diff:
-            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
-                best_grid = grid
-
-    return best_grid
 
 
 @auto_docstring(
