@@ -269,7 +269,7 @@ class Siglip2VisionModel(SiglipVisionModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Siglip2VisionModel
@@ -344,7 +344,7 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
                 if attention_mask.dtype == torch.bool:
                     attention_mask = torch.where(
                         attention_mask,
-                        torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                        torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
                         torch.finfo(probe.dtype).min,
                     )
 
@@ -426,7 +426,7 @@ class Siglip2Model(SiglipModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
@@ -517,10 +517,6 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -528,7 +524,7 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT

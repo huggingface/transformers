@@ -15,7 +15,7 @@
 This util provides a way to manually run the tests of the transformers repo as they would be run by the CI.
 It was mainly used for models tests, so if you find features missing for another suite, do not hesitate to open a PR.
 
-Functionnalities:
+Functionalities:
 - Running specific test suite (models, tokenizers, etc.)
 - Parallel execution across multiple processes (each has to be launched separately with different `--processes` argument)
 - GPU/CPU test filtering and slow tests filter

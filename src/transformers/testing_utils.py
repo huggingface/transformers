@@ -47,8 +47,8 @@ from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
-import httpx
 from huggingface_hub import create_repo, delete_repo
+from huggingface_hub.utils import httpx
 from packaging import version
 
 from transformers import logging as transformers_logging
@@ -72,6 +72,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    MISTRAL_COMMON_MIN_VERSION,
     SAFE_WEIGHTS_INDEX_NAME,
     TRITON_MIN_VERSION,
     WEIGHTS_INDEX_NAME,
@@ -89,7 +90,9 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_diffusers_available,
     is_essentia_available,
+    is_executorch_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
@@ -110,7 +113,6 @@ from .utils import (
     is_huggingface_hub_greater_or_equal,
     is_ipython_available,
     is_jinja_available,
-    is_jmespath_available,
     is_jumanpp_available,
     is_kernels_available,
     is_levenshtein_available,
@@ -123,11 +125,15 @@ from .utils import (
     is_nltk_available,
     is_numba_available,
     is_onnx_available,
+    is_onnxruntime_available,
+    is_onnxscript_available,
     is_openai_available,
+    is_openvino_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
+    is_peft_greater_or_equal,
     is_phonemizer_available,
     is_pretty_midi_available,
     is_psutil_available,
@@ -145,6 +151,7 @@ from .utils import (
     is_sentencepiece_available,
     is_seqio_available,
     is_serve_available,
+    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -264,7 +271,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file
 
-    from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
+    from .modeling_utils import PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
@@ -316,6 +323,7 @@ _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
 _run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
+_run_fsdp_tests = parse_flag_from_env("RUN_FSDP_TESTS", default=True)
 
 
 def is_staging_test(test_case):
@@ -398,6 +406,22 @@ def is_tensor_parallel_test(test_case):
             return pytest.mark.is_tensor_parallel_test()(test_case)
 
 
+def is_fsdp_test(test_case):
+    """
+    Decorator marking a test as an FSDP test. If RUN_FSDP_TESTS is set to a falsy value, those tests will be
+    skipped.
+    """
+    if not _run_fsdp_tests:
+        return unittest.skip(reason="test is fsdp test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_fsdp_test()(test_case)
+
+
 def slow(test_case):
     """
     Decorator marking a test as slow.
@@ -405,6 +429,12 @@ def slow(test_case):
     Slow tests are skipped by default. Set the RUN_SLOW environment variable to a truthy value to run them.
 
     """
+    try:
+        import pytest  # We don't need a hard dependency on pytest in the main library
+
+        test_case = pytest.mark.slow(test_case)
+    except ImportError:
+        pass
     return unittest.skipUnless(_run_slow_tests, "test is slow")(test_case)
 
 
@@ -560,7 +590,7 @@ def require_triton(min_version: str = TRITON_MIN_VERSION):
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
     """
-    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    Decorator marking a test that requires gguf. These tests are skipped when gguf isn't installed.
     """
     return unittest.skipUnless(is_gguf_available(min_version), f"test requires gguf version >= {min_version}")(
         test_case
@@ -597,15 +627,24 @@ def require_jinja(test_case):
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
 
 
-def require_jmespath(test_case):
-    """
-    Decorator marking a test that requires jmespath. These tests are skipped when jmespath isn't installed.
-    """
-    return unittest.skipUnless(is_jmespath_available(), "test requires jmespath")(test_case)
-
-
 def require_onnx(test_case):
     return unittest.skipUnless(is_onnx_available(), "test requires ONNX")(test_case)
+
+
+def require_onnxscript(test_case):
+    return unittest.skipUnless(is_onnxscript_available(), "test requires ONNXScript")(test_case)
+
+
+def require_onnxruntime(test_case):
+    return unittest.skipUnless(is_onnxruntime_available(), "test requires ONNX Runtime")(test_case)
+
+
+def require_executorch(test_case):
+    return unittest.skipUnless(is_executorch_available(), "test requires ExecuTorch")(test_case)
+
+
+def require_openvino(test_case):
+    return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
 
 
 def require_timm(test_case):
@@ -675,16 +714,8 @@ def require_flash_attn(test_case):
     These tests are skipped when Flash Attention isn't installed.
 
     """
-    flash_attn_available = is_flash_attn_2_available()
-    kernels_available = is_kernels_available()
-    try:
-        from kernels import get_kernel
-
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
-    except Exception as _:
-        kernels_available = False
-
-    return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention")(test_case)
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
+    return unittest.skipUnless(flash_attn_available, "test requires Flash Attention")(test_case)
 
 
 def require_kernels(test_case):
@@ -716,19 +747,12 @@ def require_flash_attn_4(test_case):
 
 
 def require_all_flash_attn(test_case):
-    flash_attn_available = is_flash_attn_2_available()
-    kernels_available = is_kernels_available()
-    try:
-        from kernels import get_kernel
-
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
-    except Exception as _:
-        kernels_available = False
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
 
     return unittest.skipUnless(
         all(
             (
-                flash_attn_available | kernels_available,
+                flash_attn_available,
                 is_flash_attn_3_available(),
                 is_flash_attn_4_available(),
             )
@@ -773,6 +797,21 @@ def require_peft(test_case):
     return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
 
 
+def require_peft_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PEFT version >= `version`.
+
+    These tests are skipped when PEFT version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_peft_greater_or_equal(version), f"test requires PEFT version >= {version}")(
+            test_case
+        )
+
+    return decorator
+
+
 def require_torchvision(test_case):
     """
     Decorator marking a test that requires Torchvision.
@@ -781,6 +820,21 @@ def require_torchvision(test_case):
 
     """
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
+
+
+def require_torchvision_video_decoding(test_case):
+    """
+    Decorator marking a test that requires the torchvision video decoding API.
+
+    These tests are skipped when torchvision isn't installed, or when it is too recent to still ship the video
+    decoding API (removed in `torchvision==0.26`).
+
+    """
+    from .video_utils import is_torchvision_video_decoding_available
+
+    return unittest.skipUnless(
+        is_torchvision_video_decoding_available(), "test requires Torchvision with video decoding support"
+    )(test_case)
 
 
 def require_torchcodec(test_case):
@@ -823,7 +877,7 @@ def require_seqio(test_case):
 
 def require_scipy(test_case):
     """
-    Decorator marking a test that requires Scipy. These tests are skipped when SentencePiece isn't installed.
+    Decorator marking a test that requires Scipy. These tests are skipped when Scipy isn't installed.
     """
     return unittest.skipUnless(is_scipy_available(), "test requires Scipy")(test_case)
 
@@ -1090,6 +1144,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "mps" and not torch.backends.mps.is_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MPS is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -1142,7 +1200,11 @@ def require_torch_gpu(test_case):
 
 
 def require_torch_mps(test_case):
-    """Decorator marking a test that requires CUDA and PyTorch."""
+    """Decorator marking a test that requires MPS and PyTorch.
+
+    MPS is not auto-detected as `torch_device` -- a Mac reports `cpu` unless asked otherwise -- so
+    these run under `TRANSFORMERS_TEST_DEVICE=mps`.
+    """
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
@@ -1151,17 +1213,136 @@ def require_rocm(test_case):
     return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
 
 
-def require_large_cpu_ram(test_case, memory: float = 80):
-    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+def get_cgroup_memory_limit_bytes() -> int | None:
+    """
+    Memory limit enforced on the current cgroup, or `None` when there is no limit / no cgroup to read.
+
+    This is what the OOM killer actually enforces inside a container. `psutil.virtual_memory().total` reads the
+    *host* `/proc/meminfo`, so in a K8S pod it reports the whole node (~750 GiB) and says nothing about how much this
+    process may use before it is SIGKILLed.
+    """
+    candidates = (
+        ("/sys/fs/cgroup/memory.max", "max"),  # cgroup v2
+        ("/sys/fs/cgroup/memory/memory.limit_in_bytes", None),  # cgroup v1
+    )
+    for path, unlimited_marker in candidates:
+        try:
+            with open(path, encoding="utf-8") as f:
+                raw = f.read().strip()
+        except OSError:
+            continue
+        if raw == unlimited_marker:
+            return None
+        try:
+            limit = int(raw)
+        except ValueError:
+            continue
+        # cgroup v1 writes a huge sentinel (a page-aligned 2**63-1) rather than a marker when unlimited
+        if limit <= 0 or limit >= 2**62:
+            return None
+        return limit
+    return None
+
+
+# Set by `patch_psutil_cpu_memory` to the pre-patch `psutil.virtual_memory`, so the guards below can still read
+# the machine's real RAM after conftest has capped what the rest of the session sees.
+_UNPATCHED_VIRTUAL_MEMORY = None
+
+
+def get_physical_cpu_ram_gib() -> float | None:
+    """
+    RAM physically present on this machine, in GiB, or `None` when psutil is unavailable.
+
+    Deliberately reads *past* the `patch_psutil_cpu_memory` cap: that cap is a `device_map="auto"` planning budget
+    (`CI_CPU_MEMORY_LIMIT_GB` per accelerator), not a statement about the machine. Note this is the wrong number
+    inside a pod, where it reports the whole node -- `get_cpu_ram_total_gib` is what combines it with the cgroup
+    limit to get an answer that holds in both places.
+    """
     if not is_psutil_available():
-        return test_case
+        return None
 
     import psutil
 
-    return unittest.skipUnless(
-        psutil.virtual_memory().total / 1024**3 > memory,
-        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
-    )(test_case)
+    virtual_memory = _UNPATCHED_VIRTUAL_MEMORY or psutil.virtual_memory
+    return virtual_memory().total / 1024**3
+
+
+def get_ci_cpu_memory_budget_gib() -> float | None:
+    """
+    CPU RAM budget this CI runner is entitled to, in GiB, or `None` outside CI.
+
+    `CI_CPU_MEMORY_LIMIT_GB` is a *per-accelerator* budget: a single-accelerator A10 runner gets 60 GiB, and a
+    runner with more accelerators gets proportionally more, because `device_map="auto"` can legitimately use more
+    CPU RAM for intermediate storage when more devices are present. So the budget is the variable times the
+    accelerator count -- reading the variable raw would report 60 GiB on a 2-accelerator runner that has 180.
+
+    This is the single source of truth for that arithmetic, shared with the `patch_psutil_cpu_memory` call in
+    `conftest.py`.
+    """
+    limit_per_device = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
+    if limit_per_device is None:
+        return None
+    try:
+        limit_per_device = float(limit_per_device)
+    except ValueError:
+        return None
+
+    num_accelerators = max(1, backend_device_count(torch_device)) if torch_device is not None else 1
+    return limit_per_device * num_accelerators
+
+
+def get_cpu_ram_total_gib() -> float:
+    """
+    CPU RAM this process may actually use, in GiB.
+
+    Prefers what can be *measured* -- the cgroup limit the OOM killer enforces, and the machine's physical RAM --
+    taking the smaller of the two, since each is wrong on its own: there is no cgroup limit outside a container,
+    and physical RAM reports the whole node inside a pod.
+
+    Falls back to the CI budget (`get_ci_cpu_memory_budget_gib`) only when neither can answer, because that budget
+    is an allocation policy rather than a measurement: it is deliberately `CI_CPU_MEMORY_LIMIT_GB` per accelerator,
+    so on a 2-accelerator runner it reads 120 GiB where the runner really has 180. Using it as a term in the `min`
+    would make every guard on such a runner over-skip.
+
+    Returns `inf` when nothing can answer at all -- no cgroup, no psutil, no CI budget. That is an ordinary local
+    setup rather than a broken one, so callers run their test instead of silently dropping coverage; a guard is
+    only useful where the limit is actually knowable.
+    """
+    measured = []
+
+    cgroup_limit = get_cgroup_memory_limit_bytes()
+    if cgroup_limit is not None:
+        measured.append(cgroup_limit / 1024**3)
+
+    physical_ram = get_physical_cpu_ram_gib()
+    if physical_ram is not None:
+        measured.append(physical_ram)
+
+    if measured:
+        return min(measured)
+
+    ci_budget = get_ci_cpu_memory_budget_gib()
+    return ci_budget if ci_budget is not None else float("inf")
+
+
+def require_large_cpu_ram(test_case=None, *, memory: float = 80):
+    """
+    Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory.
+
+    Usable bare (`@require_large_cpu_ram`) or with a budget (`@require_large_cpu_ram(memory=48)`). The default 80
+    is not an estimate of any particular model: it was picked as "more than the 60 GiB of our GPU runners", so a
+    bare use means "do not run this on a CI GPU runner". Pass `memory=` when the test has a real footprint.
+    """
+
+    def memory_decorator(tc):
+        # `get_cpu_ram_total_gib` returns `inf` when it cannot measure anything (psutil missing and no cgroup), so
+        # an undetermined budget runs the test instead of silently dropping coverage.
+        return unittest.skipUnless(
+            get_cpu_ram_total_gib() > memory,
+            f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
 def require_torch_large_gpu(test_case, memory: float = 20):
@@ -1186,6 +1367,41 @@ def require_torch_large_accelerator(test_case=None, *, memory: float = 20):
         return unittest.skipUnless(
             torch_accel.get_device_properties(0).total_memory / 1024**3 > memory,
             f"test requires a GPU or XPU with more than {memory} GiB of memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
+
+
+def get_accelerator_total_memory_gib() -> float:
+    """
+    Total memory of *all* visible accelerators, in GiB.
+
+    Use this rather than the memory of a single device for tests that spread one model over every visible device
+    (`device_map="auto"`, tensor parallelism, ...). Returns 0 on CPU, and on the backends that do not expose
+    `get_device_properties(...).total_memory` -- so callers treat "we cannot tell" the same as "it does not fit",
+    which is the safe direction: guessing too high OOM-kills the whole test process.
+    """
+    # Same restriction as `require_torch_large_accelerator`: only cuda and xpu report `total_memory`. ROCm is
+    # covered by the cuda branch -- a HIP build of torch reports `torch_device == "cuda"`, see `IS_ROCM_SYSTEM`.
+    if not is_torch_available() or torch_device not in ("cuda", "xpu"):
+        return 0.0
+
+    torch_accel = getattr(torch, torch_device)
+    total = sum(torch_accel.get_device_properties(i).total_memory for i in range(torch_accel.device_count()))
+    return total / 1024**3
+
+
+def require_torch_accelerator_memory(test_case=None, *, memory: float):
+    """
+    Decorator marking a test that needs at least `memory` GiB of accelerator memory *in total*, summed over every
+    visible accelerator. Prefer this over `require_torch_large_accelerator` (which only looks at device 0) for tests
+    that shard a single model across all visible devices.
+    """
+
+    def memory_decorator(tc):
+        return unittest.skipUnless(
+            get_accelerator_total_memory_gib() >= memory,
+            f"test requires {memory} GiB of accelerator memory in total",
         )(tc)
 
     return memory_decorator if test_case is None else memory_decorator(test_case)
@@ -1246,6 +1462,46 @@ def require_deterministic_for_xpu(test_case):
             return test_case(*args, **kwargs)
 
     return wrapper
+
+
+def require_deterministic_for_accelerator(test_case=None, *, devices=None):
+    """Decorator that enables deterministic algorithms for the duration of a test.
+
+    Uses ``get_device_properties()`` to detect the device type — no per-backend
+    ``is_torch_*_available()`` conditions needed. On CPU the test runs unchanged.
+
+    Args:
+        devices: Optional list of device type strings (e.g. ``["cuda", "xpu"]``). If given,
+            deterministic mode is only enabled when the active device matches one of them.
+            If ``None`` (default), deterministic mode is enabled for all non-CPU accelerators.
+
+    Can be used with or without arguments::
+
+        @require_deterministic_for_accelerator
+        def test_foo(self): ...
+
+        @require_deterministic_for_accelerator(devices=["cuda"])
+        def test_bar(self): ...
+    """
+
+    def decorator(tc):
+        @wraps(tc)
+        def wrapper(*args, **kwargs):
+            device_type = get_device_properties()[0]
+            should_enable = device_type != "cpu" and (devices is None or device_type in devices)
+            if should_enable:
+                original_state = torch.are_deterministic_algorithms_enabled()
+                try:
+                    torch.use_deterministic_algorithms(True)
+                    return tc(*args, **kwargs)
+                finally:
+                    torch.use_deterministic_algorithms(original_state)
+            else:
+                return tc(*args, **kwargs)
+
+        return wrapper
+
+    return decorator if test_case is None else decorator(test_case)
 
 
 def require_torch_tf32(test_case):
@@ -1318,6 +1574,13 @@ def require_wandb(test_case):
 
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
+
+
+def require_diffusers(test_case):
+    """
+    Decorator marking a test that requires diffusers
+    """
+    return unittest.skipUnless(is_diffusers_available(), "test requires diffusers")(test_case)
 
 
 def require_clearml(test_case):
@@ -1507,6 +1770,13 @@ def require_librosa(test_case):
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
 
 
+def require_soundfile(test_case):
+    """
+    Decorator marking a test that requires soundfile
+    """
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
+
+
 def require_multipart(test_case):
     """
     Decorator marking a test that requires python-multipart
@@ -1604,11 +1874,13 @@ def require_serve(test_case):
     return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
-def require_mistral_common(test_case):
+def require_mistral_common(test_case, min_version: str = MISTRAL_COMMON_MIN_VERSION):
     """
     Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
     """
-    return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
+    return unittest.skipUnless(
+        is_mistral_common_available(min_version), f"test requires mistral-common version >= {min_version}"
+    )(test_case)
 
 
 def get_gpu_count():
@@ -1719,6 +1991,7 @@ def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
     target_names = (
         "LayerNorm",
+        "LayerNorm1P",
         "GroupNorm",
         "BatchNorm",
         "RMSNorm",
@@ -2383,7 +2656,7 @@ def pytest_terminal_summary_main(tr, id):
                 dlist.append(rep)
     if dlist:
         dlist.sort(key=lambda x: x.duration, reverse=True)
-        with open(report_files["durations"], "w") as f:
+        with open(report_files["durations"], "w", encoding="utf-8") as f:
             durations_min = 0.05  # sec
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
@@ -2413,25 +2686,25 @@ def pytest_terminal_summary_main(tr, id):
 
     # report failures with line/short/long styles
     config.option.tbstyle = "auto"  # full tb
-    with open(report_files["failures_long"], "w") as f:
+    with open(report_files["failures_long"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
     # config.option.tbstyle = "short" # short tb
-    with open(report_files["failures_short"], "w") as f:
+    with open(report_files["failures_short"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         summary_failures_short(tr)
 
     config.option.tbstyle = "line"  # one line per error
-    with open(report_files["failures_line"], "w") as f:
+    with open(report_files["failures_line"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
-    with open(report_files["errors"], "w") as f:
+    with open(report_files["errors"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_errors()
 
-    with open(report_files["warnings"], "w") as f:
+    with open(report_files["warnings"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_warnings()  # normal warnings
         tr.summary_warnings()  # final warnings
@@ -2445,11 +2718,11 @@ def pytest_terminal_summary_main(tr, id):
     #     tr._tw = create_terminal_writer(config, f)
     #     tr.summary_passes()
 
-    with open(report_files["summary_short"], "w") as f:
+    with open(report_files["summary_short"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.short_test_summary()
 
-    with open(report_files["stats"], "w") as f:
+    with open(report_files["stats"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_stats()
 
@@ -2596,7 +2869,7 @@ def nested_simplify(obj, decimals=3):
 
 
 def check_json_file_has_correct_format(file_path):
-    with open(file_path) as f:
+    with open(file_path, encoding="utf-8") as f:
         lines = f.readlines()
         if len(lines) == 1:
             # length can only be 1 if dict is empty
@@ -2901,7 +3174,7 @@ def preprocess_string(string, skip_cuda_tests):
     cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
     `string`.
     """
-    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )(.*?```)"
+    codeblock_pattern = r"(```(?:python|py)[^\S\n]*\n\s*>>> )(.*?```)"
     codeblocks = re.split(codeblock_pattern, string, flags=re.DOTALL)
     is_cuda_found = False
     for i, codeblock in enumerate(codeblocks):
@@ -3308,8 +3581,8 @@ def get_device_properties() -> DeviceProperties:
             gen = (arch & gen_mask) >> 32
             return ("xpu", gen, None)
     if IS_NPU_SYSTEM:
-        # TODO: after torch 2.5.1, use `if hasattr(torch, "npu") and torch.npu.is_available()` here for consistency with CUDA/XPU blocks
-        return ("npu", None, None)
+        if torch.npu.is_available():
+            return ("npu", None, None)
     return (torch_device, None, None)
 
 
@@ -3329,6 +3602,40 @@ def unpack_device_properties(
     else:
         major, minor = major_minor
     return device_type, major, minor
+
+
+@functools.lru_cache(maxsize=1)
+def supports_sdpa_flash_backend() -> bool | None:
+    """Whether torch's SDPA flash backend can actually dispatch on this device.
+
+    Ask torch instead of guessing from the ROCm architecture number: CDNA
+    (flash-capable) reports major 9 while RDNA parts report 10/11/12, so a
+    "major >= 9" gate admits RDNA hardware that has no flash kernel. Returns
+    None when torch's capability API is unavailable.
+    """
+    import torch
+
+    if not torch.cuda.is_available():
+        return False
+    try:
+        from torch.backends.cuda import SDPAParams, can_use_flash_attention
+    except ImportError:
+        return None
+    try:
+        q = torch.empty(1, 1, 1, 16, device="cuda", dtype=torch.float16)
+        return bool(can_use_flash_attention(SDPAParams(q, q, q, None, 0.0, False, False), False))
+    except Exception:
+        return None
+
+
+def rocm_has_sdpa_flash_backend(major: int) -> bool:
+    """Whether this ROCm device can dispatch the SDPA flash backend, falling back
+    to the historical "major >= 9" heuristic when torch's query is unavailable.
+    """
+    supported = supports_sdpa_flash_backend()
+    if supported is None:
+        return major >= 9
+    return supported
 
 
 class Expectations(UserDict[PackedDeviceProperties, Any]):
@@ -3409,6 +3716,14 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         return f"{self.data}"
 
 
+def get_json_expectation(expectations: dict[str, Any]) -> Any:
+    """
+    Same as `Expectations.get_expectation`, for expectations stored in a JSON fixture. JSON only allows string keys, so
+    they are written as their `Expectations` counterpart repr, e.g. `"(None, None)"` or `"('xpu', 5)"`.
+    """
+    return Expectations({ast.literal_eval(key): value for key, value in expectations.items()}).get_expectation()
+
+
 def patch_torch_compile_force_graph():
     """
     Patch `torch.compile` to always use `fullgraph=True`.
@@ -3433,6 +3748,60 @@ def patch_torch_compile_force_graph():
             return orig_method(*args, **kwargs)
 
         torch.compile = patched
+
+
+def patch_psutil_cpu_memory(limit_bytes: int):
+    """
+    Patch `psutil.virtual_memory` to cap the reported CPU memory to `limit_bytes`.
+
+    In K8S instance-sharing CI, each runner sees the full machine's CPU RAM (~750 GB) even though it only
+    owns a fraction. This causes `device_map="auto"` to overfill GPU+CPU with nothing offloaded to disk,
+    leading to GPU OOM at runtime. Calling this function caps `total`, `available`, `used`, and `percent`
+    so the entire test session sees a realistic per-runner memory budget.
+    """
+    global _UNPATCHED_VIRTUAL_MEMORY
+
+    import psutil
+
+    # Keep the honest reader reachable: the cap described in the docstring is a `device_map="auto"` planning budget,
+    # but a guard that asks "will this OOM-kill the container?" needs the machine's real RAM.
+    # See `get_physical_cpu_ram_gib`.
+    # If already patched, always use the stored original so a second call doesn't chain patches on top of each other.
+    if _UNPATCHED_VIRTUAL_MEMORY is not None:
+        _original_virtual_memory = _UNPATCHED_VIRTUAL_MEMORY
+    else:
+        _original_virtual_memory = psutil.virtual_memory
+        _UNPATCHED_VIRTUAL_MEMORY = _original_virtual_memory
+
+    def _capped_virtual_memory():
+        mem = _original_virtual_memory()
+        total = min(mem.total, limit_bytes)
+        available = min(mem.available, limit_bytes)
+        used = min(mem.used, total)
+        percent = 100 * used / total if total > 0 else 0.0
+        return mem._replace(total=total, available=available, used=used, percent=percent)
+
+    psutil.virtual_memory = _capped_virtual_memory
+
+
+@contextlib.contextmanager
+def cap_psutil_cpu_memory(limit_bytes: int):
+    """
+    Context manager that temporarily caps `psutil.virtual_memory` to `limit_bytes`, then restores the
+    previous value on exit.
+
+    Use this inside individual tests that need a tighter CPU memory budget than the session-wide cap set
+    by conftest (e.g. to force `device_map="auto"` to use disk offload during `from_pretrained`), without
+    affecting the rest of the test session.
+    """
+    import psutil
+
+    prev = psutil.virtual_memory
+    patch_psutil_cpu_memory(limit_bytes)
+    try:
+        yield
+    finally:
+        psutil.virtual_memory = prev
 
 
 def _get_test_info():
@@ -3522,13 +3891,13 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(actual_test_file) as fp:
+    with open(actual_test_file, encoding="utf-8") as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
 
     # Get the code context in the caller (to the patched function/method).
-    with open(caller_path) as fp:
+    with open(caller_path, encoding="utf-8") as fp:
         s = fp.read()
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
@@ -3618,7 +3987,7 @@ def _prepare_debugging_info(test_info, info):
     info = f"{test_info}\n\n{info}"
     p = os.path.join(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""), "captured_info.txt")
     # TODO (ydshieh): This is not safe when we use pytest-xdist with more than 1 worker.
-    with open(p, "a") as fp:
+    with open(p, "a", encoding="utf-8") as fp:
         fp.write(f"{info}\n\n{'=' * 120}\n\n")
 
     return info
@@ -3762,7 +4131,9 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
 
             # This is specific
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
-            info = _prepare_debugging_info(test_info, info)
+            # An empty `info` means the call site's expressions could not be matched to this call
+            # (a delegated call, see `_parse_call_info`): don't append a record with no values.
+            info = _prepare_debugging_info(test_info, info) if info else ""
 
             # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
             # behaves as usual.
@@ -3815,6 +4186,12 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
         # (This part is very unlikely what a user would be interest to know)
         call_argument_expressions["positional_args"] = ["self"] + call_argument_expressions["positional_args"]
 
+    # Source expressions only match direct calls. Delegation can add args (e.g. assertListEqual ->
+    # assertSequenceEqual), so counts may differ; indexing would misattribute expressions or crash.
+    # Report nothing instead.
+    if len(args) != len(call_argument_expressions["positional_args"]):
+        return ""
+
     param_position_mapping = {param_name: idx for idx, param_name in enumerate(signature_names)}
 
     arg_info = {}
@@ -3861,6 +4238,9 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(
         unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
     )
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertSequenceEqual", _parse_call_info, target_args=("seq1", "seq2")
+    )
     _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
     _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
     _patch_with_call_info(unittest.case.TestCase, "assertIn", _parse_call_info, target_args=("member", "container"))
@@ -3873,7 +4253,7 @@ def patch_testing_methods_to_collect_info():
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: dict | None = None):
     """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+    with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w+", suffix=".py") as tmp:
         tmp.write(script)
         tmp.flush()
         tmp.seek(0)
@@ -3912,6 +4292,12 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         # We work directly with the string representation instead the tensor itself
         t_str = str(t)
+
+        # A non-default dtype is repr'd as a trailing kwarg, e.g.
+        # `tensor([83, 362], dtype=torch.int16)`. It is not part of the value, and
+        # stripping only `tensor(` / `)` leaves it stranded inside the literal,
+        # which then does not parse (integer tensors hit this).
+        t_str = re.sub(r",\s*dtype=torch\.\w+", "", t_str)
 
         # remove `tensor( ... )` so keep only the content
         t_str = t_str.replace("tensor(", "").replace(")", "")
@@ -3968,6 +4354,11 @@ def _quote_string(s):
 
     We choice double quotes over single quote despite `str(s)` would give `'abc'` instead of `"abc"`.
     """
+    # Backslashes first: escaping the quotes below adds none, but a backslash
+    # already in `s` would otherwise escape whatever follows it -- a value ending
+    # in one swallows the closing quote and the literal no longer parses.
+    s = s.replace("\\", "\\\\")
+
     has_single_quote = "'" in s
     has_double_quote = '"' in s
 
@@ -4127,10 +4518,14 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             else:
                 groups.append(buf)
 
+        # a 1-element tuple needs its trailing comma or the value changes type:
+        # `(5)` parses back as the int 5, not as `(5,)`
+        trailing = "," if isinstance(obj, tuple) and len(obj) == 1 else ""
+
         output = f"{' ' * 4 * indent}{p1}\n"
         element_strings = [f"{' ' * (4 * (indent + 1))}" + ", ".join(buf) for buf in groups]
         output += ",\n".join(element_strings)
-        output += f"\n{' ' * 4 * indent}{p2}"
+        output += f"{trailing}\n{' ' * 4 * indent}{p2}"
 
         # if all elements are in one-line
         no_new_line_in_elements = all("\n" not in x for x in element_strings)
@@ -4141,7 +4536,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
         # will be `True`.
         if could_use_one_line:
             one_line_form = ", ".join([x.lstrip() for x in element_strings])
-            one_line_form = f"{p1}{one_line_form}{p2}"
+            one_line_form = f"{p1}{one_line_form}{trailing}{p2}"
 
             if mode == "one-line":
                 return output
@@ -4167,10 +4562,17 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                             return False
 
                         # only one element that is iterable, but not the same type as `obj` --> no one line repr.
-                        if type(obj) is not type(obj[0]):
+                        # (`obj[0]` on a dict is a *key* lookup, not positional: use its single value)
+                        only_element = next(iter(obj.values())) if type(obj) is dict else obj[0]
+                        if type(obj) is not type(only_element):
                             return False
 
                         # one-line repr. if possible, without width limit
+                        return no_new_line_in_elements
+
+                    # empty container: nothing to inspect, and `element_types[0]`
+                    # below would raise IndexError
+                    if not element_types:
                         return no_new_line_in_elements
 
                     # all elements are of simple types, but more than one type --> no one line repr.
@@ -4195,6 +4597,9 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             # width condition combined with specific mode conditions
             if use_one_line_repr(obj):
                 output = f"{' ' * 4 * indent}{one_line_form}"
+    else:
+        # anything else (e.g. `torch.Size`, `numpy` scalars): fall back to `repr`, which stays copy-pastable
+        output = repr(obj)
 
     cache[(id(obj), indent, mode, prefix)] = output
 
@@ -4202,12 +4607,12 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
 
 
 def write_file(file, content):
-    with open(file, "w") as f:
+    with open(file, "w", encoding="utf-8") as f:
         f.write(content)
 
 
 def read_json_file(file):
-    with open(file, "r") as fh:
+    with open(file, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -4443,7 +4848,7 @@ def convert_all_safetensors_to_bins(folder: str):
         # Adapt the index as well
         elif file == SAFE_WEIGHTS_INDEX_NAME:
             new_path = os.path.join(folder, WEIGHTS_INDEX_NAME)
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 index = json.loads(f.read())
             os.remove(path)
             if "weight_map" in index.keys():
@@ -4452,7 +4857,7 @@ def convert_all_safetensors_to_bins(folder: str):
                 for k, v in weight_map.items():
                     new_weight_map[k] = v.replace(".safetensors", ".bin").replace("model", "pytorch_model")
             index["weight_map"] = new_weight_map
-            with open(new_path, "w") as f:
+            with open(new_path, "w", encoding="utf-8") as f:
                 f.write(json.dumps(index, indent=4))
 
 
@@ -4473,3 +4878,40 @@ def force_serialization_as_bin_files():
         yield
     finally:
         PreTrainedModel.save_pretrained = original_save
+
+
+@contextmanager
+def preserve_module_forwards(model: "PreTrainedModel"):
+    """
+    A context to keep track of __dict__["forward"] for each module. Upon entering, the context creates a dict where keys
+    are module and values module.__dict__["forward"]; on exit those entries are restored (if there was no "forward" key
+    in __dict__, we only pop the "forward" key).
+    This cancels the effect of a call to "kernelize" because it re-routes module.forward by adding a "forward" key to
+    the modules' __dict__ object. Exists mainly because `kernels` does not provide an `unkernelize` function.
+    """
+    original_fw = {}
+    _fw_not_set = object()  # has a unique id
+
+    # Before entering: create the dictionnary of original __dict__["forward"]
+    for _, module in model.named_modules():
+        # This is a dictionnary w/ keys -> module that can be kernelized
+        _kernel_funcs = getattr(module, "_kernel_funcs", {})
+        kernelizable_modules = list(_kernel_funcs.values())
+        # If the module is simply a wrapper around a kernel function, it has the attribute "kernel_layer_name"
+        if hasattr(type(module), "kernel_layer_name"):
+            kernelizable_modules.append(module)
+        # Go through kernelizable modules and keep track of the original forward
+        for k_module in kernelizable_modules:
+            original_fw[k_module] = k_module.__dict__.get("forward", _fw_not_set)
+
+    # Enter context manager
+    try:
+        yield
+
+    # On exit: restore the original __dict__["forward"] if they were set, otherwise pop them
+    finally:
+        for module, original_forward in original_fw.items():
+            if original_forward is _fw_not_set:
+                module.__dict__.pop("forward", None)
+            else:
+                module.__dict__["forward"] = original_forward

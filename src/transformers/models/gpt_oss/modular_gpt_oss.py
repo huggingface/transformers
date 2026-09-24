@@ -19,7 +19,7 @@ from torch.nn import functional as F
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     MoeModelOutputWithPast,
@@ -151,7 +151,7 @@ class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = freqs
@@ -172,7 +172,7 @@ def _apply_rotary_emb(
     return torch.cat((first_, second_), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
@@ -319,7 +319,7 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
     _compatible_flash_implementations = (
         ["kernels-community/aiter-flash-attn"]
         if is_rocm_platform()
-        else ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+        else ["kernels-community/vllm-flash-attn3", "flash_attention_4", "kernels-community/metal-flash-sdpa"]
     )
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),

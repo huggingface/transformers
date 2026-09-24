@@ -15,12 +15,15 @@ import torch
 import torch.nn as nn
 
 from ..image_transforms import center_to_corners_format
-from ..utils import is_scipy_available
+from ..utils import is_scipy_available, logging
 from .loss_for_object_detection import HungarianMatcher, ImageLoss, _set_aux_loss, generalized_box_iou
 
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+
+logger = logging.get_logger(__name__)
 
 
 # Similar to the one used in `DeformableDetr` but we reduce with sum and normalize by num_boxes
@@ -118,6 +121,10 @@ class GroundingDinoHungarianMatcher(HungarianMatcher):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+        # these predictions only if there are no other valid predictions.
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]

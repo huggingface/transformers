@@ -14,6 +14,8 @@
 # limitations under the License.
 """Configuration base class and utilities."""
 
+from __future__ import annotations
+
 import copy
 import json
 import math
@@ -21,7 +23,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
 
 from huggingface_hub.dataclasses import strict
 from packaging import version
@@ -30,6 +32,7 @@ from typing_extensions import dataclass_transform
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
+from .integrations.heterogeneity import HeterogeneousConfigMixin
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
@@ -37,10 +40,10 @@ from .utils import (
     PushToHubMixin,
     cached_file,
     copy_func,
-    extract_commit_hash,
     hf_api,
     is_torch_available,
     logging,
+    resolve_revision,
 )
 from .utils.generic import is_timm_config_dict
 
@@ -59,23 +62,76 @@ _FLOAT_TAG_KEY = "__float__"
 _FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
 
 
-ALLOWED_LAYER_TYPES = (
+ALLOWED_ATTN_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
+    "window_attention",  # non-overlapping windows usually in ViT
+    "indexed_attention",  # For indexer-based attentions
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
-    "linear_attention",  # used in minimax
-    "conv",  # used in LFMv2
-    "mamba",
-    "attention",
+    "conv",
+    "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
+    "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
+    # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
+    "linear_attention",
+)
+
+ALLOWED_MLP_LAYER_TYPES = (
     "sparse",
     "dense",
-    "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
-    "moe",  # for nemotron_h, which uses either attention, mamba or moe
-    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
 )
+
+# Keep a complete list of layer types as well for BC
+ALLOWED_LAYER_TYPES = ALLOWED_ATTN_LAYER_TYPES + ALLOWED_MLP_LAYER_TYPES
+
+
+# Mapping from old names to new names
+_LEGACY_LAYER_TYPE_REMAP = {
+    "mamba": "linear_attention",
+    "attention": "full_attention",
+    "deepseek_sparse_attention": "indexed_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32, ...)
+    "qwen_sparse_attention": "indexed_attention",  # QSA with block-compressed indexer keys (Qwen4-Exp)
+}
+
+
+def remap_legacy_layer_types(
+    layer_types: list[str] | None = None, config: PreTrainedConfig | None = None
+) -> list[str] | None:
+    """
+    Remap legacy layer types to newer convention names. Any name that does not fit one of the `_LEGACY_LAYER_TYPE_REMAP`
+    patterns is returned unchanged.
+    This function can either take a list of `layer_types`, in which case a remapped list is returned, or a `config`,
+    in which case the config's `layer_types` and `mtp_layer_types` will be modified in-place, and nothing will be returned.
+
+    Args:
+        layer_types (`list[str]`, optional):
+            Layer type names that may include legacy values.
+        config (`PreTrainedConfig`, optional):
+            Config on which `layer_types` and `mtp_layer_types` will be remapped in-plce if they exist.
+
+
+    Returns:
+        `list[str]` if `layer_types` is passed, or `None` if `config` is passed.
+    """
+    if (layer_types is None) ^ (config is not None):
+        raise ValueError("This function must take exactly one of `layer_types` or `config`")
+
+    if layer_types is not None:
+        return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
+    else:
+        if getattr(config, "layer_types", None) is not None:
+            # This check should not be needed, but sometimes `layer_types` is a read-only @property (already following
+            # correct conventions), so this avoids error when trying to `setattr` it
+            if (remapped := remap_legacy_layer_types(config.layer_types)) != config.layer_types:
+                config.layer_types = remapped
+        if getattr(config, "mtp_layer_types", None) is not None:
+            # This check should not be needed, but sometimes `mtp_layer_types` is a read-only @property (already following
+            # correct conventions), so this avoids error when trying to `setattr` it
+            if (remapped := remap_legacy_layer_types(config.mtp_layer_types)) != config.mtp_layer_types:
+                config.mtp_layer_types = remapped
 
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
@@ -122,7 +178,7 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
 @dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
+class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, HeterogeneousConfigMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -149,6 +205,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
       naming of attributes.
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
+    - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
+      sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
+      (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
     - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
@@ -187,6 +246,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
+        per_layer_config (`dict[int | str, dict[str, Any]]`, *optional*):
+            A sparse mapping from layer indices to configuration attribute overrides. Each key is a layer index, and each value contains the attributes that differ from the global config for that layer.
+        tie_last_hidden_states (`bool`, *optional*):
+            Whether `hidden_states[-1]` should be the post-final-norm `last_hidden_state` rather than the pre-final-norm
+            hidden state. If unset, the model's built-in default is used.
 
         > Parameters for fine-tuning tasks
 
@@ -215,11 +279,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # They are not supposed to be set/changed by users. Each field is set when
     # creating a model class
     base_config_key: ClassVar[str] = ""
-    sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
+    sub_configs: ClassVar[dict[str, type[PreTrainedConfig]]] = {}
     has_no_defaults_at_init: ClassVar[bool] = False
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
+    base_model_fsdp_plan: ClassVar[dict[Any, str]] = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
@@ -233,7 +302,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # Common attributes for all models
     output_hidden_states: bool | None = False
     return_dict: bool | None = True
-    dtype: Union[str, "torch.dtype"] | None = None
+    dtype: str | torch.dtype | None = None
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
 
@@ -255,11 +324,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
             self.dtype = getattr(torch, self.dtype)
 
-        # Keep the default value of `num_labels=2` in case users have saved a classfier with 2 labels
+        # Keep the default value of `num_labels=2` in case users have saved a classifier with 2 labels
         # Our configs prev wouldn't save `id2label` for 2 labels because it is the default. In all other
         # cases we expect the config dict to have an `id2label` field if it's a clf model, or not otherwise
         if self.id2label is None:
-            self.num_labels = kwargs.get("num_labels", 2)
+            self.num_labels = kwargs.get("num_labels", self.num_labels if self.num_labels is not None else 2)
         else:
             if kwargs.get("num_labels") is not None and len(self.id2label) != kwargs.get("num_labels"):
                 logger.warning(
@@ -292,12 +361,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
-        self._commit_hash = kwargs.pop("_commit_hash", None)
+        # BC: configs saved by older versions may still carry this key, it is not used anymore. The revision of a
+        # repository is now resolved once per load and passed around as `revision` (see `utils.hub.resolve_revision`).
+        kwargs.pop("_commit_hash", None)
 
         # Attention/Experts implementation to use, if relevant (it sets it recursively on sub-configs)
         self._output_attentions: bool | None = kwargs.pop("output_attentions", False)
         self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
+
+        # HeterogeneousConfigMixin: `per_layer_config` should be applied last, as heterogeneity needs to have all of the other kwargs set
+        per_layer_config = kwargs.pop("per_layer_config", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -308,6 +382,20 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 except AttributeError as err:
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
+
+        # HeterogeneousConfigMixin
+        if per_layer_config is not None:
+            self.per_layer_config = per_layer_config
+
+        # TODO: to support models whose input embedding module is not named `embed_tokens` (e.g. GPT-NeoX's `embed_in`).
+        if getattr(self, "tie_word_embeddings", False) and self.base_model_tp_plan is not None:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
+
+        # Remap layer types if needed
+        remap_legacy_layer_types(config=self)
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -333,9 +421,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
 
     @property
-    def num_labels(self) -> int:
+    def num_labels(self) -> int | None:
         """
-        `int`: The number of labels for classification models.
+        `int` or `None`: The number of labels for classification models, or
+        `None` when `id2label` is not set.
         """
         return len(self.id2label) if self.id2label is not None else None
 
@@ -444,6 +533,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.is_heterogeneous:
+            for config in self.per_layer_config:
+                config.validate_architecture()
+            return
         if (
             hasattr(self, "head_dim")
             and hasattr(self, "num_heads")
@@ -472,13 +565,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     )
 
     def validate_layer_type(self):
-        """Check that `layer_types` is correctly defined."""
-        for layer_types in ["layer_types", "mlp_layer_types"]:
+        """Check that `mlp_layer_types` and `layer_types` is correctly defined."""
+        for allowed_types, layer_types in zip(
+            [ALLOWED_ATTN_LAYER_TYPES, ALLOWED_MLP_LAYER_TYPES], ["layer_types", "mlp_layer_types"]
+        ):
             layers = getattr(self, layer_types, None)
             if not (layers is not None and hasattr(self, "num_hidden_layers")):
                 return
-            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
-                raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
+
+            if not all(layer_type in allowed_types for layer_type in layers):
+                raise ValueError(f"The `{layer_types}` entries must be in {allowed_types} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
                 raise ValueError(
                     f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of `{layer_types}` "
@@ -682,13 +778,20 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
+        # Resolve the revision once, so that both config files below are read from the exact same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
+
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
         if config_dict is None:
             return {}, kwargs
-        if "_commit_hash" in config_dict:
-            original_kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         # That config file may point us toward another config file to use.
         if "configuration_files" in config_dict:
@@ -713,7 +816,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        commit_hash = kwargs.pop("_commit_hash", None)
 
         gguf_file = kwargs.get("gguf_file")
 
@@ -750,11 +852,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
-                    _commit_hash=commit_hash,
                 )
                 if resolved_config_file is None:
                     return None, kwargs
-                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -770,12 +870,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         try:
             if gguf_file:
-                config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
+                # A GGUF repo ships no `config.json`: the metadata is the config. Architectures the fast
+                # reader covers rebuild it from those keys; the rest go to the legacy reader.
+                from .integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
+
+                metadata, tensor_names = read_gguf_metadata(resolved_config_file)
+                if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
+                    config_dict = get_gguf_config(metadata, tensor_names)
+                else:
+                    config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
             else:
                 # Load config dict
                 config_dict = cls._dict_from_json_file(resolved_config_file)
-
-            config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
 
@@ -817,10 +923,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             [`PreTrainedConfig`]: The configuration object instantiated from those parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-
-        # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
-        if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
-            kwargs.setdefault("_commit_hash", config_dict["_commit_hash"])
 
         # To remove arg here are those passed along for our internal telemetry but we still need to remove them
         to_remove = ["_from_auto", "_from_pipeline"]
@@ -944,7 +1046,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        yield from self.__dict__
+        # HeterogeneousConfigMixin: keys of `self.__dict__` that are per-layer attributes
+        # may require hiding when using a heterogeneous config.
+        yield from self._iter_config_keys_with_heterogeneous_adjustment(self.__dict__)
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
@@ -968,13 +1072,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Only serialize values that differ from the default config,
         # except always keep the 'config' attribute.
         for key, value in config_dict.items():
+            # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
+            attr = self._getattr_without_heterogeneous_validation(key, None)
+
             if (
-                isinstance(getattr(self, key, None), PreTrainedConfig)
+                isinstance(attr, PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
             ):
                 # For nested configs we need to clean the diff recursively
-                diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
+                diff = recursive_diff_dict(value, default_config_dict, config_obj=attr)
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
@@ -1002,6 +1109,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 else self.quantization_config
             )
         self.dict_dtype_to_str(serializable_config_dict)
+
+        # HeterogeneousConfigMixin: update the serialized output.
+        self._update_heterogeneous_to_dict_output(serializable_config_dict)
 
         return serializable_config_dict
 
@@ -1049,6 +1159,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 else self.quantization_config
             )
         self.dict_dtype_to_str(output)
+
+        # HeterogeneousConfigMixin: update the serialized output.
+        self._update_heterogeneous_to_dict_output(output)
 
         return output
 
@@ -1168,6 +1281,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
             "base_model_pp_plan",
+            "base_model_fsdp_plan",
+            "distributed_config",
         ]:
             d.pop(key_to_remove, None)
 
@@ -1200,6 +1315,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         cls._auto_class = auto_class
 
+    @classmethod
+    def is_remote_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. code loaded from the hub, or class that we just
+        registered via `register_for_auto_class`."""
+        return cls._auto_class is not None
+
+    @classmethod
+    def is_custom_code(cls) -> bool:
+        """Return whether the current config is custom code, i.e. either code loaded from the hub, or defined in any
+        user-specific module/session."""
+        return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
+
     def _get_generation_parameters(self) -> dict[str, Any]:
         """
         Checks if there are generation parameters in `PreTrainedConfig` instance. Note that
@@ -1216,7 +1343,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         return generation_params
 
-    def get_text_config(self, decoder=None, encoder=None) -> "PreTrainedConfig":
+    def get_text_config(self, decoder=None, encoder=None) -> PreTrainedConfig:
         """
         Returns the text config related to the text input (encoder) or text output (decoder) of the model. The
         `decoder` and `encoder` input arguments can be used to specify which end of the model we are interested in,
@@ -1269,7 +1396,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
                 # NOTE: We can't discard keys because:
-                # 1) we can't truly delete a cls attribte on a dataclass; 2) we can't set the value to `None` due to
+                # 1) we can't truly delete a cls attribute on a dataclass; 2) we can't set the value to `None` due to
                 # strict validation. So we just keep it as is, since there are only a couple old models falling in this condition
                 if key.startswith(prefix_to_keep):
                     # [encoder/decoder]_layers -> num_hidden_layers
@@ -1292,6 +1419,52 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     setattr(config_to_return, new_key, value)
 
         return config_to_return
+
+    def get_mtp_config(self) -> PreTrainedConfig:
+        """
+        Returns the mtp text config to be used to create the MTP model. Since the MTP layers are created by instantiating
+        the same classes as the main model, we need to overwrite index-specific properties of the config such as `layer_types`
+        or `mtp_layer_types` to create the correct mtp layers and avoid indexing issues in the layers (because MTP layers restart
+        the indexing of layers at 0).
+        """
+        # Start from the text config
+        text_config = copy.deepcopy(self.get_text_config(decoder=True))
+        num_mtp_layers = getattr(text_config, "num_mtp_layers", None)
+        # In this case, raise
+        if num_mtp_layers is None:
+            raise ValueError("Calling `get_mtp_config` on a config without `num_mtp_layers`")
+
+        layer_types = getattr(text_config, "layer_types", None)
+        mtp_layer_types = getattr(text_config, "mtp_layer_types", None)
+        mlp_layer_types = getattr(text_config, "mlp_layer_types", None)
+        mtp_mlp_layer_types = getattr(text_config, "mtp_mlp_layer_types", None)
+
+        # Replace the index-based fields so that we can call `XXXDecoderLayer(config, layer_idx)` with the mtp config, and create
+        # the correct layers
+        if layer_types is not None:
+            if mtp_layer_types is None:
+                raise ValueError(
+                    "Calling `get_mtp_config` on a config containing `layer_types` without `mtp_layer_types` is ambiguous"
+                )
+            text_config.layer_types = mtp_layer_types
+        if mlp_layer_types is not None:
+            if mtp_mlp_layer_types is None:
+                raise ValueError(
+                    "Calling `get_mtp_config` on a config containing `mlp_layer_types` without `mtp_mlp_layer_types` is ambiguous"
+                )
+            text_config.mlp_layer_types = mtp_mlp_layer_types
+
+        # This is needed to be correct in several places, e.g. when creating the cache
+        text_config.num_hidden_layers = num_mtp_layers
+
+        # In some models this is used to discriminate between MLP or MoE layers, but MTP layers always use MoE -> artifically set to 0
+        if hasattr(text_config, "first_k_dense_replace"):
+            text_config.first_k_dense_replace = 0
+
+        # MTP uses independent per-layer overrides
+        text_config.per_layer_config = getattr(text_config, "mtp_per_layer_config", None)
+
+        return text_config
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:
@@ -1334,13 +1507,37 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
-        obj_value = getattr(config_obj, str(key), None)
+        # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
+        obj_value = (
+            config_obj._getattr_without_heterogeneous_validation(str(key), None) if config_obj is not None else None
+        )
         if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             diff[key] = diff_value
         elif key not in dict_b or (value != default[key]):
             diff[key] = value
     return diff
+
+
+def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
+    """Returns a tuple `(num_kv_heads, head_dim)`, each of them either a single int for all layers, or a list of int
+    with the value for each layer."""
+    # Some models (e.g. Gemma4) have different head_dim and num_heads depending on layer type
+    per_layer_attributes = config.per_layer_attributes or ()
+    # Layers sharing kv states have no kv cache of their own, so they are excluded.
+    layers = range(config.num_hidden_layers - getattr(config, "num_kv_shared_layers", 0))
+
+    if "head_dim" in per_layer_attributes:
+        head_dim = [config.per_layer_config[layer].head_dim for layer in layers]
+    else:
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+    if "num_key_value_heads" in per_layer_attributes:
+        num_kv_heads = [config.per_layer_config[layer].num_key_value_heads for layer in layers]
+    else:
+        num_kv_heads = getattr(config, "num_key_value_heads", None) or config.num_attention_heads
+
+    return num_kv_heads, head_dim
 
 
 PreTrainedConfig.push_to_hub = copy_func(PreTrainedConfig.push_to_hub)

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
-from collections import OrderedDict
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from math import ceil, log2
@@ -20,43 +20,25 @@ from typing import Any
 
 import torch
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import is_torch_greater_or_equal
-
-from .requests import FutureRequestState, RequestState, RequestStatus, logger
+from ...configuration_utils import PreTrainedConfig
+from .requests import FutureRequestState, RequestState, RequestStatus
 
 
 class CudaGraphBuffer:
-    """A fixed-size dict for CUDA graphs with LRU eviction when full."""
+    """A dict for CUDA graphs with a special __del__ method to make sure the graphs are properly reset."""
 
-    def __init__(self, max_size: int) -> None:
-        if max_size <= 0:
-            raise ValueError(f"max_size must be positive, but got {max_size}")
-        self.max_size = max_size
-        self._storage: OrderedDict[tuple[int, ...], torch.cuda.CUDAGraph] = OrderedDict()
+    def __init__(self) -> None:
+        self._storage: dict[tuple[int, ...], torch.cuda.CUDAGraph] = {}
 
     def __del__(self) -> None:
-        original_max_size = self.max_size
-        self.max_size = 1  # 0 would cause an infinite loop, 1 is enough to clear all graphs
-        self.plan_for_new_graph(silent=True)
-        self.max_size = original_max_size
+        while self._storage:
+            _, graph = self._storage.popitem()
+            graph.reset()
 
     def get_graph(self, key: tuple[int, ...]) -> torch.cuda.CUDAGraph | None:
-        graph = self._storage.get(key)
-        if graph is not None:
-            self._storage.move_to_end(key)
-        return graph
-
-    def plan_for_new_graph(self, silent: bool = False) -> None:
-        while len(self._storage) >= self.max_size:
-            evicted_key, evicted_graph = self._storage.popitem(last=False)
-            if not silent:
-                logger.info(f"Evicting graph for {evicted_key = }")
-            evicted_graph.reset()
+        return self._storage.get(key)
 
     def set_graph(self, key: tuple[int, ...], graph: torch.cuda.CUDAGraph) -> None:
-        # In our use case, this should not have any effect because we plan for a new graph before it is captured
-        self.plan_for_new_graph()
         self._storage[key] = graph
 
 
@@ -69,7 +51,12 @@ class WorkloadHints:
     num_requests: int = 0
 
 
-def attn_mask_is_needed(config: PretrainedConfig) -> bool:
+class ThreadLocalCounter(threading.local):
+    def __init__(self) -> None:
+        self.value = 0
+
+
+def attn_mask_is_needed(config: PreTrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
 
@@ -165,20 +152,15 @@ def build_attention_mask(
             causal_diagonal = 1
         query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
         key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-        # Apply causal mask
-        minus_inf = torch.full(
-            attention_mask[..., query_range, key_range].shape,
-            min_value,
-            dtype=attention_mask.dtype,
-            device=attention_mask.device,
-        )
-        masked = torch.triu(minus_inf, diagonal=causal_diagonal)
-        # Apply sliding window mask if needed
+        # Apply the causal mask fully in place: a request block can be as large as [max_batch_tokens, whole cache],
+        # so materializing [seqlen_q, seqlen_k] temporaries here can cost tens of GB during warmup
+        block = attention_mask[..., query_range, key_range]
+        block.fill_(min_value)
+        block.triu_(causal_diagonal)  # zeroes everything strictly below the causal diagonal
+        # Apply sliding window mask if needed. This branch keeps a temporary, but its size is bounded by the window.
         if sliding_window > 1:
             sliding_diagonal = seqlen_k - seqlen_q - sliding_window
-            masked += torch.tril(minus_inf, diagonal=sliding_diagonal)
-        # Replace in attention mask
-        attention_mask[..., query_range, key_range] = masked
+            block.add_(torch.tril(torch.full_like(block, min_value), diagonal=sliding_diagonal))
 
 
 def create_warmup_future_states(
@@ -192,7 +174,6 @@ def create_warmup_future_states(
     # Setup
     request_ids = [f"__warmup_{status.name}_{i}__" for i in range(num)]
     total_tokens = num_q_tokens + max_kv_read
-    blocks_needed = ceil(total_tokens / cache.block_size)
     # Main loop
     future_states = []
     for req_id in request_ids:
@@ -200,9 +181,9 @@ def create_warmup_future_states(
         state._status = status  # bypass the property setter to avoid the lifecycle side effects
         state.tokens_to_process = [0] * num_q_tokens
         state.position_offset = max_kv_read
-        # Stop if allocation fails for any request
-        allocated = cache.allocate_blocks(blocks_needed, state.request_id, 0)
-        if allocated is None:
+        # Stop if allocation fails for any request. Since position_offset acts as the past length, this allocates
+        # enough cache for the whole fake request (past + query).
+        if not cache.can_store_request_tokens(state, num_q_tokens):
             return future_states
         future_states.append(
             FutureRequestState(state, has_new_token=True, complete_blocks=0, query_length=num_q_tokens)
@@ -223,25 +204,50 @@ def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
     return new_states
 
 
-def get_cuda_pools():  # no type hint because it would make torch 2.4 crash
-    """Returns a tuple of (mem_pool, graph_pool_id) for CUDA graphs. Since the MemPool object is only available in torch
-    2.5+, we only return a graph_pool_id for older versions."""
-    if is_torch_greater_or_equal("2.5.0"):
-        mem_pool = torch.cuda.MemPool()
-        graph_pool_id = mem_pool.id
-        return mem_pool, graph_pool_id
-    else:
-        mem_pool = None
-        graph_pool_id = torch.cuda.graph_pool_handle()
-        return mem_pool, graph_pool_id
+def get_cuda_pools() -> tuple:
+    """Returns a tuple of (mem_pool, graph_pool_id) for CUDA graphs."""
+    mem_pool = torch.cuda.MemPool()
+    graph_pool_id = mem_pool.id
+    return mem_pool, graph_pool_id
 
 
 @contextmanager
 def mem_pool_ctx(mem_pool):
-    """A context manager to use a CUDA mem pool. If the mem pool is None, it is a no-op. No type hint because it would
-    make torch 2.4 or below crash."""
-    if mem_pool is not None:
-        with torch.cuda.use_mem_pool(mem_pool):
-            yield
-    else:
+    """A context manager to use a CUDA mem pool."""
+    with torch.cuda.use_mem_pool(mem_pool):
         yield
+
+
+def find_num_key_value_heads(config: PreTrainedConfig) -> int:
+    """Finds the number of key-value heads for the given config."""
+    # If the model supports GQA, we leverage it by using the num_key_value_heads attribute
+    kv_heads = getattr(config, "num_key_value_heads", None)
+    if kv_heads is not None:
+        return kv_heads
+    # Otherwise, the number of KV heads is the same as the number of attention heads
+    kv_heads = getattr(config, "num_attention_heads", None)
+    if kv_heads is not None:
+        return kv_heads
+    raise ValueError(f"num_key_value_heads or num_attention_heads could not be found in the config:\n{config}")
+
+
+def find_head_dim(config: PreTrainedConfig) -> int:
+    """Finds the head dimension for the given config."""
+    # If the model has the head_dim attribute, there is nothing to do but return it
+    head_dim = getattr(config, "head_dim", None)
+    if head_dim is not None:
+        return head_dim
+    # If it is missing, we may reconstruct it from the hidden size and the number of attention heads
+    hidden_size = getattr(config, "hidden_size", None)
+    num_attention_heads = getattr(config, "num_attention_heads", None)
+    if hidden_size is not None and num_attention_heads is not None:
+        return hidden_size // num_attention_heads
+    raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
+
+
+def exact_div(a: int, b: int) -> int:
+    """Divide an integer a by a integer b and error out if there is a remainder."""
+    quotient, remainder = divmod(a, b)
+    if remainder:
+        raise ValueError(f"Division of {a} by {b} is not exact: {remainder = } != 0")
+    return quotient

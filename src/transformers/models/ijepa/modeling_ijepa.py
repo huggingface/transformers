@@ -285,13 +285,11 @@ class IJepaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, IJepaEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
@@ -405,13 +403,6 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
         interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-
         outputs: BaseModelOutputWithPooling = self.ijepa(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,

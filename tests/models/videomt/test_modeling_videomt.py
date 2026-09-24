@@ -21,7 +21,6 @@ from transformers import VideomtConfig, VideomtForUniversalSegmentation
 from transformers.testing_utils import (
     Expectations,
     require_torch,
-    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -110,7 +109,6 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = {}
     is_encoder_decoder = False
     test_missing_keys = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = VideomtForUniversalSegmentationTester(self)
@@ -554,7 +552,6 @@ class VideomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
             panoptic_results[1]["segments_info"], self.expected_panoptic_segments_info_frame_1
         )
 
-    @require_torch_gpu
     def test_instance_segmentation_inference_bf16(self):
         _, _, _, outputs = self.run_inference(self.instance_model_id, dtype=torch.bfloat16)
 

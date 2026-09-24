@@ -100,7 +100,10 @@ class Cohere2VisionModel(AyaVisionModel):
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
-        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
+        pooler_output = self.multi_modal_projector(selected_image_feature)
+        image_outputs.pooler_output = pooler_output.reshape(
+            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
+        )
 
         return image_outputs
 
@@ -169,11 +172,6 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Cohere2VisionCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

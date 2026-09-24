@@ -1,7 +1,5 @@
-import io
 import unittest
 
-import httpx
 import numpy as np
 import pytest
 
@@ -16,7 +14,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, load_coco_image
 
 
 if is_torch_available() and is_vision_available():
@@ -26,7 +24,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class FuyuImageProcessingTester:
+class FuyuImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -106,9 +104,6 @@ class FuyuImageProcessingTester:
 
         return image_inputs
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
 
 @require_torch
 @require_vision
@@ -180,11 +175,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -192,9 +183,11 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
         backend_names = list(encodings.keys())
-        reference_encoding = encodings[backend_names[0]].images[0][0]
+        reference_backend = backend_names[0]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].images[0][0])
+            self._assert_encodings_equivalence(
+                encodings[reference_backend], encodings[backend_name], reference_backend, backend_name
+            )
 
     def test_backends_equivalence_batched(self):
         """Override to handle Fuyu's custom output structure"""

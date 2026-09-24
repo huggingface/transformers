@@ -59,7 +59,7 @@ class TDTLossTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(cls.FIXTURE_PATH) as f:
+        with open(cls.FIXTURE_PATH, encoding="utf-8") as f:
             cls.fixture = json.load(f)
 
     def _make_inputs(self):
@@ -142,7 +142,7 @@ class RNNTLossTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(cls.FIXTURE_PATH) as f:
+        with open(cls.FIXTURE_PATH, encoding="utf-8") as f:
             cls.fixture = json.load(f)
 
     def _make_inputs(self):
@@ -503,7 +503,7 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_single-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
@@ -524,7 +524,7 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_batched-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
@@ -633,7 +633,6 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_attention_outputs = False
     test_resize_embeddings = False
-    test_torch_exportable = False
     _is_composite = True
 
     @unittest.skip(reason="No available flash-SDPA kernels for Parakeet test shapes on this setup")
@@ -749,7 +748,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_single_tdt-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single_tdt.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
@@ -768,7 +767,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_batch_tdt-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch_tdt.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
@@ -787,7 +786,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_batch_tdt_timestamps-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch_tdt_timestamp.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
         EXPECTED_START_TIMESTAMPS = raw_data["start_timestamps"]
@@ -821,7 +820,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/883ea42bf7d8ce2af42f3055627476a7
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_loss_tdt.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_MEAN_LOSS = torch.tensor(raw_data["expected_mean_loss"])
         num_samples = raw_data["num_samples"]
@@ -955,7 +954,6 @@ class ParakeetForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_attention_outputs = False
     test_resize_embeddings = False
-    test_torch_exportable = False
     _is_composite = True
 
     @unittest.skip(reason="No available flash-SDPA kernels for Parakeet test shapes on this setup")
@@ -1072,7 +1070,7 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-reproducer_single_rnnt-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single_rnnt.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
@@ -1093,7 +1091,7 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-reproducer_batch_rnnt-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch_rnnt.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
@@ -1114,7 +1112,7 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-reproducer_batch_rnnt_timestamps-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch_rnnt_timestamp.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
         EXPECTED_START_TIMESTAMPS = raw_data["start_timestamps"]
@@ -1150,7 +1148,7 @@ class ParakeetForRNNTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/2b9a9a85ec447b176d14b23fc1484496#file-reproducer_rnnt_loss-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_loss_rnnt.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_MEAN_LOSS = torch.tensor(raw_data["expected_mean_loss"])
         num_samples = raw_data["num_samples"]

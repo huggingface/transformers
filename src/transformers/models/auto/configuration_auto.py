@@ -22,7 +22,7 @@ from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import CONFIG_NAME, logging
+from ...utils import CONFIG_NAME, logging, resolve_revision
 from .auto_mappings import CONFIG_MAPPING_NAMES, SPECIAL_MODEL_TYPE_TO_MODULE_NAME
 
 
@@ -43,7 +43,7 @@ CONFIG_MAPPING_NAMES.update(
     }
 )
 
-# TODO: depecate and remove `gpt-sw3`, old model. And prohibit mapping the same config to different model types
+# TODO: deprecate and remove `gpt-sw3`, old model. And prohibit mapping the same config to different model types
 # Auto-classes rely a lot on these, and it is much easier when we have 1-1 mapping
 CONFIG_MAPPING_NAMES = OrderedDict(**{"gpt-sw3": "GPT2Config"}, **CONFIG_MAPPING_NAMES)
 
@@ -140,6 +140,15 @@ class _LazyConfigMapping(OrderedDict[str, type[PreTrainedConfig]]):
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 
+    def __reduce__(self):
+        return (self.__class__._from_pickle, (dict(self._mapping), dict(self._extra_content)))
+
+    @classmethod
+    def _from_pickle(cls, mapping, extra_content):
+        obj = cls(mapping)
+        obj._extra_content = extra_content
+        return obj
+
 
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
 
@@ -193,6 +202,9 @@ class _LazyLoadAllMappings(OrderedDict[str, str]):
     def __contains__(self, item: object) -> bool:
         self._initialize()
         return item in self._data
+
+    def __reduce__(self):
+        return (self.__class__, (dict(self._mapping),))
 
 
 def _get_class_name(model_class: str | list[str]):
@@ -372,6 +384,15 @@ class AutoConfig:
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         code_revision = kwargs.pop("code_revision", None)
+
+        # Resolve the revision once, so the config and the remote code below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
 
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]

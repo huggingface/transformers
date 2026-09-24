@@ -14,6 +14,7 @@
 """PyTorch PaliGemmamodel."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
@@ -157,7 +158,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -197,7 +198,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
@@ -329,7 +330,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
@@ -381,46 +382,31 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             image_hidden_states=outputs.image_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
+    def _update_model_kwargs_for_generation(
         self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        token_type_ids = model_kwargs.get("token_type_ids")
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
+        if token_type_ids is not None:
+            # A generated token belongs to the causal suffix, so it is 1. The generic update repeats the
+            # last prompt value (0 before any suffix), which would put it in the bidirectional prefix.
+            model_kwargs["token_type_ids"] = torch.cat(
+                [token_type_ids, token_type_ids.new_ones((token_type_ids.shape[0], num_new_tokens))], dim=-1
+            )
+        return model_kwargs
 
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
         # position_ids in Paligemma are 1-indexed
         if model_inputs.get("position_ids") is not None:
             # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
             model_inputs["position_ids"] = model_inputs["position_ids"] + 1
-
-        # Pixel values are used only in the first iteration if available
-        # In subsequent iterations, they are already merged with text and cached
-        # NOTE: first iteration doesn't have to be prefill, it can be the first
-        # iteration with a question and cached system prompt (continue generate from cache). NOTE: use_cache=False needs pixel_values always
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
 

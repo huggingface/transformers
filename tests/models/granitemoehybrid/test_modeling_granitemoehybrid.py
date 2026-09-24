@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -123,6 +124,16 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_attention_outputs(self):
         r"""
@@ -317,7 +328,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         """Ensure forward pass works when all layers are attention (no mamba layers). Regression test for #45507."""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config = config_and_inputs[0]
-        config.layers_block_type = ["attention"] * config.num_hidden_layers
+        config.layers_block_type = ["full_attention"] * config.num_hidden_layers
 
         for model_class in self.all_model_classes:
             model = model_class._from_config(config)
@@ -331,6 +342,19 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         """Ensure we can't create a config with disallowed layers."""
         with pytest.raises(StrictDataclassClassValidationError):
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
+
+    @unittest.skip(
+        "Model doesn't have rope but was added with `config_rope_parameters` which is `None` for some reason..."
+    )
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "Model doesn't have rope but was added with `config_rope_parameters` which is `None` for some reason..."
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch_accelerator
@@ -346,9 +370,9 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
             out = model(torch.tensor([input_ids]).to(device))
 
         # fmt: off
-        # Expected mean on dim = -1
+        # Expected mean on dim = -1, recorded with the einsum-based CPU chunk scan.
         EXPECTED_MEAN = torch.tensor([
-            [-0.3543, -1.0066, -0.5338, -0.8816, -0.7438,  0.0500, -1.3644, -0.0742, -1.7746, -1.6326, -1.4802, -0.4961]
+            [-0.3543, -1.0456, -0.5024, -0.8578, -0.6664,  0.0618, -1.3840, -0.1416, -1.7800, -1.6412, -1.5263, -0.4934]
         ], device=device)
 
         torch.testing.assert_close(EXPECTED_MEAN, out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
@@ -371,7 +395,7 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
     @slow
     @parameterized.expand([("cpu",)])
     def test_model_generation(self, device):
-        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers in uniform motion relative"
+        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same in all inertial reference frames,"
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-h-tiny")
         model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-h-tiny", device_map=device)

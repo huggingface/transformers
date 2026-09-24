@@ -63,12 +63,8 @@ class Data2VecTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -471,7 +467,7 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
     config_class = Data2VecTextConfig
     base_model_prefix = "data2vec_text"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Data2VecTextForTextEmbeddings", "Data2VecTextLayer"]
+    _no_split_modules = ["Data2VecTextEmbeddings", "Data2VecTextLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -854,12 +850,6 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
         outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
@@ -919,12 +909,6 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
@@ -1010,10 +994,6 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -1094,10 +1074,6 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,

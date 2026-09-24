@@ -66,12 +66,18 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
+        "layers.*.linear_attn.out_proj": "colwise_gather_output",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = None  # no Moe
 
     vocab_size: int = 248320
     hidden_size: int = 4096
@@ -125,6 +131,8 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -138,6 +146,7 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")

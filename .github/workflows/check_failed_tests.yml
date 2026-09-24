@@ -44,13 +44,18 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
+  # Cap the CPU RAM that psutil reports to pytest so device_map="auto" offloads some layers to disk
+  # instead of packing everything into CPU RAM (K8S runners share a ~750 GB host, causing GPU OOM).
+  # See huggingface/transformers#46539 for details.
+  CI_CPU_MEMORY_LIMIT_GB: 60
 
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   setup_check_new_failures:
+    permissions: {}
     name: "Setup matrix for finding commits"
     runs-on: ubuntu-22.04
     outputs:
@@ -116,6 +121,8 @@ jobs:
 
 
   check_new_failures:
+    permissions:
+      contents: read
     name: "Find commits for new failing tests"
     needs: setup_check_new_failures
     if: needs.setup_check_new_failures.outputs.process == 'true'
@@ -259,6 +266,8 @@ jobs:
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
 
   process_new_failures_with_commit_info:
+    permissions:
+      contents: read
     name: "process bad commit reports"
     needs: check_new_failures
     if: needs.check_new_failures.outputs.process == 'true'
@@ -385,7 +394,7 @@ jobs:
 
       - name: Send processed report
         if: ${{ !endsWith(env.REPORT_TEXT, '{}') }}
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
           # Slack channel id, channel name, or user id to post message.
           # See also: https://api.slack.com/methods/chat.postMessage#channels

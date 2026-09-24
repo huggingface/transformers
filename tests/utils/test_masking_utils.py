@@ -15,24 +15,27 @@
 import unittest
 
 from transformers.testing_utils import (
-    cleanup,
     is_torch_available,
     require_torch,
+    require_torch_greater_or_equal,
     torch_device,
 )
+
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
     import torch
     from torch.nn.attention.flex_attention import create_block_mask
 
-    from transformers import DynamicCache, LlamaConfig
+    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig
     from transformers.cache_utils import DynamicSlidingWindowLayer
     from transformers.masking_utils import (
         create_bidirectional_mask,
         create_causal_mask,
         create_chunked_causal_mask,
         create_masks_for_generate,
+        create_recurrent_attention_mask,
         find_packed_sequence_indices,
     )
 
@@ -66,13 +69,7 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 
 
 @require_torch
-class MaskTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class MaskTest(MemoryCleanupMixin, unittest.TestCase):
     def test_packed_sequence_mask_sdpa(self):
         config = LlamaConfig()
         config._attn_implementation = "sdpa"
@@ -180,6 +177,56 @@ class MaskTest(unittest.TestCase):
         )
         # cannot be skipped under compile, should result into a triu mask
         self.assertTrue(torch.equal(~torch.ones(*causal_mask.shape).triu(diagonal=1).bool(), causal_mask))
+
+    @require_torch_greater_or_equal("2.14")
+    def test_mask_skip_without_padding_mask_under_compile(self):
+        """
+        Checks whether the mask creation can still be skipped under `torch.compile` if we have no padding mask at all.
+        Whether a padding mask is provided is a static property that dynamo guards on - only the checks reading its
+        values are data-dependent, and have to be skipped while tracing.
+
+        Requires torch>=2.14: before https://github.com/pytorch/pytorch/pull/176499, dynamo replaced calls to
+        `torch.compiler.is_exporting()` by a constant `True`, so we treated `torch.compile` as export and never
+        skipped. On older versions the mask is therefore still materialized.
+        """
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+
+        batch_size = 2
+        sequence_length = 10
+        inputs_embeds = torch.empty((batch_size, sequence_length, 8), dtype=torch.float16, device=torch_device)
+        padded_mask = torch.ones(batch_size, sequence_length, dtype=torch.long, device=torch_device)
+        padded_mask[0, :3] = 0
+
+        def create_masks(attention_mask):
+            causal_mask = create_causal_mask(
+                config=config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=None,
+            )
+            bidirectional_mask = create_bidirectional_mask(
+                config=config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
+            return causal_mask, bidirectional_mask
+
+        compiled_create_masks = torch.compile(create_masks, fullgraph=True)
+
+        # Without a padding mask, both masks are skipped in eager as well as under compile
+        self.assertEqual(create_masks(None), (None, None))
+        self.assertEqual(compiled_create_masks(None), (None, None))
+
+        # With a padding mask, the masks are materialized. Under compile, reading its values must be skipped
+        # instead of raising a data-dependent control flow error
+        causal_mask, bidirectional_mask = create_masks(padded_mask)
+        self.assertIsNotNone(causal_mask)
+        self.assertIsNotNone(bidirectional_mask)
+
+        compiled_causal_mask, compiled_bidirectional_mask = compiled_create_masks(padded_mask)
+        self.assertIsNotNone(compiled_causal_mask)
+        self.assertIsNotNone(compiled_bidirectional_mask)
 
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
         # Make sure we have an attention_chunk_size in the config
@@ -375,19 +422,56 @@ class MaskTest(unittest.TestCase):
         self.assertTrue(padded_mask[0] is not None)
         self.assertTrue(padded_mask[1] is not None)
 
+    def test_recurrent_mask_kept_on_continued_multi_token_forward(self):
+        """
+        Continued multi-token forwards (chunked prefill, cache continuation) must still receive the
+        padding mask for recurrent layers, otherwise pad tokens of the new segment leak into the
+        linear-attention/conv state. Only single-token decode may skip it.
+        """
+        config = Qwen3NextConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            layer_types=["linear_attention", "full_attention"],
+            linear_conv_kernel_dim=2,
+            linear_key_head_dim=8,
+            linear_value_head_dim=8,
+            linear_num_key_heads=2,
+            linear_num_value_heads=4,
+        )
+        cache = DynamicCache(config=config)
+        # 8 seen tokens, row 0 left-padded with 6 pads; the continued chunk covers the last 4 positions
+        attention_mask = torch.tensor([[0, 0, 0, 0, 0, 0, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]], device=torch_device)
+        inputs_embeds = torch.zeros(2, 4, config.hidden_size, device=torch_device)
+
+        # simulate the state left behind by the first (prefill) chunk
+        cache.update_conv_state(torch.zeros(2, 4, config.linear_conv_kernel_dim, device=torch_device), 0)
+        self.assertTrue(cache.has_previous_state(0))
+
+        mask = create_recurrent_attention_mask(
+            config=config, inputs_embeds=inputs_embeds, attention_mask=attention_mask, past_key_values=cache
+        )
+        self.assertIsNotNone(mask)
+        torch.testing.assert_close(mask, attention_mask[:, -4:])
+
+        # single-token decode keeps skipping the mask (a generated token is never padding)
+        decode_embeds = torch.zeros(2, 1, config.hidden_size, device=torch_device)
+        decode_mask = create_recurrent_attention_mask(
+            config=config, inputs_embeds=decode_embeds, attention_mask=attention_mask, past_key_values=cache
+        )
+        self.assertIsNone(decode_mask)
+
     def test_create_masks_for_generate_defers_for_unmapped_layer_types(self):
         """
         `create_masks_for_generate` pre-builds attention masks for compilable caches by mapping each
-        `config.layer_types` entry through `LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING`. Hybrid models with a layer type
-        that has no mask function (e.g. `linear_attention` in Qwen3.5 / Qwen3-Next, which build their own per-layer
-        masks in the forward) must not raise `KeyError` here; instead the raw attention mask is returned so the model
-        can build its own masks.
+        `config.layer_types` entry through `LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING`. Hybrid models with a
+        non-attention layer type (e.g. ``moe`` / ``mlp`` in Nemotron-H) have no mask function — the helper must
+        not raise `KeyError`; instead the raw attention mask is returned so the model can build its own masks.
         """
         config = LlamaConfig(num_hidden_layers=2)
-        config.layer_types = ["full_attention", "linear_attention"]
+        config.layer_types = ["full_attention", "moe"]
         attention_mask = torch.ones((1, 5), dtype=torch.long, device=torch_device)
 
-        # Must not raise (previously `KeyError: 'linear_attention'`), and defers the raw mask to the model.
+        # Must not raise (previously `KeyError: 'moe'`), and defers the raw mask to the model.
         out = create_masks_for_generate(
             config, inputs_embeds=None, attention_mask=attention_mask, past_key_values=None
         )

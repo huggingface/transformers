@@ -25,10 +25,10 @@ import numpy as np
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
@@ -96,6 +96,7 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
             },
         },
         "audio_kwargs": {
+            "n_window": 50,  # should match model config
             "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
@@ -104,19 +105,20 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def _get_feat_extract_output_lengths(input_lengths):
-    """Compute output lengths after the 3-layer CNN feature extractor with deepstack.
-
-    Three stride-2 convolutions within each 100-frame block, plus 13 output frames
-    per full block from the deepstack path.
+def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     """
-    input_lengths_leave = input_lengths % 100
+    Computes the output length of the convolutional layers and the output length of the audio encoder
+    """
+    chunk_len = n_window * 2
+    input_lengths_leave = input_lengths % chunk_len
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
+    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
 @auto_docstring
 class Qwen3OmniMoeProcessor(ProcessorMixin):
+    valid_processor_kwargs = Qwen3OmniMoeProcessorKwargs
+
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
     ):
@@ -136,7 +138,7 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
-        **kwargs,
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> BatchFeature:
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
@@ -151,6 +153,8 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
+        fps = fps if fps is not None else 1.0
+        n_window = output_kwargs["audio_kwargs"].pop("n_window", 50)
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
@@ -160,7 +164,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             audio_inputs["input_features"] = audio_inputs.pop(
                 "input_features"
             )  # rename input_features to prevent conflicts later on
-            audio_lengths = iter(_get_feat_extract_output_lengths(audio_inputs["feature_attention_mask"].sum(-1)))
+            audio_lengths = iter(
+                _get_feat_extract_output_lengths(audio_inputs["feature_attention_mask"].sum(-1), n_window)
+            )
         else:
             audio_inputs = {}
             audio_lengths = iter([])
@@ -173,9 +179,8 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             image_grid_thw = iter([])
 
         if videos is not None:
-            videos = make_batched_videos(videos)
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            fps = [fps] * len(videos)
+            fps = [fps] * len(videos_inputs["video_grid_thw"])
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
             ]
@@ -334,7 +339,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         Returns:
             `list[str]`: The decoded text.
         """
-        return self.tokenizer.batch_decode(generated_outputs[0], skip_special_tokens=skip_special_tokens, **kwargs)
+        if isinstance(generated_outputs, (tuple, list)):
+            generated_outputs = generated_outputs[0]
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
@@ -355,7 +362,7 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
+            `list[Union[str, np.ndarray]]`: The decoded text or generated audio.
         """
         if generation_mode is None or generation_mode == "text":
             return self.post_process_image_text_to_text(
@@ -363,9 +370,12 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             )
 
         elif generation_mode == "audio":
-            # model supports only bs=1, so we will never get several audio outputs
-            audio = generated_outputs[1].reshape(-1).detach().cpu().numpy()
-            return [audio]
+            # Batched generation returns one waveform per sample, while a single sample comes back as a lone
+            # `(num_samples,)` tensor that return as a list
+            audio_outputs = generated_outputs[1]
+            if not isinstance(audio_outputs, (list, tuple)):
+                audio_outputs = [audio_outputs]
+            return [audio.reshape(-1).detach().cpu().numpy() for audio in audio_outputs]
 
         else:
             raise ValueError(

@@ -76,7 +76,7 @@ def prepare_coco_detection_annotation(
     """
     Convert the target in COCO format into the format expected by RT-DETR.
     """
-    image_height, image_width = image.size()[-2:]
+    image_height, image_width = image.shape[-2:]
 
     image_id = target["image_id"]
     image_id = torch.as_tensor([image_id], dtype=torch.int64, device=image.device)
@@ -238,112 +238,6 @@ class RTDetrImageProcessor(DetrImageProcessor):
         else:
             raise ValueError(f"Format {format} is not supported.")
         return target
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        annotations: AnnotationType | list[AnnotationType] | None,
-        return_segmentation_masks: bool,
-        masks_path: str | pathlib.Path | None,
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | None",
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        do_convert_annotations: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool,
-        pad_size: SizeDict | None,
-        format: str | AnnotationFormat | None,
-        return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> BatchFeature:
-        """
-        Preprocess an image or a batch of images so that it can be used by the model.
-        """
-
-        if annotations is not None and isinstance(annotations, dict):
-            annotations = [annotations]
-
-        if annotations is not None and len(images) != len(annotations):
-            raise ValueError(
-                f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
-            )
-
-        format = AnnotationFormat(format)
-        if annotations is not None:
-            validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
-
-        data = {}
-        processed_images = []
-        processed_annotations = []
-        pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-            # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
-            if annotations is not None:
-                annotation = self.prepare_annotation(
-                    image,
-                    annotation,
-                    format,
-                    return_segmentation_masks=return_segmentation_masks,
-                    masks_path=masks_path,
-                    input_data_format=ChannelDimension.FIRST,
-                )
-
-            if do_resize:
-                resized_image = self.resize(image, size=size, resample=resample)
-                if annotations is not None:
-                    annotation = self.resize_annotation(
-                        annotation,
-                        orig_size=image.size()[-2:],
-                        target_size=resized_image.size()[-2:],
-                    )
-                image = resized_image
-            # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
-
-            processed_images.append(image)
-            processed_annotations.append(annotation)
-        images = processed_images
-        annotations = processed_annotations if annotations is not None else None
-
-        if do_pad:
-            # depends on all resized image shapes so we need another loop
-            if pad_size is not None:
-                padded_size = (pad_size.height, pad_size.width)
-            else:
-                padded_size = get_max_height_width(images)
-
-            padded_images = []
-            padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-                # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-                if padded_size == image.size()[-2:]:
-                    padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
-                    padded_annotations.append(annotation)
-                    continue
-                image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
-                )
-                padded_images.append(image)
-                padded_annotations.append(annotation)
-                pixel_masks.append(pixel_mask)
-            images = padded_images
-            annotations = padded_annotations if annotations is not None else None
-            data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
-
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
-        if annotations is not None:
-            encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
-            ]
-        return encoded_inputs
 
     def post_process_object_detection(
         self,
@@ -768,7 +662,7 @@ class RTDetrModelOutput(ModelOutput):
 class RTDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -1360,7 +1254,7 @@ class RTDetrMLPPredictionHead(DetrMLPPredictionHead):
 @auto_docstring
 class RTDetrPreTrainedModel(PreTrainedModel):
     config: RTDetrConfig
-    base_model_prefix = "rt_detr"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
@@ -1372,6 +1266,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, RTDetrForObjectDetection):
             if module.model.decoder.class_embed is not None:
                 for layer in module.model.decoder.class_embed:
@@ -1414,7 +1309,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -1422,10 +1317,6 @@ class RTDetrPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
@@ -1769,7 +1660,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
-        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
+        anchors = torch.where(valid_mask, anchors, torch.full((), torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
 
@@ -1807,7 +1698,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1862,7 +1753,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state)[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
@@ -2023,18 +1914,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
             can choose to directly pass a flattened representation of an image.
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
         ```python
         >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

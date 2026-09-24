@@ -226,8 +226,8 @@ class CTRLModel(CTRLPreTrainedModel):
         self.h = nn.ModuleList([EncoderLayer(config, layer_idx=i) for i in range(config.n_layer)])
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
-        self.register_buffer(
-            "pos_encoding", positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
+        self.pos_encoding = nn.Buffer(
+            positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
         )
 
         # Initialize weights and apply final processing
@@ -300,7 +300,7 @@ class CTRLModel(CTRLPreTrainedModel):
         else:
             token_type_embeds = 0
 
-        if attention_mask is not None and attention_mask.ndim < 4:
+        if attention_mask is not None and isinstance(attention_mask, torch.Tensor) and attention_mask.ndim < 4:
             attention_mask = attention_mask.view(batch_size, -1)
 
         causal_mask = create_causal_mask(
@@ -488,11 +488,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Example of single-label classification:
 
         ```python

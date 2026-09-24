@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
 import itertools
 import json
 import tempfile
 import unittest
 
-import httpx
 import numpy as np
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
@@ -26,7 +24,13 @@ from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs, prepare_video_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    load_coco_image,
+    prepare_image_inputs,
+    prepare_video_inputs,
+)
 
 
 if is_torch_available():
@@ -36,7 +40,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Qwen2VLImageProcessingTester:
+class Qwen2VLImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -142,6 +146,30 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             for key, value in self.image_processor_dict.items():
                 if key not in ["min_pixels", "max_pixels"]:
                     self.assertEqual(obj[key], value)
+
+    def test_class_size_mutation(self):
+        """
+        Passing a deprecated min/max pixels should NOT mutate cls.size. Pssing
+        only one of the min or max pixels, should not raise any errors and keep
+        the default `cls.size` for missing entries.
+        """
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+
+        for image_processing_class in self.image_processing_classes.values():
+            original_size = dict(image_processing_class().size)
+
+            # Instantiate with min_pixels to ensure it doesn't mutate class defaults
+            processor = image_processing_class(min_pixels=123)
+            self.assertEqual(processor.size.get("shortest_edge"), 123)
+
+            # The default is already `123`, so we get identical pixels
+            encoded_images_1 = processor(image_inputs, min_pixels=123, return_tensors="pt")
+            encoded_images_2 = processor(image_inputs, return_tensors="pt")
+            torch.allclose(encoded_images_1.pixel_values, encoded_images_2.pixel_values)
+
+            # Check if class default was mutated
+            processor_reloaded = image_processing_class()
+            self.assertEqual(dict(processor_reloaded.size), original_size)
 
     def test_select_best_resolution(self):
         # Test with a final resize resolution
@@ -294,11 +322,7 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}

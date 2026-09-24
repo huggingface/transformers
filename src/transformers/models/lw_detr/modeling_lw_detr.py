@@ -307,13 +307,11 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, LwDetrViTEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LwDetrViTLayer):
@@ -956,8 +954,9 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [LwDetrAttention, LwDetrMultiscaleDeformableAttention],
-        "hidden_states": [LwDetrDecoderLayer],
+        "attentions": LwDetrAttention,
+        "cross_attentions": LwDetrMultiscaleDeformableAttention,
+        "hidden_states": LwDetrDecoderLayer,
     }
 
     @torch.no_grad()
@@ -1318,7 +1317,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1482,7 +1481,7 @@ class LwDetrMLPPredictionHead(nn.Module):
 class LwDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -1558,18 +1557,12 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, LwDetrForObjectDetection
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

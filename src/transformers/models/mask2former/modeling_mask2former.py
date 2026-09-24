@@ -417,7 +417,13 @@ class Mask2FormerHungarianMatcher(nn.Module):
         mask_labels: torch.Tensor,
         class_labels: torch.Tensor,
     ) -> list[tuple[Tensor]]:
-        """
+        """Performs the matching
+
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             masks_queries_logits (`torch.Tensor`):
                 A tensor of dim `batch_size, num_queries, num_labels` with the classification logits.
@@ -466,10 +472,10 @@ class Mask2FormerHungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
-            # eliminate infinite values in cost_matrix to avoid the error ``ValueError: cost matrix is infeasible``
-            cost_matrix = torch.minimum(cost_matrix, torch.tensor(1e10))
-            cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
-            cost_matrix = torch.nan_to_num(cost_matrix, 0)
+            # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+            # these predictions only if there are no other valid predictions.
+            max_value = torch.finfo(cost_matrix.dtype).max
+            cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
             # do the assignment using the hungarian algorithm in scipy
             assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
@@ -504,7 +510,7 @@ class Mask2FormerLoss(nn.Module):
         self.eos_coef = config.no_object_weight
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
         # pointwise mask loss parameters
         self.num_points = config.train_num_points
@@ -871,10 +877,23 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
         temperature: int = 10000,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        y_embed = mask.cumsum(1, dtype=dtype)
-        x_embed = mask.cumsum(2, dtype=dtype)
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
         if normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
@@ -2125,6 +2144,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
 
@@ -2165,7 +2185,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Mask2FormerPixelDecoder):
             init.normal_(module.level_embed, std=0)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -2173,16 +2193,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
 
         elif isinstance(module, Mask2FormerLoss):
             empty_weight = torch.ones(module.num_labels + 1)
@@ -2353,7 +2363,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
@@ -2388,7 +2398,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
@@ -2424,7 +2434,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

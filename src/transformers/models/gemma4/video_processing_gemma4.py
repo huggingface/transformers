@@ -19,14 +19,14 @@ from ...image_processing_utils import BatchFeature
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput
 
 
@@ -92,7 +92,7 @@ def get_aspect_ratio_preserving_size(
     # Handle edge cases where one or both dimensions round to 0
     if target_height == 0 and target_width == 0:
         raise ValueError(
-            "Attempting to resize to a 0 x 0 image. Resized height should be divisble by "
+            "Attempting to resize to a 0 x 0 image. Resized height should be divisible by "
             f"`pooling_kernel_size * patch_size`={pooling_kernel_size * patch_size}."
         )
 
@@ -151,10 +151,7 @@ def pad_to_max_patches(
     return video, positions
 
 
-@add_start_docstrings(
-    "Constructs a Gemma4 video processor that samples frames from videos for use with the Gemma4 model.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-)
+@auto_docstring
 class Gemma4VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = [0.0, 0.0, 0.0]

@@ -135,7 +135,10 @@ class AyaVisionModel(LlavaModel):
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
-        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
+        pooler_output = self.multi_modal_projector(selected_image_feature)
+        image_outputs.pooler_output = pooler_output.reshape(
+            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
+        )
 
         return image_outputs
 
@@ -208,11 +211,6 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AyaVisionCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
