@@ -24,6 +24,7 @@
 #   TMP_CACHE=<prefix>        run with a throwaway hub cache under that prefix.
 #   UPLOAD=1                  upload the results as well as writing them out. Needs RESULTS_REPO_ID.
 #   RESULTS_REPO_ID=<repo>    the dataset repo an upload publishes to.
+#   TEST_TIMEOUT=3600         seconds after which a single test is failed rather than waited for.
 #
 # Only one process at a time can hold a given TPU chip, and torch_tpu aborts the process rather than
 # raising when it cannot acquire one, so do not run anything else that runs a TPU op alongside.
@@ -39,6 +40,11 @@
 set -euo pipefail
 
 export TRANSFORMERS_IS_CI=yes NO_COLOR=1 OMP_NUM_THREADS=8
+
+# Every model runs in one pytest process, so a single test that never finishes holds up every model
+# after it: Whisper's long-form beam-search integration test was still running after an hour on TPU.
+# Fail such a test and move on; the slowest tests that do finish take about 22 minutes.
+export PYTEST_ADDOPTS="${PYTEST_ADDOPTS:-} --timeout=${TEST_TIMEOUT:-3600}"
 
 # `TPU_VISIBLE_DEVICES` is torch_tpu's `CUDA_VISIBLE_DEVICES` and does restrict which chips the
 # process opens, but `torch.tpu.device_count()` keeps reporting every chip on the host (see the
