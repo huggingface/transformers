@@ -36,8 +36,7 @@ def eager_paged_attention_forward(
             "inputs and the 4D mask that continuous batching prepares; on a standard forward it would attend "
             "bidirectionally. Use `eager` for a standard forward."
         )
-    # Paged cache update happens with flash attention shapes, ie. [batch_size, seq_len, num_kv_heads, head_dim]
-    key, value = (x.transpose(1, 2) for x in (key, value))
+    # Paged cache update uses the same format as the regular Cache update so that one day they can be unified.
     key, value = cache.update(
         key_states=key,
         value_states=value,
@@ -45,7 +44,6 @@ def eager_paged_attention_forward(
         read_index=kwargs["read_index"],
         write_index=kwargs["write_index"],
     )
-    key, value = (x.transpose(1, 2) for x in (key, value))
 
     # Repeat the key and value tensors for each group of key-value heads
     if hasattr(module, "num_key_value_groups"):
