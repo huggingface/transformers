@@ -181,12 +181,16 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `return_last_hidden_state=True`):
+        The last layer hidden state of the model. Returned independently of `output_hidden_states` so downstream users
+        can avoid materializing every intermediate layer.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+    last_hidden_state: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -2187,6 +2191,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         per_layer_inputs: torch.Tensor | None = None,
+        return_last_hidden_state: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
@@ -2204,6 +2209,9 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
             to reverse the main embedding, which is expensive.
+        return_last_hidden_state (`bool`, *optional*, defaults to `False`):
+            Whether to return the last layer hidden state of the model independently of `output_hidden_states`.
+            Useful to avoid materializing every intermediate layer's hidden state.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -2247,6 +2255,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
             audio_hidden_states=outputs.audio_hidden_states,
             shared_kv_states=outputs.shared_kv_states,
+            last_hidden_state=hidden_states if return_last_hidden_state else None,
         )
 
     @auto_docstring
