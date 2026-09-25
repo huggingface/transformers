@@ -589,6 +589,24 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             )
         return inputs_dict
 
+    def test_forward_with_labels_without_decoder_start_token_id(self):
+        # Released hub checkpoints ship decoder.decoder_start_token_id=None and rely
+        # on bos_token_id; forward(labels=...) must not require config surgery.
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.decoder.decoder_start_token_id = None
+            self.assertIsNotNone(config.decoder.bos_token_id)
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            # Labels-only path: drop any decoder_input_ids to hit the hub path.
+            inputs.pop("decoder_input_ids", None)
+            outputs = model(**inputs)
+            self.assertIsNotNone(outputs.loss)
+
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             self.skipTest(reason="model_tester.is_training is set to False")
