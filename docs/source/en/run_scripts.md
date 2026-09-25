@@ -140,7 +140,7 @@ hf jobs uv run --flavor a10g-small --timeout 30m -s HF_TOKEN -- \
     --predict_with_generate
 ```
 
-This trains on 500 examples and finishes in about three minutes. For the full run, drop `--max_train_samples` and `--max_eval_samples` and raise `--timeout`. The header installs `transformers` from `main`, so the run uses the same code as the script. See [Train Models on Jobs](https://huggingface.co/docs/hub/jobs-training) for hardware, checkpoints and multi-GPU runs.
+This trains on 500 examples and finishes in about three minutes. For the full run, drop `--max_train_samples` and `--max_eval_samples` and raise `--timeout`. The header installs Transformers from `main`, so the run uses the same code as the script. See [Train Models on Jobs](https://huggingface.co/docs/hub/jobs-training) for hardware, checkpoints, and multi-GPU runs.
 
 ## Accelerate
 
