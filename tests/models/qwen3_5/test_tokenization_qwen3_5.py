@@ -14,7 +14,9 @@
 
 import unittest
 
-from transformers import Qwen3_5Tokenizer
+from parameterized import parameterized
+
+from transformers import AutoTokenizer, Qwen3_5Tokenizer, TokenizersBackend
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -63,3 +65,25 @@ class Qwen3_5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         self.assertEqual(tokenizer.model_input_names, ["input_ids", "attention_mask"])
+
+    @parameterized.expand(
+        [
+            "Qwen/Qwen3.8-Flash-Next",  # model_type: qwen4_exp
+            "Qwen/Qwen3.6-27B",  # model_type: qwen3_5
+            "Qwen/Qwen3.6-35B-A3B",  # model_type: qwen3_5_moe
+            "Qwen/Qwen3.8-2.4T-A95B",  # model_type: qwen3_5_moe_text
+        ]
+    )
+    def test_auto_skips_incorrect_hub_tokenizer_class(self, repo_id):
+        """These checkpoints' hub tokenizer_config.json incorrectly sets tokenizer_class=Qwen2Tokenizer.
+        AutoTokenizer should use the registered model_type mapped Qwen3_5Tokenizer instead,
+        matching the hub's tokenizer.json."""
+        tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
+        tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
+
+        self.assertIsInstance(tokenizer_auto, Qwen3_5Tokenizer)
+
+        text = "नमस्ते दुनिया"
+        auto_ids = tokenizer_auto.encode(text, add_special_tokens=False)
+        tok_ids = tokenizer_tok.encode(text, add_special_tokens=False)
+        self.assertEqual(auto_ids, tok_ids)
