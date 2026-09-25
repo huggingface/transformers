@@ -45,6 +45,8 @@ from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     AutoTokenizer,
+    Qwen3MoeConfig,
+    Qwen3MoeForCausalLM,
     Trainer,
     TrainerState,
     TrainingArguments,
@@ -97,6 +99,7 @@ from .trainer_test_utils import (
     RegressionPreTrainedModel,
     RegressionRandomPreTrainedModel,
     RegressionTrainingArguments,
+    RepeatDataset,
     TrainerIntegrationCommon,
     get_dataset,
     get_language_model_trainer,
@@ -454,6 +457,45 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
+
+    def test_resume_training_with_weight_conversion(self):
+        config = Qwen3MoeConfig(
+            vocab_size=100,
+            hidden_size=32,
+            moe_intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_experts=2,
+            num_experts_per_tok=1,
+        )
+        train_dataset = RepeatDataset(torch.randint(0, 100, (16,)))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kwargs = {"output_dir": tmpdir, "max_steps": 2, "save_steps": 1, "per_device_train_batch_size": 2}
+            trainer = Trainer(
+                model=Qwen3MoeForCausalLM(config), args=TrainingArguments(**kwargs), train_dataset=train_dataset
+            )
+            trainer.train()
+            state_dict = trainer.model.state_dict()
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-1")
+            for sharded in (False, True):
+                if sharded:
+                    self.convert_to_sharded_checkpoint(checkpoint)
+
+                # Reinitialize trainer
+                trainer = Trainer(
+                    model=Qwen3MoeForCausalLM(config), args=TrainingArguments(**kwargs), train_dataset=train_dataset
+                )
+                trainer.train(resume_from_checkpoint=checkpoint)
+                for name, param in trainer.model.state_dict().items():
+                    torch.testing.assert_close(param.cpu(), state_dict[name].cpu())
+
+                trainer.state.best_model_checkpoint = checkpoint
+                trainer._load_best_model()
+                best_state_dict = Qwen3MoeForCausalLM.from_pretrained(checkpoint, device_map=torch_device).state_dict()
+                for name, param in trainer.model.state_dict().items():
+                    torch.testing.assert_close(param.cpu(), best_state_dict[name].cpu())
 
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_checkpoint(self):
