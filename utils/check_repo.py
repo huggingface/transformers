@@ -108,6 +108,7 @@ PRIVATE_MODELS = [
     "Idefics2PerceiverResampler",
     "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
+    "GraniteForDoclingVisionTransformer",
     "Kosmos2_5TextModel",
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
@@ -303,6 +304,7 @@ IGNORE_NON_TESTED = (
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
         "Exaone4_5_VisionModel",  # Building part of a bigger model
         "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
+        "GraniteForDoclingTextModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteForDoclingModel.
         "DiffusionGemmaDecoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
@@ -557,6 +559,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "Ernie4_5_VL_MoeTextModel",  # BC Alias
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
         "Granite4VisionTextModel",  # Building part of bigger (tested) model.
+        "GraniteForDoclingTextModel",  # Building part of bigger (tested) model.
         "InklingTextModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
