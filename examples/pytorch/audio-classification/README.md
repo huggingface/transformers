@@ -66,7 +66,7 @@ On a single V100 GPU (16GB), this script should run in ~14 minutes and yield acc
 
 ## Multi-GPU
 
-The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) for 🌎 **Language Identification** on the [CommonLanguage dataset](https://huggingface.co/datasets/anton-l/common_language).
+The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) for 🌎 **Language Identification** on the [CommonLanguage dataset](https://huggingface.co/datasets/regisss/common_language).
 
 ```bash
 python run_audio_classification.py \
