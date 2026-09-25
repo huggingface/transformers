@@ -503,6 +503,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "MetaClip2TextModelWithProjection",
         "MetaClip2VisionModel",
         "MetaClip2VisionModelWithProjection",
+        "Lfm2AudioDetokenizer",  # Shares Lfm2Config with LFM2 and is loaded explicitly from a checkpoint subfolder
         "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
         "Emu3VQVAE",  # no autoclass for VQ-VAE models
         "Emu3TextModel",  # Building part of bigger (tested) model
