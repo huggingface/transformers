@@ -131,10 +131,23 @@ def sdpa_attention_forward(
     # When `is_causal = False` and the `attention_mask` is not of boolean type, the Ascend NPU's SDPA interface cannot utilize the FlashAttentionScore operator，
     # and falls back to small-operator concatenation. To invoke the FlashAttentionScore, the attention_mask must be converted to boolean type.
     # This adaptation ensures the `attention_mask` meets the requirement for using FlashAttentionScore.
+    # The conversion below is only meaningful for masks that carry *boolean* semantics, i.e. whose entries are
+    # either `0` (keep) or `-inf` / `torch.finfo(dtype).min` (mask out). Some models instead pass an *additive*
+    # attention bias through `attention_mask` (e.g. Parakeet's relative position bias, see
+    # `modeling_parakeet.py`), where the magnitude of every entry carries information. Booleanizing such a mask
+    # maps every non-zero entry to the same value and silently discards the bias, so it is left untouched.
     if _is_torch_npu_available:
         if attention_mask is not None and attention_mask.dtype != torch.bool:
-            # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
-            attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
+            if attention_mask.is_floating_point():
+                neg_fill = torch.finfo(attention_mask.dtype).min
+                has_boolean_semantics = (
+                    (attention_mask == 0) | (attention_mask == neg_fill) | attention_mask.isneginf()
+                ).all()
+            else:
+                has_boolean_semantics = True
+            if has_boolean_semantics:
+                # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
+                attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
 
     # This scenario can only happen during prefill with an empty StaticCache. Technically, since sdpa's `is_causal` mask alignment
     # is upper-left, `is_causal=True` is enough to correctly compute the attention. However, sdpa will only dispatch to
