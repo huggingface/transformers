@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import json
 import logging
 import os
 import tempfile
@@ -119,6 +120,30 @@ class GenerationConfigTest(unittest.TestCase):
 
         # `.update()` returns a dictionary of unused kwargs
         self.assertEqual(unused_kwargs, {"foo": "bar"})
+
+    def test_to_json_string_dataclass(self):
+        from dataclasses import dataclass
+
+        @dataclass
+        class CustomParam:
+            foo: str = "bar"
+            value: int = 123
+
+        @dataclass
+        class CustomWithDict:
+            mapping: dict
+
+        config = GenerationConfig()
+        config.custom_param = CustomParam(foo="baz", value=456)
+        config.custom_list = [CustomParam(foo="item1", value=1), CustomParam(foo="item2", value=2)]
+        config.custom_nested = CustomWithDict(mapping={1: "a", 2: "b"})
+
+        json_str = config.to_json_string(use_diff=False)
+        parsed = json.loads(json_str)
+
+        self.assertEqual(parsed["custom_param"], {"foo": "baz", "value": 456})
+        self.assertEqual(parsed["custom_list"], [{"foo": "item1", "value": 1}, {"foo": "item2", "value": 2}])
+        self.assertEqual(parsed["custom_nested"], {"mapping": {"1": "a", "2": "b"}})
 
     def test_kwarg_init(self):
         """Tests that we can overwrite attributes at `from_pretrained` time."""
