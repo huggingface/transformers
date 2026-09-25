@@ -20,6 +20,7 @@ import pytest
 
 from transformers import dynamic_module_utils
 from transformers.dynamic_module_utils import get_cached_module_file, get_imports
+from transformers.testing_utils import require_symlink_support
 
 
 TOP_LEVEL_IMPORT = """
@@ -235,6 +236,7 @@ def _build_symlinked_hub_cache(repo_root: Path, files: dict[str, str], revision:
     return snapshot
 
 
+@require_symlink_support
 def test_get_cached_module_file_local_handles_symlinked_hub_cache(monkeypatch, tmp_path):
     # In a real hub cache the snapshot files are symlinks into a content-addressed ``blobs/`` dir,
     # so relative-import discovery must follow the named ``*.py`` symlinks in the snapshot dir rather
