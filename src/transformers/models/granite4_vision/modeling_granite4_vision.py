@@ -1182,8 +1182,11 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         # override -> model has only deepstack features with no pooler output
 
         def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
-            return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
+            if isinstance(inputs, torch.Tensor):
+                return inputs.repeat_interleave(repeat_times, dim=0)
+            else:
+                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
+                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
 
         image_outputs = mm_encoder_output.get("image")
         if image_outputs is None or getattr(image_outputs, "deepstack_features", None) is None:

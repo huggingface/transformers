@@ -38,6 +38,7 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
+from ..auto import AutoModel
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
@@ -575,7 +576,8 @@ class Qwen3_5Model(Qwen2VLModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen3_5VisionModel._from_config(config.vision_config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
 
     def get_rope_index(
         self,

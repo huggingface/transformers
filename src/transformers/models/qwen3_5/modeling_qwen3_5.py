@@ -69,6 +69,7 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
+from ..auto import AutoModel
 from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 
 
@@ -1314,8 +1315,8 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen3_5VisionModel._from_config(config.vision_config)
-        self.language_model = Qwen3_5TextModel._from_config(config.text_config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing

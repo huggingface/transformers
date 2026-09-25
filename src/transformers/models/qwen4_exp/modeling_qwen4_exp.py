@@ -71,6 +71,7 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
+from ..auto import AutoModel
 from .configuration_qwen4_exp import Qwen4ExpConfig, Qwen4ExpTextConfig, Qwen4ExpVisionConfig
 
 
@@ -2025,8 +2026,8 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen4ExpVisionModel._from_config(config.vision_config)
-        self.language_model = Qwen4ExpTextModel._from_config(config.text_config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing

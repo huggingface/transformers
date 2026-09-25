@@ -670,6 +670,10 @@ class Idefics3Model(Idefics3PreTrainedModel):
                 )
             image_hidden_states = mm_encoder_outputs["image"].pooler_output
         elif isinstance(mm_encoder_outputs, torch.Tensor):
+            logger.warning(
+                "Passing `mm_encoder_outputs` (prev `image_hidden_states`) as a single tensor for pooled outputs "
+                "is deprecated and will be removed in v5.20. Please pass the whole output dict as `mm_encoder_outputs`"
+            )
             image_hidden_states = mm_encoder_outputs
         else:
             image_hidden_states = None

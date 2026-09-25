@@ -559,7 +559,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @deprecate_kwarg("pixel_values", version="v5.12.0", new_name="pixel_values_videos")
+    @deprecate_kwarg("pixel_values", version="v5.22.0", new_name="pixel_values_videos")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )

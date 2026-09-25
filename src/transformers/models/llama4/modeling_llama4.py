@@ -1190,13 +1190,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
-            The tensors corresponding to the input images.
-        vision_feature_select_strategy (`str`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`
-        """
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         return self.vision_model(pixel_values, **kwargs)
 
@@ -1288,11 +1281,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
-                pixel_values=pixel_values,
-                vision_feature_select_strategy=vision_feature_select_strategy,
-                return_dict=True,
-            )
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].last_hidden_state

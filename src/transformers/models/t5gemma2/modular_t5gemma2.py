@@ -904,6 +904,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
@@ -919,7 +920,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
                 position_ids=position_ids,
                 inputs_embeds=inputs_embeds,
                 pixel_values=pixel_values,
-                encoder_outputs=encoder_outputs,
+                mm_encoder_outputs=mm_encoder_outputs,
                 return_dict=True,
                 **kwargs,
             )
@@ -1019,6 +1020,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
@@ -1044,6 +1046,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
