@@ -26,12 +26,12 @@ very little annotated data to yield good performance on speech classification da
 
 ## Single-GPU
 
-The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) on the 🗣️ [Keyword Spotting subset](https://huggingface.co/datasets/superb#ks) of the SUPERB dataset.
+The following command shows how to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) on the 🗣️ [Keyword Spotting subset](https://huggingface.co/datasets/s3prl/superb#ks) of the SUPERB dataset.
 
 ```bash
 python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
-    --dataset_name superb \
+    --dataset_name s3prl/superb \
     --dataset_config_name ks \
     --output_dir wav2vec2-base-ft-keyword-spotting \
     --remove_unused_columns False \
@@ -71,7 +71,7 @@ The following command shows how to fine-tune [wav2vec2-base](https://huggingface
 ```bash
 python run_audio_classification.py \
     --model_name_or_path facebook/wav2vec2-base \
-    --dataset_name common_language \
+    --dataset_name speechbrain/common_language \
     --audio_column_name audio \
     --label_column_name language \
     --output_dir wav2vec2-base-lang-id \
@@ -134,8 +134,8 @@ python run_audio_classification.py \
 The following table shows a couple of demonstration fine-tuning runs.
 It has been verified that the script works for the following datasets:
 
-- [SUPERB Keyword Spotting](https://huggingface.co/datasets/superb#ks)
-- [Common Language](https://huggingface.co/datasets/common_language)
+- [SUPERB Keyword Spotting](https://huggingface.co/datasets/s3prl/superb#ks)
+- [Common Language](https://huggingface.co/datasets/speechbrain/common_language)
 
 | Dataset | Pretrained Model | # transformer layers | Accuracy on eval | GPU setup | Training time | Fine-tuned Model & Logs |
 |---------|------------------|----------------------|------------------|-----------|---------------|--------------------------|

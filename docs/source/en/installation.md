@@ -197,7 +197,7 @@ Set the environment variable `HF_HUB_OFFLINE=1` to prevent HTTP calls to the Hub
 
 ```bash
 HF_HUB_OFFLINE=1 \
-python examples/pytorch/language-modeling/run_clm.py --model_name_or_path meta-llama/Llama-2-7b-hf --dataset_name wikitext ...
+python examples/pytorch/language-modeling/run_clm.py --model_name_or_path meta-llama/Llama-2-7b-hf --dataset_name Salesforce/wikitext ...
 ```
 
 Another option for only loading cached files is to set `local_files_only=True` in [`~PreTrainedModel.from_pretrained`].

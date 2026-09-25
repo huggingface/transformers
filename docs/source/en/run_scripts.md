@@ -77,7 +77,7 @@ python examples/pytorch/summarization/run_summarization.py \
     --max_predict_samples 50 \
     --do_train \
     --do_eval \
-    --dataset_name cnn_dailymail \
+    --dataset_name abisee/cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir /tmp/tst-summarization \
@@ -137,7 +137,7 @@ Run [accelerate launch](https://huggingface.co/docs/accelerate/package_reference
 ```bash
 accelerate launch run_summarization_no_trainer.py \
     --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
+    --dataset_name abisee/cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir ~/tmp/tst-summarization \

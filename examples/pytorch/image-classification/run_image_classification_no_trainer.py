@@ -75,7 +75,7 @@ def parse_args():
     parser.add_argument(
         "--dataset_name",
         type=str,
-        default="cifar10",
+        default="uoft-cs/cifar10",
         help=(
             "The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private,"
             " dataset)."
