@@ -77,7 +77,7 @@ FLASH_ATTN_KERNEL_VERSIONS = {
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
     "kernels-community/flash-attn4": 0,
-    "kernels-community/metal-flash-sdpa": 1,
+    "kernels-community/metal-flash-sdpa": 2,
 }
 
 # Meta information on each mainline FA compatibility:
