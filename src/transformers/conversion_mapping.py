@@ -28,6 +28,7 @@ from .core_model_loading import (
     PermuteForRope,
     PrefixChange,
     Transpose,
+    Unsqueeze,
     WeightConverter,
     WeightRenaming,
     WeightTransform,
@@ -1384,6 +1385,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^model.language_model.lm_head", r"lm_head"),
             WeightRenaming(r"^model.vision_projector", r"model.projector"),
             PrefixChange(prefix_to_remove="model", model_prefix="model.language_model"),
+        ],
+        "llava_onevision1_5": [
+            WeightRenaming(r"^visual\.", r"model.visual."),
+            WeightRenaming(r"^model\.(?!visual\.)", r"model.language_model."),
+            WeightConverter(
+                source_patterns=r"class_embedding$",
+                target_patterns=r"class_embedding.weight",
+                operations=[Unsqueeze(dim=0)],
+            ),
+            WeightRenaming(r"class_pos_emb$", r"class_pos_emb.weight"),
         ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),

@@ -112,6 +112,13 @@ else:
             ("layoutxlm", {"torchvision": "LayoutLMv2ImageProcessor", "pil": "LayoutLMv2ImageProcessorPil"}),
             ("lighton_ocr", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("llava_next_video", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
+            (
+                "llava_onevision1_5",
+                {
+                    "torchvision": "Ernie4_5_VLMoeImageProcessor",
+                    "pil": "Ernie4_5_VLMoeImageProcessorPil",
+                },
+            ),
             ("lw_detr", {"torchvision": "DeformableDetrImageProcessor", "pil": "DeformableDetrImageProcessorPil"}),
             ("metaclip_2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("mgp-str", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
