@@ -17,6 +17,14 @@ rendered properly in your Markdown viewer.
 
 # RegNet
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
+
 
 ## Overview
 

@@ -203,7 +203,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_no_panoptic(self):
         model_id = "hf-internal-testing/tiny-random-mobilevit"
-        # The default task is `image-classification` we need to override
         pipe = pipeline(task="image-segmentation", model=model_id)
 
         # This model does NOT support neither `instance` nor  `panoptic`
@@ -216,7 +215,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         self.assertEqual(
             str(e.exception),
             "Subtask panoptic is not supported for model <class"
-            " 'transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
+            " 'transformers.models.deprecated.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
         )
         with self.assertRaises(ValueError) as e:
             pipe(
@@ -226,7 +225,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         self.assertEqual(
             str(e.exception),
             "Subtask instance is not supported for model <class"
-            " 'transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
+            " 'transformers.models.deprecated.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
         )
 
     @require_torch

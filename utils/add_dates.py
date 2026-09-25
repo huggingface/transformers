@@ -225,7 +225,8 @@ def _normalize_model_card_name(model_card: str) -> str:
 
 def _should_skip_model_card(model_card: str) -> bool:
     """Check if model card should be skipped"""
-    return model_card in ("auto.md", "timm_wrapper.md")
+    deprecated_path = os.path.join(MODELS_PATH, "deprecated", model_card.removesuffix(".md").replace("-", "_"))
+    return model_card in ("auto.md", "timm_wrapper.md") or os.path.isdir(deprecated_path)
 
 
 def _read_model_card_content(model_card: str) -> str:

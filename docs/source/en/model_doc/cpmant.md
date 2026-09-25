@@ -17,6 +17,14 @@ rendered properly in your Markdown viewer.
 
 # CPMAnt
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
+
 [CPMAnt](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live) is a 10B-parameter open-source Chinese pre-trained language model and the first milestone of the CPM-Live open training project. It achieves strong results with delta tuning on the CUGE benchmark, and compressed variants are available for different hardware configurations.
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`CpmAntForCausalLM`] class.
