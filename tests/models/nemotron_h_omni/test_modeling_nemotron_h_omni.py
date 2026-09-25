@@ -260,7 +260,9 @@ class NemotronHOmniModelTestMixin:
     def _audio_features_prepare_config_and_inputs(self):
         tester = self.model_tester
         input_features = floats_tensor([tester.batch_size, tester.feat_seq_length, tester.num_mel_bins])
-        input_features_mask = torch.ones(tester.batch_size, tester.feat_seq_length, dtype=torch.long)
+        input_features_mask = torch.ones(
+            tester.batch_size, tester.feat_seq_length, dtype=torch.long, device=torch_device
+        )
         return tester.get_config(), {"input_features": input_features, "input_features_mask": input_features_mask}
 
     def _image_features_get_expected_num_attentions(self, model_tester=None):
@@ -334,6 +336,7 @@ class NemotronHOmniModelTestMixin:
 @require_torch
 class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTest, unittest.TestCase):
     model_tester_class = NemotronHOmniVision2TextModelTester
+    test_torch_exportable = False  # packed image patches use data-dependent shapes in RadioModel._forward_packed
 
     @parameterized.expand([True, False, None])
     @unittest.skip("FIXME raushan - common needs a better way to tell bs for packed images")
