@@ -183,14 +183,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
     def test_mismatching_num_image_tokens(self):
         pass
 
-    @unittest.skip(reason="MiniCPM-V uses custom pixel_values format (list-of-list), skipping common input tests")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V uses custom pixel_values format (list-of-list), skipping common input tests")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="Compile not yet supported for MiniCPM-V models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):

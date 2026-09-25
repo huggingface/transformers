@@ -336,10 +336,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     def test_batching_equivalence(self, atol=2e-5, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    # FIXME raushan, no idea why yet
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("HunYuanVL currently validates the vision path with eager attention.")
     def test_sdpa_can_dispatch_on_flash(self):
         pass

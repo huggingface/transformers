@@ -227,10 +227,6 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip("Audio placeholder embeddings are replaced when audio inputs are provided")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("Accelerate does not create a device map when the entire tiny model fits on CPU")
     def test_cpu_offload(self):
         pass
@@ -451,10 +447,6 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip("Inkling requires an explicit prompt for generation")
     def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip("Image placeholder embeddings are replaced when pixel values are provided")
-    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(

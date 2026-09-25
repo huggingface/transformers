@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch MiniCPM-V 4.7 model."""
 
-import copy
 import unittest
 
 import pytest
@@ -34,7 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import MODEL_MAPPING_NAMES, floats_tensor, get_values
+from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -323,36 +322,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     )
     def test_mismatching_num_image_tokens(self):
         pass
-
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if model_class.__name__ not in get_values(MODEL_MAPPING_NAMES):
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            inputs.pop("pixel_values")
-            inputs.pop("target_sizes")
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 1
-            )
-
-            wte = model.get_input_embeddings()
-            input_ids = inputs["input_ids"]
-            # some models infer position ids/attn mask differently when input ids
-            # by check if pad_token let's make sure no padding is in input ids
-            not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
-            input_ids[input_ids == pad_token_id] = not_pad_token_id
-            del inputs["input_ids"]
-            inputs_embeds = wte(input_ids)
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     @unittest.skip(reason="Compile not yet supported for MiniCPM-V models")
     @pytest.mark.torch_compile_test

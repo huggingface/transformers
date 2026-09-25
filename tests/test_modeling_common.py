@@ -3103,6 +3103,11 @@ class ModelTesterMixin(ExportTesterMixin):
                 config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 1
             )
 
+            # Some models prepare position IDs based on input IDs, and skip if embeddings
+            # are used. Precompute in that case to force matching
+            if hasattr(model.base_model, "get_rope_index"):
+                inputs["position_ids"] = model.base_model.get_rope_index(**inputs)[0]
+
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
