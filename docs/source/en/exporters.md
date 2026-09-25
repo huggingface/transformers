@@ -218,6 +218,22 @@ outputs = compiled(ov_inputs)
 </hfoption>
 </hfoptions>
 
+### ExecuTorch constant methods
+
+Use `ExecutorchConfig.constant_methods` to add zero-argument methods that return constants from the
+exported program. This works with `export()` and `export_for_generation()` across ExecuTorch backends.
+
+```python
+from transformers.exporters import ExecutorchConfig
+
+config = ExecutorchConfig(constant_methods={"get_model_version": 1})
+```
+
+Each dictionary key is a method name and its value is the returned constant. Values must use
+ExecuTorch-supported types, such as scalars or tensors, and be appropriate for the exported component.
+Names that conflict with automatically generated constants are rejected. The supplied dictionary is
+not modified.
+
 ## Dynamic shapes
 
 Passing `dynamic=True` marks every tensor
@@ -283,8 +299,6 @@ onnx_program = exporter.export(model, inputs, config=config)
 
 </hfoption>
 <hfoption id="ExecuTorch">
-
-The same explicit-shape configuration applies to XNNPACK and MLX.
 
 ```python
 import torch
@@ -416,9 +430,6 @@ components = exporter.export_for_generation(model, inputs, config=config)
 # components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
 ```
 
-The caller must feed the updated key/value cache tensors returned by each invocation into the next.
-This MLX export path supports `DynamicCache`, but rejects `StaticCache`.
-
 </hfoption>
 <hfoption id="OpenVINO">
 
@@ -512,8 +523,6 @@ components = exporter.export_for_generation(model, inputs, config=config, multi_
 </hfoption>
 <hfoption id="ExecuTorch">
 
-Multi-token decode is supported by both XNNPACK and MLX. Use `DynamicCache` for MLX.
-
 ```python
 from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
@@ -533,19 +542,23 @@ cache handles where they land internally.
 
 ### ExecuTorch off-graph KV cache
 
-Set `ExecutorchConfig(cache_implementation="executorch_off_graph_cache")` to keep historical K/V in an off-graph runtime cache,
-not in graph inputs, outputs, or mutable buffers. This uses ExecuTorch's backend-neutral
-`kvcache::update_and_attend` operator. Initially, export is enabled only for `backend="mlx"`.
-It requires an ExecuTorch build providing `extension.llm.cache.update_and_attend` and
-`extension.llm.export.model_metadata.write_cache_geometry`; the pinned installation above may not
-provide these experimental APIs.
+With ExecuTorch's off-graph cache, the runtime owns historical K/V rather than passing it through
+the graph. This experimental mode currently requires the MLX backend and an ExecuTorch build with
+off-graph cache support.
+
+It supports a single unpadded, decoder-only text sequence with full or sliding-window attention.
+Custom masks, beam search, and speculative generation are not supported.
 
 ```python
-from transformers import GenerationConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from transformers.exporters import ExecutorchConfig, ExecutorchExporter
 
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = tokenizer("Hello, world!", return_tensors="pt")
+
 components = ExecutorchExporter().export_for_generation(
-    model.eval(),
+    model,
     inputs,
     config=ExecutorchConfig(backend="mlx", dynamic=True, cache_implementation="executorch_off_graph_cache"),
     generation_config=GenerationConfig(cache_implementation="dynamic", do_sample=False),
@@ -553,49 +566,14 @@ components = ExecutorchExporter().export_for_generation(
 )
 ```
 
-`GenerationConfig.cache_implementation` controls the ordinary HF cache used during generation
-capture. `ExecutorchConfig.cache_implementation` controls the exported program: `None` (the default)
-preserves the existing HF cache export behavior, while `"executorch_off_graph_cache"` installs off-graph attention
-and removes the captured HF cache and attention masks before `torch.export`. Generation itself is unchanged, and no off-graph
-reference-cache session is needed for capture or tracing. Token positions remain explicit inputs. With
-`multi_token_decode=True` and dynamic shapes, the decode graph can process both an empty-cache
-prompt and subsequent token chunks, within its exported query-length bounds.
+`GenerationConfig.cache_implementation` selects the HF cache used during capture;
+`ExecutorchConfig.cache_implementation` selects the exported representation. Token positions remain
+explicit graph inputs.
 
-Both artifacts publish cache geometry with `write_cache_geometry`: the `get_n_caches`,
-`get_kv_heads`, `get_head_dims`, and `get_windows` constant methods. Entries correspond to the
-off-graph operator's cache layer IDs, with one entry per KV producer rather than per attention call.
-Gemma4's shared-KV layers select the last non-sharing layer of the same attention type. They pass
-that producer's K/V at the same positions with their own queries, reusing the off-graph cache slots.
-A window of zero selects full attention; a positive window selects
-sliding-window attention with a ring cache. Off-graph attention constructs its masks internally from
-absolute token positions and this geometry; no attention-mask tensor is needed by the exported graph.
-`GenerationConfig.max_cache_len` only sizes an HF static cache
-used during capture; it does not set off-graph runtime capacity. There is no `max_cache_len` setting on
-`ExecutorchConfig`: the runtime caller supplies its logical capacity limit and growth policy when constructing the
-cache. Lazy allocation does not mean the runtime has no capacity limit.
-
-Supply additional constant-returning methods with `ExecutorchConfig(constant_methods={...})`.
-For example, an LLM runner may require `get_vocab_size`, `get_activation_dtype`, `get_logits_to_keep_mode`,
-and `get_max_seq_len`. These are caller-supplied, not inferred by the exporter; their values must match
-that component's model and exported shape bounds. Cache geometry is still added automatically, and
-names that overlap the generated geometry methods are rejected. The supplied dictionary is not modified.
-
-The runtime caller must create and install a cache, bind its `llm_cache_registry_key` through
-load-time backend options for **both** artifacts, and reuse that cache for prefill and decode.
-Clear the runtime cache before starting an independent sequence. The returned component dictionary
-does not create a generation runtime, and ordinary Python `Runtime.load_program()` alone does not
-install or bind an off-graph cache.
-
-Initial support is single-sequence, unpadded, decoder-only text models using the standard attention
-interface with full causal attention, sliding-window attention, or a mixture of both. Per-layer K/V
-head geometry and Gemma4-style trailing shared-KV layers are supported. Padding/custom masks,
-SSM/encoder-decoder caches, beam expansion,
-speculative generation, and attention-weight outputs are rejected. Generation requests are checked
-before capture; HF-generated masks are discarded afterward. For direct `export()`, omit
-`attention_mask` or supply an all-ones 2-D mask; caller-supplied 4-D masks and mask dictionaries are
-rejected. Both ordinary dynamic and static HF caches can be used during generation capture.
-Select this on the export config, not on `GenerationConfig`;
-`"executorch_off_graph_cache"` is not a cache implementation for standalone `model.generate()`.
+At runtime, create a cache with the desired capacity and growth policy, and bind its
+`llm_cache_registry_key` through load-time backend options for both prefill and decode artifacts.
+Reuse that cache between calls and clear it before starting a new sequence.
+`Runtime.load_program()` alone does not configure the cache.
 
 ### Static KV cache
 
