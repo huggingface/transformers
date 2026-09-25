@@ -34,7 +34,7 @@ from transformers.utils import (
     to_py_obj,
     transpose,
 )
-from transformers.utils.generic import retry, split_attention_implementation
+from transformers.utils.generic import retry, split_attention_implementation, torch_float
 
 
 if is_torch_available():
@@ -66,6 +66,11 @@ class GenericTester(unittest.TestCase):
         }
 
         self.assertEqual(flatten_dict(input_dict), expected_dict)
+
+    def test_torch_float(self):
+        result = torch_float(9.797958971132712)
+        self.assertIsInstance(result, float)
+        self.assertEqual(result, 9.797958971132712)
 
     def test_transpose_numpy(self):
         x = np.random.randn(3, 4)
