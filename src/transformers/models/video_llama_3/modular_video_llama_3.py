@@ -890,16 +890,16 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
 
 class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
+    _defaults = AttributeError()
 
 
 class VideoLlama3Processor(Qwen3VLProcessor):
+    text_kwargs = {
+        "padding": False,
+        "return_mm_token_type_ids": False,
+    }
+    videos_kwargs = {"return_metadata": True}
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -913,7 +913,7 @@ class VideoLlama3Processor(Qwen3VLProcessor):
             if getattr(tokenizer, "video_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
-        ProcessorMixin.__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+        ProcessorMixin.__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_video_tokens = [

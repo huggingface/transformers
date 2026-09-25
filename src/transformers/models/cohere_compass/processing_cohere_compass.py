@@ -27,19 +27,18 @@ logger = logging.get_logger(__name__)
 
 
 class CohereCompassProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 @auto_docstring
 class CohereCompassProcessor(ProcessorMixin):
     valid_processor_kwargs = CohereCompassProcessorKwargs
+    text_kwargs = {
+        "padding": False,
+        "return_token_type_ids": False,
+        "return_mm_token_type_ids": True,
+    }
+    videos_kwargs = {"return_metadata": True}
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|IMAGE_PAD|>"

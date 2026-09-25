@@ -40,6 +40,13 @@ class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
 class Gemma4Processor(ProcessorMixin):
     valid_processor_kwargs = Gemma4ProcessorKwargs
 
+    text_kwargs = {
+        "padding": True,
+        "return_mm_token_type_ids": True,
+    }
+    images_kwargs = {"do_convert_rgb": True}
+    videos_kwargs = {"return_metadata": True}
+
     def __init__(
         self,
         feature_extractor,
@@ -50,7 +57,6 @@ class Gemma4Processor(ProcessorMixin):
         image_seq_length: int = 280,
         audio_seq_length: int = 750,
         audio_ms_per_token: int = 40,
-        subprocessor_call_kwargs: Gemma4ProcessorKwargs | None = None,
         **kwargs,
     ):
         r"""
@@ -63,8 +69,6 @@ class Gemma4Processor(ProcessorMixin):
             Milliseconds of audio per output soft token. Used to dynamically compute
             the number of audio placeholder tokens as ``ceil(duration_ms / audio_ms_per_token)``.
             The default of 40 comes from the SSCP convolution's 4× time reduction on 10ms frames.
-        subprocessor_call_kwargs ([`Gemma4ProcessorKwargs`], *optional*):
-            Default kwargs passed to any subprocessor calls.
         """
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
@@ -90,25 +94,12 @@ class Gemma4Processor(ProcessorMixin):
         self.boa_token = getattr(tokenizer, "boa_token", None)
         self.eoa_token = getattr(tokenizer, "eoa_token", None)
 
-        if subprocessor_call_kwargs is None:
-            subprocessor_call_kwargs = {
-                "text_kwargs": {
-                    "padding": True,
-                    "return_mm_token_type_ids": True,
-                },
-                "images_kwargs": {
-                    "do_convert_rgb": True,
-                },
-                "videos_kwargs": {"return_metadata": True},
-            }
-
         super().__init__(
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             tokenizer=tokenizer,
             video_processor=video_processor,
             chat_template=chat_template,
-            subprocessor_call_kwargs=subprocessor_call_kwargs,
             **kwargs,
         )
 

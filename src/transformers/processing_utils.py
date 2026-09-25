@@ -452,11 +452,11 @@ class ProcessingKwargs(TypedDict, total=False):
 
     class ModelProcessorKwargs(ProcessingKwargs, total=False):
         images_kwargs: ModelImagesKwargs
-        new_processor_kwarg: bool | None
+        new_processor_kwarg: float
     ```
     """
 
-    _defaults = {}  # Deprecated, use ProcessorMixin.subprocessor_call_kwargs instead.
+    _defaults = {}  # Deprecated, set defaults as class variables on ProcessorMixin instead
 
     text_kwargs: TextKwargs
     images_kwargs: ImagesKwargs
@@ -592,16 +592,26 @@ class ProcessorMixin(PushToHubMixin):
     valid_processor_kwargs = ProcessingKwargs
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets"]
 
-    # Default kwargs passed to any subprocessor calls. Use this only to override defaults of the
-    # subprocessor. For example, to set `return_metadata=True` when calling video processors.
-    # TODO: Discuss if we should save this in the config or not.
-    subprocessor_call_kwargs: ProcessingKwargs | None
+    # Default values for ProcessingKwargs.
+    # Only override subprocessor kwargs if the subprocessor has a different default.
+    # For example, to set `videos_kwargs = {"return_metadata" = True}` to always request
+    # metadata from the video processor.
+    text_kwargs: TextKwargs
+    images_kwargs: ImagesKwargs
+    videos_kwargs: VideosKwargs
+    audio_kwargs: AudioKwargs
+    common_kwargs: dict[str, Any]
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
-        setattr(self, "subprocessor_call_kwargs", kwargs.pop("subprocessor_call_kwargs", None))
+
+        # Pop processor kwargs and set as attributes
+        processor_kwargs = {
+            key: kwargs.pop(key) for key in list(kwargs) if key in self.valid_processor_kwargs.__annotations__
+        }
+        self._set_attributes(**processor_kwargs)
 
         # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
@@ -1022,9 +1032,13 @@ class ProcessorMixin(PushToHubMixin):
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
         # or in the attributes
-        attrs_to_save = list(sig.parameters) + self.__class__.get_attributes()
+        attrs_to_save = (
+            set(sig.parameters)
+            .union(self.__class__.get_attributes())
+            .union(self.valid_processor_kwargs.__annotations__)
+        )
         # extra attributes to be kept
-        attrs_to_save += ["auto_map"]
+        attrs_to_save.add("auto_map")
 
         if "chat_template" in output:
             del output["chat_template"]
@@ -1501,6 +1515,14 @@ class ProcessorMixin(PushToHubMixin):
         else:
             return processor
 
+    def _set_attributes(self, **kwargs):
+        """Resolve and set instance attributes from processor kwargs and class-level defaults."""
+        for key in self.valid_processor_kwargs.__annotations__:
+            if key in kwargs:
+                setattr(self, key, kwargs[key])
+            elif hasattr(self, key):
+                setattr(self, key, copy.deepcopy(getattr(self, key)))
+
     def _merge_kwargs(
         self,
         ModelProcessorKwargs: ProcessingKwargs,
@@ -1551,23 +1573,23 @@ class ProcessorMixin(PushToHubMixin):
                         },
                     }
                 ```
-            7) Recommended: `subprocessor_call_kwargs` specified in the processor have lowest priority.
+            7) Recommended: processor attributes have lowest priority.
+                ```python
+                processor_class(..., text_kwargs={"padding": "max_length"}, common_kwargs={"return_tensors": "pt"})
+                ```
+
+                Defaults can be registered as class variables and have lower priority than kwargs passed at initialization time:
                 ```python
                 class MyProcessor(ProcessorMixin):
-                    def __init__(self, tokenizer, subprocessor_call_kwargs: dict[str, Any] | None = None, **kwargs):
-                        if subprocessor_call_kwargs is None:
-                            subprocessor_call_kwargs = {
-                                "text_kwargs": {
-                                    "padding": "max_length",
-                                    "max_length": 64,
-                                },
-                                # Common kwargs have lower priority than modality specific kwargs.
-                                # This matches behavior when passing kwargs directly to __call__.
-                                "common_kwargs": {
-                                    "return_tensors": "pt",
-                                },
-                            }
-                        super().__init__(tokenizer, subprocessor_call_kwargs=subprocessor_call_kwargs, **kwargs)
+                    text_kwargs = {
+                        "padding": "max_length",
+                        "max_length": 64,
+                    }
+                    # Common kwargs have lower priority than modality specific kwargs.
+                    # This matches behavior when passing kwargs directly to __call__.
+                    common_kwargs = {
+                        "return_tensors": "pt",
+                    }
                 ```
         Args:
             ModelProcessorKwargs (`ProcessingKwargs`):
@@ -1610,12 +1632,19 @@ class ProcessorMixin(PushToHubMixin):
         possible_modality_keywords = {"text", "audio", "videos", "images"}
         used_keys = set()
 
+        common_kwargs = getattr(self, "common_kwargs", {})
+
+        # 7): flat, not modality-specific processor attributes
+        for key in self.valid_processor_kwargs.__annotations__:
+            if key != "common_kwargs" and key not in default_kwargs:
+                default_kwargs.update(copy.copy(getattr(self, key)))
+
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
-            # 7): subprocessor_call_kwargs
-            if self.subprocessor_call_kwargs is not None:
-                default_kwargs[modality] = self.subprocessor_call_kwargs.get("common_kwargs", {})
-                default_kwargs[modality].update(self.subprocessor_call_kwargs.get(modality, {}))
+            # 7): modality-specific processor attributes
+            default_kwargs[modality].update(common_kwargs.copy())
+            default_kwargs[modality].update(getattr(self, modality, {}).copy())
+
             # 6): _defaults overrides for BC
             default_kwargs[modality].update(processor_kwargs_defaults.get(modality, {}).copy())
             # Some preprocessors define a set of accepted "valid_kwargs" (currently only vision).
