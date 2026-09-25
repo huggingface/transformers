@@ -62,6 +62,8 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "InklingTextConfig",
     "InklingAudioConfig",
     "InklingVisionConfig",
+    # No public Qwen3-TTS-Tokenizer-25Hz checkpoint yet (https://github.com/QwenLM/Qwen3-TTS/issues/34)
+    "Qwen3TTSTokenizerSingleCodebookConfig",
 }
 
 

@@ -282,6 +282,25 @@ def _build_checkpoint_conversion_mapping():
             # the prefix also renames the `weight_scale_inv` companion).
             WeightRenaming(source_patterns=r"self_attn\.q_b_proj\.", target_patterns="self_attn.q_gate_proj."),
         ],
+        "qwen3_tts_tokenizer_12hz": [
+            WeightRenaming(
+                source_patterns=r"decoder\.quantizer\.rvq_first\.",
+                target_patterns="quantizer.semantic_residual_vector_quantizer.",
+            ),
+            WeightRenaming(
+                source_patterns=r"decoder\.quantizer\.rvq_rest\.",
+                target_patterns="quantizer.acoustic_residual_vector_quantizer.",
+            ),
+            WeightRenaming(source_patterns=r"\.vq\.layers\.", target_patterns=".layers."),
+            WeightRenaming(source_patterns=r"\._codebook\.", target_patterns=".codebook."),
+            WeightRenaming(source_patterns=r"\.embedding_sum", target_patterns=".embed_sum"),
+            WeightRenaming(
+                source_patterns=r"decoder\.pre_transformer\.input_proj\.", target_patterns="decoder.input_proj."
+            ),
+            WeightRenaming(
+                source_patterns=r"decoder\.pre_transformer\.output_proj\.", target_patterns="decoder.output_proj."
+            ),
+        ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
             WeightRenaming(
