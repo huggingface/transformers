@@ -174,6 +174,18 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         )
                         break
 
+            # Extract the pre_tokenizer's Split regex from tokenizer.json when present (e.g. Qwen2Tokenizer)
+            pre_tokenizer_config = tokenizer_json.get("pre_tokenizer")
+            if pre_tokenizer_config:
+                if pre_tokenizer_config.get("type", None) == "Sequence":
+                    pre_tokenizer_config = pre_tokenizer_config["pretokenizers"]
+                elif not isinstance(pre_tokenizer_config, list):
+                    pre_tokenizer_config = [pre_tokenizer_config]
+                for pre_tokenizer in pre_tokenizer_config:
+                    if pre_tokenizer.get("type") == "Split" and "Regex" in pre_tokenizer.get("pattern", {}):
+                        local_kwargs["_pretokenizer_regex"] = pre_tokenizer["pattern"]["Regex"]
+                        break
+
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
             if cls.model is None:
                 if isinstance(vocab, list):
@@ -371,6 +383,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
         # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
         kwargs.pop("_spm_precompiled_charsmap", None)
+        # Same for the checkpoint's own pre_tokenizer regex (see convert_to_native_format): already
+        # consumed by model-specific tokenizers that opt in (e.g. Qwen2Tokenizer), not needed otherwise.
+        kwargs.pop("_pretokenizer_regex", None)
 
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
