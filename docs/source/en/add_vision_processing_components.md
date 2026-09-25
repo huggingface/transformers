@@ -181,32 +181,59 @@ After the mapping is generated, verify the model type appears in the relevant ma
 
 ## Testing
 
-Add tests for each vision processing component in the model test directory. Image and video processor tests follow the same pattern. Inherit from the shared mixin, indicate the fast and slow processing classes when automatic discovery isn't enough, provide model-specific init kwargs, and override the input name when the model uses a non-default output key.
+Add tests for each vision processing component in the model test directory. Use the shared test mixins and provide model-specific initialization kwargs. Image tests discover processor backends automatically through a shared tester, while video tests configure their processor class and fixtures explicitly.
 
 ### Image processor tests
 
-Image processor tests usually live in `tests/models/<model_name>/test_image_processing_<model_name>.py` and inherit from [`ImageProcessingTestMixin`].
+Image processor tests live in `tests/models/<model_name>/test_image_processing_<model_name>.py`. Define a tester that inherits from [`ImageProcessingTester`] and a test class that inherits from [`ImageProcessingTestMixin`] and `unittest.TestCase`.
 
-The image processing mixin finds the image processor classes from `IMAGE_PROCESSOR_MAPPING_NAMES`. Expose model-specific defaults through `image_processor_dict`. Add a tester object only when you need reusable dummy inputs or helper methods for focused tests.
+The image processing tester defines default test attributes such as the processor initialization arguments and parameters to create random inputs for the tests. Only override arguments if they should be different from the image processor defaults. For example, we usually test with smaller image sizes to keep the tests fast. The image processor classes are automatically inferred from `IMAGE_PROCESSOR_MAPPING_NAMES`.
+
+Set `image_processor_tester_class` on the test class. The mixin creates `self.image_processor_tester` and already covers most required test methods.
 
 ```py
+import unittest
+
 from transformers.testing_utils import require_torch, require_vision
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTestMixin, ImageProcessingTester
+
+
+class MyModelImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 2)          # default: 7     
+        kwargs.setdefault("num_channels", 4)        # default: 3
+        kwargs.setdefault("min_resolution", 20)     # default: 30
+        kwargs.setdefault("max_resolution", 100)    # default: 400
+
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 20})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
+
 
 @require_torch
 @require_vision
 class MyModelImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    @property
-    def image_processor_dict(self):
-        return {"size": {"shortest_edge": 224}, "do_resize": True}
+    image_processor_tester_class = MyModelImageProcessingTester
+
+    def test_inherits_from_mixin(self):
+        # Always iterate over all image processing classes
+        for image_processing_class in self.image_processing_classes.values():
+            # self.image_processor_dict contains the default processor init kwargs
+            # including overrides from the tester.
+            image_processor = image_processing_class(**self.image_processor_dict)
+            self.assertIsInstance(image_processor, ImageProcessingMixin)
 ```
 
 Add focused tests for behavior the mixin can't infer, such as custom resizing rules or model-specific kwargs.
 
-Post-processing test mixins are available in `tests/test_image_processing_common.py` and are added on top of [`ImageProcessingTestMixin`].
+Post-processing test mixins are available in `tests/test_image_processing_common.py` and are added on top of `ImageProcessingTestMixin`.
 
 ```py
 class MyModelImageProcessingTest(ImageProcessingTestMixin, MyTaskPostProcessTestMixin, unittest.TestCase):
+    image_processor_tester_class = MyModelImageProcessingTester
 ```
 
 The tests automatically verify that the correct mixins are used for your model. Mixins for new tasks must be added to `tests/test_image_processing_common.py`.

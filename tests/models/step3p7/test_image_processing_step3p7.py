@@ -26,38 +26,23 @@ if is_torch_available():
 
 
 class Step3p7ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=50,
-        do_resize=True,
-        size=None,
-        patch_size=32,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-    ):
-        size = size if size is not None else {"height": 64, "width": 64}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.patch_size = patch_size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 30)
+        kwargs.setdefault("max_resolution", 50)
+
+        # Image processor init kwargs
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 64, "width": 64})
+        kwargs.setdefault("patch_size", 32)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         return {
@@ -67,8 +52,6 @@ class Step3p7ImageProcessingTester(ImageProcessingTester):
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
         }
 
@@ -77,25 +60,7 @@ class Step3p7ImageProcessingTester(ImageProcessingTester):
 @require_vision
 @require_torchvision
 class Step3p7ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Step3p7ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
+    image_processor_tester_class = Step3p7ImageProcessingTester
 
     def _processor(self):
         image_processing_class = next(iter(self.image_processing_classes.values()))
