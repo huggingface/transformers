@@ -828,7 +828,16 @@ def is_pygments_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_torchvision_available() -> bool:
-    return is_vision_available() and is_torch_available() and _is_package_available("torchvision")[0]
+    if not is_vision_available() or not is_torch_available():
+        return False
+    if not _is_package_available("torchvision")[0]:
+        return False
+    try:
+        import torchvision  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 @lru_cache
