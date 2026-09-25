@@ -763,7 +763,7 @@ def _flash_attention_forward(
             The attention implementation to use. If None, will default to the one based on the environment.
     """
     (
-        (flash_fn, flash_varlen_fn, flash_with_kv_cache, pad_fn, unpad_fn),
+        (flash_fn, flash_varlen_fn, flash_kvcache_fn, pad_fn, unpad_fn),
         (process_flash_kwargs_fn, process_paged_kwargs_fn),
     ) = lazy_import_flash_attention(attn_implementation)
     batch_size = query_states.size(0)
@@ -778,7 +778,7 @@ def _flash_attention_forward(
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is
     # safe to use `flash_varlen_fn` knowing we already have all necessary the kwargs.
     is_fa_with_varlen_kwargs = all(x is not None for x in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k))
-    # We can also use `flash_with_kv_cache` to update the paged cache during the call if the kwargs are provided
+    # We can also use `flash_kvcache_fn` to update the paged cache during the call if the kwargs are provided
     is_fa_with_paged_kwargs = all(x is not None for x in (block_table, cu_seq_lens_k, k_cache, v_cache))
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
@@ -801,8 +801,8 @@ def _flash_attention_forward(
         flash_kwargs = flash_kwargs_fn(
             max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
         )
-        out = _flash_attention_forward_paged(
-            flash_with_kv_cache, query_states, key_states, value_states, cu_seq_lens_k, k_cache, v_cache, **flash_kwargs
+        out = _flash_attention_forward_kvcache(
+            flash_kvcache_fn, query_states, key_states, value_states, cu_seq_lens_k, k_cache, v_cache, **flash_kwargs
         )
         return out.view(batch_size, -1, *out.shape[-2:])
 
@@ -842,8 +842,8 @@ def _flash_attention_forward(
     return out.view(batch_size, -1, out.size(-2), out.size(-1))
 
 
-def _flash_attention_forward_paged(
-    flash_with_kv_cache: Callable,
+def _flash_attention_forward_kvcache(
+    flash_kvcache_fn: Callable,
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
@@ -860,5 +860,5 @@ def _flash_attention_forward_paged(
     # Also, rather than cu_seq_lens_k, we use cache_seqlens, which is the number of tokens in the cache per sequence
     flash_kwargs["cache_seqlens"] = cu_seq_lens_k[1 : num_sequences + 1] - cu_seq_lens_k[:num_sequences] - 1
 
-    out = flash_with_kv_cache(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
+    out = flash_kvcache_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
     return out[0] if isinstance(out, tuple) else out
