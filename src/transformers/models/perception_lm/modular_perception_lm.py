@@ -95,6 +95,7 @@ class PerceptionLMMultiModalProjector(nn.Module):
 
 class PerceptionLMPreTrainedModel(LlavaPreTrainedModel):
     base_model_prefix = "model"
+    input_modalities = ("image", "video", "text")
 
 
 class PerceptionLMModelOutputWithPast(LlavaModelOutputWithPast):
@@ -221,11 +222,6 @@ class PerceptionLMModel(LlavaModel):
     ) -> tuple | PerceptionLMModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
-            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
