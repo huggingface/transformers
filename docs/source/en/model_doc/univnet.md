@@ -17,6 +17,14 @@ rendered properly in your Markdown viewer.
 
 # UnivNet
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
+
 
 ## Overview
 
@@ -49,8 +57,24 @@ feature_extractor = UnivNetFeatureExtractor.from_pretrained(model_id_or_path)
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 # Resample the audio to the model and feature extractor's sampling rate.
+
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
 ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
 # Pad the end of the converted waveforms to reduce artifacts at the end of the output audio samples.
+
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
 inputs = feature_extractor(
     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], pad_end=True, return_tensors="pt"
 )
@@ -59,8 +83,24 @@ with torch.no_grad():
     audio = model(**inputs)
 
 # Remove the extra padding at the end of the output.
+
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
 audio = feature_extractor.batch_decode(**audio)[0]
 # Convert to wav file
+
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
 write("sample_audio.wav", feature_extractor.sampling_rate, audio)
 ```
 

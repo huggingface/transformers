@@ -58,7 +58,26 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
 
 # This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
 # `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
-DEPRECATED_MODELS = []
+DEPRECATED_MODELS = [
+    "cpmant",
+    "decision_transformer",
+    "glpn",
+    "groupvit",
+    "imagegpt",
+    "lxmert",
+    "mobilevit",
+    "mobilevitv2",
+    "mra",
+    "nystromformer",
+    "pegasus_x",
+    "regnet",
+    "roberta_prelayernorm",
+    "switch_transformers",
+    "univnet",
+    "visual_bert",
+    "vit_msn",
+    "yoso",
+]
 
 
 def model_type_to_module_name(key) -> str:

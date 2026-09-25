@@ -238,9 +238,9 @@ def _patch_sdpa(original):
     # — each one needs its own override since the name is looked up there.
     "transformers.modeling_utils.is_kernels_available",
     "transformers.models.sam3_video.modeling_sam3_video.is_kernels_available",
-    "transformers.models.mra.modeling_mra.is_kernels_available",
+    "transformers.models.deprecated.mra.modeling_mra.is_kernels_available",
     "transformers.models.rwkv.modeling_rwkv.is_kernels_available",
-    "transformers.models.yoso.modeling_yoso.is_kernels_available",
+    "transformers.models.deprecated.yoso.modeling_yoso.is_kernels_available",
 )
 def _patch_is_kernels_available(_original):
     """Force-disable the optional ``kernels`` library during export — its kernels

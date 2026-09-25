@@ -13,6 +13,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 # MobileViT
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
+
 
 
 [MobileViT](https://huggingface.co/papers/2110.02178) is a lightweight vision transformer for mobile devices that merges CNN's efficiency and inductive biases with transformers global context modeling. It treats transformers as convolutions, enabling global information processing without the heavy computational cost of standard ViTs.

@@ -23,6 +23,14 @@ rendered properly in your Markdown viewer.
 
 # PEGASUS-X
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
+
 [PEGASUS-X](https://huggingface.co/papers/2208.04347) is an encoder-decoder (sequence-to-sequence) transformer model for long-input summarization. It extends the [Pegasus](./pegasus) model with staggered block-local attention, global encoder tokens, and additional pretraining on long text sequences, enabling it to handle inputs of up to 16,000 tokens. PEGASUS-X matches the performance of much larger models while using fewer parameters.
 
 You can find all the original PEGASUS-X checkpoints under the [Google](https://huggingface.co/google/models?search=pegasus-x) organization.
