@@ -54,21 +54,20 @@ def flash_attention_forward(
             "FlashAttention does not support inputs with dim=0.\n"
             "Please check your input shapes or use SDPA instead."
         )
+
+    # If there is a paged cache, now is the time to update it and the kwargs
+    if isinstance(cache, PagedAttentionCache):
+        key, value = cache.update(
+            key_states=key,
+            value_states=value,
+            layer_idx=module.layer_idx,
+            kwargs=kwargs,  # is updated in place
+        )
+
     # FA uses non-transposed inputs. After this, shape is [batch_size, seq_len, num_heads, head_dim]
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
-
-    # If there is a paged cache, now is the time to update it and the kwargs
-    if isinstance(cache, PagedAttentionCache):
-        query, key, value = (x.contiguous() for x in (query, key, value))
-        key, value, attention_mask = cache.update(
-            key_states=key,
-            value_states=value,
-            layer_idx=module.layer_idx,
-            attention_mask=attention_mask,
-            kwargs=kwargs,  # is updated in place
-        )
 
     # FlashAttention requires the query and value to share a head dim; pad `value` up to the
     # query head dim (e.g. MLA, where `v_head_dim < qk_head_dim`) and crop the output below.
@@ -82,7 +81,6 @@ def flash_attention_forward(
     # This might slowdown training & inference so it is recommended to not cast the LayerNorms
     # in fp32. (usually our RMSNorm modules handle it correctly)
     target_dtype = get_target_dtype(query, module)
-    s_aux = s_aux.to(target_dtype) if s_aux is not None else None
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else module.is_causal
@@ -102,7 +100,7 @@ def flash_attention_forward(
         target_dtype=target_dtype,
         attn_implementation=module.config._attn_implementation,  # type: ignore <- the config is cached on the module
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
-        s_aux=s_aux,
+        s_aux=(s_aux.to(query.dtype) if s_aux is not None else None),  # FA only accepts half precision
         **kwargs,
     )
 
