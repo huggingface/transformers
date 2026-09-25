@@ -1123,6 +1123,8 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
     """Construct a Cosmos3 Edge multimodal prompt from image, video, and text inputs."""
 
     valid_processor_kwargs = ProcessingKwargs
+    text_kwargs = AttributeError()
+    videos_kwargs = AttributeError()
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         """Expand an image placeholder to one text token per projected 2×2 patch group."""
