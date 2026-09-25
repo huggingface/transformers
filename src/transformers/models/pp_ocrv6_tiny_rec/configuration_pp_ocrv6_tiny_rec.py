@@ -21,7 +21,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -35,7 +35,24 @@ class PPOCRV6TinyRecConfig(PreTrainedConfig):
     """
 
     model_type = "pp_ocrv6_tiny_rec"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hgnet_v2",
+            init_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [1.0, 1.0, 1.0, 1.0, 1.0],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+                "stage_downsample": [True, True, True, True],
+                "stem_strides": [2, 1, 1, 1, 1],
+                "stage_downsample_strides": [[2, 1], [1, 2], [2, 1], [2, 1]],
+            },
+        ),
+    }
     backbone_config: dict | PreTrainedConfig | None = None
     hidden_size: int = 120
     head_out_channels: int = 6625

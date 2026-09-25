@@ -26,7 +26,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -396,10 +396,10 @@ class Gemma3nConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma3n"
-    sub_configs = {
-        "text_config": Gemma3nTextConfig,
-        "vision_config": Gemma3nVisionConfig,
-        "audio_config": Gemma3nAudioConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Gemma3nTextConfig),
+        "vision_config": SubConfigSpec(config_class=Gemma3nVisionConfig),
+        "audio_config": SubConfigSpec(config_class=Gemma3nAudioConfig),
     }
 
     text_config: Gemma3nTextConfig | dict[str, Any] | None = None
@@ -416,27 +416,6 @@ class Gemma3nConfig(PreTrainedConfig):
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
     use_cache: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma3nTextConfig()
-            logger.info("text_config is None, using default Gemma3nTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma3nTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma3nVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Gemma3nVisionConfig()
-            logger.info("vision_config is None, using default Gemma3nVisionConfig vision config.")
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma3nAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Gemma3nAudioConfig()
-            logger.info("audio_config is None. Using default Gemma3nAudioConfig.")
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring

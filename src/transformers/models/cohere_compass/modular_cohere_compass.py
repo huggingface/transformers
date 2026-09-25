@@ -122,11 +122,6 @@ class CohereCompassConfig(Qwen3VLConfig):
     ```"""
 
     model_type = "cohere_compass"
-    sub_configs = {
-        "text_config": CohereCompassTextConfig,
-        "vision_config": CohereCompassVisionConfig,
-    }
-
     image_token_id: int = 255031
     video_token_id: int = 255032
     vision_start_token_id: int = 255028

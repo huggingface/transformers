@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
@@ -121,7 +121,10 @@ class IdeficsConfig(PreTrainedConfig):
     ```"""
 
     model_type = "idefics"
-    sub_configs = {"perceiver_config": IdeficsPerceiverConfig, "vision_config": IdeficsVisionConfig}
+    sub_configs_defaults = {
+        "perceiver_config": SubConfigSpec(config_class=IdeficsPerceiverConfig),
+        "vision_config": SubConfigSpec(config_class=IdeficsVisionConfig),
+    }
 
     vocab_size: int = 32000
     additional_vocab_size: int = 0
@@ -153,19 +156,6 @@ class IdeficsConfig(PreTrainedConfig):
     max_position_embeddings: int = 2048
     perceiver_config: dict | PreTrainedConfig | None = None
     rope_parameters: dict | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.perceiver_config is None:
-            self.perceiver_config = IdeficsPerceiverConfig()
-        elif isinstance(self.perceiver_config, dict):
-            self.perceiver_config = IdeficsPerceiverConfig(**self.perceiver_config)
-
-        if self.vision_config is None:
-            self.vision_config = IdeficsVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = IdeficsVisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["IdeficsConfig", "IdeficsPerceiverConfig", "IdeficsVisionConfig"]

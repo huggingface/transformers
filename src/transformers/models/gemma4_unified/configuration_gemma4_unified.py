@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import (
     auto_docstring,
     logging,
@@ -294,10 +294,10 @@ class Gemma4UnifiedConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma4_unified"
-    sub_configs = {
-        "text_config": Gemma4UnifiedTextConfig,
-        "vision_config": Gemma4UnifiedVisionConfig,
-        "audio_config": Gemma4UnifiedAudioConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Gemma4UnifiedTextConfig),
+        "vision_config": SubConfigSpec(config_class=Gemma4UnifiedVisionConfig, optional=True),
+        "audio_config": SubConfigSpec(config_class=Gemma4UnifiedAudioConfig, optional=True),
     }
 
     text_config: Gemma4UnifiedTextConfig | dict[str, Any] | None = None
@@ -312,25 +312,6 @@ class Gemma4UnifiedConfig(PreTrainedConfig):
     audio_token_id: int | None = 258_881
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma4UnifiedTextConfig()
-            logger.info("text_config is None. Using default Gemma4UnifiedTextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma4UnifiedTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. Gemma4UnifiedModel.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma4UnifiedVisionConfig(**self.vision_config)
-
-        if self.audio_config is None:
-            logger.info("audio_config is None. Gemma4UnifiedModel.audio_tower will not be initialized.")
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma4UnifiedAudioConfig(**self.audio_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma4UnifiedAudioConfig", "Gemma4UnifiedConfig", "Gemma4UnifiedTextConfig", "Gemma4UnifiedVisionConfig"]

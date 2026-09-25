@@ -20,9 +20,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
@@ -52,7 +52,10 @@ class Glm46VConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm46v"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="glm4v_text"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="glm4v_vision"),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -64,21 +67,6 @@ class Glm46VConfig(PreTrainedConfig):
     video_start_token_id: int = 151361
     video_end_token_id: int = 151362
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "glm4v_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["glm4v_vision"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "glm4v_text")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["glm4v_text"]()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Glm46VConfig"]

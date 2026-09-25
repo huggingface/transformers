@@ -20,8 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -48,7 +47,21 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
     """
 
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hgnet_v2",
+            init_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+    }
     model_type = "pp_ocrv5_server_det"
 
     interpolate_mode: str = "nearest"
@@ -64,21 +77,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     id2label: dict[int, str] | dict[str, str] | None = None
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={
-                "arch": "L",
-                "return_idx": [0, 1, 2, 3],
-                "freeze_stem_only": True,
-                "freeze_at": 0,
-                "freeze_norm": True,
-                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
         # For object detection pipeline compatibility: single class "text"
         self.id2label = {0: "text"} if self.id2label is None else self.id2label
         super().__post_init__(**kwargs)

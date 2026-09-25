@@ -777,12 +777,10 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
         self.multi_modal_projector = Gemma3MultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     @can_return_tuple

@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -229,47 +229,18 @@ class BarkConfig(PreTrainedConfig):
     """
 
     model_type = "bark"
-    sub_configs = {
-        "semantic_config": BarkSemanticConfig,
-        "coarse_acoustics_config": BarkCoarseConfig,
-        "fine_acoustics_config": BarkFineConfig,
-        "codec_config": AutoConfig,
+    sub_configs_defaults = {
+        "semantic_config": SubConfigSpec(config_class=BarkSemanticConfig),
+        "coarse_acoustics_config": SubConfigSpec(config_class=BarkCoarseConfig),
+        "fine_acoustics_config": SubConfigSpec(config_class=BarkFineConfig),
+        "codec_config": SubConfigSpec(config_class=AutoConfig, model_type="encodec"),
     }
+
     semantic_config: dict | PreTrainedConfig | None = None
     coarse_acoustics_config: dict | PreTrainedConfig | None = None
     fine_acoustics_config: dict | PreTrainedConfig | None = None
     codec_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.semantic_config is None:
-            self.semantic_config = BarkSemanticConfig()
-            logger.info("`semantic_config` is `None`. Initializing the `BarkSemanticConfig` with default values.")
-        elif isinstance(self.semantic_config, dict):
-            self.semantic_config = BarkSemanticConfig(**self.semantic_config)
-
-        if self.coarse_acoustics_config is None:
-            self.coarse_acoustics_config = BarkCoarseConfig()
-            logger.info(
-                "`coarse_acoustics_config` is `None`. Initializing the `BarkCoarseConfig` with default values."
-            )
-        elif isinstance(self.coarse_acoustics_config, dict):
-            self.coarse_acoustics_config = BarkCoarseConfig(**self.coarse_acoustics_config)
-
-        if self.fine_acoustics_config is None:
-            self.fine_acoustics_config = BarkFineConfig()
-            logger.info("`fine_acoustics_config` is `None`. Initializing the `BarkFineConfig` with default values.")
-        elif isinstance(self.fine_acoustics_config, dict):
-            self.fine_acoustics_config = BarkFineConfig(**self.fine_acoustics_config)
-
-        if self.codec_config is None:
-            self.codec_config = CONFIG_MAPPING["encodec"]()
-            logger.info("`codec_config` is `None`. Initializing the `codec_config` with default values.")
-        elif isinstance(self.codec_config, dict):
-            codec_model_type = self.codec_config.get("model_type", "encodec")
-            self.codec_config = CONFIG_MAPPING[codec_model_type](**self.codec_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["BarkCoarseConfig", "BarkConfig", "BarkFineConfig", "BarkSemanticConfig"]

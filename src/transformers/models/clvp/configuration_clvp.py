@@ -17,7 +17,7 @@ import os
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -215,10 +215,10 @@ class ClvpConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clvp"
-    sub_configs = {
-        "text_config": ClvpEncoderConfig,
-        "speech_config": ClvpEncoderConfig,
-        "decoder_config": ClvpDecoderConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=ClvpEncoderConfig),
+        "speech_config": SubConfigSpec(config_class=ClvpEncoderConfig),
+        "decoder_config": SubConfigSpec(config_class=ClvpDecoderConfig),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -227,27 +227,6 @@ class ClvpConfig(PreTrainedConfig):
     projection_dim: int = 768
     logit_scale_init_value: float = 2.6592
     initializer_factor: float = 1.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = ClvpEncoderConfig()
-            logger.info("`text_config` is `None`. initializing the `ClvpEncoderConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = ClvpEncoderConfig(**self.text_config)
-
-        if self.speech_config is None:
-            self.speech_config = ClvpEncoderConfig()
-            logger.info("`speech_config` is `None`. initializing the `ClvpEncoderConfig` with default values.")
-        elif isinstance(self.speech_config, dict):
-            self.speech_config = ClvpEncoderConfig(**self.speech_config)
-
-        if self.decoder_config is None:
-            self.decoder_config = ClvpDecoderConfig()
-            logger.info("`image_config` is `None`. initializing the `ClvpDecoderConfig` with default values.")
-        elif isinstance(self.decoder_config, dict):
-            self.decoder_config = ClvpDecoderConfig(**self.decoder_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["ClvpConfig", "ClvpDecoderConfig", "ClvpEncoderConfig"]

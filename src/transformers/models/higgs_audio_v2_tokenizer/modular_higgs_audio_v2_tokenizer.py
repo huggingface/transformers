@@ -19,8 +19,10 @@ import torch.nn.functional as F
 import torchaudio
 from huggingface_hub.dataclasses import strict
 
+from ...configuration_utils import SubConfigSpec
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
+from ..auto import AutoConfig
 from ..xcodec.configuration_xcodec import XcodecConfig
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel, XcodecPreTrainedModel
 
@@ -65,8 +67,27 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
     >>> configuration = model.config
     ```"""
 
-    _default_semantic_model_config_kwargs = {
-        "mask_time_prob": 0.0,
+    sub_configs_defaults = {
+        "acoustic_model_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="dac",
+            init_kwargs={
+                "encoder_hidden_size": 64,
+                # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
+                # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
+                "downsampling_ratios": [8, 5, 4, 2],
+                "decoder_hidden_size": 1024,
+                "upsampling_ratios": [8, 5, 4, 2],
+                "hidden_size": 256,
+            },
+        ),
+        "semantic_model_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hubert",
+            init_kwargs={
+                "mask_time_prob": 0.0,
+            },
+        ),
     }
 
     target_bandwidths: list[int | float] | tuple[int | float, ...] = (0.5, 1, 1.5, 2, 4)

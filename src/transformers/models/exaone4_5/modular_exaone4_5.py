@@ -21,13 +21,13 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -70,7 +70,10 @@ class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
 @strict
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
-    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4_5_vision"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4"),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -80,20 +83,9 @@ class Exaone4_5_Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "exaone4_5_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["exaone4_5_vision"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
-            # BC: EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
-            if self.text_config["model_type"] == "exaone4_5_text":
-                self.text_config["model_type"] = "exaone4"
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["exaone4"]()
+        # BC: EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
+        if isinstance(self.text_config, dict) and self.text_config["model_type"] == "exaone4_5_text":
+            self.text_config["model_type"] = "exaone4"
 
         super().__post_init__(**kwargs)
 

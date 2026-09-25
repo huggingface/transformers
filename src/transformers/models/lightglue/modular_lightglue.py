@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -28,7 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.generic import no_inherit_decorator
 from ...utils.import_utils import requires
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
@@ -72,7 +72,9 @@ class LightGlueConfig(PreTrainedConfig):
     """
 
     model_type = "lightglue"
-    sub_configs = {"keypoint_detector_config": AutoConfig}
+    sub_configs_defaults = {
+        "keypoint_detector_config": SubConfigSpec(config_class=AutoConfig, model_type="superpoint"),
+    }
 
     keypoint_detector_config: dict | SuperPointConfig | None = None
     descriptor_dim: int = 256
@@ -88,22 +90,16 @@ class LightGlueConfig(PreTrainedConfig):
     attention_bias: bool = True
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
-        if isinstance(self.keypoint_detector_config, dict):
-            self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
-            self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
-                **self.keypoint_detector_config, attn_implementation="eager"
-            )
-        elif self.keypoint_detector_config is None:
-            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
+        self.keypoint_detector_config.attn_implementation = "eager"
 
         self.intermediate_size = self.descriptor_dim * 2
         self.hidden_size = self.descriptor_dim
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

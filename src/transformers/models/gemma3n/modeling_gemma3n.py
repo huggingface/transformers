@@ -1952,11 +1952,9 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
+        self.language_model = AutoModel.from_config(config.text_config)
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
