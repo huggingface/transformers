@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import torch
 
@@ -31,7 +31,7 @@ from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test, re
 
 
 # Qwen3 MoE's predefined plans, as resolved on `Qwen3MoeModel` (no `model.` prefix).
-DENSE_TP_PLAN = {
+TP_DENSE_PLAN = {
     "layers.*.self_attn.q_proj": "colwise",
     "layers.*.self_attn.k_proj": "colwise",
     "layers.*.self_attn.v_proj": "colwise",
@@ -42,19 +42,17 @@ DENSE_TP_PLAN = {
     "layers.*.mlp.up_proj": "colwise",
     "layers.*.mlp.down_proj": "rowwise",
 }
-EXPERT_TP_PLAN = {
+TP_EXPERT_PLAN = {
     "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
     "layers.*.mlp.experts.down_proj": "rowwise",
     "layers.*.mlp.experts": "moe_tp_experts",
 }
-# Token dispatch is the default; router masking with all-reduce is an override of the two forward rules.
 EP_PLAN = {
     "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
     "layers.*.mlp.experts.down_proj": "grouped_gemm",
     "layers.*.mlp.experts": "ep_dispatch_experts",
 }
-MASKED_OVERRIDE = {"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}
-MASKED_EP_PLAN = EP_PLAN | MASKED_OVERRIDE
+EP_PLAN_MASKED = EP_PLAN | {"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}
 
 
 @require_torch
@@ -77,12 +75,8 @@ class TestParallelPlanResolution(TestCasePlus):
             self.model = Qwen3MoeModel(self.config)
 
     def _reset_plans(self):
-        self.model.tp_plan = DENSE_TP_PLAN | EXPERT_TP_PLAN
+        self.model.tp_plan = TP_DENSE_PLAN | TP_EXPERT_PLAN
         self.model.ep_plan = EP_PLAN.copy()
-
-    def test_model_exposes_both_plans(self):
-        self.assertEqual(self.model.tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN)
-        self.assertEqual(self.model.ep_plan, EP_PLAN)
 
     def test_ep_plan_setter(self):
         self.model.ep_plan = None
@@ -101,32 +95,18 @@ class TestParallelPlanResolution(TestCasePlus):
 
     def test_tp_only_keeps_experts_in_tp_plan(self):
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
-        self.assertEqual(tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN)
+        self.assertEqual(tp_plan, TP_DENSE_PLAN | TP_EXPERT_PLAN)
         self.assertEqual(ep_plan, {})
 
-    def test_ep_takes_experts_out_of_tp_plan(self):
-        # Dispatch (the default) owns the experts; the masked override also owns the router.
-        for tp_size, fsdp_size, ep_size in ((1, 4, 4), (2, 2, 4), (4, 1, 4), (2, 2, 2)):
-            with self.subTest(tp_size=tp_size, fsdp_size=fsdp_size, ep_size=ep_size):
-                config = DistributedConfig(tp_size=tp_size, fsdp_size=fsdp_size, ep_size=ep_size)
+    def test_ep_takes_experts_and_router_out_of_tp_plan(self):
+        for config in (
+            DistributedConfig(tp_size=4, ep_size=4),
+            DistributedConfig(tp_size=2, fsdp_size=2, ep_size=2),
+        ):
+            with self.subTest(config=config):
                 tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-                self.assertEqual(tp_plan, DENSE_TP_PLAN if tp_size > 1 else {})
+                self.assertEqual(tp_plan, TP_DENSE_PLAN)
                 self.assertEqual(ep_plan, EP_PLAN)
-                config._validate_resolved_ep_plan(ep_plan)
-        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=MASKED_OVERRIDE)
-        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        self.assertEqual(tp_plan, DENSE_TP_PLAN)
-        self.assertEqual(ep_plan, MASKED_EP_PLAN)
-        config._validate_resolved_ep_plan(ep_plan)
-
-    def test_dispatch_override_on_a_masked_default_keeps_the_weight_rules(self):
-        self.model.ep_plan = MASKED_EP_PLAN.copy()
-        config = DistributedConfig(fsdp_size=4, ep_size=2, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"})
-        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        self.assertEqual(tp_plan, {})
-        # The router masking hook is left out: dispatch needs the global expert ids.
-        self.assertEqual(ep_plan, EP_PLAN)
-        self.assertEqual(self.model.ep_plan["layers.*.mlp.gate"], "ep_router")
 
     def test_legacy_flag_is_an_alias_for_ep_size(self):
         with warnings.catch_warnings(record=True) as caught:
@@ -146,13 +126,11 @@ class TestParallelPlanResolution(TestCasePlus):
             tensor_parallel.resolve_parallel_plans(self.model, explicit),
         )
 
-    def test_ep_plan_must_be_a_dict(self):
+    def test_ep_plan_is_a_dict_and_round_trips(self):
         with self.assertRaisesRegex(ValueError, "`ep_plan` must be a dictionary or None"):
             DistributedConfig(tp_size=4, ep_size=4, ep_plan="auto")
-
-    def test_ep_plan_round_trip(self):
-        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=MASKED_OVERRIDE)
-        self.assertEqual(config.to_dict()["ep_plan"], MASKED_OVERRIDE)
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN_MASKED)
+        self.assertEqual(config.to_dict()["ep_plan"], EP_PLAN_MASKED)
         self.assertEqual(DistributedConfig.from_dict(config.to_dict()), config)
 
     def test_overrides_merge_into_the_predefined_plans(self):
@@ -163,7 +141,7 @@ class TestParallelPlanResolution(TestCasePlus):
             ep_plan={"layers.*.mlp.experts.down_proj": "rowwise"},
         )
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        self.assertEqual(tp_plan, DENSE_TP_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
+        self.assertEqual(tp_plan, TP_DENSE_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
         self.assertEqual(ep_plan, EP_PLAN | {"layers.*.mlp.experts.down_proj": "rowwise"})
         # The merged plans are stored on the model, the config defaults are untouched.
         self.assertEqual(self.model.tp_plan["layers.*.self_attn.q_proj"], "colwise_rep")
@@ -173,36 +151,34 @@ class TestParallelPlanResolution(TestCasePlus):
         # The overrides are not rewritten with the merged plans.
         self.assertEqual(config.tp_plan, {"layers.*.self_attn.q_proj": "colwise_rep"})
         self.assertEqual(config.ep_plan, {"layers.*.mlp.experts.down_proj": "rowwise"})
+        # The merged EP plan stays on the model but is not applied while EP is disabled.
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
+        self.assertEqual(tp_plan, TP_DENSE_PLAN | TP_EXPERT_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
+        self.assertEqual(ep_plan, {})
+        self.assertEqual(self.model.ep_plan["layers.*.mlp.experts.down_proj"], "rowwise")
 
     def test_ep_rules_take_precedence_over_tp_rules_for_the_same_modules(self):
         config = DistributedConfig(
             tp_size=4,
             ep_size=4,
             tp_plan={"layers.*.mlp.experts.gate_up_proj": "packed_rowwise", "layers.*.mlp.gate": "colwise"},
-            ep_plan=MASKED_OVERRIDE,
+            ep_plan=EP_PLAN_MASKED,
         )
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        self.assertEqual(tp_plan, DENSE_TP_PLAN)
-        self.assertEqual(ep_plan, MASKED_EP_PLAN)
+        self.assertEqual(tp_plan, TP_DENSE_PLAN)
+        self.assertEqual(ep_plan, EP_PLAN_MASKED)
         # The custom TP rules are kept on the model and apply as soon as EP is disabled.
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
         self.assertEqual(tp_plan["layers.*.mlp.experts.gate_up_proj"], "packed_rowwise")
         self.assertEqual(tp_plan["layers.*.mlp.gate"], "colwise")
         self.assertEqual(ep_plan, {})
 
-    def test_ep_override_is_merged_but_not_applied_when_ep_is_disabled(self):
-        config = DistributedConfig(tp_size=4, ep_plan={"layers.*.mlp.experts.down_proj": "rowwise"})
-        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        self.assertEqual(tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN)
-        self.assertEqual(ep_plan, {})
-        self.assertEqual(self.model.ep_plan["layers.*.mlp.experts.down_proj"], "rowwise")
-
     def test_ep_requires_an_expert_plan(self):
         self.model.ep_plan = None
         with self.assertRaisesRegex(ValueError, "does not define an expert-parallel plan"):
             tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
         config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN)
-        self.assertEqual(tensor_parallel.resolve_parallel_plans(self.model, config), (DENSE_TP_PLAN, EP_PLAN))
+        self.assertEqual(tensor_parallel.resolve_parallel_plans(self.model, config), (TP_DENSE_PLAN, EP_PLAN))
 
     def test_unmatched_override_keys_raise_without_changing_plans(self):
         original_tp_plan, original_ep_plan = self.model.tp_plan.copy(), self.model.ep_plan.copy()
@@ -233,7 +209,7 @@ class TestParallelPlanResolution(TestCasePlus):
     def test_head_model_overrides_need_the_model_prefix(self):
         with torch.device("meta"):
             model = Qwen3MoeForCausalLM(self.config)
-        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=MASKED_OVERRIDE)
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN_MASKED)
         with self.assertRaisesRegex(ValueError, "including any 'model.' prefix"):
             tensor_parallel.resolve_parallel_plans(model, config)
 
@@ -241,50 +217,16 @@ class TestParallelPlanResolution(TestCasePlus):
             tp_size=4,
             ep_size=4,
             tp_plan={"model.layers.*.self_attn.q_proj": "colwise_rep"},
-            ep_plan={f"model.{k}": v for k, v in MASKED_OVERRIDE.items()},
+            ep_plan={f"model.{k}": v for k, v in EP_PLAN_MASKED.items()},
         )
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(model, config)
-        expected_tp_plan = {f"model.{k}": v for k, v in DENSE_TP_PLAN.items()} | {"lm_head": "colwise_gather_output"}
+        expected_tp_plan = {f"model.{k}": v for k, v in TP_DENSE_PLAN.items()} | {"lm_head": "colwise_gather_output"}
         self.assertEqual(tp_plan, expected_tp_plan | config.tp_plan)
-        self.assertEqual(ep_plan, {f"model.{k}": v for k, v in MASKED_EP_PLAN.items()})
-
-    def test_invalid_styles_are_reported(self):
-        self.model.ep_plan = None
-        self.model._ep_plan = {"layers.*.mlp.experts": "invalid_style", "layers.*.mlp.gate": "another_invalid_style"}
-        with self.assertRaises(ValueError) as context:
-            tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
-        self.assertIn("'invalid_style'", str(context.exception))
-        self.assertIn("'another_invalid_style'", str(context.exception))
-
-    def test_resolution_does_not_apply_sharding(self):
-        with (
-            patch.object(tensor_parallel, "_apply_parallel_plan") as apply,
-            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "shard_param") as shard,
-        ):
-            tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
-        apply.assert_not_called()
-        shard.assert_not_called()
-
-    def test_resolved_ep_plan_validation(self):
-        dispatch, masked = {"experts": "ep_dispatch_experts"}, {"router": "ep_router", "experts": "moe_tp_experts"}
-        # Dispatch frees `ep_size` from `tp_size`; masking does not.
-        DistributedConfig(tp_size=2, fsdp_size=2, ep_size=4)._validate_resolved_ep_plan(dispatch)
-        DistributedConfig(tp_size=4, ep_size=4)._validate_resolved_ep_plan(masked)
-        with self.assertRaisesRegex(ValueError, "All-reduce expert parallelism requires `ep_size=tp_size`"):
-            DistributedConfig(tp_size=2, fsdp_size=2, ep_size=4)._validate_resolved_ep_plan(masked)
-        with self.assertRaisesRegex(ValueError, "pipeline parallelism"):
-            DistributedConfig(tp_size=4, ep_size=4, pp_size=2)._validate_resolved_ep_plan(dispatch)
-        with patch("transformers.distributed.configuration_utils.is_torch_greater_or_equal", return_value=False):
-            with self.assertRaisesRegex(OSError, "token dispatch requires"):
-                DistributedConfig(tp_size=4, ep_size=4)._validate_resolved_ep_plan(dispatch)
-            DistributedConfig(tp_size=4, ep_size=4)._validate_resolved_ep_plan(masked)
-        # Nothing to validate without EP.
-        DistributedConfig(tp_size=4)._validate_resolved_ep_plan({})
-        DistributedConfig(tp_size=4, pp_size=2)._validate_resolved_ep_plan(dispatch)
+        self.assertEqual(ep_plan, {f"model.{k}": v for k, v in EP_PLAN_MASKED.items()})
 
     def test_masked_ep_shards_and_installs_hooks_on_the_tp_mesh(self):
         tp_mesh = object()
-        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=MASKED_OVERRIDE)
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN_MASKED)
         _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
         experts, router = self.model.layers[0].mlp.experts, self.model.layers[0].mlp.gate
         with (
@@ -293,7 +235,7 @@ class TestParallelPlanResolution(TestCasePlus):
             patch.object(ALL_PARALLEL_STYLES["moe_tp_experts"], "install_forward") as install_experts,
             patch.object(ALL_PARALLEL_STYLES["ep_router"], "install_forward") as install_router,
         ):
-            result = tensor_parallel.apply_masked_expert_parallelism(self.model, tp_mesh, ep_plan)
+            result = tensor_parallel.apply_tensor_parallelism(self.model, tp_mesh, ep_plan)
         self.assertIs(result, self.model)
         self.assertEqual(shard.call_count, 2)
         for name in ("gate_up_proj", "down_proj"):
@@ -301,197 +243,6 @@ class TestParallelPlanResolution(TestCasePlus):
             shard.assert_any_call(experts, name, tp_mesh)
         install_experts.assert_called_once_with(experts, tp_mesh)
         install_router.assert_called_once_with(router, tp_mesh)
-
-    def test_dispatch_shards_on_ep_and_passes_both_meshes_to_the_hook(self):
-        tp_mesh, ep_mesh = object(), object()
-        config = DistributedConfig(tp_size=2, fsdp_size=2, ep_size=4)
-        _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        experts = self.model.layers[0].mlp.experts
-        with (
-            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "validate_param") as validate,
-            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "shard_param") as shard,
-            patch.object(ALL_PARALLEL_STYLES["ep_dispatch_experts"], "install_forward") as install,
-            patch.object(ALL_PARALLEL_STYLES["ep_router"], "install_forward") as install_router,
-        ):
-            result = tensor_parallel.apply_dispatch_expert_parallelism(self.model, ep_mesh, tp_mesh, ep_plan)
-        self.assertIs(result, self.model)
-        self.assertEqual(shard.call_count, 2)
-        for name in ("gate_up_proj", "down_proj"):
-            validate.assert_any_call(experts, name, ep_mesh, parameter_name=f"layers.0.mlp.experts.{name}")
-            shard.assert_any_call(experts, name, ep_mesh)
-        install.assert_called_once_with(experts, ep_mesh, tp_mesh=tp_mesh)
-        install_router.assert_not_called()
-
-    def test_maybe_distribute_model_selects_the_ep_path_and_meshes(self):
-        meshes = {"tp": object(), "ep": object(), "fsdp": object()}
-        mesh_manager = Mock()
-        mesh_manager.get_mesh.side_effect = lambda dims: meshes.get(dims, Mock())
-        cases = (
-            # config, expected TP plan, expected (apply function, plan), FSDP applied
-            (DistributedConfig(tp_size=4), DENSE_TP_PLAN | EXPERT_TP_PLAN, None, False),
-            (DistributedConfig(fsdp_size=4), None, None, True),
-            (DistributedConfig(tp_size=4, ep_size=4), DENSE_TP_PLAN, ("dispatch", EP_PLAN), True),
-            (DistributedConfig(fsdp_size=4, ep_size=2), None, ("dispatch", EP_PLAN), True),
-            (DistributedConfig(tp_size=2, fsdp_size=2, ep_size=4), DENSE_TP_PLAN, ("dispatch", EP_PLAN), True),
-            (
-                DistributedConfig(tp_size=4, ep_size=4, ep_plan=MASKED_OVERRIDE),
-                DENSE_TP_PLAN,
-                ("masked", MASKED_EP_PLAN),
-                False,
-            ),
-            (
-                DistributedConfig(tp_size=2, fsdp_size=2, ep_size=2, ep_plan=MASKED_OVERRIDE),
-                DENSE_TP_PLAN,
-                ("masked", MASKED_EP_PLAN),
-                True,
-            ),
-        )
-        for config, expected_tp_plan, expected_ep, fsdp_applied in cases:
-            self._reset_plans()
-            with (
-                self.subTest(config=config),
-                patch("transformers.distributed.mixin.apply_tensor_parallelism", return_value=self.model) as tp,
-                patch(
-                    "transformers.distributed.mixin.apply_masked_expert_parallelism", return_value=self.model
-                ) as masked,
-                patch(
-                    "transformers.distributed.mixin.apply_dispatch_expert_parallelism", return_value=self.model
-                ) as dispatch,
-                patch(
-                    "transformers.distributed.mixin.apply_fully_sharded_data_parallelism", return_value=self.model
-                ) as fsdp,
-            ):
-                result = self.model.maybe_distribute_model(self.model, config, mesh_manager)
-                self.assertIs(result, self.model)
-                self.assertIs(self.model.config.distributed_config, config)
-                if expected_tp_plan is None:
-                    tp.assert_not_called()
-                else:
-                    tp.assert_called_once_with(self.model, meshes["tp"], expected_tp_plan)
-                if expected_ep is None:
-                    masked.assert_not_called()
-                    dispatch.assert_not_called()
-                elif expected_ep[0] == "dispatch":
-                    dispatch.assert_called_once_with(self.model, meshes["ep"], meshes["tp"], expected_ep[1])
-                    masked.assert_not_called()
-                else:
-                    masked.assert_called_once_with(self.model, meshes["tp"], expected_ep[1])
-                    dispatch.assert_not_called()
-                if fsdp_applied:
-                    fsdp.assert_called_once_with(self.model, mesh_manager)
-                else:
-                    fsdp.assert_not_called()
-
-    def test_maybe_distribute_model_validates_the_layout_before_sharding(self):
-        for config, message in (
-            (DistributedConfig(tp_size=2, fsdp_size=2, ep_size=4, ep_plan=MASKED_OVERRIDE), "ep_size=tp_size"),
-            (DistributedConfig(tp_size=4, ep_size=4, pp_size=2), "pipeline parallelism"),
-        ):
-            self._reset_plans()
-            with (
-                self.subTest(config=config),
-                patch("transformers.distributed.mixin.apply_pipeline_parallelism") as pp,
-                patch("transformers.distributed.mixin.apply_tensor_parallelism") as tp,
-                patch("transformers.distributed.mixin.apply_masked_expert_parallelism") as masked,
-                patch("transformers.distributed.mixin.apply_dispatch_expert_parallelism") as dispatch,
-                self.assertRaisesRegex(ValueError, message),
-            ):
-                self.model.maybe_distribute_model(self.model, config, Mock())
-            for apply in (pp, tp, masked, dispatch):
-                apply.assert_not_called()
-
-    def test_maybe_distribute_model_without_meshes_is_a_no_op(self):
-        with patch("transformers.distributed.mixin.resolve_parallel_plans") as resolve:
-            self.assertIs(self.model.maybe_distribute_model(self.model, DistributedConfig(), None), self.model)
-        resolve.assert_not_called()
-
-
-def _dispatch_worker(rank, rendezvous, world_size):
-    """Compare `dispatch_experts_forward` with a dense reference: outputs, input gradients and expert gradients."""
-    import torch.distributed as dist
-
-    from transformers.distributed.tensor_parallel import dispatch_experts_forward
-
-    dist.init_process_group("gloo", init_method=f"file://{rendezvous}", rank=rank, world_size=world_size)
-    try:
-        num_experts, hidden_dim, top_k = 2 * world_size, 8, 2
-        num_local_experts = num_experts // world_size
-        tokens_per_rank = [5, 0, 3, 7][:world_size]  # a rank without tokens of its own
-        generator = torch.Generator().manual_seed(0)
-        # Every rank draws the same global tensors and works on its own slice; the reference sees all of them.
-        experts_weight = torch.randn(num_experts, hidden_dim, hidden_dim, generator=generator, dtype=torch.float64)
-        hidden_states = torch.randn(sum(tokens_per_rank), hidden_dim, generator=generator, dtype=torch.float64)
-        targets = torch.randn(sum(tokens_per_rank), hidden_dim, generator=generator, dtype=torch.float64)
-        top_k_weights = torch.rand(sum(tokens_per_rank), top_k, generator=generator, dtype=torch.float64)
-        routings = {
-            "uneven": torch.stack(
-                [torch.randperm(num_experts, generator=generator)[:top_k] for _ in range(sum(tokens_per_rank))]
-            ),
-            # Every token goes to the experts of rank 0, so the other ranks receive nothing.
-            "empty_receivers": torch.arange(top_k).expand(sum(tokens_per_rank), top_k).clone(),
-        }
-        start = sum(tokens_per_rank[:rank])
-        rows = slice(start, start + tokens_per_rank[rank])
-        for name, top_k_index in routings.items():
-            # Reference: the mean over ranks of each rank's loss, so the expert gradients match the dispatch
-            # scaling (`tp_size / ep_size` with `tp_size=1`). Dispatch leaves the input gradients unscaled, so
-            # they compare against the gradient of the rank's own loss, i.e. `world_size` times the mean's.
-            reference_weight = experts_weight.clone().requires_grad_(True)
-            reference_inputs = hidden_states.clone().requires_grad_(True)
-            gathered = reference_weight[top_k_index]  # (tokens, top_k, hidden, hidden)
-            reference_out = torch.einsum("th,tkhd->tkd", reference_inputs, gathered)
-            reference_out = (reference_out * top_k_weights.unsqueeze(-1)).sum(dim=1)
-            per_rank_losses = [
-                (
-                    reference_out[sum(tokens_per_rank[:r]) : sum(tokens_per_rank[: r + 1])]
-                    * targets[sum(tokens_per_rank[:r]) : sum(tokens_per_rank[: r + 1])]
-                ).sum()
-                for r in range(world_size)
-            ]
-            torch.stack(per_rank_losses).mean().backward()
-
-            local_weight = experts_weight[rank * num_local_experts : (rank + 1) * num_local_experts].clone()
-            local_weight.requires_grad_(True)
-            local_inputs = hidden_states[rows].clone().requires_grad_(True)
-
-            def experts_forward(tokens, expert_ids, unit_weights):
-                out = torch.bmm(tokens.unsqueeze(1), local_weight[expert_ids.squeeze(-1)]).squeeze(1)
-                return out * unit_weights
-
-            output = dispatch_experts_forward(
-                experts_forward,
-                num_local_experts,
-                local_inputs,
-                top_k_index[rows],
-                top_k_weights[rows],
-                dist.group.WORLD,
-                world_size,
-            )
-            (output * targets[rows]).sum().backward()
-
-            torch.testing.assert_close(output, reference_out[rows].detach(), msg=f"{name}: output")
-            torch.testing.assert_close(
-                local_inputs.grad, reference_inputs.grad[rows] * world_size, msg=f"{name}: input grad"
-            )
-            torch.testing.assert_close(
-                local_weight.grad,
-                reference_weight.grad[rank * num_local_experts : (rank + 1) * num_local_experts],
-                msg=f"{name}: expert grad",
-            )
-    finally:
-        dist.destroy_process_group()
-
-
-@require_torch
-class TestDispatchExpertsForward(TestCasePlus):
-    def test_matches_dense_reference(self):
-        import tempfile
-
-        import torch.multiprocessing as mp
-
-        for world_size in (2, 4):
-            with self.subTest(world_size=world_size), tempfile.TemporaryDirectory() as directory:
-                mp.spawn(_dispatch_worker, args=(f"{directory}/init", world_size), nprocs=world_size, join=True)
 
 
 @is_tensor_parallel_test

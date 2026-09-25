@@ -16,7 +16,6 @@ from __future__ import annotations
 import contextlib
 import re
 from collections.abc import Callable
-from fnmatch import fnmatchcase
 from typing import TYPE_CHECKING
 
 from ..utils import logging
@@ -38,6 +37,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
+    from torch.distributed.nn.functional import all_to_all_single
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -50,6 +50,14 @@ def replace_layer_number_by_wildcard(name: str) -> str:
     numbers in a parameter name itself, e.g. if the param is named `"w1"` or `"w2"`.
     """
     return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
+
+
+def _plan_pattern_to_regex(pattern: str) -> str:
+    """
+    Translate a plan key into a regex, where `*` stands for any run of characters (typically a layer index, e.g.
+    `"model.layers.*.mlp.experts"`). Every other character is matched literally.
+    """
+    return ".*".join(re.escape(part) for part in pattern.split("*"))
 
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
@@ -594,18 +602,6 @@ if is_torch_distributed_available():
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
 
-    class _ScaleGrad(torch.autograd.Function):
-        """Identity whose backward scales the gradient."""
-
-        @staticmethod
-        def forward(ctx, tensor, scale):
-            ctx.scale = scale
-            return tensor
-
-        @staticmethod
-        def backward(ctx, grad_output):
-            return grad_output * ctx.scale, None
-
 
 class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
@@ -761,129 +757,160 @@ class RouterParallelMegaMoe(EpRouterParallel):
         return output
 
 
-def dispatch_experts_forward(
-    experts_forward: Callable,
-    num_local_experts: int,
-    hidden_states: torch.Tensor,
-    top_k_index: torch.Tensor,
-    top_k_weights: torch.Tensor,
-    ep_group,
-    ep_size: int,
-    tp_size: int = 1,
-) -> torch.Tensor:
-    """
-    Expert-parallel forward by token dispatch. Every rank routes its own tokens, sends each selected (token, expert)
-    pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives with
-    `experts_forward` (the experts module's own forward, called as a top-1 routing with unit weights), sends the
-    results back and combines them with the routing weights. Each TP group trains on its own batch, so the expert
-    gradients sum contributions from `ep_size / tp_size` batches: they are scaled by `tp_size / ep_size` before the
-    remaining expert-data-parallel reduction, matching the trunk's FSDP average.
-    """
-    from torch.distributed.nn.functional import all_to_all_single
-
-    num_tokens, hidden_dim = hidden_states.shape
-    num_top_k = top_k_index.size(-1)
-
-    # Sorting the selected pairs by expert groups them by owner rank, since each rank owns a contiguous range of
-    # experts, and the per-expert counts tell every receiver which expert each token it gets is for. The split
-    # sizes are the one host sync of the layer.
-    expert_ids = top_k_index.reshape(-1)
-    order = torch.argsort(expert_ids)
-    send_tokens = hidden_states[order // num_top_k]
-    send_counts = torch.zeros(num_local_experts * ep_size, dtype=torch.long, device=hidden_states.device)
-    send_counts = send_counts.scatter_add_(0, expert_ids, torch.ones_like(expert_ids)).view(ep_size, num_local_experts)
-    recv_counts = torch.empty_like(send_counts)
-    torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
-    send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
-    recv_tokens = all_to_all_single(
-        send_tokens.new_empty(sum(recv_sizes), hidden_dim),
-        send_tokens,
-        output_split_sizes=recv_sizes,
-        input_split_sizes=send_sizes,
-        group=ep_group,
-    )
-    recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
-    recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
-
-    # An EP group collects ep_size / tp_size distinct batches. The remaining efsdp reduction averages
-    # expert replicas; together these give the same fsdp_size divisor as the trunk.
-    expert_gradient_scale = tp_size / ep_size
-    recv_tokens = _ScaleGrad.apply(recv_tokens, 1.0 / expert_gradient_scale)
-    unit_weights = torch.ones_like(recv_expert_ids, dtype=recv_tokens.dtype).unsqueeze(-1)
-    expert_out = experts_forward(recv_tokens, recv_expert_ids.unsqueeze(-1), unit_weights)
-    expert_out = _ScaleGrad.apply(expert_out, expert_gradient_scale)
-
-    # Send the results back to the owners of the tokens and combine them with the routing weights.
-    recv_out = all_to_all_single(
-        expert_out.new_empty(send_tokens.size(0), hidden_dim),
-        expert_out,
-        output_split_sizes=send_sizes,
-        input_split_sizes=recv_sizes,
-        group=ep_group,
-    )
-    inverse_order = torch.empty_like(order)
-    inverse_order[order] = torch.arange(order.numel(), device=order.device)
-    combined = recv_out[inverse_order] * top_k_weights.reshape(-1, 1)
-    return combined.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
-
-
 class EpDispatchExpertsParallel(MoeExpertsParallel):
-    """Dispatch disjoint TP token slices to the experts' owners, then replicate the combined output on TP."""
+    """
+    Dispatch disjoint TP token slices to the experts' owners, then replicate the combined output on TP.
+
+    Example:
+    Let's say we have 8 experts [E0, E7] with DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4). That imply:
+        - Since fsdp_size=4, we have 4 batches B denoted [B0, B3]
+        - Because we have tp_size=2, that means *both ranks share the same batch*
+        - efsdp = (fsdp_size * tp_size) / ep_size = 4 * 2 / 4 = 2
+
+    GPU         0      1       2      3       4      5       6      7
+                |      |       |      |       |      |       |      |
+    dense view  ---------------------------------------------------------
+    batch       [====B0====]   [====B1====]   [====B2====]   [====B3====]
+    tp_size     [___________ 0 ___________]   [___________ 1 ___________]
+    fsdp_size        0              1              2              3
+
+    expert view ---------------------------------------------------------
+
+    experts     E0E1   E2E3    E4E5   E6E7    E0E1   E2E3    E4E5   E6E7
+    ep_size      0      1       2      3       0      1       2      3
+    efsdp_size [___________ 0 ___________]   [___________ 1 ___________]
+
+    Assume token 1 in B0 chose E4, which lives on another rank, so it must travel by all-to-all. B0 sits on 2 ranks (cf diagram), so if both sent it, E4 would compute it twice.
+    We need to make sure that token 1 is in rank 0 range, so rank 0 sends it and rank 1 does not have it in its slice.
+    """
+
+    def _dispatch_tokens(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        num_local_experts: int,
+        ep_group,
+        ep_size: int,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[int], list[int]]:
+        """Send each selected (token, expert) pair to the rank that owns the expert.
+
+        Also returns the sort order and the per-rank split sizes that `_combine_tokens` needs to reverse the exchange.
+        """
+        hidden_dim = hidden_states.size(-1)
+        num_top_k = top_k_index.size(-1)
+
+        # Sorting the selected pairs by expert groups them by owner rank, since each rank owns a contiguous range of
+        # experts, and the per-expert counts tell every receiver which expert each token it gets is for. The split
+        # sizes are the one host sync of the layer.
+        expert_ids = top_k_index.reshape(-1)
+        order = torch.argsort(expert_ids)
+        send_tokens = hidden_states[order // num_top_k]
+        send_counts = torch.zeros(num_local_experts * ep_size, dtype=torch.long, device=hidden_states.device)
+        send_counts = send_counts.scatter_add_(0, expert_ids, torch.ones_like(expert_ids)).view(
+            ep_size, num_local_experts
+        )
+        recv_counts = torch.empty_like(send_counts)
+        torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
+        send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
+        recv_tokens = all_to_all_single(
+            send_tokens.new_empty(sum(recv_sizes), hidden_dim),
+            send_tokens,
+            output_split_sizes=recv_sizes,
+            input_split_sizes=send_sizes,
+            group=ep_group,
+        )
+        recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
+        recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
+        return recv_tokens, recv_expert_ids, order, send_sizes, recv_sizes
+
+    def _run_local_experts(
+        self,
+        experts_forward: Callable,
+        tokens: torch.Tensor,
+        expert_ids: torch.Tensor,
+        num_local_experts: int,
+    ) -> torch.Tensor:
+        """Run local experts with top-1 routing and unit weights; apply routing weights after combine."""
+        # One zero row per expert keeps tokens and all expert weights connected to backward. Without it,
+        # empty eager experts can skip the reverse all-to-all and FSDP reduction, leaving other ranks waiting.
+        num_tokens, hidden_dim = tokens.shape
+        local_expert_ids = torch.arange(num_local_experts, device=tokens.device)
+        tokens = torch.cat([tokens, tokens.new_zeros(num_local_experts, hidden_dim)])
+        expert_ids = torch.cat([expert_ids, local_expert_ids]).unsqueeze(-1)
+        weights = torch.ones_like(expert_ids, dtype=tokens.dtype)
+        return experts_forward(tokens, expert_ids, weights)[:num_tokens]
+
+    def _combine_tokens(
+        self,
+        expert_output: torch.Tensor,
+        top_k_weights: torch.Tensor,
+        order: torch.Tensor,
+        send_sizes: list[int],
+        recv_sizes: list[int],
+        ep_group,
+    ) -> torch.Tensor:
+        """Return expert outputs to the token owners and combine them with routing weights."""
+        num_tokens, num_top_k = top_k_weights.shape
+        hidden_dim = expert_output.size(-1)
+        recv_out = all_to_all_single(
+            expert_output.new_empty(order.numel(), hidden_dim),
+            expert_output,
+            output_split_sizes=send_sizes,
+            input_split_sizes=recv_sizes,
+            group=ep_group,
+        )
+        # Restore the original (token, top-k slot) order, then apply routing weights.
+        token_outputs = torch.empty_like(recv_out)
+        token_outputs[order] = recv_out
+        token_outputs = token_outputs.view(num_tokens, num_top_k, hidden_dim)
+        return (token_outputs * top_k_weights.unsqueeze(-1)).sum(dim=1)
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, tp_mesh=None):
+        hidden_states, top_k_index, top_k_weights = args
+        if isinstance(hidden_states, DTensor):
+            hidden_states = hidden_states.to_local()
+        if isinstance(top_k_weights, DTensor):
+            top_k_weights = top_k_weights.to_local()
+        if tp_mesh is None or tp_mesh.size() == 1:
+            return (hidden_states, top_k_index, top_k_weights), kwargs
+
+        tp_group = tp_mesh.get_group()
+        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
+        top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+        # TP ranks share the same batch. Slice tokens here so each is dispatched only once, then restore the full output in the post hook
+        num_tokens, tp_rank, tp_size = hidden_states.size(0), tp_mesh.get_local_rank(), tp_mesh.size()
+        rows = slice(num_tokens * tp_rank // tp_size, num_tokens * (tp_rank + 1) // tp_size)
+        return (hidden_states[rows], top_k_index[rows], top_k_weights[rows]), kwargs
+
+    def transform_output_post_forward(self, module, output, mesh, *, tp_mesh=None, num_tokens=None):
+        if tp_mesh is None or tp_mesh.size() == 1:
+            return output
+        tp_rank, tp_size = tp_mesh.get_local_rank(), tp_mesh.size()
+        rows = slice(num_tokens * tp_rank // tp_size, num_tokens * (tp_rank + 1) // tp_size)
+        full_output = output.new_zeros(num_tokens, output.size(-1))
+        full_output[rows] = output
+        return _AllReduceForward.apply(full_output, tp_mesh.get_group())
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None):
-        original_forward = module.forward
+        experts_forward = module.forward
         ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
-        tp_size = tp_mesh.size() if tp_mesh is not None else 1
-
-        def experts_forward(hidden_states, top_k_index, top_k_weights):
-            output = original_forward(hidden_states, top_k_index, top_k_weights)
-            if hidden_states.size(0) == 0 and torch.is_grad_enabled():
-                # Eager experts may return disconnected zeros on an empty receiver. Keep both the
-                # reverse all-to-all and the expert FSDP reductions in the backward graph on every rank.
-                output = output + hidden_states
-                for param in module.parameters():
-                    if isinstance(param, DTensor):
-                        param = param.to_local()
-                    output = output + param.reshape(-1)[:0].sum()
-            return output
 
         def tp_forward(hidden_states, top_k_index, top_k_weights):
-            if isinstance(hidden_states, DTensor):
-                hidden_states = hidden_states.to_local()
-            if isinstance(top_k_weights, DTensor):
-                top_k_weights = top_k_weights.to_local()
+            # Read the full token count before the pre hook slices the inputs on TP.
             num_tokens = hidden_states.size(0)
-            if tp_size > 1:
-                # Inputs and router scores are replicated on TP. Sum the slice gradients before they
-                # reach the router and trunk, and combine outputs with an identity backward.
-                hidden_states = _AllReduceBackward.apply(hidden_states, tp_mesh.get_group())
-                top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_mesh.get_group())
-                # TP ranks share the same batch. Slice tokens here so each is dispatched only once,
-                # then restore the full output below; Trainer does not need a separate EP sampler.
-                tp_rank = tp_mesh.get_local_rank()
-                rows = slice(num_tokens * tp_rank // tp_size, num_tokens * (tp_rank + 1) // tp_size)
-                hidden_states, top_k_index, top_k_weights = (
-                    hidden_states[rows],
-                    top_k_index[rows],
-                    top_k_weights[rows],
-                )
+            (hidden_states, top_k_index, top_k_weights), _ = self.transform_inputs_pre_forward(
+                module, (hidden_states, top_k_index, top_k_weights), {}, ep_mesh, tp_mesh=tp_mesh
+            )
             with self.context_around_forward(module, ep_mesh):
-                # The sharding leaves the module with its local expert count.
-                output = dispatch_experts_forward(
-                    experts_forward,
-                    module.num_experts,
-                    hidden_states,
-                    top_k_index,
-                    top_k_weights,
-                    ep_group,
-                    ep_size,
-                    tp_size=tp_size,
+                tokens, expert_ids, order, send_sizes, recv_sizes = self._dispatch_tokens(
+                    hidden_states, top_k_index, module.num_experts, ep_group, ep_size
                 )
-            if tp_size > 1:
-                full_output = output.new_zeros(num_tokens, output.size(-1))
-                full_output[rows] = output
-                output = _AllReduceForward.apply(full_output, tp_mesh.get_group())
-            return output
+                expert_output = self._run_local_experts(experts_forward, tokens, expert_ids, module.num_experts)
+                output = self._combine_tokens(
+                    expert_output, top_k_weights, order, send_sizes, recv_sizes, ep_group
+                ).to(hidden_states.dtype)
+
+            return self.transform_output_post_forward(module, output, ep_mesh, tp_mesh=tp_mesh, num_tokens=num_tokens)
 
         module.forward = tp_forward
         return module
@@ -951,17 +978,6 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
         )
 
 
-def _validate_plan_override(model: nn.Module, plan_name: str, override: dict[str, str], model_names: set[str]):
-    """Reject override keys that match nothing, e.g. `layers.*` when the model uses `model.layers.*`."""
-    valid_names = model_names | set(getattr(model, plan_name))
-    for pattern in override:
-        if not any(fnmatchcase(name, pattern) for name in valid_names):
-            raise ValueError(
-                f"The `{plan_name}` pattern {pattern!r} does not match any module, parameter, or existing plan "
-                f"entry in {type(model).__name__}. Check the full path, including any 'model.' prefix."
-            )
-
-
 def resolve_parallel_plans(
     model: nn.Module, distributed_config: DistributedConfig
 ) -> tuple[dict[str, str], dict[str, str]]:
@@ -971,11 +987,20 @@ def resolve_parallel_plans(
     when its parallel size is 1. EP owns every module it names, so TP rules for those modules and their children
     are dropped: expert weights are sharded once, by the EP plan.
     """
-    model_names = {name for name, _ in model.named_modules()} | {name for name, _ in model.named_parameters()}
+    # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
+    layer_names = {name for name, _ in model.named_modules()} | {name for name, _ in model.named_parameters()}
+    layer_names |= {replace_layer_number_by_wildcard(name) for name in layer_names}
     for plan_name in ("tp_plan", "ep_plan"):
         override = getattr(distributed_config, plan_name)
         if isinstance(override, dict):
-            _validate_plan_override(model, plan_name, override, model_names)
+            valid_names = layer_names | set(getattr(model, plan_name))
+            for pattern in override:
+                if pattern not in valid_names:
+                    raise ValueError(
+                        f"The `{plan_name}` pattern {pattern!r} does not match any module, parameter, "
+                        f"or existing plan entry in {type(model).__name__}. "
+                        "Check the full path, including any 'model.' prefix."
+                    )
 
     if isinstance(distributed_config.tp_plan, dict):
         model._tp_plan = model.tp_plan | distributed_config.tp_plan
@@ -992,7 +1017,8 @@ def resolve_parallel_plans(
         )
 
     def is_expert_path(name: str, paths: list[str]) -> bool:
-        return any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in paths)
+        # An EP path also owns its children, e.g. `...experts.gate_up_proj` under `...experts`.
+        return any(re.fullmatch(rf"{_plan_pattern_to_regex(path)}(\..*)?", name) for path in paths)
 
     expert_paths = list(ep_plan)
     if "ep_dispatch_experts" in ep_plan.values():
@@ -1006,72 +1032,56 @@ def resolve_parallel_plans(
     return tp_plan, ep_plan
 
 
-def _apply_parallel_plan(
-    model: nn.Module, mesh: DeviceMesh, plan: dict[str, str], install_forward: Callable | None = None
-) -> nn.Module:
-    """Shard the parameters named by `plan` as DTensor placeholders and install the styles' forward hooks.
-
-    `install_forward(style_name, style, module)` replaces the default `style.install_forward(module, mesh)`.
-    """
-    _validate_parallel_plan_styles(plan)
+def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
+    """Apply parameter sharding and forward hooks on the TP mesh."""
+    tp_plan = model.tp_plan if tp_plan is None else tp_plan
+    _validate_parallel_plan_styles(tp_plan)
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+            style_name = _get_parameter_plan(parameter_name=full, plan=tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, mesh, parameter_name=full)
-                style.shard_param(module, p_name, mesh)
+                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
+                style.shard_param(module, p_name, tp_mesh)
 
-        # Install the input/output transforms required by this module's style.
-        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+        # Install the input/output transforms required by this module's TP style.
+        style_name = _get_parameter_plan(parameter_name=name, plan=tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "mla_kv_a_proj":
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            if install_forward is None:
-                ALL_PARALLEL_STYLES[style_name].install_forward(module, mesh)
-            else:
-                install_forward(style_name, ALL_PARALLEL_STYLES[style_name], module)
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model
 
 
-def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dict[str, str] | None = None):
-    """DTensor backend: shard params as placeholders and install TP forward hooks. Defaults to `model.tp_plan`."""
-    return _apply_parallel_plan(model, tp_mesh, model.tp_plan if tp_plan is None else tp_plan)
+def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
+    """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
+    for name, module in model.named_modules():
+        for p_name, _ in list(module.named_parameters(recurse=False)):
+            full = f"{name}.{p_name}" if name else p_name
+            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+                style = ALL_PARALLEL_STYLES[style_name]
+                style.validate_param(module, p_name, ep_mesh, parameter_name=full)
+                style.shard_param(module, p_name, ep_mesh)
 
+        # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
+        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            style = ALL_PARALLEL_STYLES[style_name]
+            if style_name == "ep_dispatch_experts":
+                style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
+            else:
+                style.install_forward(module, ep_mesh)
+        module._is_hooked = True
 
-def apply_masked_expert_parallelism(model: nn.Module, tp_mesh: DeviceMesh, ep_plan: dict[str, str]):
-    """Shard the experts across `tp_mesh` and install the router masking and all-reduce hooks.
-
-    Every rank of the mesh sees the same tokens, runs its local experts on them and all-reduces the outputs, so
-    this path requires `ep_size == tp_size`.
-    """
-    return _apply_parallel_plan(model, tp_mesh, ep_plan)
-
-
-def apply_dispatch_expert_parallelism(
-    model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, ep_plan: dict[str, str]
-):
-    """Shard the experts across `ep_mesh` and install the all-to-all dispatch hooks.
-
-    Every rank keeps its own tokens and only exchanges the routed (token, expert) pairs, so `ep_size` is free of
-    `tp_size`. TP ranks share a batch: the dispatch hook takes `tp_mesh` to send disjoint token slices and rebuild
-    the replicated output.
-    """
-
-    def install_forward(style_name, style, module):
-        if style_name == "ep_dispatch_experts":
-            style.install_forward(module, ep_mesh, tp_mesh=tp_mesh)
-        else:
-            style.install_forward(module, ep_mesh)
-
-    return _apply_parallel_plan(model, ep_mesh, ep_plan, install_forward=install_forward)
+    return model
 
 
 def gather_state_dict_for_save(

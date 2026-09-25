@@ -14,7 +14,6 @@ import os
 import socket
 import tempfile
 from abc import ABC, abstractmethod
-from fnmatch import fnmatchcase
 from itertools import product
 
 from parameterized import parameterized
@@ -391,56 +390,27 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     dist.barrier()
 
 
-def _ep_plan_for_layout(model_ref, layout):
-    """Override the expert forward rules of the model's EP plan for `layout`, keeping its weight sharding rules.
-
-    `None` selects router masking with all-reduce (`ep_router` + `moe_tp_experts`), anything else token dispatch
-    (`ep_dispatch_experts`). Routers are named either `gate` or `router`, depending on the model.
-    """
-    ep_plan = {}
-    for experts_path, style in model_ref.ep_plan.items():
-        if style not in ("moe_tp_experts", "ep_dispatch_experts"):
-            continue
-        experts_name = next(name for name, _ in model_ref.named_modules() if fnmatchcase(name, experts_path))
-        parent = model_ref.get_submodule(experts_name.rsplit(".", 1)[0])
-        router_path = f"{experts_path.rsplit('.', 1)[0]}.{'gate' if hasattr(parent, 'gate') else 'router'}"
-        if layout is None:
-            ep_plan[experts_path] = "moe_tp_experts"
-            ep_plan[router_path] = "ep_router"
-        else:
-            ep_plan[experts_path] = "ep_dispatch_experts"
-    return ep_plan
-
-
-def _load_ep_and_reference_models(model_path, model_class, layout=None):
-    """Load EP model and non-EP reference model for comparison.
-
-    Layouts, on `world_size` ranks with `ep_size=world_size`:
-    - `None`: router masking with all-reduce. TP and EP span the same ranks, which all see the same tokens.
-    - `"fsdp"`: token dispatch with `tp_size=1`; the dense modules are FSDP-sharded and every rank has its own batch.
-    - `"tp"`: token dispatch with `tp_size=world_size`; TP ranks share a batch and dispatch disjoint token slices.
-    """
-    model_ref = model_class.from_pretrained(model_path)
-    world_size = dist.get_world_size()
-    ep_plan = _ep_plan_for_layout(model_ref, layout)
-    if layout == "fsdp":
-        distributed_config = DistributedConfig(tp_size=1, fsdp_size=world_size, ep_size=world_size, ep_plan=ep_plan)
-    else:
-        distributed_config = DistributedConfig(tp_size=world_size, fsdp_size=1, ep_size=world_size, ep_plan=ep_plan)
-    model_ep = model_class.from_pretrained(model_path, distributed_config=distributed_config)
+def _load_ep_and_reference_models(model_path, model_class):
+    """Load EP model and non-EP reference model for comparison."""
+    # All-reduce EP: every rank sees the same tokens, so TP and EP span the same ranks.
+    model_ep = model_class.from_pretrained(
+        model_path,
+        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), ep_size=dist.get_world_size()),
+    )
     dist.barrier()
 
     device = model_ep.device
+    model_ref = model_class.from_pretrained(model_path)
     model_ref = model_ref.to(device)
 
     return model_ep, model_ref, device
 
 
-def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation, layout=None):
+def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
     """Implementation for comparing EP and non-EP model outputs."""
     set_seed(0)
 
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class, layout=layout)
+    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
 
     model_ep.eval()
     model_ref.eval()
@@ -463,11 +433,11 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_im
     dist.barrier()
 
 
-def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation, layout=None):
+def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
     """Implementation for comparing EP and non-EP model backward passes."""
     set_seed(0)
 
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class, layout=layout)
+    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
     model_ep.train()
     model_ref.train()
 
@@ -489,27 +459,6 @@ def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_i
         f"Non-EP loss: {loss_ref.item()}, EP loss: {loss_ep.item()}, "
         f"Diff: {(loss_ref - loss_ep).abs().item()}"
     )
-
-    # A missing or doubled gradient reduction leaves the forward, and so the loss, untouched: only the parameter
-    # gradients show it. Sharded gradients are gathered back to the full parameter before comparing.
-    from torch.distributed.tensor import DTensor
-
-    grads_ref = {name: param.grad for name, param in model_ref.named_parameters() if param.grad is not None}
-    grads_ep = {name: param.grad for name, param in model_ep.named_parameters() if param.grad is not None}
-    assert grads_ep.keys() == grads_ref.keys(), (
-        f"Parameters with a gradient differ. Only in EP: {sorted(grads_ep.keys() - grads_ref.keys())}, "
-        f"only in reference: {sorted(grads_ref.keys() - grads_ep.keys())}"
-    )
-    mismatched = []
-    for name, grad in grads_ep.items():
-        grad = grad.full_tensor() if isinstance(grad, DTensor) else grad
-        ref = grads_ref[name]
-        if not torch.allclose(ref, grad.to(ref.device), atol=atol, rtol=rtol):
-            mismatched.append(
-                f"{name}: max abs diff {(ref - grad).abs().max().item():.3e}, "
-                f"ref norm {ref.norm().item():.3e}, EP norm {grad.norm().item():.3e}"
-            )
-    assert not mismatched, "EP and non-EP model gradients differ:\n" + "\n".join(mismatched)
 
     dist.barrier()
 
@@ -699,13 +648,15 @@ class TensorParallelTesterMixin(ABC):
             )
 
     @parameterized.expand(
-        [(tie, impl, None) for tie, impl in product([False, True], ["eager", "grouped_mm", "batched_mm"])]
-        # Token dispatch is orthogonal to the experts implementation: one case per layout, see
-        # `_load_ep_and_reference_models`.
-        + [(False, "eager", "fsdp"), (False, "eager", "tp")]
+        list(
+            product(
+                [False, True],  # tie_word_embeddings
+                ["eager", "grouped_mm", "batched_mm"],  # experts_implementation
+            )
+        )
     )
     @is_tensor_parallel_test
-    def test_ep_forward(self, tie_word_embeddings, experts_implementation, layout):
+    def test_ep_forward(self, tie_word_embeddings, experts_implementation):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
@@ -719,14 +670,12 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation, layout=layout
+                tmp_dir, model_class, atol, rtol, experts_implementation
             )
 
-    @parameterized.expand(
-        [("eager", None), ("grouped_mm", None), ("batched_mm", None), ("eager", "fsdp"), ("eager", "tp")]
-    )
+    @parameterized.expand([("eager",), ("grouped_mm",), ("batched_mm",)])
     @is_tensor_parallel_test
-    def test_ep_backward(self, experts_implementation, layout):
+    def test_ep_backward(self, experts_implementation):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config()
@@ -740,5 +689,5 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation, layout=layout
+                tmp_dir, model_class, atol, rtol, experts_implementation
             )

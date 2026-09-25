@@ -796,12 +796,6 @@ class Data2VecVisionForImageClassification(Data2VecVisionPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.data2vec_vision(
             pixel_values,
@@ -1125,10 +1119,6 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         **kwargs,
     ) -> tuple | SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python

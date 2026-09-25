@@ -25,8 +25,7 @@ from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
-    apply_dispatch_expert_parallelism,
-    apply_masked_expert_parallelism,
+    apply_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
     resolve_parallel_plans,
@@ -195,38 +194,29 @@ class DistributedMixin:
         # and the experts named by the EP plan are removed from the TP plan so they are sharded once.
         tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
         distributed_config._validate_resolved_ep_plan(ep_plan)
-        dispatch = "ep_dispatch_experts" in ep_plan.values()
 
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        # The TP plan shards the dense modules across `tp`; the EP plan shards the experts on `ep` with token
-        # dispatch, or on `tp` with router masking (all-reduce EP needs identical tokens in each expert group,
-        # hence `ep_size == tp_size`). FSDP2 then shards every parameter across `fsdp`, or `efsdp` for
-        # dispatched experts.
         if tp_plan:
             model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
-        if ep_plan and dispatch:
-            # Experts live in the expert view: sharded on `ep`, FSDP-wrapped on `efsdp` below. TP ranks share a
-            # batch, so the hook also takes `tp` to dispatch disjoint token slices and rebuild the full output.
-            model = apply_dispatch_expert_parallelism(
-                model, mesh_manager.get_mesh("ep"), mesh_manager.get_mesh("tp"), ep_plan
-            )
-        elif ep_plan:
-            # `ep_size == tp_size`, so the `ep` and `tp` groups hold the same ranks. Shard the experts on `tp`
-            # anyway: FSDP2 wraps them on `fsdp` below, and a DTensor's mesh must share its root mesh with the
-            # FSDP mesh (`DeviceMesh._concatenate` rejects mixed roots). `tp` and `fsdp` are both in the dense
-            # view; `ep` lives in the expert view, whose FSDP axis is `efsdp` (used by the dispatch path).
-            model = apply_masked_expert_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
 
-        # Dispatched experts are always wrapped on `efsdp`, even at size one, so the trunk's `fsdp` wrapper
-        # excludes them and every parameter goes through the same FSDP save path.
-        if distributed_config.fsdp_size > 1 or dispatch:
+        if ep_plan:
+            tp_mesh = mesh_manager.get_mesh("tp")
+            ep_mesh = mesh_manager.get_mesh("ep")
+
+            if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
+                # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
+                model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
+            elif "ep_dispatch_experts" in ep_plan.values():
+                # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
+                # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
+                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
+
+        if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)
-        return model
 
-    def _uses_expert_dispatch(self, distributed_config: DistributedConfig) -> bool:
-        return distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
+        return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
         """Return whether this rank should write checkpoint files."""
@@ -286,7 +276,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or self._uses_expert_dispatch(distributed_config):
+        if distributed_config.fsdp_size > 1 or (
+            distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
+        ):
             # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and the
             # full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
