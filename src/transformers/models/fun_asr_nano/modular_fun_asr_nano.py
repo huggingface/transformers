@@ -28,7 +28,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
@@ -64,15 +64,6 @@ LANGUAGE_CODE_TO_NAME = {
     "ja": "日文",
     "japanese": "日文",
 }
-
-
-def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
-    """Broadcast / validate the hotword argument to match batch_size."""
-    if isinstance(keywords, str):
-        keywords = [keywords]
-    if isinstance(keywords, list | tuple) and all(isinstance(item, str) for item in keywords):
-        keywords = [list(keywords)] * batch_size
-    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
@@ -159,15 +150,13 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
 
         languages = prepare_language_inputs(language, batch_size, LANGUAGE_CODE_TO_NAME, return_code=False)
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
-        keyword_batches = _prepare_keyword_inputs(keywords, batch_size)
+        keyword_batches = prepare_keyword_inputs(keywords, batch_size)
 
         conversations = []
         for audio_item, prompt_text, keyword_list, language_name in zip(
             audio_items, prompts, keyword_batches, languages
         ):
-            content = [make_audio_chat_template_content(audio_item)]
-            if prompt_text is not None:
-                content.append({"type": "text", "text": prompt_text})
+            content = make_audio_chat_template_content(audio_item, prompt_text)
             if keyword_list:
                 content.append({"type": "keywords", "keywords": keyword_list})
             if language_name is not None:

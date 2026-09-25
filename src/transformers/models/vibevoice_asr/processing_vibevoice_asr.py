@@ -208,14 +208,10 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
 
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
 
-        conversations = []
-        for prompt_text, audio_item in zip(prompts, audio_items):
-            content = [make_audio_chat_template_content(audio_item)]
-
-            if prompt_text is not None:
-                content.append({"type": "text", "text": prompt_text})
-
-            conversations.append([{"role": "user", "content": content}])
+        conversations = [
+            [{"role": "user", "content": make_audio_chat_template_content(audio_item, prompt_text)}]
+            for prompt_text, audio_item in zip(prompts, audio_items)
+        ]
 
         return self.apply_chat_template(
             conversations,
