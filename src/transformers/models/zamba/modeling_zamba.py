@@ -42,7 +42,8 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,
-    is_tracing,
+    is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
 )
 from ...utils.output_capturing import capture_outputs
 from .configuration_zamba import ZambaConfig
@@ -337,7 +338,12 @@ def mamba_selective_scan(
         scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
         ssm_state = all_states[:, -1]
 
-    elif use_associative_scan and associative_scan is not None and is_tracing(hidden_states):
+    elif (
+        use_associative_scan
+        and associative_scan is not None
+        # There is no onnx translation for this op so we rely on the normal sequential path then
+        and (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
+    ):
 
         def combine_fn(left, right):
             a_left, b_left = left
@@ -430,6 +436,7 @@ class ZambaMambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_mamba_act]
 
         self.use_fast_kernels = config.use_mamba_kernels
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
@@ -580,7 +587,7 @@ class ZambaMambaMixer(nn.Module):
                     return_last_state=output_final_state,
                     # Old model: only when user request it explicitly
                     use_mambapy=False,
-                    use_associative_scan=False,
+                    use_associative_scan=self.use_associative_scan,
                 )
 
                 if output_final_state:

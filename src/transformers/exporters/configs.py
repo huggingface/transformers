@@ -175,7 +175,6 @@ class ExecutorchConfig(DynamoConfig):
             becomes a zero-argument method in the exported program. Values must be supported by
             ExecuTorch (for example, scalars or tensors) and consistent with the exported graph.
             Off-graph cache geometry is added automatically; overlapping names raise an error.
-        alloc_graph_input
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
