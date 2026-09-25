@@ -611,7 +611,6 @@ class MraSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class MraSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -639,7 +638,6 @@ class MraAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class MraIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -655,7 +653,6 @@ class MraIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class MraOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

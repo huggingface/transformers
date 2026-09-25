@@ -220,7 +220,6 @@ class NystromformerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class NystromformerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -248,7 +247,6 @@ class NystromformerAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Nystromformer
 class NystromformerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -264,7 +262,6 @@ class NystromformerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Nystromformer
 class NystromformerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -340,7 +340,6 @@ class BridgeTowerLinkTower(nn.Module):
             raise NotImplementedError(f"link_tower_type {self.link_tower_type} is not implemented")
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BridgeTower
 class BridgeTowerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -355,7 +354,6 @@ class BridgeTowerSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BridgeTower
 class BridgeTowerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -371,7 +369,6 @@ class BridgeTowerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->BridgeTower
 class BridgeTowerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -431,7 +428,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->BridgeTower
 class BridgeTowerSelfAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
@@ -499,7 +495,6 @@ class BridgeTowerSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaCrossAttention with Roberta->BridgeTower
 class BridgeTowerCrossAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
@@ -576,7 +571,6 @@ class BridgeTowerCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower,BERT->BRIDGE_TOWER
 class BridgeTowerAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
         super().__init__()
