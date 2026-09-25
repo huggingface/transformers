@@ -258,14 +258,9 @@ def _ignore_causal_mask_sdpa(
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
     passed).
     """
-    # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
-    # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
-    # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
-    # `ignore_causal_mask = True` if we are not tracing
-    # NOTE: under `torch.compile` we can still skip, but only if we do not have to read the values of the
-    # `padding_mask`. This requires torch>=2.14: before pytorch#176499, dynamo replaced
-    # `torch.compiler.is_exporting()` by a constant `True`, so older versions keep the previous behavior of
-    # never skipping while compiling.
+    # Never skip under export: `is_causal` would be hard-coded into the graph for the traced query length
+    # (pytorch#108108). `torch.compile` can still skip when `padding_mask` values need not be read, on
+    # torch>=2.14 (before pytorch#176499, `torch.compiler.is_exporting()` was a constant `True` under dynamo).
     if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
         return False
 

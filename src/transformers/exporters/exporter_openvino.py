@@ -1407,35 +1407,6 @@ def _fix_empty_expand(gm, node):
 
 
 @register_fx_node_fix("openvino")
-def _fix_expand_own_extent(gm, node):
-    """Keep an ``aten.expand`` axis the tensor already has as ``-1`` rather than a recomputed extent.
-
-    GQA's `repeat_kv` names every extent of its 5-D expand, including the key length — which the graph
-    reaches by a second route (the cache's length plus this step's), and OV then has two dynamic dimensions
-    it cannot prove equal (`Broadcast Check 'input_shape[j] == 1'`). `-1` keeps the axis the tensor already
-    has, which leaves the expand/reshape pair the CPU plugin fuses attention through.
-    """
-    if node.target is not torch.ops.aten.expand.default:
-        return False
-    tensor, sizes = node.args[0], list(node.args[1])
-    val = tensor.meta.get("val") if hasattr(tensor, "meta") else None
-    if val is None:
-        return False
-    offset = len(sizes) - val.ndim  # expand aligns sizes to the input's trailing dims
-    changed = False
-    for axis in range(max(offset, 0), len(sizes)):
-        dim, size = val.shape[axis - offset], sizes[axis]
-        if isinstance(dim, int) or not isinstance(size, torch.fx.Node):
-            continue
-        if str(size.meta.get("val")) == str(dim):
-            sizes[axis] = -1
-            changed = True
-    if changed:
-        node.args = (tensor, sizes, *node.args[2:])
-    return changed
-
-
-@register_fx_node_fix("openvino")
 def _fix_view_inferred_dim(gm, node):
     """Replace the inferred ``-1`` in an ``aten.view`` target that also carries a symbolic dim.
 
