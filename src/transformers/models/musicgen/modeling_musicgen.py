@@ -1540,9 +1540,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
                 if self.config.decoder.decoder_start_token_id is not None
                 else self.config.decoder.bos_token_id
             )
-            decoder_input_ids = shift_tokens_right(
-                labels, self.config.decoder.pad_token_id, decoder_start_token_id
-            )
+            decoder_input_ids = shift_tokens_right(labels, self.config.decoder.pad_token_id, decoder_start_token_id)
 
         elif decoder_input_ids is None and decoder_inputs_embeds is None:
             audio_encoder_outputs = self.audio_encoder(
