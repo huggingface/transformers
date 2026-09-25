@@ -169,8 +169,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LlavaNextVideoProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             size = (

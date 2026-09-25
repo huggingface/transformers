@@ -38,6 +38,10 @@ class HyperCLOVAXVisionV2_ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class HyperCLOVAXVisionV2Processor(ProcessorMixin):
     valid_processor_kwargs = HyperCLOVAXVisionV2_ProcessorKwargs
+    text_kwargs = {
+        "padding": False,
+        "return_mm_token_type_ids": True,
+    }
     # Stopgap for `video_duration`: the hub template renders it as text, leaving the literal
     # `<|video_duration|>` placeholder when missing. These three overrides fill it in after the fact,
     # instead of the single `replace_video_token` hook other video models use (qwen3_vl, glm4v). Remove
@@ -85,10 +89,10 @@ class HyperCLOVAXVisionV2Processor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
+        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = HyperCLOVAXVisionV2_ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = merged_kwargs.get("images_kwargs", {})
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -99,8 +103,7 @@ class HyperCLOVAXVisionV2Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = HyperCLOVAXVisionV2_ProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes

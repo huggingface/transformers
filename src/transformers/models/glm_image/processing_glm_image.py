@@ -42,6 +42,8 @@ class GlmImageImagesKwargs(ImagesKwargs, total=False):
 
 
 class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: GlmImageImagesKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -52,7 +54,6 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
             "target_w": 768,
         },
     }
-    images_kwargs: GlmImageImagesKwargs
 
 
 @requires(backends=("torch",))

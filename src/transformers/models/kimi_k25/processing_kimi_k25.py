@@ -42,6 +42,10 @@ class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Kimi_K25Processor(ProcessorMixin):
     valid_processor_kwargs = Kimi_K25ProcessorKwargs
+    text_kwargs = {
+        "padding": False,
+        "return_mm_token_type_ids": True,
+    }
 
     def __init__(
         self,
@@ -115,10 +119,10 @@ class Kimi_K25Processor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
+        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Kimi_K25ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = merged_kwargs["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -129,8 +133,7 @@ class Kimi_K25Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Kimi_K25ProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs["videos_kwargs"]
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             temporal_patch_size = (
                 videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size

@@ -890,7 +890,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
 
 class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
-    _defaults = AttributeError()
+    pass
 
 
 class VideoLlama3Processor(Qwen3VLProcessor):

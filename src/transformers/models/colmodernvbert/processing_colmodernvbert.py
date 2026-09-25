@@ -298,8 +298,7 @@ class ColModernVBertProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = ColModernVBertProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
 
             num_image_row_cols = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
