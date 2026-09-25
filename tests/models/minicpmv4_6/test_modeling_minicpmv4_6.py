@@ -192,10 +192,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    @unittest.skip(reason="MiniCPM-V 4.6 uses Qwen3.5 hybrid cache layers that are incompatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
-        pass
-
     @unittest.skip(reason="Conversion only for CausalLM loading from saved ConditionalLM")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass

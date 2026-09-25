@@ -415,11 +415,6 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
-    def test_generate_with_quant_cache(self):
-        pass
-
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -766,11 +761,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip("Audio modality is not tested here")
     def test_get_audio_features_attentions(self, return_dict: bool | None):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(

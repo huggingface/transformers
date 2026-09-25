@@ -173,10 +173,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_compilation_all_outputs(self):
         pass
 
-    @unittest.skip("Qwen4-Exp hybrid linear-attention cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
-        pass
-
     @unittest.skip(
         "Cannot generate from random embeds since the ple embedding needs to revert them if input_ids are not provided"
     )
@@ -546,10 +542,6 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("QSA index selection has data-dependent control flow")
     def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Qwen4-Exp hybrid linear-attention cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(
