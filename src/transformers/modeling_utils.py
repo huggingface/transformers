@@ -5109,7 +5109,7 @@ class AttentionInterface(GeneralInterface):
         "paged|flash_attention_4": flash_attention_forward,
         "paged|flash_attention_3": flash_attention_forward,
         "paged|flash_attention_2": flash_attention_forward,
-        "paged|sdpa": sdpa_attention_paged_forward,
+        "paged|sdpa": sdpa_attention_forward,
         "paged|eager": eager_paged_attention_forward,
     }
 
