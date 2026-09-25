@@ -338,6 +338,7 @@ class NemotronHOmniModelTestMixin:
 @require_torch
 class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTest, unittest.TestCase):
     model_tester_class = NemotronHOmniVision2TextModelTester
+    test_torch_exportable = False  # packed image patches use data-dependent shapes in RadioModel._forward_packed
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
