@@ -857,7 +857,7 @@ def _flash_attention_forward_kvcache(
     key_states = key_states.reshape(-1, 1, *key_states.shape[-2:])
     value_states = value_states.reshape(-1, 1, *value_states.shape[-2:])
     # Also, rather than cu_seq_lens_k, we use cache_seqlens, which is the number of tokens in the cache per sequence
-    num_sequences = key_states.size(0)
+    num_sequences = key_states.size(0)  # NOTE: this holds because for now block table is only available for decode
     flash_kwargs["cache_seqlens"] = cu_seq_lens_k[1 : num_sequences + 1] - cu_seq_lens_k[:num_sequences] - 1
 
     out = flash_kvcache_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
