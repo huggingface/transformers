@@ -1722,6 +1722,7 @@ class Trainer:
             # asking Accelerate to wrap the DTensor parameters in DDP or to shard them again.
             model = self.accelerator.prepare_model(model, device_placement=False, evaluation_mode=True)
             self.optimizer = self.accelerator.prepare(self.optimizer)
+            self._sync_replicated_trainable_parameters(model)
         elif use_accelerator_prepare:
             if delay_optimizer_creation:
                 # TODO: check if we can move this somewhere else
@@ -2568,6 +2569,36 @@ class Trainer:
 
         # 4. Default fallback
         return 1
+
+    def _sync_replicated_trainable_parameters(self, model: nn.Module) -> None:
+        """
+        Keep the trainable parameters that FSDP2 does not manage identical across ranks.
+
+        A parameter added after `fully_shard` (a PEFT adapter attached to a model sharded at load time) stays a plain
+        replicated tensor next to the DTensor base weights. FSDP2 reduce-scatters only what it sharded and the DDP
+        wrap is skipped for such a model, so each rank would init its own copy and train it on its own batch.
+        Broadcast these parameters from rank 0, then average their gradient over all ranks at the end of each
+        accumulation window.
+        """
+        if not dist.is_available() or not dist.is_initialized() or dist.get_world_size() == 1:
+            return
+
+        from torch.distributed.tensor import DTensor
+
+        def average_gradient(param):
+            # Averaging the accumulated micro-batch gradients once gives the same result as after every backward.
+            if self.accelerator.sync_gradients:
+                dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
+
+        for param in model.parameters():
+            if not param.requires_grad or isinstance(param.data, DTensor):
+                continue
+            with torch.no_grad():
+                dist.broadcast(param.data, src=0)
+            # `train()` can run more than once on the same model: register the hook only once.
+            if not getattr(param, "_replicated_grad_hook_registered", False):
+                param.register_post_accumulate_grad_hook(average_gradient)
+                param._replicated_grad_hook_registered = True
 
     def _wrap_model(self, model: nn.Module, training: bool = True, dataloader: DataLoader | None = None) -> nn.Module:
         """Wrap `model` for distributed training if needed (DDP, FSDP, SageMaker, etc.)."""
