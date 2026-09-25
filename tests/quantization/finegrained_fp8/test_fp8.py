@@ -75,6 +75,27 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
 
+class FineGrainedFP8TpPlanTest(unittest.TestCase):
+    def test_update_tp_plan_rewrites_composite_text_config(self):
+        """The expert `*_scale_inv` plan entries must be added where the plans live. A
+        composite config (text + vision) keeps `base_model_ep_plan` on its text config;
+        rewriting the outer config left the expert scales replicated under expert
+        parallelism while the expert weights were sharded."""
+        from transformers import Qwen3VLMoeConfig
+
+        config = Qwen3VLMoeConfig()
+        text_config = config.get_text_config(decoder=True)
+        self.assertNotIn("layers.*.mlp.experts.gate_up_proj_scale_inv", text_config.base_model_ep_plan)
+
+        FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
+
+        plan = text_config.base_model_ep_plan
+        self.assertEqual(plan["layers.*.mlp.experts.gate_up_proj_scale_inv"], "grouped_gemm")
+        self.assertEqual(plan["layers.*.mlp.experts.down_proj_scale_inv"], "grouped_gemm")
+        # nothing is written onto the outer config
+        self.assertIsNone(getattr(config, "base_model_ep_plan", None))
+
+
 @slow
 @require_accelerate
 @require_torch_accelerator
