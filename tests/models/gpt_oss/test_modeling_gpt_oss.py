@@ -166,7 +166,11 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_flash_attn_2_equivalence(self):
         pass
 
-    @unittest.skip("Most probably because of the MOE, the moe and router does not ignore padding tokens")
+    @unittest.skip(
+        "Not a padding issue: routing is per-token (no expert capacity, no cross-token reduction), so pad "
+        "tokens cannot change a real token's expert assignment. The mismatch comes from `index_add_` in the "
+        "experts: padding changes which tokens group into each expert, so accumulation order changes."
+    )
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
