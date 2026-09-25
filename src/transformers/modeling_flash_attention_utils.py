@@ -688,7 +688,6 @@ def _process_flash_attention_kwargs(
         elif supports_mapping["learnable_sink"]:
             flash_kwargs["learnable_sink"] = s_aux  # FA4
 
-    # The block table is named `block_table` in Tri Dao's kernels and `page_table` in vLLM's FA3 kernel
     if block_table is not None:
         if supports_mapping["block_table"]:
             flash_kwargs["block_table"] = block_table  # FA2, FA3, ...
