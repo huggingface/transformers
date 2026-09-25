@@ -290,7 +290,10 @@ def lazy_import_flash_attention(
         # Similarly, some kernels don't have a kvcache function
         _process_paged_kwargs_fn = _lazy_define_process_function(_flash_paged_fn) if _flash_paged_fn else dict
 
-    return (_flash_fn, _flash_varlen_fn, _flash_paged_fn), (_process_flash_kwargs_fn, _process_paged_kwargs_fn)
+    return (
+        (_flash_fn, _flash_varlen_fn, _flash_paged_fn, _pad_fn, _unpad_fn),
+        (_process_flash_kwargs_fn, _process_paged_kwargs_fn),
+    )
 
 
 def _index_first_axis(tensor, indices):
