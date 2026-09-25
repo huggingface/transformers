@@ -33,7 +33,6 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
-from .utils.generic import split_attention_implementation
 from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 
 
@@ -172,8 +171,6 @@ def _lazy_imports(
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    is_paged, implementation = split_attention_implementation(implementation)
-
     # If we are on NPU, use the NPU-specific flash functions. No need to check other branches, is_fa is False on NPU
     if is_torch_npu_available():
         # Package `flash-attn` is unavailable on Ascend NPU, which will cause ImportError
@@ -201,9 +198,7 @@ def _lazy_imports(
 
         # Map standard attention names to hub kernel repos
         kernel_repo = FLASH_ATTN_KERNEL_FALLBACK.get(implementation, implementation)
-        # We want to explicitly register the name with `paged|` if found
-        kernel_implementation = f"paged|{implementation}" if is_paged else kernel_repo
-        kernel = load_and_register_attn_kernel(kernel_implementation, attention_wrapper, allow_all_kernels)
+        kernel = load_and_register_attn_kernel(kernel_repo, attention_wrapper, allow_all_kernels)
 
         flash_attn_func = getattr(kernel, "flash_attn_func", None)
         flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)

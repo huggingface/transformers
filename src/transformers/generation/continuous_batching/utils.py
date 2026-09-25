@@ -58,7 +58,7 @@ class ThreadLocalCounter(threading.local):
 
 def attn_mask_is_needed(config: PreTrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
-    return config._attn_implementation in ["paged|eager", "paged|sdpa"]
+    return config._attn_implementation in ["paged|eager", "sdpa"]
 
 
 def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:
