@@ -452,6 +452,22 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], e
     return model, _make_contiguous(sample_inputs), partitioner
 
 
+def prepare_for_openvino(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
+    """CPU inference through the OpenVINO delegate.
+
+    Like XNNPACK this is a CPU path, so the graph is traced on CPU for the same reasons. What differs is
+    who runs the partition: OpenVINO compiles the delegated subgraphs itself, and names its target in a
+    compile spec rather than through partitioner configs — so `partition_exclude` has nothing to act on.
+    """
+    from executorch.backends.openvino.partitioner import OpenvinoPartitioner
+    from executorch.exir.backend.backend_details import CompileSpec
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    partitioner = [OpenvinoPartitioner([CompileSpec("device", b"CPU")])]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
 def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
@@ -472,6 +488,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], excl
 
 
 _BACKEND_PREPARE = {
+    "openvino": prepare_for_openvino,
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
 }

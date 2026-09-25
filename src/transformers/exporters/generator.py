@@ -55,6 +55,8 @@ from .cache import (
     _advance_cache,
     _cache_length,
     _empty_container,
+    advance_cache_length,
+    is_fixed_size,
     mask_width,
     materialize_cache_layers,
     resize_to_traced_lengths,
@@ -70,6 +72,7 @@ from .decompose import (
 from .precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
 from .utils import (
     cast_leaf_tensors,
+    get_leaf_tensors,
     runner_feed,
 )
 
@@ -770,8 +773,15 @@ class ExportedGenerator(GenerationMixin):
         past_key_values = past_key_values if past_key_values is not None else cache_params
         # How much the cache already holds decides which graph runs and, below, how wide the mask and the
         # streamed-modality window are. One answer per step: every reader here means the same thing by it.
-        past_len = _cache_length(past_key_values) if past_key_values is not None else 0
-        runner = self._prefill_runner if past_len == 0 else self._decode_runner
+        # How far along the sequence is, which decides which graph runs. A runtime that owns its cache
+        # keeps that count itself: the loop's cache never grows, so asking it would answer 0 at every step
+        # and send a decode token to the prompt graph.
+        decode_runner = self._decode_runner
+        if decode_runner.owns_state:
+            past_len = decode_runner.state_length
+        else:
+            past_len = _cache_length(past_key_values) if past_key_values is not None else 0
+        runner = self._prefill_runner if past_len == 0 else decode_runner
         # A backend that owns its state keeps the sequence inside the runtime, so the cache the loop holds
         # never grows and cannot say how far along we are — the runner does.
         if runner.owns_state:
@@ -792,12 +802,14 @@ class ExportedGenerator(GenerationMixin):
         feed.update(self._step_kwargs(runner, kwargs, feed, text.shape[1]))
         feed.update(self._streamed_window(runner, kwargs, past_len, text.shape[1]))
         feed.update(self._empty_containers(runner, feed, text.shape[0]))
-        # How wide the graph's key axis is: a fixed-size cache is allocated in full, so the mask has to be
-        # padded out to it, while a growing one is only as long as what it already holds plus this step's
-        # query. Growing vs fixed-size is the layer's *kind*, not what `get_max_length` reports — a
-        # `DynamicSlidingWindowLayer` grows and crops, yet reports its whole window (4096 on a gemma2 text
-        # config), padding the mask to a width the graph never declared (`set_inputs` then refuses it).
-        cache_len = past_len + text.shape[1] if runner.owns_state else mask_width(past_key_values, text.shape[1])
+        # How wide the graph's key axis is: a fixed-size cache is allocated in full (in the variables too, for
+        # a graph holding its own), so the mask spans its capacity; a growing one spans what it holds plus this
+        # query. That is the layer's *kind*, not `get_max_length`: a `DynamicSlidingWindowLayer` grows yet
+        # reports its whole window (4096 on gemma2), a width the graph never declared.
+        if runner.owns_state and not is_fixed_size(past_key_values):
+            cache_len = past_len + text.shape[1]
+        else:
+            cache_len = mask_width(past_key_values, text.shape[1])
         feed.update(self._mask_feed(runner, attention_mask, position_ids, cache_len))
         # A graph that names the decoder's mask separately gets the causal one here — `attention_mask` is
         # the *encoder's* on those models. `generate` supplies neither this nor decoder positions (the
@@ -812,15 +824,43 @@ class ExportedGenerator(GenerationMixin):
         # back a cache the exported graph does not take (xlstm) would otherwise be fed an input it never had.
         if past_key_values is not None and runner.cache_input is not None and not runner.owns_state:
             feed[runner.cache_input] = past_key_values
+        # A prompt graph returns its cache and a decode graph keeps one in variables, so the two do not meet:
+        # the first step this graph runs takes over what the prompt left in the loop's cache. Only that step
+        # — afterwards the variables are ahead of it, and seeding again would drop every token since.
+        # With no prompt graph, what the loop's cache holds before the first step is the cross half the
+        # encoder seeded (`_seed_cross_cache`), which a decode graph traced after that write only reads.
+        if runner.owns_state and not runner.state_length and past_key_values is not None:
+            seeded = {
+                path: tensor
+                for path, tensor in get_leaf_tensors({runner.cache_input: past_key_values}).items()
+                if path in runner.state_paths
+                and ".cross_attention_cache." in path
+                and (tensor.dim() < 2 or tensor.shape[-2])
+            }
+            if seeded:
+                runner.adopt_state(seeded, 0)
+
         # Only what this graph declares: a model whose decode graph takes its text some other way
         # (higgs_audio_v2 embeds it upstream) would otherwise be handed an `input_ids` it never had. Pytree
         # kwargs are the exception — see `declares`, which knows a graph naming only their leaves still takes
         # them (the cache, `encoder_outputs`, a mask dict).
         outputs = runner(**{name: value for name, value in feed.items() if runner.declares(name, value)})
+        # A prompt graph and a decode graph keep separate caches — one in its outputs, one in variables of
+        # its own — and nothing carries the prompt's across. It moves here, once, on the way out of the step
+        # that wrote it: from the prompt's outputs, or from its own variables where it kept them there.
+        if decode_runner is not runner and decode_runner.owns_state and not decode_runner.state_length:
+            written = runner.state_tensors() if runner.owns_state else outputs
+            shared = {name: value for name, value in written.items() if name in decode_runner.state_paths}
+            if shared:
+                decode_runner.adopt_state(shared, text.shape[1])
         # Nothing to advance when the runtime holds the cache: it wrote this step's keys and values into its
         # own variables, and `state_length` is what the next step reads instead of a cache's shape.
         if past_key_values is not None and not runner.owns_state:
             past_key_values = _advance_cache(past_key_values, outputs, num_new_tokens=text.shape[1])
+        elif is_fixed_size(past_key_values):
+            # Still count what the runtime took in: `generate` builds a fixed-size cache's 4D mask from the
+            # loop cache's length, and an unadvanced one masks each query off its own slot.
+            advance_cache_length(past_key_values, text.shape[1])
         # A recurrent model's state is not a KV cache and `generate` must not carry it back as one; which
         # kind the graphs hold is `_is_recurrent`, read off the kwarg the decode graph takes it under.
         returned_cache = None if self._is_recurrent else past_key_values
@@ -934,10 +974,10 @@ class ExportedGenerator(GenerationMixin):
         for key, value in kwargs.items():
             if value is None or key in _TEXT_KWARGS or key in foreign:
                 continue
-            # `_declares`, not an exact name match: a *list-valued* input (ernie4_5_vl_moe's
-            # `temporal_slice_index`, the even/odd gather pair) is declared by its flattened leaves
-            # (`temporal_slice_index.0`, `.1`), and each runner flattens the pytree its own way.
-            if modality.runner.declares(name := grid_renamed(key), value):
+            # `declares`, not a name match: a list-valued input (ernie4_5_vl_moe's `temporal_slice_index`) is
+            # declared by its flattened leaves. The modality's own kwargs stay even when undeclared: the precompute
+            # derives what the graph takes from them, and OpenVINO drops an unread omni `input_features`.
+            if modality.runner.declares(name := grid_renamed(key), value) or key in modality.input_keys:
                 inputs[name] = value
         # Only when nothing named the graph's feature input: the modality's kwarg is that tensor under
         # another name (`pixel_values_videos` for a video getter that declares `pixel_values`). A getter
@@ -987,18 +1027,32 @@ class ExportedGenerator(GenerationMixin):
         return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        """Multi-modal M-RoPE: build the `[text; 3 vision]` 4-axis `position_ids` the exported decode graph
-        expects — what `generate` normally gets from a VLM's own override of this method. Runs that same
-        override without the model: the text row from `super()` (GenerationMixin), the 3 vision rows from
-        the model class's own `get_rope_index` (see `get_rope_index_from_config`), and the decode step
-        advances the text row by the cached rope-delta. Models that lay out no modality spans (plain
-        decoders, VLMs with 1D text positions like Llava) keep the standard positions."""
+        """Multi-modal M-RoPE: build the multi-axis `position_ids` the exported graph expects — what
+        `generate` normally gets from a VLM's own override of this method. Runs that same override without
+        the model: the text row from `super()` (GenerationMixin), the modality rows from the model class's
+        own `get_rope_index` (see `get_rope_index_from_config`), and the decode step advances the text row
+        by the cached rope-delta. Models that lay out no modality spans (plain decoders, VLMs with 1D text
+        positions like Llava) keep the standard positions.
+
+        How many rows that is depends on the architecture, and the two conventions are not told apart by
+        the config: qwen2_vl's layout returns the 3 vision axes and its model puts the text row in front,
+        hunyuan_vl's returns every axis its `mrope_section` declares and puts nothing in front — and both
+        return as many rows as their config states sections. So the count comes from the graph about to be
+        fed (`ExportMetadata.position_axes`), which is the one place it was recorded."""
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
         cache = model_kwargs.get("past_key_values")
         past_length = _cache_length(cache)
+        # How many rows the graph about to be fed takes, which is the only place the per-architecture
+        # layout is stated — see `ExportMetadata.position_axes`. `None` for an artifact that recorded no
+        # shape, which leaves the qwen-style layout below as it was.
+        runner = self._prefill_runner if past_length == 0 else self._decode_runner
+        axes = runner.export_metadata.position_axes
         if past_length != 0 and getattr(self, "_rope_deltas", None) is not None:
-            return text_positions[None, ...] + self._rope_deltas
+            positions = text_positions[None, ...] + self._rope_deltas
+            # A decode graph traced against every axis (hunyuan_vl) takes them all; one traced against the
+            # single broadcast row (qwen2_vl) takes that row.
+            return positions.expand(axes, -1, -1) if axes and axes > positions.shape[0] else positions
 
         if model_kwargs.get("input_ids") is not None and model_kwargs["input_ids"].shape[1] > 0:
             inputs_tensor = model_kwargs["input_ids"]
@@ -1010,4 +1064,8 @@ class ExportedGenerator(GenerationMixin):
         if rope_index is None:
             return text_positions
         vision_positions, self._rope_deltas = rope_index
+        # A layout that already laid out every axis the graph takes is fed as it is; one that laid out the
+        # modality axes alone gets the text row in front, which is what its model's own forward does.
+        if axes == vision_positions.shape[0]:
+            return vision_positions
         return torch.cat([text_positions[None, ...], vision_positions], dim=0)

@@ -45,9 +45,13 @@ EXPORT_METADATA_KEY = "transformers_export_metadata"
 
 
 def _traced_kwarg(value: Any) -> dict[str, Any]:
-    """How one traced kwarg was shaped, as JSON: rank and dtype for a tensor, the same per leaf for a
+    """How one traced kwarg was shaped, as JSON: shape and dtype for a tensor, the same per leaf for a
     mapping of them (a per-attention-type mask dict), and the container's kind for anything else — a cache
     is the one a runner has to recognise, since it feeds it as an object rather than a tensor.
+
+    The shape is what the trace saw, hints and all, not what the graph left symbolic — an axis a runtime
+    has to match is one the export specialised, and the recorded size is what it specialised to. `rank` is
+    kept beside it: it is the older field, and readers that only ever wanted the rank still ask for it.
 
     A container also records the class it was, as `module:qualname`. The graph takes such a kwarg as that
     *type* (dynamo bakes it into the input spec, and the other backends name their leaves by its fields),
@@ -55,7 +59,11 @@ def _traced_kwarg(value: Any) -> dict[str, Any]:
     encoder output carrying more than hidden states (parakeet's frame mask) only survives as its own type.
     """
     if isinstance(value, torch.Tensor):
-        return {"rank": value.dim(), "dtype": str(value.dtype).removeprefix("torch.")}
+        return {
+            "rank": value.dim(),
+            "shape": [int(dim) for dim in value.shape],
+            "dtype": str(value.dtype).removeprefix("torch."),
+        }
     if isinstance(value, Mapping):
         recorded = {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
         # A per-attention-type mask is a plain dict and is rebuilt as one. An encoder's output is a mapping
@@ -271,6 +279,20 @@ class ExportMetadata:
         mismatching a shape. Recorded in kwarg space, not read off an artifact's declared shapes — those
         are a different fact and gave this a different answer per backend."""
         return self.kwargs.get("attention_mask", {}).get("rank")
+
+    @property
+    def position_axes(self) -> int | None:
+        """How many rows the graph's M-RoPE `position_ids` was traced with, `None` when it took the plain
+        2-D `[batch, positions]` (or none at all).
+
+        Where the modality axes sit is per architecture, and the count is not derivable from the config:
+        qwen2_vl's `get_rope_index` lays out the 3 vision axes and its model prepends the text row, while
+        hunyuan_vl's lays out every axis its `mrope_section` declares and prepends nothing. Both return as
+        many rows as their config states sections, so only the trace can say how many the graph takes —
+        and feeding one row too many fails a guard rather than broadcasting.
+        """
+        shape = self.kwargs.get("position_ids", {}).get("shape")
+        return shape[0] if isinstance(shape, list) and len(shape) == 3 else None
 
     @property
     def mask_dtype(self) -> torch.dtype | None:

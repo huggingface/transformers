@@ -511,6 +511,9 @@ class ModelRunner(ABC):
     # export folds the cache into internal variables the plugin keeps between calls, so the loop neither
     # feeds one nor reads one back — see `ExportedGenerator.forward`.
     owns_state: bool = False
+    # The cache leaves a graph keeps in variables instead of taking them as inputs — none, unless the backend
+    # folds its state into the graph (OpenVINO).
+    state_paths: frozenset[str] = frozenset()
 
     @functools.cached_property
     def input_names(self) -> tuple[str, ...]:
@@ -575,11 +578,17 @@ class ModelRunner(ABC):
             # to the name scan the way an artifact without metadata does.
             if containers:
                 return containers
-        return tuple(
+        declared = tuple(
             kwarg
             for kwarg in ("cache_params", "past_key_values")
             if any(name.removeprefix("input.").startswith(kwarg) for name in self.input_names)
         )
+        # A stateful graph folds its cache into variables, so none of its leaves is an input — its state paths
+        # (`cache_params.rnn_state.0.2`, reformer's `past_buckets_states.states_cache.0`) name the kwarg they
+        # came from instead. Without this the cache is not declared, never reaches the runner, and the graph
+        # runs every step from its variables' initial values.
+        folded = tuple(dict.fromkeys(path.split(".", 1)[0] for path in sorted(self.state_paths) if "." in path))
+        return declared or folded
 
     def declares(self, name: str, value=None) -> bool:
         """Whether this graph takes the feed entry `name` — directly, or as the pytree whose leaves it names.
@@ -593,7 +602,9 @@ class ModelRunner(ABC):
         The one rule for "does this graph take this", asked here by every caller: a feed built against a
         weaker rule (an exact name match) silently loses whatever a flattening backend renamed.
         """
-        if name in self.input_names or name == self.cache_input:
+        # Every cache, not only the primary one: voxtral_realtime's decode folds `encoder_past_key_values` into
+        # state beside `past_key_values`, and a second cache no input names would otherwise be dropped.
+        if name in self.input_names or name in self.cache_inputs:
             return True
         return not isinstance(value, torch.Tensor) and any(
             declared.removeprefix("input.").startswith((f"{name}.", f"{name}_")) for declared in self.input_names

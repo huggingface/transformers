@@ -211,6 +211,7 @@ class ExecutorchConfig(DynamoConfig):
             Target ExecuTorch backend. Supported values:
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
+            - `"openvino"` — CPU inference via the ExecuTorch OpenVINO delegate.
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,

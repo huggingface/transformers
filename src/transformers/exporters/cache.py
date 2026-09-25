@@ -154,6 +154,16 @@ def resize_to_traced_lengths(cache, lengths: dict[int, int]) -> None:
             layers[index].max_cache_len = length
 
 
+def is_fixed_size(cache) -> bool:
+    """Whether `cache` is allocated at its full length up front (`StaticCache`) rather than growing.
+
+    Read off the first self-attention layer, the one `mask_width` asks: a fixed-size layer is the kind
+    that compiles (`is_compileable`), whatever it currently holds.
+    """
+    layers = _self_attention_layers(cache) if cache is not None else []
+    return bool(layers) and getattr(layers[0], "is_compileable", False)
+
+
 def mask_width(cache, query_length: int) -> int:
     """How wide a causal mask over `cache` has to be — what the cache itself reports (`get_mask_sizes`),
     which is the same question `create_causal_mask` puts to it in an eager forward.
@@ -221,17 +231,32 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
                 if old is not new:
                     old.copy_(new)
     _mark_existing_states(past_key_values)
-    for layer in _self_attention_layers(past_key_values):
-        if hasattr(layer, "cumulative_length_int"):
-            layer.cumulative_length_int += num_new_tokens
-        elif isinstance(getattr(layer, "cumulative_length", None), int):
-            layer.cumulative_length += num_new_tokens
+    counted_by_graph = any(name.endswith("cumulative_length") for name, _ in cache_updates)
+    advance_cache_length(past_key_values, num_new_tokens, counted_by_graph)
     # An `EncoderDecoderCache` also keeps `is_updated` python flags (pytree context, so the graph never
     # flips them and the growing rebuild resurrects the pre-step values): every decoder step leaves the
     # cross cache written — the prefill graph writes it, decode graphs read it.
     if getattr(past_key_values, "is_updated", None):
         past_key_values.is_updated = dict.fromkeys(past_key_values.is_updated, True)
     return past_key_values
+
+
+def advance_cache_length(past_key_values, num_new_tokens: int, counted_by_graph: bool = False) -> None:
+    """Advance each self-attention layer's length counter by `num_new_tokens`.
+
+    A fixed-size layer counts in a tensor rather than an int, and a graph that folded its cache into runtime
+    state hands no counter back — so the count stays where it started and `get_seq_length()` answers 0 for a
+    cache that is plainly full, which is also where `generate` anchors its 4D mask. `counted_by_graph` skips
+    the tensor counters a step's outputs already carried."""
+    for layer in _self_attention_layers(past_key_values):
+        counter = getattr(layer, "cumulative_length", None)
+        if hasattr(layer, "cumulative_length_int"):
+            layer.cumulative_length_int += num_new_tokens
+        elif isinstance(counter, int):
+            layer.cumulative_length += num_new_tokens
+        elif torch.is_tensor(counter) and not counted_by_graph:
+            # In place, so a graph reading this buffer keeps reading the same one.
+            counter.add_(num_new_tokens)
 
 
 def _mark_existing_states(past_key_values) -> None:

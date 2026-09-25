@@ -414,6 +414,28 @@ def _prepare_qwen3_asr_audio_inputs(config: Any, inputs: dict[str, Any]) -> None
     inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], config, kwargs=inputs)
 
 
+@register_export_input_preparer("input_values")
+def _prepare_acoustic_noise(config: Any, inputs: dict[str, Any]) -> None:
+    """Draw the VAE noise an acoustic tokenizer adds to its latents, as an input rather than inside the graph.
+
+    VibeVoice samples `vae_std * randn` on every forward, and no exported graph can match that: OpenVINO strips
+    the sampling to zeros, ONNX draws from its own generator. Drawn here — with the same two calls, in the same
+    order, that `get_audio_features` makes — eager and export share one sample, and a seeded run repeats it.
+    The latents are `(batch, ceil(samples / hop_length), hidden_size)`; chunking keeps that, since a chunk is a
+    multiple of `hop_length`.
+    """
+    encoder = getattr(config, "acoustic_tokenizer_encoder_config", None)
+    if encoder is None or not getattr(encoder, "vae_std", None) or inputs.get("acoustic_noise") is not None:
+        return
+    values = inputs["input_values"]
+    batch = values.shape[0]
+    noise_std = encoder.vae_std * torch.randn(batch, device=values.device, dtype=values.dtype)
+    latents = (batch, -(-values.shape[-1] // encoder.hop_length), encoder.hidden_size)
+    inputs["acoustic_noise"] = noise_std[:, None, None] * torch.randn(
+        latents, device=values.device, dtype=values.dtype
+    )
+
+
 def precompute_export_inputs(config: PreTrainedConfig, inputs: Mapping[str, Any]) -> dict[str, Any]:
     """Return `inputs` plus the tensors a model would otherwise compute data-dependently while tracing.
 

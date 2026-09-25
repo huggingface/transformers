@@ -406,9 +406,46 @@ def _patch_optimize_ir(original):
 
     def patch(model, *args, **kwargs):
         kwargs.setdefault("should_fold", lambda node: False if node.op_type == "Resize" else None)
-        return original(model, *args, **kwargs)
+        with _exact_identity_rewrites():
+            return original(model, *args, **kwargs)
 
     return patch
+
+
+@contextmanager
+def _exact_identity_rewrites():
+    """Let onnxscript's identity rewrites (`x + 0`, `x * 1`, …) fire on an exact 0 or 1 only.
+
+    A pattern constant matches within `math.isclose(rel_tol=1e-5, abs_tol=1e-8)`, so `x + 1e-10` counts as
+    `x + 0` and the epsilon a guarded division adds is deleted: patchtst's `loss.sum() / (mask.sum() +
+    1e-10)` turns into `0 / 0 = nan` whenever nothing is masked. Held only while the optimizer runs.
+    """
+    import onnxscript.rewriter as rewriter
+    from onnxscript.rewriter import _pattern_ir
+
+    def constants(node, seen):
+        if id(node) in seen:
+            return
+        seen.add(id(node))
+        if isinstance(node, _pattern_ir.Constant):
+            yield node
+            return
+        for value in vars(node).values() if hasattr(node, "__dict__") else ():
+            for item in value if isinstance(value, (list, tuple)) else (value,):
+                if hasattr(item, "__dict__") and type(item).__module__.startswith("onnxscript"):
+                    yield from constants(item, seen)
+
+    seen, tightened = set(), []
+    for rule in rewriter._DEFAULT_REWRITE_RULES:
+        for constant in constants(rule, seen):
+            if isinstance(constant._value, (int, float)) and constant._value in (0, 1):
+                tightened.append((constant, constant._rel_tol, constant._abs_tol))
+                constant._rel_tol = constant._abs_tol = 0.0
+    try:
+        yield
+    finally:
+        for constant, rel_tol, abs_tol in tightened:
+            constant._rel_tol, constant._abs_tol = rel_tol, abs_tol
 
 
 def _patch_cummax_or_cummin(original, *, mode: str):
@@ -678,6 +715,35 @@ def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     if node.target is not torch.ops.aten.alias.default:
         return False
     node.replace_all_uses_with(node.args[0])
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_noop_squeeze(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Drop the axes of a `squeeze` that are not of size 1, which torch leaves in place.
+
+    `x.squeeze(0)` on a `[12, dim]` tensor is `x` in torch, but torchlib lowers `squeeze.dim` to ONNX `Squeeze`
+    unconditionally, and ORT rejects the graph outright (`Dimension of input 0 must be 1 instead of 12`) —
+    mistral3 squeezes its image features twice, once too often. Only a static size is decided here: a
+    symbolic one may be 1 at runtime, and there the `Squeeze` is what torch would have done.
+    """
+    if node.target not in (torch.ops.aten.squeeze.dim, torch.ops.aten.squeeze.dims):
+        return False
+    source = node.args[0]
+    value = source.meta.get("val") if isinstance(source, torch.fx.Node) else None
+    if not isinstance(value, torch.Tensor) or value.dim() == 0:
+        return False
+    dims = [node.args[1]] if isinstance(node.args[1], int) else list(node.args[1])
+    sizes = [value.shape[dim] for dim in dims]
+    kept = [dim for dim, size in zip(dims, sizes) if not (isinstance(size, int) and size != 1)]
+    if len(kept) == len(dims):
+        return False
+    if kept:
+        node.target = torch.ops.aten.squeeze.dims
+        node.args = (source, kept)
+        return False
+    node.replace_all_uses_with(source)
     gm.graph.erase_node(node)
     return True
 

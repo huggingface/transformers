@@ -321,7 +321,7 @@ class FalconH1Mixer(BambaMixer):
             else:
                 scan_output = scan_result
 
-            scan_output = scan_output.view(batch_size, seq_len, -1)
+            scan_output = scan_output.reshape(batch_size, seq_len, -1)
 
             # Key difference 3: Norm based handling as optional between z and norm
             if self.mamba_rms_norm:

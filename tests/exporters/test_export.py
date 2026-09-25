@@ -157,6 +157,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "on the Hiera window-partition guard `Eq(s/32 - (s/4)//8, 0)` (a `FloorDiv` in a rational "
             "equation); tracing itself succeeds. ONNX + ORT also overrun the 1000s timeout at ~7.5 min."
         ),
+        "HieraForPreTraining": (
+            "The MAE head masks its patches by indexing the embeddings with a boolean mask "
+            "(`hidden_states[positions]`), whose kept count is data-dependent — the number of unmasked "
+            "mask units is not a function of the input shapes. `reroll` then divides the sequence length "
+            "by each stage's stride, so the unbacked count reaches a guard it cannot answer "
+            "(`GuardOnDataDependentSymNode: 416*((u0//416)) < 2`). Static shapes work, and the other three "
+            "Hiera classes work under both — only the pre-training head masks."
+        ),
         "SeamlessM4TForSpeechToSpeech": (
             "The Conformer speech encoder is non-causal, so `sdpa_attention_forward` evaluates "
             "`q_length > 1 and attention_mask is None and is_causal`; under dynamic shapes `q_length > 1` "
@@ -350,6 +358,30 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # ONNX, every variant.
     "onnx": {
+        "DFineModel": (
+            "The encoder's `topk` picks the decoder's queries from scores that all tie on the tiny test model "
+            "(every one of its 336 anchors scores the same), and which of them a kernel keeps is arbitrary — "
+            "ORT's `TopK` and torch's CPU and CUDA kernels each pick differently. The decoder is built from that "
+            "pick, so its outputs differ along with the `enc_topk_*` ones, and there is nothing left of it to "
+            "compare. Dynamo, OpenVINO and ExecuTorch happen to agree with eager on the pick, so they still test it."
+        ),
+        "DFineForObjectDetection": "Same as `DFineModel`.",
+        "Deimv2Model": "Same as `DFineModel`.",
+        "Deimv2ForObjectDetection": "Same as `DFineModel`.",
+        "MMGroundingDinoModel": "Same as `DFineModel` — all 340 proposals it ranks score the same on the test model.",
+        "MMGroundingDinoForObjectDetection": "Same as `DFineModel`.",
+        "PPDocLayoutV2ForObjectDetection": "Same as `DFineModel`.",
+        "PPDocLayoutV3ForObjectDetection": "Same as `DFineModel`.",
+        "RTDetrModel": "Same as `DFineModel` — all 84 anchors score the same on the test model.",
+        "RTDetrForObjectDetection": "Same as `DFineModel`.",
+        "RTDetrV2Model": "Same as `DFineModel`.",
+        "RTDetrV2ForObjectDetection": "Same as `DFineModel`.",
+        "TapasForQuestionAnswering": (
+            "Selects the answer column with an `argmax` over column logits, and on the tiny test model the two "
+            "best columns tie exactly in about a third of the rows; torch and ORT break that tie differently, "
+            "and every cell outside the chosen column then gets `-10000`, so half the logits differ by exactly "
+            "that. The other Tapas heads pick no column and are compared as usual."
+        ),
         "CHMv2ForDepthEstimation": (
             "`run_decompositions` retraces through aot_autograd which emits a `detach_(alias(...))` "
             "pair the functional-graph assertion rejects (independent of any source `.detach()` — "
@@ -382,6 +414,17 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # ONNX, dynamic-shape only.
     "onnx.dynamic": {
+        "DPTModel": (
+            "onnxruntime-gpu 1.23.2 cannot open the session: `SaveInitializedTensors` fails on "
+            "`!utils::HasExternalDataInMemory(tensor_proto)` when one initializer is read by a node it places on "
+            "the CPU and another on CUDA. The test initialises `cls_token` and `position_embeddings` to the same "
+            "zeros, onnxscript's `DeduplicateInitializersPass` merges them, and in the dynamic graph the "
+            "position-embedding resize `Concat` runs on the host while the CLS `Expand` runs on the device. Giving "
+            "`cls_token` its own copy per consumer opens the session, and the CPU provider opens it as is. 1.23.2 "
+            "is the last onnxruntime built for Python 3.10; static folds the resize away."
+        ),
+        "DPTForDepthEstimation": "Same as `DPTModel`.",
+        "DPTForSemanticSegmentation": "Same as `DPTModel`.",
         "GroundingDinoModel": (
             "Same `detach_(alias(...))` retrace bug as CHMv2, but only triggered under dynamic "
             "shapes — `aot_autograd`'s decomposition pipeline emits the detach itself (verified "
@@ -1076,6 +1119,55 @@ def needs_half_precision_export(model) -> bool:
 # ──────────────────────────── mixins ────────────────────────────
 
 
+# The outputs that are what a `topk` picked: a detector's selected queries and a QA head's top positions. Where
+# the scores it picked from tie, which element a kernel keeps is arbitrary — torch's own CPU and CUDA kernels
+# disagree — so `_check_outputs_close` leaves these out whenever the model returns anything else to compare.
+_SELECTED_BY_TOPK = frozenset(
+    {
+        "enc_topk_logits",
+        "enc_topk_bboxes",
+        "start_top_log_probs",
+        "start_top_index",
+        "end_top_log_probs",
+        "end_top_index",
+    }
+)
+
+
+def _assert_values_close(case, actual: dict, expected: dict, compare, atol: float, rtol: float) -> None:
+    """Compare the tensors a runtime produced against eager's, on eager's device and in eager's dtype.
+
+    A backend stores at the precision it computes in, which for a half model is `f16` where eager kept
+    `bfloat16` — the same numbers to the tolerance, in a type the graph chose. Integers likewise: OpenVINO
+    keeps an `int64` counter in `int32` state, since its CPU plugin holds no `i64` variables. What the precisions are is
+    checked where the export declares them, not here. The device is eager's for the same reason: OpenVINO
+    answers on the host wherever the model was built, and moving its outputs over is what lets the model
+    stay on the GPU, where exporting from a GPU-resident model gets exercised too.
+    """
+    shared = {
+        name: actual[name].to(expected[name].device, expected[name].dtype) for name in expected if name in actual
+    }
+    case.assertTrue(shared, "the runtime produced none of the tensors eager did.")
+    compare(shared, {name: expected[name] for name in shared}, atol=atol, rtol=rtol)
+
+
+def _assert_openvino_outputs_close(case, runtime, actual: dict, expected: dict, atol: float, rtol: float) -> None:
+    """Compare what the graph computed against eager, folded state included.
+
+    The cache a stateful export keeps is not among the outputs, so it is read back off the `Assign` sinks
+    and compared with the rest — which is what checks that the graph wrote the keys and values eager did,
+    rather than only that it named them.
+    """
+    runner = getattr(runtime, "runner", None)
+    folded = runner.state_tensors() if runner is not None and runner.owns_state else {}
+    produced = {**actual, **folded}
+    # In eager's dtype: OV stores a folded cache at the precision it computes in, which for a half model is
+    # `f16` where eager kept `bfloat16` — the same numbers to the tolerance below, in a type the graph chose.
+    # What is being checked here is the values, and the precisions are compared where the export declares
+    # them (`check_cache_geometry`, the metadata the artifacts carry).
+    _assert_values_close(case, produced, expected, case._check_outputs_close, atol, rtol)
+
+
 def _assert_openvino_output_names(case, runtime, actual: dict, expected: dict) -> None:
     """Every leaf eager returns is accounted for — as an output, or as folded state.
 
@@ -1306,6 +1398,20 @@ class ExportTesterMixin:
         self.assertEqual(
             len(exported_out.scores), len(eager_out.scores), "exported runtime generated a different number of steps"
         )
+        # A runtime holding its own cache is asked directly how much it holds, because nothing in the
+        # outputs would say: a graph attending to an empty cache still answers plausibly, and on a small
+        # model those logits sit well inside any tolerance. Only the decode graph is asked — it is the one
+        # carrying the whole sequence, prompt included, where a prefill graph holds just what it ran.
+        read = exported_out.sequences.shape[1] - 1
+        decode_runner = getattr(runtime, "_decode_runner", None)
+        if getattr(decode_runner, "owns_state", False) and decode_runner.state_length:
+            self.assertEqual(
+                decode_runner.state_length,
+                read,
+                f"{backend} kept {decode_runner.state_length} of the {read} tokens it read: a graph that "
+                "owns its cache was never handed what the graph before it wrote",
+            )
+
         # Ids step by step, while the two runs stay on the same prefix. This is a wiring check — numeric
         # fidelity is asserted per component above — so it puts no score bar on an fp32 export: kernel
         # drift is model-specific, and a tiny random model's top-2 gaps are small enough that argmax flips
@@ -1340,6 +1446,10 @@ class ExportTesterMixin:
         reordered reductions), which perturbs half-precision values by ~2^-8. Widen to the dtype's rounding
         scale so genuine bugs (systematic, larger drift) still fail while benign bf16 noise passes.
         """
+        selected = expected.keys() & _SELECTED_BY_TOPK
+        if selected and len(selected) < len(expected):
+            actual = {name: value for name, value in actual.items() if name not in selected}
+            expected = {name: value for name, value in expected.items() if name not in selected}
         if any(t.dtype in (torch.bfloat16, torch.float16) for t in expected.values()):
             atol, rtol = max(atol, 1.6e-2), max(rtol, 1.6e-2)
         try:
@@ -1532,7 +1642,7 @@ class ExportTesterMixin:
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_onnx_export(self, dynamic):
+    def test_onnx_export(self, dynamic, atol=1e-3, rtol=1e-3):
         """ExportArtifacts each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
@@ -1554,6 +1664,11 @@ class ExportTesterMixin:
                     onnx_outputs = output.runtime()(**inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+                    # And what they hold, not only what they are called: a graph can answer with the
+                    # right names and the wrong numbers.
+                    _assert_values_close(
+                        self, onnx_outputs, eager_outputs[name], self._check_outputs_close, atol, rtol
+                    )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1564,8 +1679,8 @@ class ExportTesterMixin:
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export(self, dynamic):
-        """ExportArtifacts each model class to ExecuTorch, run it, and verify output count matches eager."""
+    def test_executorch_export(self, dynamic, atol=1e-3, rtol=1e-3):
+        """ExportArtifacts each model class to ExecuTorch, run it, and verify its outputs match eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
@@ -1597,8 +1712,11 @@ class ExportTesterMixin:
                     # ExecuTorch reports a missing kernel or an oversized arena.
                     with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
                         outputs = output.runtime()(**inputs)
-                        tensors = [t for t in outputs.values() if isinstance(t, torch.Tensor)]
+                        tensors = {n: t for n, t in outputs.items() if isinstance(t, torch.Tensor)}
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
+                        # And what they hold, not only how many there are: a lowering can answer with
+                        # the right shapes and the wrong numbers.
+                        _assert_values_close(self, tensors, eager_outputs[name], self._check_outputs_close, atol, rtol)
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
@@ -1873,7 +1991,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_onnx_export_generate(self, dynamic, multi_token_decode, generation_config):
+    def test_onnx_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
         """ExportArtifacts prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
@@ -1905,6 +2023,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     onnx_outputs = output.runtime()(**inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+                    # And what they hold, not only what they are called: a graph can answer with the
+                    # right names and the wrong numbers.
+                    _assert_values_close(
+                        self, onnx_outputs, eager_outputs[name], self._check_outputs_close, atol, rtol
+                    )
                     exported[name] = output
 
             # End-to-end id-parity (text and VLM) — see the dynamo call site for the gate.
@@ -1930,7 +2053,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_openvino_export(self, dynamic):
+    def test_openvino_export(self, dynamic, atol=1e-3, rtol=1e-3):
         """ExportArtifacts each model class to OpenVINO IR and verify output names match eager."""
         self._skip_if_not_exportable()
 
@@ -1951,6 +2074,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     runtime = output.runtime()
                     ov_outputs = runtime(**inputs)
                     _assert_openvino_output_names(self, runtime, ov_outputs, eager_outputs[name])
+                    # And what they hold, not only what they are called: every other backend's component
+                    # check compares values against eager, and a graph can answer with the right names and
+                    # the wrong numbers.
+                    _assert_openvino_outputs_close(self, runtime, ov_outputs, eager_outputs[name], atol, rtol)
 
     @GENERATE_EXPORT_PARAMS
     @slow
@@ -1959,7 +2086,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_openvino_export_generate(self, dynamic, multi_token_decode, generation_config):
+    def test_openvino_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
         """ExportArtifacts prefill and decode stages to OpenVINO IR and verify output names match eager."""
         self._skip_if_not_exportable()
 
@@ -1978,10 +2105,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             config = OpenVINOConfig(dynamic=dynamic)
 
             components = self._prepare_export_generate_model_and_inputs(
-                model_class, "openvino", generation_config=generation_config, multi_token_decode=multi_token_decode
+                model_class,
+                "openvino",
+                generation_config=generation_config,
+                multi_token_decode=multi_token_decode,
             )
             eager_outputs = self._collect_eager_outputs(components)
 
+            exported = {}
             for name, component in components.items():
                 model, inputs = component.module, component.inputs
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1989,6 +2120,29 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     runtime = output.runtime()
                     ov_outputs = runtime(**inputs)
                     _assert_openvino_output_names(self, runtime, ov_outputs, eager_outputs[name])
+                    # And what they hold, not only what they are called: every other backend's component
+                    # check compares values against eager, and a graph can answer with the right names and
+                    # the wrong numbers.
+                    _assert_openvino_outputs_close(self, runtime, ov_outputs, eager_outputs[name], atol, rtol)
+                    exported[name] = output
+
+            # And the loop those graphs are for. Checking each component against the call it was captured
+            # from leaves the hand-offs between them untested — a component is handed its cache, while the
+            # loop expects each graph to carry what the one before it wrote.
+            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
+            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
+                if not self._should_skip(
+                    model_class,
+                    generate=True,
+                    dynamic=dynamic,
+                    backend="openvino",
+                    multi_token=multi_token_decode,
+                    generation_config=generation_config,
+                    runtime=True,
+                ):
+                    self._assert_generate_matches_eager(
+                        components, exported, "openvino", generation_config, dynamic, multi_token_decode
+                    )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1999,8 +2153,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, dynamic, multi_token_decode, generation_config):
-        """ExportArtifacts prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
+    def test_executorch_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
+        """ExportArtifacts prefill and decode stages to ExecuTorch, run each, and verify they match eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
@@ -2041,8 +2195,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     # ExecuTorch reports a missing kernel or an oversized arena.
                     with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
                         outputs = output.runtime()(**inputs)
-                        tensors = [t for t in outputs.values() if isinstance(t, torch.Tensor)]
+                        tensors = {n: t for n, t in outputs.items() if isinstance(t, torch.Tensor)}
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
+                        # And what they hold, not only how many there are: a lowering can answer with
+                        # the right shapes and the wrong numbers.
+                        _assert_values_close(self, tensors, eager_outputs[name], self._check_outputs_close, atol, rtol)
                         # Only a component that ran is handed to the generate drive below.
                         exported[name] = output
 

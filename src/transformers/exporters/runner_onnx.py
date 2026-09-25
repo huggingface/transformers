@@ -211,6 +211,10 @@ class OnnxModelRunner(ModelRunner):
         The GPU is named outright, where ORT would otherwise default to device 0 whatever the caller asked
         for. A session that runs on a different GPU than its inputs live on does not copy them across: it
         reads the address it was given on the GPU it was opened for, which faults.
+
+        TF32 follows torch's own setting for matmuls. ORT's CUDA provider turns it on by default, where torch
+        leaves it off, so an fp32 graph would compute its matmuls and convolutions in 10-bit mantissas and
+        drift from the eager model it was exported from — by 1e-2 on a depth decoder.
         """
         import onnxruntime
 
@@ -219,7 +223,14 @@ class OnnxModelRunner(ModelRunner):
             return ["CPUExecutionProvider"]
         if "CUDAExecutionProvider" not in onnxruntime.get_available_providers():
             raise ValueError("This onnxruntime build has no CUDA provider, so the session cannot run on CUDA.")
-        return [("CUDAExecutionProvider", {"device_id": device.index})]
+        use_tf32 = int(torch.backends.cuda.matmul.allow_tf32)
+        return [("CUDAExecutionProvider", {"device_id": device.index, "use_tf32": use_tf32})]
+
+    # ORT's `Pad_Fusion` folds a constant-zero `Pad` into the `MaxPool` that follows it, as the pool's own
+    # `pads` — but a pool pads with -inf, not zero, so wherever a border window holds only negative values the
+    # fused pool returns the largest of them where the graph asked for 0 (BiT's stem pads then pools). The
+    # conv and average-pool folds it also makes are exact without it, so the pass is switched off as a whole.
+    _DISABLED_OPTIMIZERS = ["Pad_Fusion"]
 
     @classmethod
     def from_artifact(cls, artifact, export_metadata=None, device=None, providers=None, **kwargs) -> OnnxModelRunner:
@@ -227,7 +238,9 @@ class OnnxModelRunner(ModelRunner):
         import onnxruntime
 
         providers = providers or cls._providers_for(device)
-        session = onnxruntime.InferenceSession(artifact.model_proto.SerializeToString(), providers=providers)
+        session = onnxruntime.InferenceSession(
+            artifact.model_proto.SerializeToString(), providers=providers, disabled_optimizers=cls._DISABLED_OPTIMIZERS
+        )
         return cls(session, export_metadata=export_metadata, source=artifact, **kwargs)
 
     @classmethod
@@ -238,7 +251,7 @@ class OnnxModelRunner(ModelRunner):
 
         providers = providers or cls._providers_for(device)
         return cls(
-            onnxruntime.InferenceSession(str(path), providers=providers),
+            onnxruntime.InferenceSession(str(path), providers=providers, disabled_optimizers=cls._DISABLED_OPTIMIZERS),
             export_metadata=export_metadata,
             source=path,
             **kwargs,
@@ -343,7 +356,16 @@ class OnnxModelRunner(ModelRunner):
             # Assigned back, not just rebound: binding hands ORT a *pointer*, so a converted tensor that only
             # existed as a loop local would be freed before the run and leave the graph reading whatever took
             # its place (an embedding `Gather` on freed memory reports indices out of bounds).
-            tensor = feed[name] = feed[name].to(device).contiguous()
+            on_host = (
+                device_type == "cuda"
+                and not self._cuda_graph
+                and not feed[name].is_floating_point()
+                and name not in self._shared_outputs
+            )
+            # Integers go over in host memory: ORT turns them into gather indices on its CPU, and a CUDA pointer
+            # it fetches from there reads back garbage on a busy GPU (`CUDA failure 700` from a `GatherND`).
+            # Except a counter sharing its output's buffer, and a CUDA-graph capture's pinned pointers.
+            tensor = feed[name] = (feed[name].cpu() if on_host else feed[name].to(device)).contiguous()
             # Under a CUDA graph the captured pointers have to stay put, so the tensor is copied into a
             # buffer this runner keeps rather than bound where the caller happened to allocate it.
             if self._cuda_graph:
@@ -360,7 +382,12 @@ class OnnxModelRunner(ModelRunner):
             # address instead; the bound shape still says zero, so nothing is read or written through it.
             pointer = tensor.data_ptr() or self._scratch(tensor, name)
             self._io_binding.bind_input(
-                name, device_type, device_index, self._element_types[name], bound_shape, pointer
+                name,
+                "cpu" if on_host else device_type,
+                0 if on_host else device_index,
+                self._element_types[name],
+                bound_shape,
+                pointer,
             )
             if (paired := self._shared_outputs.get(name)) is not None:
                 # One buffer for the pair: the graph's write lands in the tensor it just read, under the same
@@ -399,7 +426,16 @@ class OnnxModelRunner(ModelRunner):
                 buffer.data_ptr() or self._scratch(buffer, name),
             )
             outputs[name] = buffer
+        # ORT runs on a CUDA stream of its own, and the pointers bound above tie it to torch's memory without
+        # tying it to torch's stream. So both directions are ordered by hand: the torch work that produced the
+        # inputs has to land before ORT reads them, and ORT's writes before torch reads the outputs or frees
+        # the inputs. Missing either reads half-written tensors — wrong values, and on a busy GPU (where every
+        # stream runs long) an illegal memory access; an idle one mostly finishes in time, which hides it.
+        if device_type == "cuda":
+            torch.cuda.current_stream(device).synchronize()
         self._session.run_with_iobinding(self._io_binding)
+        if device_type == "cuda":
+            self._io_binding.synchronize_outputs()
         if ort_allocated:
             values = self._io_binding.get_outputs()
             for name in ort_allocated:

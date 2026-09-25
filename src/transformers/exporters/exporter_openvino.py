@@ -129,6 +129,11 @@ class OpenVINOExporter(DynamoExporter):
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
         _rename_model_ports(ov_model, graph_module, inputs_names, outputs_names)
 
+        if config.dynamic:
+            # Only where the trace left axes symbolic — a static export already declares every one of them,
+            # and reshaping a graph that is wholly pinned only disturbs what it settled.
+            _pin_static_input_axes(ov_model, graph_module, inputs_names)
+
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
 
@@ -138,6 +143,8 @@ class OpenVINOExporter(DynamoExporter):
             compress_model_transformation(ov_model)
 
         if config.output_path is not None:
+            # Whatever precision the model holds by now: `save_model` halves `f32` weights on its own, which
+            # would compress an export that never asked for it and compress twice one that did.
             openvino.save_model(ov_model, config.output_path, compress_to_fp16=False)
 
         # What the trace meant, beside what the IR declares: an `openvino.Model` reports port names, shapes
@@ -178,31 +185,99 @@ def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedPr
     return exported_program, graph_module
 
 
-def _move_tensors_to_host(graph_module) -> None:
-    """Rebind the module's tensors to host copies it owns before OV reads them.
+def _prepare_tensors_for_conversion(graph_module) -> None:
+    """Rebind the module's tensors to host copies it owns, in float32, before OV reads them.
 
     OV builds every constant with ``shared_memory=True``, so the constant points into the tensor's
     buffer instead of copying it. For a tensor that is not already on the host, OV first materialises
     one with ``Tensor.numpy(force=True)`` — a temporary that is freed as soon as the constant is
     built, leaving it aimed at memory that gets reused. Weights then read back as garbage (denormals)
-    and the model's outputs collapse to zero. Copies are rebound on the exported module only; the
-    parameters the caller's model holds are left untouched.
+    and the model's outputs collapse to zero.
+
+    Half-precision tensors are promoted to float32 in the same pass. To build a constant from a
+    ``bfloat16`` tensor OV views its bits as ``float16`` — numpy has no ``bfloat16`` — and declares the
+    result ``bf16`` again (``openvino/frontend/pytorch/utils.py``), but the values that come back are
+    the ``float16`` reading of those bits: ``1.0`` arrives as ``1.875`` and ``4.0`` as ``2.25``, so the
+    weights are wrong before anything runs. optimum-intel avoids this by routing weight-bearing modules
+    through ``ModuleExtension`` and promoting whatever is left, which is what OV's own
+    ``__make_16bit_traceable`` does; by the time an FX graph reaches here there are no module boundaries
+    left to extend, so every half-precision tensor is promoted instead. The CPU plugin reports no
+    ``bf16`` among its capabilities in any case, so this costs constant size and no accuracy.
+
+    Copies are rebound on the exported module only; the parameters the caller's model holds are left
+    untouched.
     """
+
+    def on_host_in_float32(tensor: torch.Tensor) -> torch.Tensor:
+        if tensor.dtype in (torch.bfloat16, torch.float16):
+            tensor = tensor.float()
+        return tensor.detach().cpu()
+
+    def needs_repair(tensor: torch.Tensor) -> bool:
+        return tensor.device.type != "cpu" or tensor.dtype in (torch.bfloat16, torch.float16)
+
     for module in graph_module.modules():
         for name, param in list(module._parameters.items()):
-            if param is not None and param.device.type != "cpu":
-                module._parameters[name] = torch.nn.Parameter(param.detach().cpu(), requires_grad=False)
+            if param is not None and needs_repair(param):
+                module._parameters[name] = torch.nn.Parameter(on_host_in_float32(param), requires_grad=False)
         for name, buffer in list(module._buffers.items()):
-            if buffer is not None and buffer.device.type != "cpu":
-                module._buffers[name] = buffer.detach().cpu()
+            if buffer is not None and needs_repair(buffer):
+                module._buffers[name] = on_host_in_float32(buffer)
         for name, value in list(module.__dict__.items()):
-            if isinstance(value, torch.Tensor) and value.device.type != "cpu":
-                setattr(module, name, value.detach().cpu())
+            if isinstance(value, torch.Tensor) and needs_repair(value):
+                setattr(module, name, on_host_in_float32(value))
+
+    # The dtype the graph asks for has to move with the weights. A `to(bfloat16)` or a mask built as
+    # `full(..., dtype=bfloat16)` left behind would meet the promoted weights at the first op that
+    # requires one type on both sides, and scaled-dot-product attention refuses to merge them. OV types a
+    # node from its `tensor_meta` before its `val`, so both are promoted.
+    half = (torch.bfloat16, torch.float16)
+
+    def promoted(value):
+        if isinstance(value, torch.dtype) and value in half:
+            return torch.float32
+        return value
+
+    def promoted_meta(meta):
+        if isinstance(meta, torch.Tensor) and meta.dtype in half:
+            return meta.to(torch.float32)
+        if hasattr(meta, "_replace") and getattr(meta, "dtype", None) in half:
+            return meta._replace(dtype=torch.float32)
+        if isinstance(meta, (tuple, list)) and not hasattr(meta, "_replace"):
+            return type(meta)(promoted_meta(item) for item in meta)
+        return meta
+
+    graph = graph_module.graph
+    placeholders = [node for node in graph.nodes if node.op == "placeholder"]
+    for node in graph.nodes:
+        if node.op == "placeholder":
+            continue
+        node.args = tuple(promoted(arg) for arg in node.args)
+        node.kwargs = {name: promoted(value) for name, value in node.kwargs.items()}
+        for key in ("val", "tensor_meta"):
+            if key in node.meta:
+                node.meta[key] = promoted_meta(node.meta[key])
+
+    # Inputs keep the type they are fed in — a half-precision `pixel_values`, or a static cache — and are
+    # cast once where they enter, so the IR takes what the model took while computing in float32 inside.
+    if placeholders:
+        with graph.inserting_after(placeholders[-1]):
+            for node in placeholders:
+                value = node.meta.get("val")
+                if not (isinstance(value, torch.Tensor) and value.dtype in half):
+                    continue
+                cast = graph.call_function(torch.ops.aten._to_copy.default, (node,), {"dtype": torch.float32})
+                cast.meta["val"] = value.to(torch.float32)
+                if "tensor_meta" in node.meta:
+                    cast.meta["tensor_meta"] = promoted_meta(node.meta["tensor_meta"])
+                node.replace_all_uses_with(cast, delete_user_cb=lambda user, cast=cast: user is not cast)
+
+    graph_module.recompile()
 
 
 def _convert_to_openvino(graph_module) -> openvino.Model:
     """Hand the repaired FX graph to OV's frontend and fix up the ports it produces."""
-    _move_tensors_to_host(graph_module)
+    _prepare_tensors_for_conversion(graph_module)
     decoder = TorchFXPythonDecoder(graph_module, dynamic_shapes=True)
     # Name every input port after its FX placeholder — OV may drop unused inputs, so all
     # downstream port↔placeholder matching is done by name, never positionally.
@@ -239,6 +314,46 @@ def _leaf_names_by_placeholder(graph_module, inputs_names: list[str]) -> dict[st
         if node.op == "placeholder" and isinstance(node.meta.get("val"), torch.Tensor)
     ]
     return dict(zip((node.name for node in tensor_placeholders), inputs_names))
+
+
+def _pin_static_input_axes(ov_model: openvino.Model, graph_module, inputs_names: list[str]) -> None:
+    """Declare the input axes the trace settled on a number.
+
+    OV's decoder is handed `dynamic_shapes=True` and marks every axis symbolic, including the ones
+    `torch.export` had already resolved — an m-rope `position_ids`' section count, an embedding's hidden
+    size. Two axes that are only *nominally* dynamic are then indistinguishable, and the stateful
+    transformation resolves the batch from whichever it reaches first: a `[sections, batch, positions]`
+    position_ids answers 3, and every state the graph sizes by it is built for the wrong batch.
+    """
+    leaf_by_placeholder = _leaf_names_by_placeholder(graph_module, inputs_names)
+    lengths = {}
+    for node in graph_module.graph.nodes:
+        leaf = leaf_by_placeholder.get(node.name)
+        value = node.meta.get("val") if leaf is not None else None
+        # Never the cache: its batch is the beam's to reorder and its length the sequence's to grow, so
+        # neither is the graph's to keep.
+        if value is None or leaf.startswith(("past_key_values", "cache_params")):
+            continue
+        for axis, length in enumerate(value.shape):
+            if isinstance(length, int):
+                lengths[(leaf, axis)] = length
+
+    shapes, changed = {}, False
+    for port in ov_model.inputs:
+        shape = port.get_partial_shape()
+        for name in port.get_names():
+            for (leaf, axis), length in lengths.items():
+                if leaf == _leaf_of(name) and shape.rank.is_static and shape[axis].is_dynamic:
+                    shape[axis] = openvino.Dimension(length)
+                    changed = True
+        shapes[port.get_any_name()] = shape
+    if changed:
+        ov_model.reshape(shapes)
+
+
+def _leaf_of(name: str) -> str:
+    """The kwarg-space name behind a port name — `disambiguate_io_names` only ever prefixes."""
+    return re.sub(r"^(input|output)\.", "", name)
 
 
 def _rename_model_ports(
@@ -357,20 +472,33 @@ def _find_state_pairs(ov_model: openvino.Model, sample_inputs: MutableMapping[st
     return pairs
 
 
-def _fuse_state_reorder(ov_model: openvino.Model, state_input_names: list[str]) -> None:
-    """Insert a ``beam_idx`` parameter and a batch-dim ``Gather`` in front of every state input.
+def _fuse_state_reorder(
+    ov_model: openvino.Model, state_input_names: list[str], sample_inputs: MutableMapping[str, Any]
+) -> None:
+    """Insert a ``beam_idx`` parameter and a batch-dim ``Gather`` in front of every state input that has a batch.
 
     Beam search reorders the cache between steps (`_reorder_cache`); once state lives inside the
     model that reorder must happen inside too. The runtime passes the beam permutation as
     ``beam_idx`` and the fused ``Gather`` applies it to each state variable — for greedy decoding
     ``beam_idx = arange(batch)`` makes it the identity.
+
+    A counter (xLSTM's ``seqlen_offset``, a sparse indexer's ``idx_cumulative_length``) or an empty buffer
+    (reformer's ``buckets_cache``) has no batch axis, and gathering it by ``beam_idx`` would give it one — a
+    ``[1]`` counter comes back ``[batch]``. The converted graph cannot tell: every state is declared fully
+    dynamic. The traced example can, so a state whose example does not start with the batch is left alone.
     """
-    main_input = next(port for port in ov_model.inputs if not _port_named(port, state_input_names))
-    batch = main_input.get_partial_shape()[_STATE_BATCH_DIM]
+    batch_port = _batch_bearing_input(ov_model, state_input_names)
+    batch = batch_port.get_partial_shape()[_STATE_BATCH_DIM]
+    samples = get_leaf_tensors(sample_inputs)
+    batch_sample = next((samples[name] for name in batch_port.get_names() if name in samples), None)
     beam_idx = ov_ops.parameter(name="beam_idx", dtype=np.int32, shape=openvino.PartialShape([batch]))
     beam_idx.output(0).get_tensor().set_names({"beam_idx"})
     ov_model.add_parameters([beam_idx])
     for input_name in state_input_names:
+        sample = samples.get(input_name.partition(".")[2])
+        if batch_sample is not None and sample is not None:
+            if sample.dim() == 0 or sample.shape[_STATE_BATCH_DIM] != batch_sample.shape[_STATE_BATCH_DIM]:
+                continue
         state_port = ov_model.input(input_name)
         consumers = state_port.get_target_inputs()
         gather = ov_ops.gather(state_port, beam_idx, ov_ops.constant(np.int64(_STATE_BATCH_DIM)))
@@ -439,15 +567,20 @@ def _freeze_batchless_states(
 ) -> None:
     """Replace batch-less round-tripped tensors with baked constants (in place, updating ``pairs``).
 
-    A round-tripped tensor without a batch dim (e.g. Cohere2's scalar ``_sliding_window_tensor``)
-    is config-derived, not per-sequence state — there is nothing to reorder between beams and
-    nothing to reset between prompts, so it becomes a graph constant instead of an OV variable.
+    A round-tripped tensor without a batch dim that the graph hands back unchanged (e.g. Cohere2's scalar
+    ``_sliding_window_tensor``) is config-derived, not per-sequence state — there is nothing to reorder
+    between beams and nothing to reset between prompts, so it becomes a graph constant instead of an OV
+    variable. One the graph writes is a counter (a static layer's ``cumulative_length``, where each step's
+    keys land) and stays state: baked, every step would write the slot the trace wrote.
     """
     sample_leaves = get_leaf_tensors(sample_inputs)
     changed = False
-    for input_name in list(pairs):
+    for input_name, output_name in list(pairs.items()):
         port = ov_model.input(input_name)
         if port.get_partial_shape().rank.get_length() > _STATE_BATCH_DIM:
+            continue
+        written = ov_model.output(output_name).get_node().input_value(0).get_node()
+        if written.get_friendly_name() != port.get_node().get_friendly_name():
             continue
         sample = sample_leaves.get(input_name.partition(".")[2])
         if sample is None:
@@ -461,6 +594,20 @@ def _freeze_batchless_states(
         changed = True
     if changed:
         ov_model.validate_nodes_and_infer_types()
+
+
+def _batch_bearing_input(ov_model: openvino.Model, exclude: list[str] | None = None):
+    """An input whose leading axis is the batch — what the state is sized and reordered by.
+
+    The text input is the one that always answers that. Taking whichever port comes first reads an m-rope
+    `position_ids` as `[sections, batch, positions]` and takes the section count for the batch (glm4v: 4
+    rather than 2), which the first state update then refuses to concatenate against.
+    """
+    ports = {name: port for port in ov_model.inputs for name in port.get_names()}
+    for name in ("input_ids", "inputs_embeds", "decoder_input_ids", "decoder_inputs_embeds", "attention_mask"):
+        if name in ports:
+            return ports[name]
+    return next(port for port in ov_model.inputs if not _port_named(port, exclude or []))
 
 
 def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, list]) -> None:
@@ -480,9 +627,8 @@ def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, lis
     """
     variables = {variable.get_info().variable_id: variable for variable in ov_model.get_variables()}
     update_shapes = {sink.get_variable_id(): sink.input_value(0).get_partial_shape() for sink in ov_model.get_sinks()}
-    main_input = ov_model.inputs[0]
     batch = ov_ops.gather(
-        ov_ops.shape_of(main_input, output_type="i64"),
+        ov_ops.shape_of(_batch_bearing_input(ov_model), output_type="i64"),
         ov_ops.constant([_STATE_BATCH_DIM]),
         ov_ops.constant(0),
     )
@@ -497,19 +643,29 @@ def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, lis
         if update_is_static:
             dims = [update_shape[axis].get_length() if d == "batch" else d for axis, d in enumerate(dims)]
         info = variables[op.get_variable_id()].get_info()
-        info.data_shape = openvino.PartialShape([-1 if d in ("batch", 0) else d for d in dims])
+        # The batch the graph's own inputs declare, where they declare one: a state left dynamic beside a
+        # static query is a pair the fused attention cannot show equal (`B == B_state`).
+        declared = _batch_bearing_input(ov_model).get_partial_shape()[_STATE_BATCH_DIM]
+        batch_dim = declared.get_length() if declared.is_static else -1
+        # `"batch"` and a growing `0` are different answers: the batch is whatever the inputs declare, the
+        # growing axis is nobody's until a step writes it.
+        info.data_shape = openvino.PartialShape([batch_dim if d == "batch" else -1 if d == 0 else d for d in dims])
         variables[op.get_variable_id()].update(info)
         # The growing dim's zero length is emitted as ``batch - batch`` rather than a literal
         # ``[0]``: the CPU plugin fuses single-consumer init subgraphs into
         # ``ReadValueWithSubgraph`` and re-infers the state descriptor from the init's static
         # shape — a folded ``0`` gets baked in and seeding the state is then rejected.
         zero = ov_ops.subtract(batch, batch)
-        shape = ov_ops.concat(
-            [
-                batch if d == "batch" else zero if d == 0 else ov_ops.constant(np.array([d], dtype=np.int64))
-                for d in dims
-            ],
-            axis=0,
+        shape = (
+            ov_ops.concat(
+                [
+                    batch if d == "batch" else zero if d == 0 else ov_ops.constant(np.array([d], dtype=np.int64))
+                    for d in dims
+                ],
+                axis=0,
+            )
+            if dims
+            else ov_ops.constant(np.array([], dtype=np.int64))
         )
         zero = ov_ops.constant(0.0, dtype=op.get_output_element_type(0))
         op.set_arguments([ov_ops.broadcast(zero, shape)])
@@ -575,7 +731,7 @@ def _make_stateful(
         return
 
     _align_state_pair_types(ov_model, pairs)
-    _fuse_state_reorder(ov_model, list(pairs))
+    _fuse_state_reorder(ov_model, list(pairs), sample_inputs)
     apply_make_stateful_transformation(ov_model, pairs)
     _build_state_initializers(ov_model, init_dims)
     _pin_state_update_shapes(ov_model)
@@ -671,6 +827,12 @@ def _drop_runtime_asserts(graph_module) -> None:
         module.recompile()
 
 
+# Ops OV keeps for its own conversion, which we hand back to torch's. `index_copy` writes one position into
+# a cache and its direct conversion broadcasts the source against the index, which a `[batch, 1, 1, dim]`
+# write into a `[batch, 1, length, dim]` static cache cannot satisfy.
+_DECOMPOSE_ANYWAY = frozenset({"aten.index_copy.default"})
+
+
 def _run_openvino_decompositions(exported_program: ExportedProgram) -> ExportedProgram:
     """Run the same decomposition pass ``TorchFXPythonDecoder.from_exported_program`` would.
 
@@ -680,7 +842,8 @@ def _run_openvino_decompositions(exported_program: ExportedProgram) -> ExportedP
     """
     decomp_table = CustomDecompTable()
     for op in ops_to_not_decompose():
-        decomp_table.pop(op, None)
+        if str(op) not in _DECOMPOSE_ANYWAY:
+            decomp_table.pop(op, None)
     return exported_program.run_decompositions(decomp_table)
 
 
@@ -994,6 +1157,49 @@ def _fix_narrow_int_item(gm, node):
         widened.meta.update(source.meta)
         widened.meta["val"] = val.to(torch.int64)
     node.args = (widened,) + tuple(node.args[1:])
+    return True
+
+
+@register_fx_node_fix("openvino")
+def _fix_integer_last_axis_sum(gm, node):
+    """Reduce an integer ``sum`` over the last axis through a rank-2 view.
+
+    The CPU plugin miscompiles an integer ``ReduceSum`` over the last axis when a size-1 axis sits before
+    it and an eltwise op follows (``(starts[:, None] <= positions[None, :, None]).sum(-1) - 1``, BLT's patch
+    ids): batch rows past the first come out wrong, while float and rank-2 reductions are right. Summing
+    ``[-1, last]`` and restoring the leading shape afterwards is value-preserving.
+    """
+    if node.target is not torch.ops.aten.sum.dim_IntList or len(node.args) < 2:
+        return False
+    source, dims = node.args[0], node.args[1]
+    in_val, out_val = getattr(source, "meta", {}).get("val"), node.meta.get("val")
+    if in_val is None or out_val is None or in_val.dim() < 3:
+        return False
+    if out_val.dtype.is_floating_point or out_val.dtype.is_complex or out_val.dtype == torch.bool:
+        return False
+    rank = in_val.dim()
+    if [dim % rank for dim in dims] != [rank - 1]:
+        return False
+    keepdim = node.args[2] if len(node.args) > 2 else node.kwargs.get("keepdim", False)
+
+    def size_of(axis):
+        size = in_val.shape[axis]
+        if isinstance(size, int):
+            return size
+        return gm.graph.call_function(torch.ops.aten.sym_size.int, args=(source, axis))
+
+    with gm.graph.inserting_before(node):
+        flat = gm.graph.call_function(torch.ops.aten.view.default, args=(source, [-1, size_of(rank - 1)]))
+        flat.meta["val"] = in_val.reshape(-1, in_val.shape[-1])
+        summed = gm.graph.call_function(
+            torch.ops.aten.sum.dim_IntList, args=(flat, [1], False), kwargs=dict(node.kwargs)
+        )
+        summed.meta["val"] = flat.meta["val"].sum(1, dtype=out_val.dtype)
+        leading = [size_of(axis) for axis in range(rank - 1)] + ([1] if keepdim else [])
+        restored = gm.graph.call_function(torch.ops.aten.view.default, args=(summed, leading))
+        restored.meta.update(node.meta)
+    node.replace_all_uses_with(restored)
+    gm.graph.erase_node(node)
     return True
 
 
@@ -1338,6 +1544,80 @@ def _patch_sdpa(original):
                 unattended, torch.zeros((), dtype=attn_output.dtype, device=attn_output.device), attn_output
             )
         return attn_output
+
+    return patch
+
+
+@register_patch(
+    "openvino",
+    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
+    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
+    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
+    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
+)
+def _patch_mamba_selective_scan(original):
+    """Keep an SSM scan sequential, whatever device the model sits on.
+
+    Neither of `associative_scan`'s combine modes converts. The `generic` mode a cpu tensor selects runs
+    the combine under `vmap`, whose batch dims reach `run_decompositions` as tensors that "escaped from
+    inside a function being vmapped"; the `pointwise` mode a cuda tensor selects traces, but OV's frontend
+    cannot build the scan's subgraph (a `getitem` past the end of its one-element list, and a broadcast the
+    body's shapes do not merge on). ONNX takes the `pointwise` mode, which is why its patch keeps it on cuda.
+    """
+
+    def patch(hidden_states, *args, **kwargs):
+        kwargs["use_associative_scan"] = False
+        return original(hidden_states, *args, **kwargs)
+
+    return patch
+
+
+@register_patch("openvino", "torch.matmul", "torch.Tensor.matmul")
+def _patch_matmul(original):
+    """Flatten a two-axis batch before `MatMul`, which folds the leading axes into one regardless.
+
+    OV folds every leading axis into a single batch and then requires both operands to agree on it, so
+    m-rope's `[sections, batch, dim, 1] @ [sections, batch, 1, positions]` reaches it as `3` against `3*2`
+    and is refused. Folding the pair by hand says the same product with one batch axis both sides share.
+    """
+
+    def patch(input, other, **kwargs):
+        batched = (
+            isinstance(other, torch.Tensor)
+            and input.dim() == 4
+            and other.dim() == 4
+            and input.shape[:2] == other.shape[:2]
+        )
+        if not batched:
+            return original(input, other, **kwargs)
+        leading = input.shape[:2]
+        product = original(input.flatten(0, 1), other.flatten(0, 1), **kwargs)
+        return product.unflatten(0, leading)
+
+    return patch
+
+
+@register_patch(
+    "openvino",
+    "transformers.integrations.sdpa_attention.repeat_kv",
+    "transformers.integrations.eager_paged.repeat_kv",
+    "transformers.integrations.flex_attention.repeat_kv",
+)
+def _patch_repeat_kv(original):
+    """Expand GQA K/V heads over the tensor's own sequence axis rather than a recomputed one.
+
+    The stock `repeat_kv` names every extent of its 5-D `expand`, including the key length — which the
+    graph reaches by a second route (the cache's length plus this step's), and OV then has two dynamic
+    dimensions it cannot prove equal (`Broadcast Check 'input_shape[j] == 1'`). `-1` keeps the axis the
+    tensor already has, which leaves the expand/reshape pair the CPU plugin fuses attention through.
+    """
+
+    def patch(hidden_states, n_rep):
+        if n_rep == 1:
+            return hidden_states
+        batch, kv_heads, _, head_dim = hidden_states.shape
+        expanded = hidden_states[:, :, None, :, :].expand(batch, kv_heads, n_rep, -1, head_dim)
+        return expanded.reshape(batch, kv_heads * n_rep, -1, head_dim)
 
     return patch
 
@@ -1920,6 +2200,30 @@ def _patch_scatter_reduce(original):
 # ``_OV_CONVERSION_EXTENSIONS``.
 
 
+def _match_kv_heads(query, tensor):
+    """Grouped K/V widened to the query's head count, for a `[tokens, heads, dim]` packed tensor.
+
+    OV's SDPA merges the head axis of all three inputs, so a grouped model reaches it with two head counts
+    and is refused outright. Widened here rather than inside the loop body, where the token axis is a slice
+    and the arithmetic would be dynamic — out here only the token count is, and the head counts are the
+    architecture's.
+    """
+    query_shape, tensor_shape = query.get_partial_shape(), tensor.get_partial_shape()
+    if query_shape.rank.get_length() != 3 or not (query_shape[1].is_static and tensor_shape[1].is_static):
+        return tensor
+    heads, kv_heads = query_shape[1].get_length(), tensor_shape[1].get_length()
+    if heads == kv_heads or kv_heads == 0 or heads % kv_heads:
+        return tensor
+    if not tensor_shape[2].is_static:
+        return tensor
+    # Each group's head repeated in place (`repeat_interleave`), which is what the packed layout expects:
+    # a size-1 axis beside the heads, tiled, then folded back in.
+    widened = ov_ops.unsqueeze(tensor, ov_ops.constant(np.array([2], dtype=np.int64)))
+    tiled = ov_ops.tile(widened, ov_ops.constant(np.array([1, 1, heads // kv_heads, 1], dtype=np.int64)))
+    target = np.array([0, heads, tensor_shape[2].get_length()], dtype=np.int64)
+    return ov_ops.reshape(tiled, ov_ops.constant(target), special_zero=True).output(0)
+
+
 def _convert_varlen_attn(context):
     """Convert ``torch_attn::_varlen_attn`` — packed variable-length attention — into an OV ``Loop``.
 
@@ -1935,30 +2239,43 @@ def _convert_varlen_attn(context):
     slices must all be the same size.
     """
     query, key, value = (context.get_input(index) for index in range(3))
+    key, value = _match_kv_heads(query, key), _match_kv_heads(query, value)
     cu_seqlens = ov_ops.convert(context.get_input(3), "i64")
     element_type = query.get_element_type()
     axis0 = ov_ops.constant(np.array([0], dtype=np.int64))
     one = ov_ops.constant(np.array([1], dtype=np.int64))
 
-    # Body: (iteration, condition, q, k, v, cu, carried output) -> (grown output, condition)
+    # Laid out the way OV's SDPA wants once, out here, rather than per segment inside the body: the op is
+    # batch-first, and the trace hands over `[tokens, heads, dim]`.
+    heads_first = ov_ops.constant(np.array([1, 0, 2], dtype=np.int64))
+    axis2 = ov_ops.constant(np.array([2], dtype=np.int64))
+    query, key, value = (
+        ov_ops.unsqueeze(ov_ops.transpose(tensor, heads_first), axis0).output(0) for tensor in (query, key, value)
+    )
+
+    # Body: (iteration, condition, q, k, v, cu, carried output) -> (written output, condition)
     iteration = ov_ops.parameter([], Type.i64)
     condition = ov_ops.parameter([], Type.boolean)
-    body_q, body_k, body_v = (ov_ops.parameter(PartialShape([-1, -1, -1]), element_type) for _ in range(3))
+    body_q, body_k, body_v = (ov_ops.parameter(PartialShape([-1, -1, -1, -1]), element_type) for _ in range(3))
     body_cu = ov_ops.parameter(PartialShape([-1]), Type.i64)
-    carried = ov_ops.parameter(PartialShape([-1, -1, -1]), element_type)
+    carried = ov_ops.parameter(PartialShape([-1, -1, -1, -1]), element_type)
 
     index = ov_ops.reshape(iteration, one, False)
     start = ov_ops.gather(body_cu, index, axis0)
     stop = ov_ops.gather(body_cu, ov_ops.add(index, one), axis0)
 
     def _segment(tensor):
-        """This iteration's slice, as `[1, heads, n_i, dim]` — OV's SDPA is batch-first."""
-        rows = ov_ops.slice(tensor, start, stop, one, axis0)
-        return ov_ops.unsqueeze(ov_ops.transpose(rows, ov_ops.constant(np.array([1, 0, 2], dtype=np.int64))), axis0)
+        """This iteration's tokens, still `[1, heads, n_i, dim]`."""
+        return ov_ops.slice(tensor, start, stop, one, axis2)
 
-    attention = ov_ops.scaled_dot_product_attention(_segment(body_q), _segment(body_k), _segment(body_v), causal=False)
-    segment = ov_ops.transpose(ov_ops.squeeze(attention, axis0), ov_ops.constant(np.array([1, 0, 2], dtype=np.int64)))
-    grown = ov_ops.concat([carried, segment], axis=0)
+    segment = ov_ops.scaled_dot_product_attention(_segment(body_q), _segment(body_k), _segment(body_v), causal=False)
+    # Written into its own tokens of a whole-length buffer, not appended to a growing one: a loop-carried
+    # value keeps one shape for every iteration, so accumulating by concatenation silently carries only the
+    # last segment — which is why a single-segment call (one image, one clip) always looked right.
+    rows = ov_ops.range(
+        ov_ops.squeeze(start, axis0), ov_ops.squeeze(stop, axis0), ov_ops.constant(np.int64(1)), output_type="i64"
+    )
+    grown = ov_ops.scatter_update(carried, rows, segment, ov_ops.constant(np.int64(2)))
     body = Model(
         [ov_ops.result(grown), ov_ops.result(condition)],
         [iteration, condition, body_q, body_k, body_v, body_cu, carried],
@@ -1974,11 +2291,13 @@ def _convert_varlen_attn(context):
     loop.set_special_body_ports([0, 1])
     for parameter, source in ((body_q, query), (body_k, key), (body_v, value), (body_cu, cu_seqlens.output(0))):
         loop.set_invariant_input(parameter, source)
-    # Starts empty and grows by a segment each iteration, which is what makes the slices free to differ.
-    empty = ov_ops.slice(query, ov_ops.constant(np.array([0], dtype=np.int64)), axis0, one, axis0)
-    loop.set_merged_input(carried, empty.output(0), grown.output(0))
+    # The buffer every iteration writes into: the query's own shape, so the tokens land where they came from.
+    blank = ov_ops.broadcast(ov_ops.constant(0.0, dtype=element_type), ov_ops.shape_of(query, output_type="i64"))
+    loop.set_merged_input(carried, blank.output(0), grown.output(0))
     loop.validate_and_infer_types()
-    return [loop.get_iter_value(grown.output(0), -1)]
+    # Back to the packed `[tokens, heads, dim]` the graph around it speaks.
+    written = ov_ops.squeeze(loop.get_iter_value(grown.output(0), -1), axis0)
+    return [ov_ops.transpose(written, heads_first).output(0)]
 
 
 def _convert_grouped_mm(context):

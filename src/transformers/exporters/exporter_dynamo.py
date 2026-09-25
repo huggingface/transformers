@@ -784,12 +784,24 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
 # `DynamoConfig.dynamic` is True and no explicit `dynamic_shapes` are provided.
 
 
-# An embedding input's last axis is the model's hidden size — architecture, like a cache's head layout.
-_EMBEDDING_INPUTS = frozenset({"inputs_embeds", "decoder_inputs_embeds"})
+def architecture_axes(name: str, tensor: torch.Tensor) -> tuple[int, ...]:
+    """The axes of one input that the architecture fixes, so `Dim.AUTO` should not offer them to the trace.
+
+    An embedding's feature axis is the model's hidden size. A rank-3 `position_ids` is m-rope, whose leading
+    axis counts rope sections — and a model reads that count in Python (`position_ids.shape[0] == 4` picks
+    the text row out of glm4v's four), so left symbolic the branch traces the way no runtime call will take.
+    """
+    if not isinstance(tensor, torch.Tensor) or not tensor.dim():
+        return ()
+    if name in ("inputs_embeds", "decoder_inputs_embeds"):
+        return (tensor.dim() - 1,)
+    if name in ("position_ids", "decoder_position_ids") and tensor.dim() == 3:
+        return (0,)
+    return ()
 
 
 def _auto_dynamic_shape(
-    tensor: torch.Tensor, is_cache_tensor: bool = False, is_embedding: bool = False
+    tensor: torch.Tensor, is_cache_tensor: bool = False, static_axes: tuple[int, ...] = ()
 ) -> dict[int, torch.export.Dim]:
     """Generate a dynamic shape with all dimensions set to Dim.AUTO.
 
@@ -799,18 +811,14 @@ def _auto_dynamic_shape(
     that rank qualifies — a recurrent layer's states or a sliding layer's scalars ride in the same cache
     without the same layout, so they stay fully dynamic.
 
-    An `inputs_embeds` keeps its feature axis static for the same reason: the hidden size is the
-    architecture's, never the batch's. Left symbolic, every per-layer reshape below it becomes runtime shape
-    arithmetic — a smolvlm decode graph grows 4k synthesized `Reshape` nodes and the CPU plugin can no longer
-    match its attention, which costs more than the dynamic axis ever buys.
+    `static_axes` carries the same idea for the axes an input's *name* settles — see `architecture_axes`.
     """
     static_dims = (1, 3) if is_cache_tensor and tensor.dim() == 4 else ()
-    if is_embedding and tensor.dim():
-        static_dims = (*static_dims, tensor.dim() - 1)
+    static_dims = (*static_dims, *static_axes)
     return {dim: torch.export.Dim.AUTO for dim in range(tensor.dim()) if dim not in static_dims}
 
 
-def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False, is_embedding: bool = False) -> Any:
+def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False, static_axes: tuple[int, ...] = ()) -> Any:
     """Recursively build dynamic shapes for any input value.
 
     - Tensors → per-dimension Dim.AUTO spec.
@@ -825,13 +833,13 @@ def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False, is_embed
     - Everything else → None.
     """
     if isinstance(inputs, torch.Tensor):
-        return _auto_dynamic_shape(inputs, is_cache_tensor, is_embedding)
+        return _auto_dynamic_shape(inputs, is_cache_tensor, static_axes)
     if inputs is None or isinstance(inputs, (int, float, bool, str)):
         return None
     if type(inputs) in (list, tuple, set, frozenset):
         return type(inputs)(get_auto_dynamic_shapes(v, is_cache_tensor) for v in inputs)
     if type(inputs) is dict:
-        return {k: get_auto_dynamic_shapes(v, is_cache_tensor, k in _EMBEDDING_INPUTS) for k, v in inputs.items()}
+        return {k: get_auto_dynamic_shapes(v, is_cache_tensor, architecture_axes(k, v)) for k, v in inputs.items()}
     if (node := torch.utils._pytree.SUPPORTED_NODES.get(type(inputs))) is not None:
         # Registered pytree node (a `ModelOutput`, a `Cache` subclass, ...). Mirror one level of its
         # registered flatten and recurse, so a field holding a container keeps that container in the
