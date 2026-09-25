@@ -110,8 +110,9 @@ class _IdentityOp(ConversionOps):
 
 
 class Chunk(ConversionOps):
-    """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
-    to know how many tensors to chunk into. Useful when concatenating an arbitrary number of tensors."""
+    """Split a tensor along `dim` into one chunk per target, each sized like its target parameter (like GQA qkv). Falls back
+    to equal chunks when the targets are not model parameters, i.e. when saving. Additionally, `num_shards_attribute` is a
+    config field to read to know how many tensors to chunk into. Useful when concatenating an arbitrary number of tensors."""
 
     def __init__(self, dim: int = 0, num_shards_attribute: str | None = None):
         self.dim = dim
@@ -126,9 +127,17 @@ class Chunk(ConversionOps):
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = self.get_target_patterns(target_patterns, **kwargs)
-        num_shards = len(targets)
-        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, num_shards, dim=self.dim))
-        return dict(zip(targets, chunks))
+        sizes = self.get_target_sizes(targets, **kwargs)
+        chunks = torch.split(tensor, sizes, dim=self.dim) if sizes else torch.chunk(tensor, len(targets), dim=self.dim)
+        return dict(zip(targets, (chunk.contiguous() for chunk in chunks)))
+
+    def get_target_sizes(self, targets: list[str], full_layer_name=None, model=None, **kwargs) -> list[int]:
+        try:
+            return [
+                model.get_parameter(full_layer_name.replace(targets[0], target)).shape[self.dim] for target in targets
+            ]
+        except AttributeError:
+            return []
 
     def get_target_patterns(self, target_patterns: list[str], **kwargs) -> list[str]:
         if self.num_shards_attribute is None:
