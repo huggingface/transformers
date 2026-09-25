@@ -104,7 +104,6 @@ def sdpa_attention_forward(
             layer_idx=module.layer_idx,
             kwargs=kwargs,
         )
-        query, key, value = (x.contiguous() for x in (query, key, value))
 
     sdpa_kwargs = {}
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
