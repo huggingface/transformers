@@ -114,12 +114,12 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    get_device_type,
     has_file,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_env_variable_true,
     is_kernels_available,
-    is_rocm_platform,
     is_torch_flex_attn_available,
     is_torch_npu_available,
     is_torch_xpu_available,
@@ -1752,8 +1752,7 @@ class PreTrainedModel(
                 and base_implementation not in compatible_flash_implementations
             ):
                 # Prefer the first implementation shipping builds for the current device
-                device = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
-                device = "rocm" if device == "cuda" and is_rocm_platform() else device
+                device = get_device_type()
                 supported_flash_implementations = [
                     impl
                     for impl in compatible_flash_implementations

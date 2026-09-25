@@ -33,12 +33,16 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import packaging.version
 from packaging import version
 
 from . import logging
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -325,6 +329,16 @@ def is_rocm_platform() -> bool:
 
         return getattr(torch, "version").hip is not None
     return False
+
+
+def get_device_type(device: "torch.device | str | None" = None) -> str:
+    """Type of a device (the current accelerator by default, else cpu), with AMD GPUs reported as rocm."""
+    import torch
+
+    if device is None:
+        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+    device_type = torch.device(device).type if isinstance(device, str) else device.type
+    return "rocm" if device_type == "cuda" and is_rocm_platform() else device_type
 
 
 @lru_cache

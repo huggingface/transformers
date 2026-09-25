@@ -82,7 +82,7 @@ FLASH_ATTN_KERNEL_VERSIONS = {
 
 # Devices each hub flash kernel ships builds for, unlisted kernels are assumed to run everywhere
 FLASH_ATTN_KERNEL_DEVICES = {
-    "kernels-community/flash-attn2": ("cuda", "xpu", "cpu"),
+    "kernels-community/flash-attn2": ("cuda", "xpu"),
     "kernels-community/flash-attn3": ("cuda",),
     "kernels-community/vllm-flash-attn3": ("cuda",),
     "kernels-community/aiter-flash-attn": ("rocm",),
