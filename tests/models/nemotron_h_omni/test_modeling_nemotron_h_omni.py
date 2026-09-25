@@ -262,7 +262,9 @@ class NemotronHOmniModelTestMixin:
     def _audio_features_prepare_config_and_inputs(self):
         tester = self.model_tester
         input_features = floats_tensor([tester.batch_size, tester.feat_seq_length, tester.num_mel_bins])
-        input_features_mask = torch.ones(tester.batch_size, tester.feat_seq_length, dtype=torch.long, device=torch_device)
+        input_features_mask = torch.ones(
+            tester.batch_size, tester.feat_seq_length, dtype=torch.long, device=torch_device
+        )
         return tester.get_config(), {"input_features": input_features, "input_features_mask": input_features_mask}
 
     def _image_features_get_expected_num_attentions(self, model_tester=None):
