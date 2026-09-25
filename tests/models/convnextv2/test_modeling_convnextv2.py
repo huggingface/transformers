@@ -308,6 +308,7 @@ class ConvNextV2ModelIntegrationTest(unittest.TestCase):
         expected_slice = Expectations(
             {
                 (None, None): torch.tensor([0.9989, 0.1953, -0.4382]),
+                ("cuda", 8): torch.tensor([0.9987, 0.1953, -0.4381]),
                 ("xpu", 5): torch.tensor([0.9986, 0.1953, -0.4381]),
             }
         ).get_expectation().to(torch_device)
