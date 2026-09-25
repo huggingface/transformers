@@ -15,6 +15,7 @@
 what those assert is passed to the kernels, these assert comes back out of them. Needs an
 accelerator, since nothing here is mocked."""
 
+import os
 import unittest
 from unittest import mock
 
@@ -23,7 +24,7 @@ import torch
 import transformers.integrations.finegrained.core as fg
 from transformers.integrations.finegrained import (
     FineGrainedExperts,
-    finegrained_linear,
+    FineGrainedLinear,
     load_finegrained_kernel,
 )
 from transformers.testing_utils import (
@@ -86,6 +87,22 @@ def _unpack_e2m1(packed):
     return pairs.reshape(*packed.shape[:-1], packed.shape[-1] * 2)
 
 
+# `(weight format, activation format, scale format, linear floor, experts floor)`: every pairing the
+# kernels serve (`None` is the weights' own format, `"bf16"` weight-only), against the dequantized weights.
+# A floor is the activation quantization's own rounding, measured, with headroom; weight-only has nothing
+# else that rounds, so a mis-read scale or a wrong arm lands far above it.
+PAIRINGS = [
+    ("fp8", None, "float", 0.05, 0.08),  # W8A8
+    ("fp8", None, "ue8m0", 0.05, 0.08),  # W8A8, power-of-two block scales
+    ("mxfp8", None, "float", 0.05, 0.09),
+    ("mxfp4", None, "float", 0.2, 0.35),  # W4A4
+    ("mxfp4", "mxfp8", "float", 0.05, 0.09),  # W4A8
+    ("mxfp4", "bf16", "float", 0.01, 0.02),  # W4A16
+    ("nvfp4", None, "float", 0.17, 0.25),  # W4A4
+    ("nvfp4", "bf16", "float", 0.01, 0.02),  # W4A16
+]
+
+
 @require_kernels
 @require_torch_accelerator
 class FineGrainedForwardTest(unittest.TestCase):
@@ -98,33 +115,85 @@ class FineGrainedForwardTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # the kernels autotune per shape from a cold cache, which dwarfs everything else here
+        os.environ["FINEGRAINED_AUTOTUNE_TRIALS"] = "1"
         load_finegrained_kernel()
 
-    def _block_fp8_weight(self, N, K, *, ue8m0):
-        """(N, K) E4M3 + its (N/128, K/128) inv-scale grid, and the exact dequantized values the
-        kernel will see — so the reference is the quantization floor, not the pre-quant weight."""
-        w = torch.randn(N, K, device=torch_device, dtype=torch.float32)
-        blocks = w.reshape(N // 128, 128, K // 128, 128)
-        amax = blocks.abs().amax(dim=(1, 3), keepdim=True).clamp(min=1e-12)
-        inv = amax / 448.0
-        if ue8m0:  # power-of-two scales: the tcgen05 dot_scaled format
-            inv = torch.pow(2.0, torch.ceil(torch.log2(inv)))
-        q = (blocks / inv).to(torch.float8_e4m3fn)
-        deq = (q.float() * inv).reshape(N, K)
-        return q.reshape(N, K), inv.reshape(N // 128, K // 128).contiguous(), deq
+    def _quantize_into(self, module, key, value, model):
+        """`value` quantized by the kernels' own quantizers into `module`'s held layout."""
+        from transformers.integrations.finegrained.conversions import FineGrainedQuantize
 
-    def test_linear_forward_matches_the_quantization_floor(self):
-        """A real quantized linear against its own dequantized weight. Loose vs bf16 would pass
-        even if the kernel silently dropped a K-block; comparing to the floor does not."""
-        M, N, K = 256, 512, 384
-        for ue8m0 in (False, True):
-            with self.subTest(ue8m0=ue8m0):
-                w, s, deq = self._block_fp8_weight(N, K, ue8m0=ue8m0)
-                x = torch.randn(M, K, device=torch_device, dtype=torch.bfloat16)
-                out = finegrained_linear(x, w, s, block_size=[128, 128])
-                ref = x.float() @ deq.t()
-                rel = ((out.float() - ref).norm() / ref.norm()).item()
-                self.assertLess(rel, 5e-2, f"ue8m0={ue8m0}: {rel:.2e} vs the dequantized weight")
+        for name, tensor in FineGrainedQuantize(hf_quantizer=None).convert({key: value}, model=model).items():
+            setattr(module, name.rsplit(".", 1)[-1], torch.nn.Parameter(tensor, requires_grad=False))
+
+    def _dequantized(self, module, proj, scale, global_scale, rows, experts=None):
+        """The values the kernels multiply by: the held weight times its (unswizzled) scales and global."""
+        from transformers.integrations.finegrained.conversions import FineGrainedDequantize
+
+        scale = getattr(module, scale)
+        if scale.ndim == 5:
+            scale = load_finegrained_kernel().unswizzle_mx_scales(scale, rows, scale.shape[2] * 4, num_experts=experts)
+        weight = FineGrainedDequantize(None)._dequantize_one(
+            getattr(module, proj), scale.float(), output_dtype=torch.float32
+        )
+        global_scale = getattr(module, global_scale, None)
+        if global_scale is not None:
+            weight = weight * (global_scale.reshape(-1, 1, 1) if experts else global_scale)
+        return weight
+
+    def _relative(self, out, reference):
+        return ((out.float() - reference).norm() / reference.norm()).item()
+
+    def test_every_pairing_forwards_within_its_floor(self):
+        """Each weight × activation pairing, on the linear and the three experts forwards."""
+        torch.manual_seed(0)
+        hidden, intermediate, num_experts = 512, 256, 4
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = hidden, intermediate, num_experts
+        cfg._experts_implementation = "grouped_mm"
+        forwards = (
+            ("grouped", fg.finegrained_grouped_mm_experts_forward),
+            ("batched", fg.finegrained_batched_mm_experts_forward),
+            ("eager", lambda module, *args: module(*args)),
+        )
+        for weight_format, activation_format, scale_fmt, linear_floor, experts_floor in PAIRINGS:
+            storage = {"block_size": (128, 128), "scale_fmt": scale_fmt} if weight_format == "fp8" else {}
+            with self.subTest(weights=weight_format, activations=activation_format, scales=scale_fmt, module="linear"):
+                linear = FineGrainedLinear(
+                    hidden, hidden, weight_format=weight_format, activation_format=activation_format, **storage
+                ).to(torch_device)
+                model = torch.nn.Module()
+                model.proj = linear
+                self._quantize_into(linear, "proj.weight", self._weight(hidden, hidden), model)
+                x = torch.randn(64, hidden, device=torch_device, dtype=torch.bfloat16)
+                reference = (
+                    x.float()
+                    @ self._dequantized(linear, "weight", "weight_scale_inv", "weight_global_scale", hidden).t()
+                )
+                self.assertLess(self._relative(linear(x), reference), linear_floor)
+
+            experts = FineGrainedExperts(
+                cfg, weight_format=weight_format, activation_format=activation_format, **storage
+            ).to(torch_device)
+            model = torch.nn.Module()
+            model.experts = experts
+            dequantized = {}
+            for proj, rows, cols in (("gate_up_proj", 2 * intermediate, hidden), ("down_proj", hidden, intermediate)):
+                self._quantize_into(experts, f"experts.{proj}", self._weight(num_experts, rows, cols), model)
+                dequantized[proj] = self._dequantized(
+                    experts, proj, f"{proj}_scale_inv", f"{proj}_weight_global_scale", rows, experts=num_experts
+                )
+            x = torch.randn(8, hidden, device=torch_device, dtype=torch.bfloat16)
+            idx = torch.randint(0, num_experts, (8, 2), device=torch_device, dtype=torch.long)
+            wts = torch.rand(8, 2, device=torch_device, dtype=torch.bfloat16)
+            reference = self._moe_reference(dequantized, x, idx, wts, interleaved=experts.holds_interleaved_gate_up)
+            for name, forward in forwards:
+                with self.subTest(weights=weight_format, activations=activation_format, scales=scale_fmt, module=name):
+                    self.assertLess(self._relative(forward(experts, x, idx, wts), reference), experts_floor)
+
+    @staticmethod
+    def _weight(*shape):
+        return (torch.randn(*shape, device=torch_device) * 0.02).to(torch.bfloat16)
 
     def test_on_the_fly_group_formats_round_trip_within_their_floor(self):
         """MXFP8 / MXFP4 / NVFP4 on-the-fly quantization through the kernels' quantizers, emitted in
@@ -234,15 +303,16 @@ class FineGrainedForwardTest(unittest.TestCase):
             setattr(experts, target.split(".")[-1], torch.nn.Parameter(value, requires_grad=False))
         return experts, dequantized, single_global
 
-    def _moe_reference(self, dequantized, x, idx, wts, post_norm=None):
-        """The experts chain in torch over the dequantized weights: gate|up (interleaved columns),
-        SwiGLU, down, the optional per-expert output norm, then the routing-weighted sum."""
+    def _moe_reference(self, dequantized, x, idx, wts, post_norm=None, interleaved=True):
+        """The experts chain in torch over the dequantized weights: gate|up (interleaved columns, or
+        stacked halves), SwiGLU, down, the optional per-expert output norm, then the routing-weighted sum."""
         out = torch.zeros_like(x, dtype=torch.float32)
         for token in range(x.shape[0]):
             for slot in range(idx.shape[1]):
                 e = int(idx[token, slot])
                 pre = x[token].float() @ dequantized["gate_up_proj"][e].t()
-                inter = torch.nn.functional.silu(pre[0::2]) * pre[1::2]
+                gate, up = (pre[0::2], pre[1::2]) if interleaved else pre.chunk(2)
+                inter = torch.nn.functional.silu(gate) * up
                 row = inter @ dequantized["down_proj"][e].t()
                 if post_norm is not None:
                     row = post_norm(row.to(x.dtype)).float()

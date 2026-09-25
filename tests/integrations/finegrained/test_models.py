@@ -11,551 +11,240 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The sharded load paths on real checkpoints: expert parallelism and intra-expert tensor
-parallelism must both reproduce what `device_map` computes, for every format a shipped model
-quantizes with."""
+"""The shipped checkpoint layouts end to end: tiny random copies of the real checkpoints must load
+cleanly, compute what their dequantized weights compute and the logits recorded for them, and save back
+to their own layout."""
 
 import os
 import re
-import socket
-import subprocess
-import tempfile
 
 import torch
+from parameterized import parameterized
 
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForImageTextToText
 from transformers.testing_utils import (
+    Expectations,
     TestCasePlus,
-    backend_empty_cache,
-    require_torch_multi_accelerator,
+    cleanup,
+    require_kernels,
+    require_torch_accelerator,
+    slow,
     torch_device,
 )
 
 
-def _checkpoint_shapes(path):
-    """`{key: shape}` of a saved checkpoint, for comparing one save against another."""
+def _checkpoint_bytes(path):
+    """`{key: (dtype, shape, raw bytes)}` of a saved checkpoint, for comparing one save against another."""
     import glob
 
     from safetensors import safe_open
 
-    shapes = {}
+    tensors = {}
     for shard in sorted(glob.glob(os.path.join(path, "*.safetensors"))):
         with safe_open(shard, framework="pt") as handle:
             for key in handle.keys():
-                shapes[key] = tuple(handle.get_slice(key).get_shape())
-    return shapes
+                tensor = handle.get_tensor(key)
+                raw = tensor.reshape(-1).view(torch.uint8).numpy().tobytes()
+                tensors[key] = (tensor.dtype, tuple(tensor.shape), raw)
+    return tensors
 
 
-_SHARDING_WORKER = """
-import importlib, os, sys, torch
-from transformers.distributed import DistributedConfig
-
-model_dir, out_dir, modes, cls_path = sys.argv[1], sys.argv[2], sys.argv[3].split(","), sys.argv[4]
-module_name, cls_name = cls_path.split(":")
-model_cls = getattr(importlib.import_module(module_name), cls_name)
-world = int(os.environ["WORLD_SIZE"])
-ids = torch.arange(16, dtype=torch.long).unsqueeze(0)
-
-# both modes in ONE launch: they share the mesh, so the process group is created once and only
-# the plan differs -- a second torchrun would pay another interpreter + CUDA start
-for mode in modes:
-    model = model_cls.from_pretrained(
-        model_dir,
-        dtype="auto",
-        attn_implementation="eager",
-        distributed_config=DistributedConfig(tp_size=world, enable_expert_parallel=(mode == "ep")),
-    ).eval()
-    experts = next(m for n, m in model.named_modules() if n.endswith("mlp.experts"))
-    weight = getattr(experts, "gate_up_proj", None)
-    if weight is None:
-        weight = experts.up_proj
-    local = weight.to_local() if hasattr(weight, "to_local") else weight
-    with torch.no_grad():
-        logits = model(ids.to(model.device)).logits.float().cpu()
-    if int(os.environ["RANK"]) == 0:
-        torch.save({"logits": logits, "expert_local": tuple(local.shape)},
-                   os.path.join(out_dir, mode + ".pt"))
-    del model
-    torch.accelerator.empty_cache()
-"""
+# Tiny random copies of the shipped checkpoints, shrunk from the real configs and written in their layouts.
+# Each repo's `reference/` subfolder holds the same weights dequantized to a plain bf16 model; the budget is
+# each format's own rounding against it, measured, with headroom.
+TINY_CHECKPOINTS = {
+    "IlyasMoutawwakil/tiny-random-Qwen3-FP8": 0.1,
+    "IlyasMoutawwakil/tiny-random-Mistral3-FP8-static": 0.1,
+    "IlyasMoutawwakil/tiny-random-Mistral4-FP8-static": 0.15,
+    "IlyasMoutawwakil/tiny-random-Llama-NVFP4": 0.25,
+    "IlyasMoutawwakil/tiny-random-DeepseekV3-FP8": 0.25,
+    "IlyasMoutawwakil/tiny-random-DeepseekV4-Flash": 0.25,
+    "IlyasMoutawwakil/tiny-random-GptOss-MXFP4": 0.05,
+    "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4": 0.25,
+    "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4-all-linears": 0.6,
+    "IlyasMoutawwakil/tiny-random-MiniMaxM3-MXFP8": 0.3,
+}
 
 
-def _checkpoint_expert_shape(model_dir):
-    """The UNSHARDED `(experts, rows)` of the stacked gate|up projection the module holds.
-
-    Read from the checkpoint, which ships the experts either already fused (`experts.gate_up_proj`)
-    or one per expert (`experts.0.gate_proj.weight`, or DeepSeek's `w1`/`w3`, whose rows are gate and
-    up separately). Taking the baseline from whichever leg ran first would compare one mode to
-    another, and a mode that placed nothing would still look sharded.
-    """
-    import glob
-    import json
-    import os
-
-    from safetensors import safe_open
-
-    shards = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
-    index = os.path.join(model_dir, "model.safetensors.index.json")
-    if os.path.exists(index):
-        with open(index, encoding="utf-8") as fh:
-            weight_map = json.load(fh)["weight_map"]
-        shards = sorted({os.path.join(model_dir, f) for f in weight_map.values()})
-
-    experts: set[int] = set()
-    rows = 0
-    for shard in shards:
-        with safe_open(shard, framework="pt") as handle:
-            for key in handle.keys():
-                shape = None
-                if re.search(r"\.experts\.gate_up_proj$", key):
-                    shape = handle.get_slice(key).get_shape()
-                    if len(shape) == 3:
-                        return (shape[0], shape[1])
-                if re.search(r"\.experts\.(\d+)\.(gate_proj|up_proj|w1|w3)\.weight$", key):
-                    experts.add(int(key.rsplit(".experts.", 1)[1].split(".", 1)[0]))
-                    rows = max(rows, handle.get_slice(key).get_shape()[0])
-    if not experts or not rows:
-        raise AssertionError(f"no expert projection in {model_dir} to size the shard against")
-    return (len(experts), 2 * rows)  # the module stacks gate and up into one row extent
-
-
-@require_torch_multi_accelerator
-class FineGrainedLoadPathEquivalenceTest(TestCasePlus):
-    """Expert parallelism and intra-expert tensor parallelism must both reproduce what
-    `device_map` gives, which is the baseline because it places modules across devices without
-    splitting a single tensor — no process group, no DTensor, no collectives. So it computes the
-    unsharded answer, on the multi-GPU path people actually deploy.
-
-    Each model is built in the format it actually ships, because the conversion path differs by
-    format and by checkpoint layout — a per-expert FP8 checkpoint and a fused NVFP4 one reach the
-    experts through different converters, and bugs have hidden in exactly that gap.
-
-    Three properties make this able to fail:
-      * the fixture is PRE-QUANTIZED. Quantizing on the fly derives each rank's scales from the
-        shard it already holds, so they come out correctly sized whatever the plan says and a
-        plan that shards no scale at all still produces the right answer.
-      * the model's plan must carry expert entries. A model whose `base_model_tp_plan` is empty
-        (GPT-OSS, DeepSeek-V4) shards nothing under TP, so that leg is skipped EXPLICITLY rather
-        than passing vacuously.
-      * every leg reports the local expert shard, so a leg that placed nothing fails loudly.
-    """
-
-    @staticmethod
-    def _model_table():
-        """`{label: (config_cls, model_cls, config_kwargs, quantization_config)}` — each model
-        in the format it actually ships, with the quantization config that format arrives under,
-        not just its name: block-FP8 carries a `weight_block_size`, and an NVFP4 checkpoint comes
-        from modelopt under `quant_algo`, which is remapped on construction. Dims are multiples
-        of the 128 block so a 2-way split stays block-aligned, and the expert count divides the
-        mesh."""
-        from transformers import (
-            DeepseekV3Config,
-            DeepseekV3ForCausalLM,
-            DeepseekV4Config,
-            DeepseekV4ForCausalLM,
-            Glm4vMoeConfig,
-            Glm4vMoeForConditionalGeneration,
-            Glm4vMoeTextConfig,
-            Glm4vMoeVisionConfig,
-            GptOssConfig,
-            GptOssForCausalLM,
-            MiniMaxM3SparseForConditionalGeneration,
-            MiniMaxM3VLConfig,
-            Mistral4Config,
-            Mistral4ForCausalLM,
-        )
-        from transformers.utils.quantization_config import FineGrainedConfig
-
-        return {
-            "deepseek_v3-fp8": (
-                DeepseekV3Config,
-                DeepseekV3ForCausalLM,
-                {
-                    "vocab_size": 64,
-                    "hidden_size": 256,
-                    "intermediate_size": 256,
-                    "moe_intermediate_size": 256,
-                    "num_hidden_layers": 1,
-                    "num_attention_heads": 4,
-                    "num_key_value_heads": 4,
-                    "n_routed_experts": 4,
-                    "num_experts_per_tok": 2,
-                    "n_shared_experts": 1,
-                    "n_group": 1,
-                    "topk_group": 1,
-                    "first_k_dense_replace": 0,
-                    "max_position_embeddings": 32,
-                    "q_lora_rank": None,
-                    "kv_lora_rank": 32,
-                    "qk_nope_head_dim": 32,
-                    "qk_rope_head_dim": 16,
-                    "v_head_dim": 32,
-                },
-                # DeepSeek-V3 ships block-FP8: 128x128 weight blocks, activations quantized
-                # per token at run time
-                FineGrainedConfig(quant_method="fp8", weight_block_size=(128, 128)),
-            ),
-            # the only shipped STATIC scheme: per-TENSOR weights (no `weight_block_size`) and a
-            # calibrated activation scale per quantized module, which for a MoE is one per expert.
-            # Its conversion script asserts `qscheme_act == "TENSOR"`; Ministral-3 is the dense
-            # counterpart of the same export.
-            "mistral4-fp8_tensor_static": (
-                Mistral4Config,
-                Mistral4ForCausalLM,
-                {
-                    "vocab_size": 64,
-                    "hidden_size": 256,
-                    "intermediate_size": 256,
-                    "moe_intermediate_size": 256,
-                    "num_hidden_layers": 1,
-                    "num_attention_heads": 4,
-                    "num_key_value_heads": 4,
-                    "n_routed_experts": 4,
-                    "num_experts_per_tok": 2,
-                    "first_k_dense_replace": 0,
-                    "max_position_embeddings": 32,
-                },
-                FineGrainedConfig(quant_method="fp8", weight_block_size=None, activation_scheme="static"),
-            ),
-            # MULTIMODAL: the experts' plans live on `text_config`, not on the config the
-            # quantizer is handed — whose `base_model_ep_plan` is None. Reading only the outer
-            # one adds no companion while the weights still shard, which is how a real
-            # multimodal MoE ends up with whole scales against sharded weights.
-            "glm4v_moe-nvfp4": (
-                Glm4vMoeConfig,
-                Glm4vMoeForConditionalGeneration,
-                {
-                    "text_config": Glm4vMoeTextConfig(
-                        vocab_size=64,
-                        hidden_size=256,
-                        intermediate_size=256,
-                        moe_intermediate_size=256,
-                        num_hidden_layers=2,
-                        num_attention_heads=4,
-                        num_key_value_heads=2,
-                        max_position_embeddings=32,
-                        rope_parameters={"type": "default", "mrope_section": [16, 8, 8], "partial_rotary_factor": 1.0},
-                        rope_theta=10000,
-                        tie_word_embeddings=True,
-                        bos_token_id=0,
-                        eos_token_id=0,
-                        pad_token_id=0,
-                        n_routed_experts=4,
-                        n_shared_experts=1,
-                        n_group=1,
-                        topk_group=1,
-                        num_experts_per_tok=2,
-                        first_k_dense_replace=0,
-                    ),
-                    "vision_config": Glm4vMoeVisionConfig(
-                        depth=2,
-                        num_heads=4,
-                        hidden_size=64,
-                        out_hidden_size=256,
-                        intermediate_size=64,
-                        patch_size=14,
-                        spatial_merge_size=1,
-                        temporal_patch_size=2,
-                    ),
-                },
-                # the GLM NVFP4 checkpoints are modelopt exports: `quant_algo` names the format
-                # and `FineGrainedConfig` remaps it to nvfp4 at construction
-                FineGrainedConfig(quant_method="modelopt", quant_algo="NVFP4"),
-            ),
-            # interleaved rows (`is_concatenated=False`), transposed, with expert biases — and
-            # an EP plan that already names those biases, so the companion rules meet entries
-            # the model wrote itself
-            "gpt_oss-mxfp4": (
-                GptOssConfig,
-                GptOssForCausalLM,
-                {
-                    "vocab_size": 64,
-                    "hidden_size": 256,
-                    "intermediate_size": 256,
-                    "num_hidden_layers": 1,
-                    "num_attention_heads": 4,
-                    "num_key_value_heads": 4,
-                    "num_local_experts": 4,
-                    "num_experts_per_tok": 2,
-                    "max_position_embeddings": 32,
-                },
-                # GPT-OSS ships weight-only: raw bf16 activations against packed fp4 weights
-                FineGrainedConfig(quant_method="mxfp4", activation_format="bf16"),
-            ),
-            # MIXED precision, and the only entry whose expert format is not the quantization
-            # config's: `expert_dtype` is a model-config side-channel that makes the EXPERTS
-            # mxfp4 while the dense and attention paths stay block-FP8 — with scales in UE8M0
-            # containers rather than fp32, the other `scale_fmt`
-            "deepseek_v4-fp4_experts+fp8_dense": (
-                DeepseekV4Config,
-                DeepseekV4ForCausalLM,
-                {
-                    "vocab_size": 64,
-                    "hidden_size": 256,
-                    "intermediate_size": 256,
-                    "moe_intermediate_size": 256,
-                    "num_hidden_layers": 1,
-                    "num_attention_heads": 4,
-                    "num_key_value_heads": 4,
-                    "n_routed_experts": 4,
-                    "num_experts_per_tok": 2,
-                    "n_shared_experts": 1,
-                    "first_k_dense_replace": 0,
-                    "max_position_embeddings": 32,
-                    "expert_dtype": "fp4",
-                },
-                FineGrainedConfig(quant_method="fp8", weight_block_size=(128, 128), scale_fmt="ue8m0"),
-            ),
-            # a second MULTIMODAL nesting, in the group-32 MX format. The sub-config shape
-            # follows this model's own tester; only the MoE dims are raised to a multiple of
-            # the 128 block so a 2-way split stays block-aligned.
-            "minimax_m3_vl-mxfp8": (
-                MiniMaxM3VLConfig,
-                MiniMaxM3SparseForConditionalGeneration,
-                {
-                    "text_config": {
-                        "hidden_size": 256,
-                        # 512 so the 2-way split leaves 256: the experts' down projection
-                        # contracts over this, and a sharded 128 has no 128-wide swizzled tile
-                        "intermediate_size": 512,
-                        "dense_intermediate_size": 256,
-                        "shared_intermediate_size": 256,
-                        "num_hidden_layers": 2,
-                        "num_attention_heads": 4,
-                        "num_key_value_heads": 4,
-                        "head_dim": 64,
-                        "rotary_dim": 32,
-                        "vocab_size": 64,
-                        "max_position_embeddings": 32,
-                        "bos_token_id": 0,
-                        "eos_token_id": 1,
-                        "pad_token_id": 2,
-                        "num_local_experts": 4,
-                        "num_experts_per_tok": 2,
-                        "n_shared_experts": 1,
-                        "moe_layer_freq": [0, 1],
-                        "layer_types": ["full_attention", "minimax_m3_sparse"],
-                        "tie_word_embeddings": False,
-                        "index_n_heads": 2,
-                        "index_head_dim": 16,
-                        "index_block_size": 8,
-                        "index_topk_blocks": 4,
-                        "index_local_blocks": 1,
-                    },
-                    "vision_config": {
-                        # 256 so the 2-way SPLIT is still 128-aligned: an MXFP8 weight with
-                        # pre-swizzled scales is read in 128-wide K tiles, and a sharded 128 dim
-                        # leaves 64 — which has none to offer, and the tuner has no config at all
-                        "hidden_size": 256,
-                        "intermediate_size": 256,
-                        "num_hidden_layers": 2,
-                        "num_attention_heads": 4,
-                        "num_channels": 3,
-                        "image_size": 14,
-                        "patch_size": 14,
-                        "temporal_patch_size": 2,
-                        "spatial_merge_size": 1,
-                    },
-                    "image_token_index": 4,
-                    "video_token_index": 5,
-                    "projector_hidden_size": 256,
-                    "pad_token_id": 2,
-                },
-                FineGrainedConfig(quant_method="mxfp8"),
-            ),
+# The logits `[0, :3, :8]` each checkpoint gives on `torch.arange(3, 35)`, per device, as the model integration
+# tests record them: bit-stable across tuner caches, so a tight tolerance holds.
+EXPECTED_SLICES = {
+    "IlyasMoutawwakil/tiny-random-Qwen3-FP8": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [0.6094, -0.6055, -0.3262, 0.1396, -0.1270, -0.0420, 0.3750, -0.1592],
+                [0.1689, -0.4961, 0.1621, 0.0752, -0.1895, 0.0688, 0.3320, -0.0234],
+                [0.1069, -0.3027, 0.1050, 0.1553, 0.1699, -0.1572, 0.1699, 0.2598],
+            ],
         }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-Mistral3-FP8-static": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [-0.1992, -0.4141, -0.1650, -0.1826, 0.1309, 0.4375, -0.2832, 0.2480],
+                [-0.1367, -0.2422, -0.1138, -0.3418, 0.2910, 0.3965, -0.0293, -0.0330],
+                [-0.1436, -0.1055, -0.3320, -0.3203, 0.3633, 0.2480, 0.1523, -0.1621],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-Mistral4-FP8-static": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [-0.0850, 0.1816, -0.2344, 0.5547, -0.0747, 0.6875, -0.2949, 0.1982],
+                [-0.0056, -0.0065, 0.0530, 0.0996, 0.1436, 0.2217, -0.3281, 0.1846],
+                [0.0055, 0.2559, -0.1045, -0.0031, 0.0608, 0.0449, 0.0962, 0.1416],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-Llama-NVFP4": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [0.7617, -0.5938, -0.2832, 0.2559, -0.1021, 0.0082, 0.3418, -0.1699],
+                [0.6523, -0.7148, 0.2930, 0.3750, -0.5039, 0.0835, 0.2793, -0.0153],
+                [0.3457, -0.4785, 0.1924, 0.4102, -0.2715, -0.0835, 0.2070, 0.1602],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-DeepseekV3-FP8": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [-0.1260, -0.2051, -0.1836, -0.6523, 0.4395, -0.0771, -0.7461, 0.3613],
+                [-0.1025, -0.0640, -0.0132, -0.6602, 0.3672, -0.1270, -0.9023, -0.0786],
+                [-0.0874, 0.0552, 0.0442, -0.4824, 0.4375, -0.4121, -0.4980, -0.1836],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-DeepseekV4-Flash": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [-0.3984, 0.3633, 0.1348, -0.0476, -0.1118, -0.0518, -0.0952, -0.4590],
+                [-0.4336, 0.1836, 0.0049, -0.1514, -0.0449, -0.2383, -0.1113, -0.4766],
+                [-0.2559, 0.0693, -0.0664, -0.2207, -0.2500, -0.1177, -0.1562, -0.2949],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-GptOss-MXFP4": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [-0.1309, 0.2061, 0.2559, 0.5156, -0.2715, 0.5469, 0.4004, -0.0854],
+                [-0.2490, 0.6406, 0.1289, 0.4277, -0.3809, 0.3125, 0.3516, -0.0811],
+                [-0.2334, 0.1367, 0.2930, 0.6875, -0.1836, 0.4844, 0.1953, -0.2363],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [0.1709, -0.4199, -0.4199, -0.2402, -0.3125, 0.6016, 0.3008, 0.1914],
+                [-0.2051, -0.6328, -0.5391, 0.3184, 0.1299, 0.2773, 0.4824, 0.0938],
+                [0.0447, -0.5078, -0.3672, -0.1992, 0.1553, 0.6523, 0.4141, -0.0038],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-GlmMoeDsa-NVFP4-all-linears": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [0.2266, -0.2793, -0.3906, -0.1357, 0.0170, 0.4980, 0.1035, 0.2041],
+                [-0.0649, -0.2188, -0.5547, 0.2041, 0.1201, 0.3750, 0.4355, 0.1099],
+                [0.0908, -0.4492, -0.6094, -0.1836, 0.3203, 0.4453, 0.4199, 0.1172],
+            ],
+        }
+    ),  # fmt: skip
+    "IlyasMoutawwakil/tiny-random-MiniMaxM3-MXFP8": Expectations(
+        {
+            ("cuda", (10, 0)): [
+                [0.2334, -0.0771, -0.3633, 0.1670, -0.2832, 0.1611, 0.4609, 0.0574],
+                [0.4199, -0.1011, -0.2031, -0.2334, -0.2832, 0.1182, 0.5586, 0.1201],
+                [0.1836, -0.0981, -0.6836, 0.2969, 0.0684, 0.0942, 0.5625, -0.0635],
+            ],
+        }
+    ),  # fmt: skip
+}
+
+
+@slow
+@require_kernels
+@require_torch_accelerator
+class FineGrainedTinyCheckpointTest(TestCasePlus):
+    """Each shipped layout, from the hub: it must load with every key accounted for, compute what
+    its dequantized weights compute within the format's own rounding, and save back to its own
+    layout. The checkpoints come from the formats' own producers (modelopt, OpenAI's and DeepSeek's
+    quantizers), so a converter is checked against what the format really is, not against what
+    this code believes it to be."""
 
     @classmethod
     def setUpClass(cls):
-        cls._tmp = tempfile.TemporaryDirectory()
         # the kernels autotune per shape from a cold cache, which dwarfs everything else here
-        cls._env = {
-            "FINEGRAINED_AUTOTUNE_TRIALS": "1",
-            "TRITON_CACHE_DIR": os.path.join(cls._tmp.name, "triton"),
-        }
-        os.environ.update(cls._env)
+        os.environ["FINEGRAINED_AUTOTUNE_TRIALS"] = "1"
 
-    @classmethod
-    def tearDownClass(cls):
-        cls._tmp.cleanup()
+    def setUp(self):
+        super().setUp()
+        # below that the quantizer dequantizes instead, which is not what is under test
+        if torch_device == "cuda" and torch.cuda.get_device_capability() < (8, 9):
+            self.skipTest("fine-grained quantized compute needs compute capability >= 8.9")
+
+    def tearDown(self):
+        super().tearDown()
+        cleanup(torch_device, gc_collect=True)
 
     @staticmethod
-    def _free_port() -> int:
-        with socket.socket() as sock:
-            sock.bind(("", 0))
-            return sock.getsockname()[1]
+    def _load(repo, **kwargs):
+        config = AutoConfig.from_pretrained(repo, **kwargs)
+        model_cls = AutoModelForImageTextToText if "vision_config" in config.to_dict() else AutoModelForCausalLM
+        return model_cls.from_pretrained(repo, device_map=torch_device, output_loading_info=True, **kwargs)
 
-    def _fixture(self, label):
-        """A PRE-QUANTIZED checkpoint of one tiny model, in the format that model ships."""
+    @staticmethod
+    def _unbuilt_mtp_keys(model, keys):
+        """The multi-token-prediction layer the checkpoint ships and the model does not build: it
+        sits at index `num_hidden_layers`, which the models' own ignore rule only names at the
+        full-size index."""
+        mtp = model.config.get_text_config().num_hidden_layers
+        return {key for key in keys if re.search(rf"(^|\.)layers\.{mtp}\.", key)}
 
-        config_cls, model_cls, kwargs, quantization_config = self._model_table()[label]
-        config = config_cls(**kwargs)
+    def _not_loaded(self, model, keys):
+        """Checkpoint keys the model does not load, so a save does not write them back: the unbuilt MTP
+        layer, and what the load declares it ignores (an FP8 KV cache's scales)."""
+        ignored = model._keys_to_ignore_on_load_unexpected or []
+        return self._unbuilt_mtp_keys(model, keys) | {k for k in keys if any(re.search(p, k) for p in ignored)}
 
-        bf16_dir = os.path.join(self._tmp.name, label, "bf16")
-        quant_dir = os.path.join(self._tmp.name, label, "quantized")
-        torch.manual_seed(0)
-        # BF16 is what every model here ships, and the dtype decides which kernel arms run: a
-        # float32 checkpoint (torch's default for a freshly built model, which `dtype="auto"`
-        # then faithfully reloads) sends the weight-only formats down arms `tl.dot_scaled`
-        # cannot serve at all, so the suite would exercise a dtype nobody deploys and leave the
-        # real one uncovered. Saving in bf16 makes `"auto"` mean bf16 for every load below.
-        model_cls(config).to(torch.bfloat16).save_pretrained(bf16_dir, safe_serialization=True)
-        quantized = model_cls.from_pretrained(
-            bf16_dir,
-            dtype="auto",
-            attn_implementation="eager",
-            quantization_config=quantization_config,
-            device_map=f"{torch_device}:0",
-        )
-        quantized.save_pretrained(quant_dir, safe_serialization=True)
-        del quantized
-        backend_empty_cache(torch_device)
+    @parameterized.expand(TINY_CHECKPOINTS.items())
+    def test_logits_match_the_dequantized_reference(self, repo, budget):
+        model, info = self._load(repo)
+        unexpected = set(info["unexpected_keys"]) - self._unbuilt_mtp_keys(model, info["unexpected_keys"])
+        self.assertEqual((set(info["missing_keys"]), unexpected, set(info["mismatched_keys"])), (set(), set(), set()))
 
-        # SAVE must restore the checkpoint's own layout: the layout ops (gate|up interleave,
-        # scale container, swizzle) each have a reverse, and a quantized model reloaded and
-        # written again has to land on the same keys and shapes. A broken reverse writes a
-        # corrupt checkpoint silently — the module still reads back whatever it wrote.
-        reloaded = model_cls.from_pretrained(quant_dir, dtype="auto", device_map=f"{torch_device}:0")
-        round_trip = os.path.join(self._tmp.name, label, "round_trip")
-        reloaded.save_pretrained(round_trip, safe_serialization=True)
-        del reloaded
-        backend_empty_cache(torch_device)
-        self.assertEqual(
-            _checkpoint_shapes(quant_dir), _checkpoint_shapes(round_trip), f"{label}: save did not round-trip"
-        )
-        return quant_dir, config, model_cls
-
-    def _logits(self, model_dir, model_cls, **load_kwargs):
-        model = model_cls.from_pretrained(model_dir, dtype="auto", attn_implementation="eager", **load_kwargs).eval()
-        ids = torch.arange(16, dtype=torch.long, device=model.device).unsqueeze(0)
+        reference, _ = self._load(repo, subfolder="reference", dtype=torch.bfloat16)
+        ids = torch.arange(3, 35, dtype=torch.long, device=model.device).unsqueeze(0)
         with torch.no_grad():
-            logits = model(ids).logits.float().cpu()
-        del model
-        backend_empty_cache(torch_device)
-        return logits
+            got, want = model(ids).logits.float(), reference(ids).logits.float()
+        error = ((got - want).norm() / want.norm()).item()
+        self.assertLessEqual(error, budget, f"{repo}: logits {error:.4f} away from the dequantized reference")
 
-    def _rounding_floor(self, model_dir, model_cls, reference):
-        """How far this model's logits move when every sharded block is perturbed by BF16 rounding.
-
-        Sharding cannot be bit-exact: a rowwise all-reduce sums the same terms in a different
-        order, so the first sharded op differs by an ULP. How far that travels is a property of
-        the MODEL, not of the sharding — a chain of MoE layers can amplify it a hundredfold while
-        a dense stack barely moves. Injecting the same magnitude on ONE device measures that
-        amplification directly, giving each model a budget its own conditioning earns.
-        """
-
-        model = model_cls.from_pretrained(
-            model_dir, dtype="auto", attn_implementation="eager", device_map=f"{torch_device}:0"
-        ).eval()
-        # Perturb EVERY block a sharded reduction passes through, not one: TP re-orders the sum
-        # in each of them, so the rounding accumulates down the stack instead of cancelling.
-        # Perturbing a single site with random noise measured LESS movement than sharding caused
-        # even at 14x the magnitude, which is what accumulation looks like from the wrong model.
-        blocks = [
-            m
-            for n, m in model.named_modules()
-            if n.endswith((".self_attn", ".mlp", ".block_sparse_moe")) and n.count(".layers.") == 1
-        ]
-        generator = torch.Generator(device=model.device).manual_seed(0)
-
-        def perturb(module, args, output):
-            tensor = output[0] if isinstance(output, tuple) else output
-            if not torch.is_tensor(tensor):
-                return output
-            ulp = torch.finfo(tensor.dtype).eps * tensor.abs().max()
-            noise = torch.randn(tensor.shape, generator=generator, device=tensor.device, dtype=tensor.dtype) * ulp
-            tensor = tensor + noise
-            return (tensor,) + output[1:] if isinstance(output, tuple) else tensor
-
-        handles = [b.register_forward_hook(perturb) for b in blocks]
-        ids = torch.arange(16, dtype=torch.long, device=model.device).unsqueeze(0)
+    @parameterized.expand(TINY_CHECKPOINTS)
+    def test_logits_match_the_expected_slice(self, repo):
+        model, _ = self._load(repo)
+        ids = torch.arange(3, 35, dtype=torch.long, device=model.device).unsqueeze(0)
         with torch.no_grad():
-            perturbed = model(ids).logits.float().cpu()
-        for handle in handles:
-            handle.remove()
-        del model
-        backend_empty_cache(torch_device)
-        return (perturbed - reference).abs().max().item()
+            logits = model(ids).logits[0, :3, :8].float().cpu()
+        expected = torch.tensor(EXPECTED_SLICES[repo].get_expectation())
+        torch.testing.assert_close(logits, expected, rtol=1e-2, atol=5e-3)
 
-    def _sharded(self, model_dir, model_cls, modes):
-        """`{mode: payload}` from one 2-rank `torchrun`, through the real EP / TP load path."""
+    @parameterized.expand(TINY_CHECKPOINTS)
+    def test_save_writes_the_checkpoint_layout_back(self, repo):
+        """A pre-quantized model saved again lands on its checkpoint's keys, dtypes and bytes. The
+        one exception is by design: NVFP4's gate and up `input_scale` share one activation global,
+        which a save writes back to both."""
+        from huggingface_hub import snapshot_download
 
-        script = os.path.join(self._tmp.name, "sharding_worker.py")
-        with open(script, "w", encoding="utf-8") as fh:
-            fh.write(_SHARDING_WORKER)
-        out = os.path.join(self._tmp.name, "out")
-        os.makedirs(out, exist_ok=True)
-        subprocess.run(
-            [
-                "torchrun",
-                "--nproc_per_node=2",
-                f"--master_port={self._free_port()}",
-                script,
-                model_dir,
-                out,
-                ",".join(modes),
-                # the model's own class: `AutoModelForCausalLM` cannot resolve a multimodal
-                # `ForConditionalGeneration` from its config
-                f"{model_cls.__module__}:{model_cls.__name__}",
-            ],
-            check=True,
-            env={**os.environ, **self._env, "TOKENIZERS_PARALLELISM": "false"},
-        )
-        return {m: torch.load(os.path.join(out, m + ".pt")) for m in modes}
-
-    def test_every_load_path_agrees(self):
-        for label in self._model_table():
-            with self.subTest(model=label):
-                model_dir, config, model_cls = self._fixture(label)
-                # the baseline, spread across both devices: `max_memory` forces a real split,
-                # since `auto` alone fits this whole model on one GPU and would quietly compare
-                # the sharded legs against a single-device load
-                reference = self._logits(model_dir, model_cls, device_map="auto", max_memory={0: "120MiB", 1: "40GiB"})
-                noise_floor = self._rounding_floor(model_dir, model_cls, reference)
-
-                # Only the modes this model's OWN plans shard experts under. A mode whose plan
-                # has no expert entry (GPT-OSS and DeepSeek-V4 ship no TP plan at all) places
-                # nothing, so running it would pass without being evidence of anything. A
-                # multimodal model keeps these on a sub-config.
-                owners = [config] + [
-                    c for name in getattr(type(config), "sub_configs", {}) if (c := getattr(config, name, None))
-                ]
-                modes = [
-                    mode
-                    for mode, attr in (("ep", "base_model_ep_plan"), ("tp", "base_model_tp_plan"))
-                    if any(".experts." in key for owner in owners for key in (getattr(owner, attr, None) or {}))
-                ]
-                self.assertTrue(modes, f"{label}: no plan shards experts, so nothing is under test")
-                whole = _checkpoint_expert_shape(model_dir)
-                for mode, payload in self._sharded(model_dir, model_cls, modes).items():
-                    with self.subTest(model=label, mode=mode):
-                        local = payload["expert_local"]
-                        # against the CHECKPOINT's own shape, never another mode's shard: seeding
-                        # this from the first leg made the second leg check EP against TP, so a
-                        # mode that placed nothing still looked sharded (glm4v's TP left its
-                        # experts replicated and passed).
-                        self.assertLess(
-                            local[0] * local[1],
-                            whole[0] * whole[1],
-                            f"{label}/{mode}: experts were not sharded ({local} of {whole}) — "
-                            f"this leg cannot catch a bad axis",
-                        )
-                        # Sharding reorders reductions, so the legs differ by BF16 rounding
-                        # whatever the axes — and how much that shows at the logits is the
-                        # model's own business (the NVFP4 fixture amplifies ~100x, the dense
-                        # ones barely). Hence each model's measured floor, not a fixed
-                        # tolerance. A wrong shard axis lands orders of magnitude above it.
-                        budget = max(2e-2, noise_floor)
-                        gap = (payload["logits"] - reference).abs().max().item()
-                        self.assertLessEqual(
-                            gap,
-                            budget,
-                            f"{label}/{mode}: sharded logits differ by {gap:.4g}, beyond this "
-                            f"model's own rounding budget {budget:.4g} — that is a sharding bug, "
-                            f"not reduction order",
-                        )
-                        if noise_floor <= 2e-2:
-                            # only meaningful where rounding does NOT already move the argmax
-                            self.assertTrue(
-                                torch.equal(payload["logits"].argmax(-1), reference.argmax(-1)),
-                                f"{label}/{mode}: argmax diverged from the unsharded model",
-                            )
+        model, _ = self._load(repo)
+        saved = os.path.join(self.get_auto_remove_tmp_dir(), "saved")
+        model.save_pretrained(saved)
+        source = _checkpoint_bytes(snapshot_download(repo, allow_patterns=["*.safetensors", "*.json"]))
+        source = {key: value for key, value in source.items() if key not in self._not_loaded(model, source)}
+        written = _checkpoint_bytes(saved)
+        self.assertEqual(sorted(written), sorted(source))
+        for key, (dtype, shape, raw) in written.items():
+            with self.subTest(key=key):
+                self.assertEqual((dtype, shape), source[key][:2])
+                if not re.search(r"\.(gate|up)_proj\.input_scale$", key):
+                    self.assertEqual(raw, source[key][2])

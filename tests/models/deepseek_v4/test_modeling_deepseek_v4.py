@@ -185,22 +185,9 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(keys.shape[3], head_dim)
             self.assertEqual(keys.shape, values.shape)
 
-    @unittest.skip(
-        reason=(
-            "V4's conversion mapping is two-pass: a structural prefix rename "
-            "(``layers.X.attn.`` → ``model.layers.X.self_attn.``) runs first, then specific in-prefix "
-            "renames operate on the already-prefixed HF-form keys (``model.layers.X.self_attn.compressor.norm.`` "
-            "→ ``...compressor.kv_norm.``). This split is load-bearing for save / load round-tripping — "
-            "any single-pass ordering loses information in either direction (the general prefix rule "
-            "and a specific in-prefix rule both want to match the same upstream key, and one of the "
-            "two directions ends up with the general rule stealing the match). The base "
-            "``test_reverse_loading_mapping`` checks every source pattern against the *upstream-form* "
-            "serialized keys, so the Pass 2 patterns (written in HF form) inherently can't satisfy "
-            "that invariant. The actual round-trip is exercised by ``test_save_load``."
-        )
-    )
     def test_reverse_loading_mapping(self):
-        pass
+        # the base model has no `model.` prefix for the checkpoint's prefix renames to reverse onto
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(
         reason=(

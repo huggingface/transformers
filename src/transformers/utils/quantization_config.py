@@ -1721,6 +1721,19 @@ class FineGrainedGroup:
         if self.weight_block_size is not None:
             self.weight_block_size = tuple(self.weight_block_size)
 
+        # what each weight format's kernels quantize activations to (`None` = the weights' own format,
+        # `"bf16"` = weight-only); anything else would fail in the kernels at the first forward
+        supported = {
+            "fp8": (None, "fp8"),
+            "mxfp8": (None, "mxfp8", "mxfp4", "bf16"),
+            "mxfp4": (None, "mxfp8", "mxfp4", "bf16"),
+            "nvfp4": (None, "nvfp4", "bf16"),
+        }.get(self.quant_method)
+        if supported is not None and self.activation_format not in supported:
+            raise ValueError(
+                f"{self.quant_method} weights take activation_format in {supported}; got {self.activation_format!r}"
+            )
+
     def matches(self, module_name: str) -> bool:
         return any(re.search(target, module_name) for target in self.targets)
 
@@ -1774,11 +1787,15 @@ def group_from_config_groups(spec: dict) -> FineGrainedGroup | None:
             return None
     activations = spec.get("input_activations") or {}
     act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
+    activation_format = formats.get(act_key) if activations else None
+    # group-scaled activations quantize their blocks inline either way: `dynamic: false` there is
+    # NVFP4's calibrated second-level global (`input_scale`), which the loader carries on its own
+    static = not activations.get("dynamic", True) and activation_format == "fp8"
     return FineGrainedGroup(
         quant_method=quant_method,
         targets=targets or [".*"],
-        activation_format=formats.get(act_key) if activations else None,
-        activation_scheme="dynamic" if activations.get("dynamic", True) else "static",
+        activation_format=activation_format,
+        activation_scheme="static" if static else "dynamic",
     )
 
 
@@ -1906,6 +1923,11 @@ class FineGrainedConfig(QuantizationConfigMixin):
             if all(group is not None for group in mapped.values()):
                 groups = mapped
         ignore = kwargs.pop("ignore", None) or kwargs.pop("exclude_modules", None)
+        if kwargs.pop("kv_cache_scheme", None):
+            logger.warning_once(
+                "This modelopt checkpoint calibrates an FP8 KV cache (`k_scale` / `v_scale`); the KV cache is not "
+                "quantized here and stays in the model's dtype, so those scales are not loaded."
+            )
         return quant_method, activation_format, groups, ignore
 
     def to_dict(self):

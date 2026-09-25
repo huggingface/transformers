@@ -258,9 +258,9 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="IDK exactly why, can be adressed later")
     def test_reverse_loading_mapping(self):
-        pass
+        # the base model has no `model.` prefix for the `^language_model\.model\.` rename to reverse onto, as in llava
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(
         reason=(

@@ -111,9 +111,10 @@ class FineGrainedInterleaveGateUp(_FineGrainedOp):
 
 
 class FineGrainedScaleContainer(_FineGrainedOp):
-    """A block scale into the dtype its module holds. UE8M0 ships either as the exponent byte
-    under ``uint8`` (reinterpreted) or as its power-of-two value in float32 (cast exactly); the
-    module records which the checkpoint used so the reverse restores it on save."""
+    """A UE8M0 block scale into the ``float8_e8m0fnu`` its module holds: it ships either as the
+    exponent byte under ``uint8`` (reinterpreted) or as its power-of-two value in float32 (cast
+    exactly), and the module records which so the reverse restores it on save. Every other scale
+    stays in the dtype the checkpoint ships (Qwen3 and Mistral BF16, DeepSeek-V3 fp32)."""
 
     def convert(self, input_dict, model=None, full_layer_name=None, target_patterns=None, **kwargs):
         out = {}
@@ -128,7 +129,8 @@ class FineGrainedScaleContainer(_FineGrainedOp):
                     value = as_container(value, container)
             else:
                 module, held = held_scale(model, full_layer_name, key)
-                if held is not None and value.dtype != held.dtype:
+                # the one container there is: e8m0 held, shipped as its bytes or its fp32 powers of two
+                if held is not None and held.dtype == _get_ue8m0_dtype() and value.dtype != held.dtype:
                     module.scale_container_dtype = value.dtype
                     value = as_container(value, held.dtype)
             out[key] = value
@@ -304,7 +306,8 @@ class FineGrainedInputScalesSplit(_FineGrainedOp):
             experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None)
             if experts is not None:
                 value = value.reshape(1).expand(experts.num_experts).contiguous()
-        return dict.fromkeys(target_patterns or list(input_dict), value)
+        # one tensor per key: a save refuses keys that share storage
+        return {key: value.clone() for key in target_patterns or list(input_dict)}
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -630,45 +633,3 @@ class FineGrainedDequantize(_FineGrainedOp):
         # a save re-quantizes, so the checkpoint keeps its format whether the in-memory
         # state stayed quantized or was dequantized for compute
         return FineGrainedQuantize(self.hf_quantizer)
-
-
-def keep_swizzle_reverse_for_save(model, hf_quantizer) -> None:
-    """Keep the swizzle's reverse reachable at save time for a model quantized ON THE FLY.
-
-    `_weight_conversions` retains only converters that matched a checkpoint weight, and
-    quantizing a bf16 checkpoint CREATES the scale keys — so the converter carrying the
-    layout ops never matched, and saving would write the module's 5-D SWIZZLE_32_4_4 grid
-    where the checkpoint format is the affine one (silently: the module reads back whatever
-    it wrote, so only a re-save catches it).
-
-    Adds a converter that renames nothing and carries the swizzle alone, for scales no
-    retained converter already covers — reversing it is the unswizzle, which reads the
-    affine grid off the self-describing 5-D shape. Scoped that way because a converter
-    appended here is matched BEFORE the retained ones (the save reverses the list), so a
-    broader pattern would take keys away from the real converter and skip the rest of its
-    chain.
-    """
-    from ...core_model_loading import WeightConverter
-
-    conversions = list(getattr(model, "_weight_conversions", None) or [])
-    covered = {
-        target
-        for conv in conversions
-        if isinstance(conv, WeightConverter)
-        for target in (getattr(conv, "target_patterns", None) or [])
-    }
-    held_swizzled = {
-        name.rsplit(".", 1)[-1]
-        for name, param in model.named_parameters()
-        if param.ndim == 5 and name.rsplit(".", 1)[-1].endswith("_scale_inv")
-    }
-    missing = sorted(name for name in held_swizzled if not any(name in target for target in covered))
-    if not missing:
-        return
-    for name in missing:
-        conv = WeightConverter(
-            source_patterns=rf"{name}$", target_patterns=name, operations=[FineGrainedSwizzleScales(hf_quantizer)]
-        )
-        conv._was_used = True  # it describes a layout this quantizer applied, not one a checkpoint carried
-        conversions.append(conv)
-    model._weight_conversions = conversions

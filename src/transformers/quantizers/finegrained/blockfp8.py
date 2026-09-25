@@ -44,14 +44,14 @@ class FineGrainedBlockFp8HfQuantizer(FineGrainedHfQuantizer):
         per_expert = [
             WeightConverter(
                 source_patterns=[
-                    r"mlp\.experts\..*\.gate_proj\.input_scale",
-                    r"mlp\.experts\..*\.up_proj\.input_scale",
+                    "mlp.experts.*.gate_proj.input_scale",
+                    "mlp.experts.*.up_proj.input_scale",
                 ],
                 target_patterns="mlp.experts.gate_up_proj_activation_scale",
                 operations=[MergeModulelist(dim=0), FineGrainedInputScales(self)],
             ),
             WeightConverter(
-                source_patterns=r"mlp\.experts\..*\.down_proj\.input_scale",
+                source_patterns="mlp.experts.*.down_proj.input_scale",
                 target_patterns="mlp.experts.down_proj_activation_scale",
                 operations=[MergeModulelist(dim=0), FineGrainedInputScales(self)],
             ),

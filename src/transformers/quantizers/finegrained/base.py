@@ -22,6 +22,7 @@ block-FP8 linears, and one arm per checkpoint could never express that.
 """
 
 import re
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from ...utils import (
@@ -33,7 +34,7 @@ from ...utils import (
 )
 from ...utils.quantization_config import groups_with_expert_dtype
 from ..base import HfQuantizer
-from ..quantizers_utils import get_module_from_name
+from ..quantizers_utils import get_module_from_name, should_convert_module
 
 
 if is_torch_available():
@@ -60,6 +61,12 @@ class FineGrainedHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "FineGrainedConfig"
     default_activation_format: str | None = None
+    quantization_param_suffixes = ("_scale_inv",)
+
+    def param_keeps_checkpoint_dtype(self, param_name: str) -> bool:
+        # a scale loads as the checkpoint ships it (Qwen3 and Mistral ship BF16, DeepSeek-V3 fp32): the
+        # kernels read either, and a save then writes it back unchanged
+        return param_name.endswith(("_scale_inv", "activation_scale", "_global_scale"))
 
     @property
     def supports_dequantize(self) -> bool:
@@ -147,25 +154,30 @@ class FineGrainedHfQuantizer(HfQuantizer):
         return super().param_element_size(model, param_name, param)
 
     def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
-        """Rewrite the skip-list to the model's own module tree.
-        For models that were already released, if they have a list of modules to not quantize
-        we need to apply the weight renaming / weight conversion opérations to get the actual
-        layer name of the model in `transformers`.
-        """
+        """Extend the skip-list, which names modules in the checkpoint's namespace, with the model's
+        modules it covers there. A released model renames its modules on load, so each one is named back
+        through the reversed renames (written on keys, so on the module's key prefix) and taken with its
+        sub-tree when the list covers it: a VLM's bare `vision_tower` matches no rename on its own."""
         skip = self.quantization_config.modules_to_not_convert
         if not skip:
             return
 
         from ...conversion_mapping import get_model_conversion_mapping
+        from ...core_model_loading import WeightRenaming
 
         renamings = get_model_conversion_mapping(model)
-        remapped = []
-        for name in skip:
-            renamed = name
-            for rename in renamings:
-                renamed, _ = rename.rename_source_key(renamed)
-            remapped.append(renamed)
-        self.quantization_config.modules_to_not_convert = remapped
+        reverse = [r.reverse_transform() for r in renamings[::-1] if isinstance(r, WeightRenaming)]
+        covered = []
+        for module_name, _ in model.named_modules():
+            if any(module_name.startswith(f"{parent}.") for parent in covered):
+                continue
+            checkpoint_name = f"{module_name}."
+            for rename in reverse:
+                checkpoint_name, _ = rename.rename_source_key(checkpoint_name)
+            checkpoint_name = checkpoint_name.removesuffix(".")
+            if checkpoint_name != module_name and not should_convert_module(checkpoint_name, skip):
+                covered.append(module_name)
+        self.quantization_config.modules_to_not_convert = [*skip, *covered]
 
     def _process_model_before_weight_loading(
         self,
@@ -181,6 +193,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
         self.quantization_config.groups = groups_with_expert_dtype(self.quantization_config.groups, expert_dtype)
         if self.quantization_config.activation_format is None:
             self.quantization_config.activation_format = self.default_activation_format
+        # the modules read their group's format, so the default lands on this arm's groups too
+        self.quantization_config.groups = {
+            name: replace(group, activation_format=self.default_activation_format)
+            if group.activation_format is None and group.quant_method == self.quant_method
+            else group
+            for name, group in self.quantization_config.groups.items()
+        }
         if self.quantization_config.activation_format == "bf16":
             # Weight-only holds no activation global, so a calibrated checkpoint's `input_scale`
             # has no slot to load into. Not an unexpected key — one this run has no use for, which
@@ -207,11 +226,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         from ...integrations.finegrained import assert_modules_are_quantized, disable_deepgemm_on_multi_device
-        from ...integrations.finegrained.conversions import keep_swizzle_reverse_for_save
 
         assert_modules_are_quantized(model)
         disable_deepgemm_on_multi_device(model)
-        keep_swizzle_reverse_for_save(model, self)
 
         return model
 

@@ -81,9 +81,13 @@ class HfQuantizer(ABC):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
+        quantization_param_suffixes (`tuple[str, ...]`):
+            Suffixes of the parameters quantization adds to a weight (`weight` -> `weight_scale_inv`).
+            A save runs each through its weight's reversed conversion, so it lands in the weight's layout.
     """
 
     requires_calibration = False
+    quantization_param_suffixes: tuple[str, ...] = ()
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -130,6 +134,13 @@ class HfQuantizer(ABC):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
         Check whether a given param needs to be quantized.
+        """
+        return False
+
+    def param_keeps_checkpoint_dtype(self, param_name: str) -> bool:
+        """
+        Whether a pre-quantized checkpoint's `param_name` loads in the dtype it ships in rather than the model's
+        (e.g. quantization scales, which a checkpoint may ship narrower or wider than the model dtype).
         """
         return False
 

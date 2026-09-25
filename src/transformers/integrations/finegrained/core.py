@@ -415,7 +415,11 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
         self.weight_scale_inv = nn.Parameter(scale, requires_grad=scale.dtype.is_floating_point)
 
         static = self.activation_scheme == "static"
+        calibrated = global_scale_dtype is not None and activation_format != "bf16"
         _set_optional_parameter(self, "activation_scale", torch.tensor(1.0, dtype=torch.float32) if static else None)
+        _set_optional_parameter(
+            self, "input_global_scale", torch.tensor(1.0, dtype=torch.float32) if calibrated else None
+        )
         _set_optional_parameter(self, "bias", torch.empty(self.out_features) if self.has_bias else None)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -428,6 +432,7 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
             bias=self.bias,
             allow_deepgemm=not self._deepgemm_disabled,
             weight_global_scale=self.weight_global_scale,
+            input_global_scale=self.input_global_scale,
             activation_format=self.activation_format,
         )
 
