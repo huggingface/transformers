@@ -1172,15 +1172,16 @@ def compare_trainer_and_checkpoint_args(training_args, trainer_state):
 def _align_special_token(name, tokenizer, config, generation_config, updated_tokens, several=False):
     """
     Aligns one special token id held by the configs with the tokenizer, recording the change in `updated_tokens`. A
-    token the tokenizer does not define is left untouched. With `several`, a config that holds a list of ids keeps
-    them alongside the tokenizer's one instead of being collapsed to it.
+    token the tokenizer does not define is left untouched. With `several`, the alignment only ever adds an id: the
+    generation config keeps the ids it holds, and so does a config that declares a list of them. Nothing here says
+    whether an id the checkpoint declares has become invalid, so none is removed.
     """
     tokenizer_token_id = getattr(tokenizer, name)
     if tokenizer_token_id is None:
         return
     config_token_ids = getattr(config, name, None)
-    config_declares_several = isinstance(config_token_ids, list)
-    if not config_declares_several:
+    keep_config_existing_tokens = isinstance(config_token_ids, list)
+    if not keep_config_existing_tokens:
         config_token_ids = [config_token_ids]
     generation_token_ids = getattr(generation_config, name) if generation_config is not None else None
     if not isinstance(generation_token_ids, list):
@@ -1192,7 +1193,7 @@ def _align_special_token(name, tokenizer, config, generation_config, updated_tok
         return
 
     updated_tokens[name] = tokenizer_token_id
-    if several and config_declares_several:
+    if several and keep_config_existing_tokens:
         # Collapsing the ids the config declares to a single one would drop stop tokens.
         setattr(config, name, [tokenizer_token_id, *(t for t in config_token_ids if t != tokenizer_token_id)])
     else:
