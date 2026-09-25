@@ -774,53 +774,56 @@ _EXPORT_GENERATION_CONFIGS = [
     GenerationConfig(cache_implementation="static", max_cache_len=256, use_cache=True),
 ]
 
+_GENERATE_VARIANTS = [
+    (dynamic, multi_token, config)
+    for dynamic, multi_token, config in itertools.product(
+        _EXPORT_SHAPE_MODES, _EXPORT_DECODE_MODES, _EXPORT_GENERATION_CONFIGS
+    )
+    # A merged multi-token decode under static shapes would freeze its query axis at 2 — a graph no
+    # decode step could ever run.
+    if not (multi_token and not dynamic)
+]
+
+
+def _generate_variant_name(dynamic, multi_token, config) -> str:
+    return (
+        ("dynamic" if dynamic else "static")
+        + ("_multi_token" if multi_token else "")
+        + (f"_{config.cache_implementation}_cache" if config.cache_implementation else "")
+    )
+
+
 GENERATE_EXPORT_PARAMS = parameterized.expand(
-    [
-        (dynamic, multi_token, config)
-        for dynamic, multi_token, config in itertools.product(
-            _EXPORT_SHAPE_MODES, _EXPORT_DECODE_MODES, _EXPORT_GENERATION_CONFIGS
-        )
-        # A merged multi-token decode under static shapes would freeze its query axis at 2 — a graph no
-        # decode step could ever run.
-        if not (multi_token and not dynamic)
-    ],
-    name_func=lambda f, _, p: (
-        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}"
-        + ("_multi_token" if p.args[1] else "")
-        + (f"_{p.args[2].cache_implementation}_cache" if p.args[2].cache_implementation else "")
-    ),
+    _GENERATE_VARIANTS, name_func=lambda f, _, p: f"{f.__name__}_{_generate_variant_name(*p.args)}"
 )
 
 
-_EXECUTORCH_BACKENDS = ("xnnpack",)
-if is_executorch_available() and importlib.util.find_spec("executorch.backends.mlx") is not None:
-    try:
-        from executorch.runtime import Runtime
-
+def _executorch_backends() -> tuple[str, ...]:
+    """The ExecuTorch backends this install can run: XNNPACK always, MLX where its runtime is registered."""
+    backends = ("xnnpack",)
+    if is_executorch_available() and importlib.util.find_spec("executorch.backends.mlx") is not None:
+        try:
+            from executorch.runtime import Runtime
+        except ImportError:  # The Python backend can be installed without the native runtime.
+            return backends
         if "MLXBackend" in Runtime.get().backend_registry.registered_backend_names:
-            _EXECUTORCH_BACKENDS += ("mlx",)
-    except ImportError:
-        pass  # The Python backend can be installed without the native runtime.
+            backends += ("mlx",)
+    return backends
 
+
+_EXECUTORCH_BACKENDS = _executorch_backends()
 EXECUTORCH_EXPORT_PARAMS = parameterized.expand(
     list(itertools.product(_EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES)),
     name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}_{p.args[0]}",
 )
 EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
     [
-        (backend, dynamic, multi_token, config)
-        for backend, dynamic, multi_token, config in itertools.product(
-            _EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES, _EXPORT_DECODE_MODES, _EXPORT_GENERATION_CONFIGS
-        )
-        # See `GENERATE_EXPORT_PARAMS`; MLX has no static cache.
-        if not (multi_token and not dynamic) and not (backend == "mlx" and config.cache_implementation == "static")
+        (backend, *variant)
+        for backend, variant in itertools.product(_EXECUTORCH_BACKENDS, _GENERATE_VARIANTS)
+        # MLX has no static cache.
+        if not (backend == "mlx" and variant[2].cache_implementation == "static")
     ],
-    name_func=lambda f, _, p: (
-        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}"
-        + ("_multi_token" if p.args[2] else "")
-        + (f"_{p.args[3].cache_implementation}_cache" if p.args[3].cache_implementation else "")
-        + f"_{p.args[0]}"
-    ),
+    name_func=lambda f, _, p: f"{f.__name__}_{_generate_variant_name(*p.args[1:])}_{p.args[0]}",
 )
 
 
