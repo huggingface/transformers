@@ -146,6 +146,10 @@ class GemmaIntegrationTest(unittest.TestCase):
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                     "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
                 ],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the 1990s and I am looking for some information on the ",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
                 ("xpu", 5): [
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music",
                     "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
@@ -218,7 +222,7 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", 8): [
                     "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
-                    "Hi today I'd like to share with you a few of my favorite and most used brushes.\n\nI",
+                    "Hi today I'd like to share with you my experience with the new and improved version of the 2",
                 ],
             }
         ).get_expectation()
@@ -300,7 +304,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 7): ["""Hello I am doing a project on a 1991 240sx and I am trying to find""", "Hi today I am going to show you how to make a very simple and easy to make a very simple and",],
-                ("cuda", 8): ['Hello I am doing a project for my school and I am trying to make a small game. I have a few questions', 'Hi today I am going to show you how to make a very simple and easy to make a very simple and'],
+                ("cuda", 8): ['Hello I am doing a project for my school and I am trying to make a small robot that can move around and I', 'Hi today I am going to show you how to make a very simple and easy to make a DIY 3'],
                 ("rocm", 9): ["Hello I am doing a project for my school and I am trying to get a servo to move a certain amount of degrees", "Hi today I am going to show you how to make a very simple and easy to make DIY light up sign",],
                 ("xpu", 5): ["Hello I am doing a project for my school and I am trying to make a game in which you have to get a", "Hi today I am going to show you how to make a very simple and easy to make a paper plane.",],
             }
@@ -367,8 +371,8 @@ class GemmaIntegrationTest(unittest.TestCase):
                     "Hi today I am going to talk about the best way to get rid of acne. miniaturing is a very",
                 ],
                 ("cuda", 8): [
-                    "Hello I am doing a project for a school and I am using a 32 aquare100000",
-                    'Hi today I am going to talk about a new app that I have found. It is called a "The',
+                    'Hello I am doing a project for my school and I am trying to make a "self balancing" robot. I have',
+                    "Hi today I'm going to be doing a review on the new and improved Nintendo 3DS XL.",
                 ],
                 ("xpu", 5): [
                     "Hello I am doing a project for my school and I am using a 12 paletm and 12 v",
