@@ -23,6 +23,24 @@ small workaround at that stage rather than editing the model.
 
 Add a workaround by writing one function and registering it with a decorator. Each workaround belongs at the lowest stage that can express it cleanly.
 
+To add a whole backend rather than a workaround, subclass [`HfExporter`] and implement its two hooks —
+`export_artifact`, which traces one graph and returns it with the metadata describing it, and
+`save_artifact`, which writes one out — then declare `export_format` and `artifact_suffix`. The public
+`export` / `export_for_generation` entry points, the [`~exporters.ExportArtifacts`] they return, and
+loading it back are built on those two and need no per-backend code.
+
+Pair it with a [`~exporters.ModelRunner`], which is what runs the artifact back: `from_artifact` and
+`from_pretrained` build one, `__call__` takes the graph's kwargs and returns its named tensor leaves.
+Register the config, the exporter and the runner under one format name with `@register_export_config`,
+`@register_exporter` and `@register_runner`, and every auto class and loader finds them.
+
+[`AotiExporter`] is the smallest worked example in the tree: it subclasses [`DynamoExporter`], compiles
+the program that one traces, and pairs with a runner that loads the result — a working backend in about
+150 lines across
+[exporter_aoti.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_aoti.py)
+and
+[runner_aoti.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/runner_aoti.py).
+
 ## Patches and fixes
 
 A workaround is either a patch or a fix. The two differ in whether they can be reverted.
@@ -80,7 +98,7 @@ this reference line up. Look there for the exact ops and classes each stage hand
 
 ### DynamoExporter
 
-The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export`
+The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export_artifact`
 (see [exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)).
 
 1. Forward-signature patch: gives `model.forward` a flat argument signature so `torch.export`
@@ -112,8 +130,9 @@ grep -nE "^def (_patch_|_fix_|_aten_)" src/transformers/exporters/exporter_onnx.
 3. FX node fixes: rewrite graph nodes the ONNX exporter can't lower, such as alias ops, in-place
    views, and dead asserts. Extend with `@register_fx_node_fix("onnx")`.
 4. ONNX translations: supply a custom lowering for an aten op where the default is missing or buggy
-   (for example `aten.index_put` or `aten._grouped_mm`). Add an `_aten_*` function to
-   `_ONNX_TRANSLATION_TABLE`.
+   (for example `aten.index_put` or `aten._grouped_mm`). Write an `_aten_*` function and register it
+   with `@register_onnx_translation("torch.ops.aten.<op>.<overload>")` (dotted op paths, like
+   `register_patch`); `_get_onnx_translation_table` assembles them into `custom_translation_table`.
 5. ONNX IR fixes: rewrite the finished ONNX program to work around ONNX Runtime bugs (for example
    forcing `TopK(sorted=True)`). Add a `_fix_ir_*` function to `_IR_FIXES`.
 

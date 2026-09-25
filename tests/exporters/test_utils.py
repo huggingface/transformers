@@ -38,15 +38,24 @@ from unittest import mock
 
 from transformers.exporters import utils as exporter_utils
 from transformers.exporters.auto import (
-    AUTO_EXPORT_CONFIG_MAPPING,
-    AUTO_EXPORTER_MAPPING,
+    EXPORT_BACKENDS,
     AutoExportConfig,
     AutoHfExporter,
+    export_backend,
     register_export_config,
     register_exporter,
+    register_runner,
 )
 from transformers.exporters.base import HfExporter
-from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
+from transformers.exporters.configs import (
+    AotiConfig,
+    DynamoConfig,
+    ExecutorchConfig,
+    ExportConfigMixin,
+    ExportFormat,
+    OnnxConfig,
+    TensorrtConfig,
+)
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
 
@@ -55,17 +64,21 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import GenerationConfig
+    from transformers import GenerationConfig, PretrainedConfig
     from transformers.exporters.utils import (
         cast_leaf_tensors,
-        decompose_prefill_decode,
         duplicate_leaf_tensors,
         patch_attributes,
         register_patch,
     )
+from transformers.exporters.decompose import (
+    decompose_prefill_decode,
+)
 
 
 CONCRETE_CONFIGS = [
+    (AotiConfig, ExportFormat.AOTI),
+    (TensorrtConfig, ExportFormat.TENSORRT),
     (OnnxConfig, ExportFormat.ONNX),
     (DynamoConfig, ExportFormat.DYNAMO),
     (ExecutorchConfig, ExportFormat.EXECUTORCH),
@@ -96,17 +109,17 @@ class AutoExportConfigTest(unittest.TestCase):
                 self.assertIsInstance(AutoExportConfig.from_dict({"export_format": export_format}), config_cls)
 
     def test_from_dict_missing_export_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "export_format"):
+        with self.assertRaisesRegex(ValueError, "No export format given"):
             AutoExportConfig.from_dict({})
 
     def test_from_dict_unknown_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "Unknown exporter type"):
+        with self.assertRaisesRegex(ValueError, "Unknown export format"):
             AutoExportConfig.from_dict({"export_format": "not_a_real_backend"})
 
 
 class AutoHfExporterTest(unittest.TestCase):
     def _check_dispatch(self, config):
-        expected_cls = AUTO_EXPORTER_MAPPING[config.export_format.value]
+        expected_cls = EXPORT_BACKENDS[config.export_format.value].exporter
         self.assertIsInstance(AutoHfExporter.from_config(config), expected_cls)
         # Same dispatch works when starting from a plain dict.
         self.assertIsInstance(AutoHfExporter.from_config(config.to_dict()), expected_cls)
@@ -127,19 +140,20 @@ class AutoHfExporterTest(unittest.TestCase):
         self._check_dispatch(ExecutorchConfig())
 
     def test_from_config_raises_on_unknown_format(self):
-        with self.assertRaisesRegex(ValueError, "Unsupported export config"):
+        # Both name the formats that *are* registered, so the message says what to pass instead.
+        with self.assertRaisesRegex(ValueError, "Unknown export format 'not_a_real_backend'"):
             AutoHfExporter.from_config({"export_format": "not_a_real_backend"})
-        with self.assertRaisesRegex(ValueError, "Unsupported export config"):
+        with self.assertRaisesRegex(ValueError, "No export format given"):
             AutoHfExporter.from_config({})
 
 
 class RegistrationTest(unittest.TestCase):
-    """Cover the edge cases of `register_exporter` / `register_export_config` that normal
-    registrations at module load don't hit — the type-check rejection paths. The mappings are
+    """Cover the edge cases of the `register_*` decorators that normal registrations at module load don't
+    hit — the type-check rejection paths, and a backend registered a part at a time. `EXPORT_BACKENDS` is
     temporarily patched so registrations never leak into other tests."""
 
     def test_register_exporter_rejects_non_subclass(self):
-        with mock.patch.dict(AUTO_EXPORTER_MAPPING):
+        with mock.patch.dict(EXPORT_BACKENDS):
             with self.assertRaisesRegex(TypeError, "HfExporter"):
 
                 @register_exporter("bad")
@@ -147,27 +161,55 @@ class RegistrationTest(unittest.TestCase):
                     pass
 
     def test_register_export_config_rejects_non_subclass(self):
-        with mock.patch.dict(AUTO_EXPORT_CONFIG_MAPPING):
+        with mock.patch.dict(EXPORT_BACKENDS):
             with self.assertRaisesRegex(TypeError, "ExportConfigMixin"):
 
                 @register_export_config("bad_config")
                 class _NotAConfig:
                     pass
 
+    def test_register_runner_rejects_non_subclass(self):
+        with mock.patch.dict(EXPORT_BACKENDS):
+            with self.assertRaisesRegex(TypeError, "ModelRunner"):
+
+                @register_runner("bad_runner")
+                class _NotARunner:
+                    pass
+
     def test_register_exporter_installs_stub(self):
         # Sanity check that a legit registration is wired through — protects against a future
         # refactor that would break the decorator without breaking any real export test.
-        with mock.patch.dict(AUTO_EXPORTER_MAPPING):
+        with mock.patch.dict(EXPORT_BACKENDS):
 
             @register_exporter("stub_exporter")
             class _StubExporter(HfExporter):
                 required_packages = []
 
-                def export(self, model, sample_inputs, config):
+                def export_artifact(self, model, sample_inputs, config):
+                    return None, {}
+
+                @classmethod
+                def save_artifact(cls, artifact, path):
                     return None
 
-            self.assertIs(AUTO_EXPORTER_MAPPING["stub_exporter"], _StubExporter)
-        self.assertNotIn("stub_exporter", AUTO_EXPORTER_MAPPING)
+            self.assertIs(EXPORT_BACKENDS["stub_exporter"].exporter, _StubExporter)
+        self.assertNotIn("stub_exporter", EXPORT_BACKENDS)
+
+    def test_backend_registered_one_part_at_a_time(self):
+        """A backend is assembled from whichever parts are registered, and asking for a missing one says
+        which decorator supplies it — the gap that used to be silent, since a runner could not be
+        registered at all."""
+        with mock.patch.dict(EXPORT_BACKENDS):
+
+            @register_export_config("halfway")
+            class _HalfwayConfig(ExportConfigMixin):
+                pass
+
+            self.assertIs(EXPORT_BACKENDS["halfway"].config, _HalfwayConfig)
+            self.assertIsNone(EXPORT_BACKENDS["halfway"].runner)
+            with self.assertRaisesRegex(ValueError, "no runner registered"):
+                export_backend("halfway", "runner")
+        self.assertNotIn("halfway", EXPORT_BACKENDS)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -274,8 +316,9 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(1, 1)
-                # `decompose_prefill_decode` bases its capture config on the model's own (mimics a
+                # `decompose_prefill_decode` reads the model's own configs before capturing (mimics a
                 # real `PreTrainedModel`); the guard under test fires afterwards on the capture count.
+                self.config = PretrainedConfig()
                 self.generation_config = GenerationConfig()
 
             def forward(self, input_ids=None, **kwargs):

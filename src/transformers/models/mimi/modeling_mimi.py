@@ -982,6 +982,11 @@ class MimiEuclideanCodebook(nn.Module):
             self._embed = self.embed_sum / self.cluster_usage.clamp(min=self.epsilon)[:, None]
         return self._embed
 
+    def _apply(self, fn, recurse=True):
+        # `_embed` is a plain attribute, so `.to()` / `.half()` would leave it behind: recompute after either.
+        self._embed = None
+        return super()._apply(fn, recurse)
+
     def quantize(self, hidden_states):
         # Projects each vector in `hidden_states` over the nearest centroid and return its index.
         # `hidden_states` should be `[N, D]` with `N` the number of input vectors and `D` the dimension.

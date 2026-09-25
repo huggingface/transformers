@@ -27,7 +27,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_int
+from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
@@ -465,8 +465,15 @@ class InternVLModel(LlavaModel):
         """
         batch_size, width, height, channels = vision_features.size()
 
-        if height % scale_factor != 0 or width % scale_factor != 0:
-            raise ValueError("Height and width must be divisible by scale_factor for proper downsampling.")
+        # `scale_factor` is fractional (0.5 halves each side), so what the reshape below needs is
+        # divisibility by its *reciprocal* — height and width even, for 0.5. A modulus against the float
+        # itself is both vacuous (any integer % 0.5 is 0.0) and untraceable: it asks the exporter for a value
+        # range over a float expression. Checked one side at a time so each condition reaches
+        # `torch._check` as a single symbolic bool rather than through python's `and`.
+        downsample_factor = round(1 / scale_factor)
+        message = "Height and width must be divisible by scale_factor for proper downsampling."
+        torch_compilable_check(height % downsample_factor == 0, message)
+        torch_compilable_check(width % downsample_factor == 0, message)
 
         # Reshape to allow downsampling
         vision_features = vision_features.view(

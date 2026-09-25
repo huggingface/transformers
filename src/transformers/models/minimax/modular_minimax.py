@@ -165,9 +165,13 @@ class MiniMaxCache(DynamicCache):
     # `self.layers`, which are all plain dynamic layers, and would otherwise wrongly report `True`.
     is_croppable = False
 
-    def __init__(self):
-        super().__init__()
-        self.linear_cache: list[torch.Tensor] = []
+    def __init__(self, *args, **kwargs):
+        # Forward whatever `DynamicCache` takes (notably `config`, which pre-sizes `layers`) instead of
+        # swallowing it: a caller that hands one over otherwise gets a cache with no layers, and
+        # `get_linear_cache` indexes off `len(self)`. `linear_cache` is sized to match, so the
+        # per-layer loops below index it at every layer `len(self)` reports.
+        super().__init__(*args, **kwargs)
+        self.linear_cache: list[torch.Tensor] = [[] for _ in range(len(self.layers))]
 
     def set_linear_cache(self, layer_idx, linear_cache):
         # There may be skipped layers, fill them with empty lists

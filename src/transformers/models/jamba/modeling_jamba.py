@@ -341,6 +341,7 @@ def mamba_selective_scan(
     return_last_state: bool = False,
     use_mambapy: bool = False,
     use_associative_scan: bool = False,
+    initial_states: torch.Tensor | None = None,
     **kwargs,
 ):
     # Torch only alternatives to the recurrent path
@@ -371,6 +372,15 @@ def mamba_selective_scan(
     discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()
     deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
+    # Continuation from a cached SSM state — the same contract as jamba2's `initial_states` — folded into
+    # the first input element (`state_1 = A_1 * state_0 + b_1`) with a position mask, so every path below
+    # (and any trace) is covered without slicing the sequence axis. Torch paths only: unlike jamba2's,
+    # this op's jamba_ssm kernel takes no initial state (its dispatch drops the kwarg), keeping the
+    # kernel's historical start-from-zero behavior.
+    if initial_states is not None:
+        first_position = torch.arange(seq_len, device=deltaB_u.device).view(1, 1, -1, 1) == 0
+        deltaB_u = deltaB_u + (discrete_A * initial_states.unsqueeze(2).float()) * first_position
+
     if use_mambapy and pscan is not None:
         all_states = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
 
@@ -380,8 +390,9 @@ def mamba_selective_scan(
     elif (
         use_associative_scan
         and associative_scan is not None
-        # There is no onnx translation for this op so we rely on the normal sequential path then
-        and (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
+        # under compile *and* export — a traced python loop would unroll and pin the step length; an
+        # exporter whose backend cannot lower the op opts out via `config.use_associative_scan`
+        and is_torchdynamo_compiling()
     ):
 
         def combine_fn(left, right):
@@ -389,13 +400,21 @@ def mamba_selective_scan(
             a_right, b_right = right
             return a_left * a_right, a_right * b_left + b_right
 
+        scan_A, scan_b = discrete_A, deltaB_u
+        if is_torchdynamo_exporting():
+            # tracing the scan bounds its axis at >= 2; padding with the combine's identity element
+            # (`state * 1 + 0`) lowers that to >= 1 without touching any real position's state
+            scan_A = torch.cat([scan_A, torch.ones_like(scan_A[:, :, :1])], dim=2)
+            scan_b = torch.cat([scan_b, torch.zeros_like(scan_b[:, :, :1])], dim=2)
+
         combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
         _, all_states = associative_scan(
             combine_fn,
-            (discrete_A, deltaB_u),
+            (scan_A, scan_b),
             dim=2,
             combine_mode=combine_mode,
         )
+        all_states = all_states[:, :, :seq_len]
 
         scan_output = torch.matmul(all_states.transpose(1, 2).to(input_dtype), C.unsqueeze(-1))
         scan_output = scan_output.squeeze(-1).transpose(1, 2)

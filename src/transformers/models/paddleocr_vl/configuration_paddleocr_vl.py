@@ -67,7 +67,15 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     default_rope_type = "axial"
     spatial_merge_size: int = 2
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
+    resample_before_merge: bool = True
     rope_parameters: dict | None = None
+
+    @property
+    def num_grid_per_side(self) -> int:
+        """Side length of the square learned position grid (`num_positions = (image_size // patch_size) ** 2`)."""
+        return self.image_size // self.patch_size
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")

@@ -38,6 +38,9 @@ edge deployment. The export pipeline runs:
 
 from __future__ import annotations
 
+import contextlib
+import functools
+import json
 import math
 import operator
 import re
@@ -46,8 +49,12 @@ from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
-from .configs import ExecutorchConfig
+from .configs import ExecutorchConfig, ExportFormat
+from .decompose import _MODALITY_SPECS
 from .exporter_dynamo import DynamoExporter
+from .metadata import (
+    EXPORT_METADATA_KEY,
+)
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -92,7 +99,7 @@ if is_executorch_available():
     from executorch.exir.passes.spec_prop_pass import _is_mutable_buffer
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
     from executorch.exir.sym_util import eval_expr
-    from executorch.exir.tensor import determine_tensor_dynanism
+    from executorch.exir.tensor import determine_tensor_dynanism, get_scalar_type, num_bytes_from_shape_and_dtype
 
     # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Guard the
     # import on CUDA availability so the module still imports (and the xnnpack CPU path still works) on
@@ -120,10 +127,13 @@ class ExecutorchExporter(DynamoExporter):
     ```
     """
 
-    required_packages = ["torch", "executorch"]
-    tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
+    export_format = ExportFormat.EXECUTORCH
+    artifact_suffix = ".pte"
 
-    def export(
+    required_packages = ["torch", "executorch"]
+    tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}
+
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -139,23 +149,156 @@ class ExecutorchExporter(DynamoExporter):
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        model, sample_inputs, partitioner = prepare_for_backend(
+            model, sample_inputs, exclude=tuple(config.partition_exclude)
+        )
+        partitioner = partitioner if config.partition else []
 
-        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+        with (
+            apply_patches("executorch"),
+            apply_patches(f"executorch.{config.backend}"),
+        ):
+            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
-            apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=partitioner,
-                compile_config=_get_edge_compile_config(config.backend),
-                transform_passes=_get_transform_passes(config.backend),
-            )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_backend_config(config)
-            )
 
-        return executorch_programs_manager
+            with keep_backed_symbols_symbolic(exported_program):
+                apply_fx_node_fixes("executorch", exported_program.graph_module)
+                edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+                    exported_program,
+                    partitioner=partitioner,
+                    compile_config=_get_edge_compile_config(exported_program, config.backend),
+                    transform_passes=_get_transform_passes(config.backend),
+                    # A `.pte` binds its inputs positionally and reports only counts and shapes, so what
+                    # the graph *is* rides along as one constant method — the same schema the ONNX
+                    # exporter writes into `metadata_props` (`build_export_metadata`).
+                    constant_methods={EXPORT_METADATA_KEY: [json.dumps(metadata)]},
+                )
+                executorch_programs_manager = edge_program_manager.to_executorch(config=_get_backend_config(config))
+
+        return executorch_programs_manager, metadata
+
+    @classmethod
+    def save_artifact(cls, artifact, path) -> None:
+        """The metadata is a constant method inside the program (`_patch_metadata_method`), so it is already
+        part of the serialized `.pte`. Streamed rather than taken through `.buffer`, which materializes the
+        whole program as bytes first."""
+        with open(path, "wb") as file:
+            artifact.write_to_file(file)
+
+
+@register_patch("executorch", "executorch.exir.program._program.serialize_for_executorch")
+def _patch_serialize_for_executorch(original):
+    """Settle the size-1 dim orders on the way into the binary.
+
+    `ExecutorchProgramManager` serializes in its constructor, so there is no moment afterwards at which the
+    program can still be edited — the bytes already exist. This is that moment.
+    """
+
+    def serialize_for_executorch(emitter_output, *args, **kwargs):
+        canonicalize_size_one_dim_orders(getattr(emitter_output, "program", None))
+        widen_underplanned_arenas(getattr(emitter_output, "program", None))
+        return original(emitter_output, *args, **kwargs)
+
+    return serialize_for_executorch
+
+
+def canonicalize_size_one_dim_orders(executorch_program) -> None:
+    """Order a tensor's size-1 axes the way every other tensor orders them.
+
+    A dim order is the axes sorted by stride, and a size-1 axis has no extent to sort by — it shares its
+    neighbour's stride, so whichever side of the tie it lands on is arbitrary. ExecuTorch's portable kernels
+    do not treat it as arbitrary: they require every operand of an op to carry the *same* dim order, and
+    refuse the call otherwise (`tensors_have_same_dim_order`, `0x12`) — which splinter hits on `aten::repeat`
+    with `[64, 64, 1]` ordered `[0, 2, 1]` against `[64, 64, 32]` ordered `[0, 1, 2]`.
+
+    So where the ambiguity is the only difference, it is settled one way: a tensor whose axes are in
+    canonical order once the size-1 ones are ignored gets the canonical order outright. A tensor that is
+    really laid out differently (channels-last, a transpose of two axes that both have extent) keeps what it
+    has — its order describes something.
+    """
+    for plan in getattr(executorch_program, "execution_plan", []):
+        for value in getattr(plan, "values", []):
+            tensor = getattr(value, "val", None)
+            sizes = getattr(tensor, "sizes", None)
+            dim_order = getattr(tensor, "dim_order", None)
+            if not sizes or not dim_order or 1 not in list(sizes):
+                continue
+            with_extent = [axis for axis in dim_order if sizes[axis] != 1]
+            if with_extent == sorted(with_extent):
+                tensor.dim_order = type(dim_order)(range(len(sizes)))
+
+
+@contextlib.contextmanager
+def keep_backed_symbols_symbolic(exported_program: ExportedProgram):
+    """Selective: keep *backed* symbols symbolic through the lowering, let everything else proceed.
+
+    The lowering's passes re-execute ops on the program's live fake tensors, and each shape relation those
+    re-executions evaluate against the trace hints ends in `ShapeEnv.set_replacement` — refining a
+    declared-dynamic axis down to its hint (`s70 = 2`), which the memory plan then bakes in ("Attempted to
+    resize a static tensor", 0x12). But wholesale guard suppression breaks the models that carry *unbacked*
+    symbols (bart's data-dependent sizes): those are legitimately resolved during lowering by the very same
+    replacement machinery, and blocking it leaves a later pass guarding on an unresolvable expression
+    (`GuardOnDataDependentSymNode`). So filter exactly the harmful case: a symbol the trace *hinted* (backed,
+    present in `var_to_val`) being replaced by a *constant*. Unbacked resolution and symbol-to-symbol
+    unification pass through untouched.
+    """
+    shape_env = next(
+        (
+            val.fake_mode.shape_env
+            for node in exported_program.graph_module.graph.nodes
+            if isinstance(val := node.meta.get("val"), torch.Tensor) and hasattr(val, "fake_mode")
+        ),
+        None,
+    )
+    if shape_env is None:
+        yield
+        return
+    original = shape_env._set_replacement
+
+    # `var_to_val` was renamed `backed_var_to_val` (the old name warns); both hold exactly the backed
+    # symbols, which is the distinction this wrapper turns on.
+    backed_values = getattr(shape_env, "backed_var_to_val", None)
+    if backed_values is None:
+        backed_values = shape_env.var_to_val
+
+    def selective(symbol, replacement, *args, **kwargs):
+        if symbol in backed_values and getattr(replacement, "is_number", False):
+            return None
+        return original(symbol, replacement, *args, **kwargs)
+
+    shape_env._set_replacement = selective
+    try:
+        yield
+    finally:
+        del shape_env._set_replacement
+
+
+def _uses_channels_last(exported_program: ExportedProgram) -> bool:
+    """Whether any tensor in the graph carries a channels-last layout — the case the `dim_order_ops` variants
+    exist to represent, and the one graph shape that cannot be lowered without them.
+
+    Deliberately *only* channels-last, not every non-contiguous tensor: a transpose-derived view (the rotary
+    pattern, dozens per audio tower) is also a non-standard dim order, and keeping the dim-order ops for
+    those graphs was measured to fix nothing while re-freezing the symbolic-size buffers the plain schemas
+    keep dynamic (musicflamingo/qwen3_asr stayed red, deepseek_v3's merged decode broke)."""
+    from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode
+
+    for node in exported_program.graph_module.graph.nodes:
+        val = node.meta.get("val")
+        tensors = val if isinstance(val, (tuple, list)) else [val]
+        for tensor in tensors:
+            if not isinstance(tensor, torch.Tensor) or tensor.dim() not in (4, 5):
+                continue
+            layout = torch.channels_last if tensor.dim() == 4 else torch.channels_last_3d
+            try:
+                if tensor.is_contiguous(memory_format=layout) and not tensor.is_contiguous():
+                    return True
+            except GuardOnDataDependentSymNode:
+                # Contiguity is a question about strides, and a tensor whose size is data-dependent cannot
+                # answer it — `is_contiguous` raises rather than returning. Count it as not channels-last,
+                # which is this function's default answer and the one that keeps the plain ATen schemas.
+                continue
+    return False
 
 
 def _get_transform_passes(backend: str):
@@ -167,7 +310,7 @@ def _get_transform_passes(backend: str):
     return None
 
 
-def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
+def _get_edge_compile_config(exported_program: ExportedProgram, backend: str) -> EdgeCompileConfig:
     """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
 
     Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
@@ -180,7 +323,19 @@ def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
     if backend == "mlx":
         return EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True)
     return EdgeCompileConfig(
+        # Keep the plain ATen ops instead of the `dim_order_ops` variants wherever the graph allows it:
+        # `_empty_dim_order` declares its size as `int[]` where `aten.empty`'s is `SymInt[]`, so dispatch
+        # coerces every symbolic size to its trace hint and the fake kernel cannot produce a symbolic val —
+        # freezing the buffer (and everything downstream) at the traced shape, which the memory plan then
+        # enforces at runtime ("Attempted to resize a static tensor", 0x12). With the plain schema the
+        # symbols survive to the spec pass and the buffers plan at their bounds. The one graph shape that
+        # *needs* the dim-order variants is a channels-last tensor — the emitter refuses the layout without
+        # them ("Tensor has a memory_format that is unsupported") — so those graphs keep them.
+        # ET-version-sensitive, like every internals patch here: revisit when the dim-order schemas learn
+        # `SymInt[]`.
+        _skip_dim_order=not _uses_channels_last(exported_program),
         _core_aten_ops_exception_list=[
+            torch.ops.aten._embedding_bag_forward_only.default,
             torch.ops.aten._fft_c2c.default,
             torch.ops.aten._is_all_true.default,
             torch.ops.aten.bincount.default,
@@ -195,6 +350,46 @@ def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
             torch.ops.aten.unique_consecutive.default,
         ],
     )
+
+
+def widen_underplanned_arenas(executorch_program) -> None:
+    """Grow a planned memory arena that its own offsets overflow.
+
+    ExecuTorch's greedy memory planner assigns each tensor an offset into an arena and then states that
+    arena's size — and the two disagree: for SmolVLM's vision tower the plan places an
+    `[13, 1024, 3072]` bf16 buffer (reused across 11 layers, so the reuse itself is right) at an offset
+    whose end is 6.5 MB past the size it declares. The loader checks the tensor against the arena it was
+    given and refuses the method with `MemoryAllocationFailed` (`0x21`), naming a tensor index that means
+    nothing to the reader.
+
+    Run from `_patch_serialize_for_executorch`, the one moment the program is still editable: the manager
+    serializes in its constructor, so a plan repaired after `to_executorch` returns is repaired in an
+    object the bytes no longer come from.
+
+    Only the declared size is wrong, so only the declared size is raised — the offsets are left exactly
+    where the planner put them, which is what keeps the reuse. Planning with `naive` instead avoids the
+    inconsistency and costs 35x the arena (25.7 GB against 729 MB here), so this is the cheaper repair
+    until the planner is fixed upstream.
+    """
+    if executorch_program is None:
+        return
+    for plan in executorch_program.execution_plan:
+        needed = dict.fromkeys(range(len(plan.non_const_buffer_sizes)), 0)
+        for item in plan.values:
+            value = item.val
+            info = getattr(value, "allocation_info", None)
+            sizes = getattr(value, "sizes", None)
+            if info is None or not sizes or info.memory_id >= len(plan.non_const_buffer_sizes):
+                continue
+            end = info.memory_offset + num_bytes_from_shape_and_dtype(sizes, get_scalar_type(value.scalar_type))
+            needed[info.memory_id] = max(needed[info.memory_id], end)
+        for memory_id, end in needed.items():
+            if end > plan.non_const_buffer_sizes[memory_id]:
+                logger.warning_once(
+                    f"The memory plan plots {end - plan.non_const_buffer_sizes[memory_id]} bytes past the "
+                    f"arena it asks for, which the runtime refuses; asking for {end} instead."
+                )
+                plan.non_const_buffer_sizes[memory_id] = end
 
 
 def _get_backend_config(config):
@@ -236,7 +431,7 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
     """CPU inference via XNNPACK.
 
     Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
@@ -250,11 +445,43 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
-    partitioner = [XnnpackPartitioner()]
+    # Withholding a config leaves its ops to the portable kernels and keeps the rest delegated: XNNPACK
+    # can claim a partition its compiler then refuses over a single op pattern (`ViewCopyConfig` for
+    # qwen3_next), where dropping the whole partition would cost every other op its acceleration.
+    if exclude:
+        from executorch.backends.xnnpack.partition.config import ALL_PARTITIONER_CONFIGS
+
+        unknown = set(exclude) - {config.__name__ for config in ALL_PARTITIONER_CONFIGS}
+        if unknown:
+            raise ValueError(f"Unknown XNNPACK partitioner config(s): {sorted(unknown)}")
+        configs = [config for config in ALL_PARTITIONER_CONFIGS if config.__name__ not in exclude]
+        if not configs:
+            # `XnnpackPartitioner` reads `configs or ALL_PARTITIONER_CONFIGS`, so an empty list means
+            # *every* config, the opposite of what excluding all of them asks for. Say so instead.
+            raise ValueError("partition_exclude removes every partitioner config; pass partition=False instead")
+        partitioner = [XnnpackPartitioner(configs=configs)]
+    else:
+        partitioner = [XnnpackPartitioner()]
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_openvino(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
+    """CPU inference through the OpenVINO delegate.
+
+    Like XNNPACK this is a CPU path, so the graph is traced on CPU for the same reasons. What differs is
+    who runs the partition: OpenVINO compiles the delegated subgraphs itself, and names its target in a
+    compile spec rather than through partitioner configs — so `partition_exclude` has nothing to act on.
+    """
+    from executorch.backends.openvino.partitioner import OpenvinoPartitioner
+    from executorch.exir.backend.backend_details import CompileSpec
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    partitioner = [OpenvinoPartitioner([CompileSpec("device", b"CPU")])]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
     The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
@@ -273,7 +500,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
     """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
     for value in sample_inputs.values():
         caches = [value]
@@ -297,6 +524,7 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
 
 _BACKEND_PREPARE = {
+    "openvino": prepare_for_openvino,
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
     "mlx": prepare_for_mlx,
@@ -308,6 +536,153 @@ _BACKEND_PREPARE = {
 # `topk(k>dim)`, non-divisible `avg_pool2d`, `dropout`, in-place `view`, GQA-shaped
 # SDPA …). Each `_patch_*(original)` factory is registered via
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
+
+
+@register_patch("executorch", "torch._higher_order_ops.associative_scan.associative_scan")
+def _patch_associative_scan(original):
+    """Run an associative scan as the sequential `scan` it computes, which ExecuTorch lowers at a symbolic length.
+
+    `associative_scan` has no ExecuTorch lowering, and the models that reach for it (the mamba family's selective
+    scan) otherwise fall back to a Python loop that unrolls over the traced length and pins the query axis — so a
+    merged decode graph could never take a single token. `scan` is its sequential form: the first element seeds
+    the carry, each step combines it with the next, and every carry is an output. The same values in the same
+    order; only the parallel evaluation is given up.
+    """
+    from torch._higher_order_ops.scan import scan
+    from torch.utils._pytree import tree_flatten, tree_unflatten
+
+    def patch(combine_fn, xs, dim, reverse=False, combine_mode="pointwise"):
+        leaves, spec = tree_flatten(xs)
+        leaves = [leaf.movedim(dim, 0) for leaf in leaves]
+        if reverse:
+            leaves = [leaf.flip(0) for leaf in leaves]
+        # `scan` checks the carry it returns against the one it was given, strides included: both contiguous.
+        first = [leaf[0].contiguous() for leaf in leaves]
+
+        def step(carry, element):
+            combined = tree_flatten(combine_fn(tree_unflatten(carry, spec), tree_unflatten(element, spec)))[0]
+            combined = [value.contiguous() for value in combined]
+            return combined, [value.clone() for value in combined]
+
+        _, rest = scan(step, first, [leaf[1:] for leaf in leaves])
+        outputs = [torch.cat([head.unsqueeze(0), tail], dim=0) for head, tail in zip(first, rest)]
+        if reverse:
+            outputs = [output.flip(0) for output in outputs]
+        return tree_unflatten([output.movedim(0, dim) for output in outputs], spec)
+
+    return patch
+
+
+def _has_unbacked_sizes(split_size_or_sections) -> bool:
+    """Whether a `split` sections argument carries a data-dependent size."""
+    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
+
+    return isinstance(split_size_or_sections, (list, tuple)) and any(
+        isinstance(size, torch.SymInt) and bool(free_unbacked_symbols(size.node.expr))
+        for size in split_size_or_sections
+    )
+
+
+@register_patch(
+    "executorch",
+    "executorch.exir.tensor.dim_order_from_stride",
+    "executorch.exir.tensor_layout.dim_order_from_stride",
+    "executorch.exir.emit._emitter.dim_order_from_stride",
+    "executorch.exir.passes.replace_view_copy_with_view_pass.dim_order_from_stride",
+)
+def _patch_dim_order_from_stride(original):
+    """Order a tensor's dims when one of its strides carries a data-dependent size.
+
+    ExecuTorch reads dim order by sorting strides, and its comparator already answers what it can without a
+    hint (`guard_or_false`), falling back to a plain `<` — which on `64*u21 < 64` has nothing to decide with
+    and raises `GuardOnDataDependentSymNode` from inside the lowering, after a graph exported cleanly.
+
+    The fallback is sorted *size-obliviously* instead. That is sound for this question: the symbol is
+    size-like, so it is at least one, so a stride of `64*u21` is at least the `64` it multiplies — and the
+    answer being sought is only which axis sits outermost, never the extent itself. Registered against
+    every call site, because three of the four imported the name rather than the module.
+    """
+    from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode, guard_or_false
+
+    def compare(left, right) -> int:
+        if guard_or_false(left == right):
+            return 0
+        if guard_or_false(left < right):
+            return -1
+        if guard_or_false(right < left):
+            return 1
+        return _compare_assuming_nonempty(left, right)
+
+    def dim_order_from_stride(stride):
+        try:
+            return original(stride)
+        except GuardOnDataDependentSymNode:
+            order = sorted(range(len(stride)), key=functools.cmp_to_key(lambda a, b: compare(stride[a], stride[b])))
+            return tuple(reversed(order))
+
+    return dim_order_from_stride
+
+
+def _compare_assuming_nonempty(left, right) -> int:
+    """`left` against `right` (-1, 0, 1) with every data-dependent size in it taken to be 2.
+
+    What `guard_size_oblivious` used to answer, written out because it is deprecated in favour of explicit
+    unbacked handling. Two is the size-oblivious convention: the symbol is a size, and the cases that make
+    an ordering question unanswerable are the degenerate 0 and 1. Substituting rather than guarding also
+    keeps the lowering's shape environment untouched, which is the point of `keep_backed_symbols_symbolic`.
+    """
+
+    def concrete(side):
+        node = getattr(side, "node", None)
+        if node is None:
+            return int(side)
+        expression = node.expr
+        # A stride mixes both kinds of symbol: a backed one stands for a real traced size and has a hint to
+        # put in its place, an unbacked one has none and takes the 2. Leaving either symbolic would make the
+        # comparison unanswerable again, and an unanswerable comparison is what puts two operands of one op
+        # in different dim orders — which ExecuTorch's kernels reject at run time (`0x12`).
+        shape_env = getattr(node, "shape_env", None)
+        hints = getattr(shape_env, "backed_var_to_val", None) or getattr(shape_env, "var_to_val", None) or {}
+        return int(expression.xreplace({symbol: hints.get(symbol, 2) for symbol in expression.free_symbols}))
+
+    try:
+        left_value, right_value = concrete(left), concrete(right)
+    except (TypeError, ValueError):
+        # Still not a number: treat the two as indistinguishable, which keeps the order they came in.
+        return 0
+    # Equal reads as equal, so the sort leaves them in place. Forcing an order on strides that are really
+    # the same (a size-1 axis has its neighbour's stride) is what puts two tensors of one op in different
+    # dim orders, and ExecuTorch's kernels reject that at run time.
+    return (left_value > right_value) - (left_value < right_value)
+
+
+@register_patch("executorch", "torch.split", "torch.Tensor.split")
+def _patch_unbacked_split(original):
+    """Keep a split whose *sizes are data-dependent* out of the graph.
+
+    A grid VLM cuts its flat vision output back into per-image runs with
+    `(grid_thw.prod(-1) // merge**2).tolist()`, i.e. sizes read off a tensor. Under export those are
+    unbacked symbols, and `split_with_sizes_copy` with unbacked sizes is the one thing ExecuTorch's
+    verifier cannot lower ("Could not extract specialized integer") — it fails every variant of every
+    such model, ~17 of them. Both consumers in this position immediately concatenate the pieces again
+    (the model's own `torch.cat(image_features, dim=0)`, and `ModalityEncoder.forward`), so handing back
+    the tensor whole is the same value with nothing for the verifier to choke on. A consumer that really
+    wanted the pieces indexes past the end of a 1-tuple, which fails loudly rather than quietly.
+
+    The test is for an *unbacked* size, not merely "not a Python int": `aten.split.Tensor`'s own
+    decomposition rewrites a constant chunk size into a size list whose last element is a backed-symbolic
+    expression of the split dim, then re-enters this same public `torch.split`. Short-circuiting there
+    hands the base tensor back from inside a view op's decomposition, which autograd rejects with "View
+    operation returned a tensor that is the same as the input base tensor" — that would fail every
+    `.split(int)` / `.chunk()` taken over a dynamic dim (qwen3_omni_moe chunks its audio conv that way).
+    """
+
+    def patch(input, split_size_or_sections, dim=0):
+        if _has_unbacked_sizes(split_size_or_sections):
+            return (input,)
+        return original(input, split_size_or_sections, dim)
+
+    return patch
 
 
 @register_patch("executorch.cuda", "torch.split", "torch.Tensor.split")
@@ -328,6 +703,11 @@ def _patch_split(original):
         elif isinstance(split_size_or_sections, torch.SymInt):
             # Dynamic split size: `range(0, total, sym_int)` needs a concrete step, so
             # the narrow-based loop above doesn't apply. Defer to the original torch.split.
+            return original(input, split_size_or_sections, dim)
+        elif _has_unbacked_sizes(split_size_or_sections):
+            # Data-dependent section sizes: narrowing to them puts the unbacked symbol in the graph, which
+            # is what `_patch_unbacked_split` -- the patch this one is layered over on CUDA -- exists to
+            # prevent. Defer to it rather than reimplementing the half of the decision this branch can see.
             return original(input, split_size_or_sections, dim)
         else:
             splits = []
@@ -378,6 +758,97 @@ def _patch_topk(original):
     return patch
 
 
+@register_patch("executorch.xnnpack", "torch.argsort", "torch.Tensor.argsort")
+def _patch_argsort(original):
+    """Topk-based argsort for XNNPACK, whose portable runtime ships no `sort` kernel.
+
+    The mirror image of `_patch_topk`: that one rewrites `topk` as `argsort` for CUDA, which has no topk
+    kernel, and is deliberately not registered here because the portable registry is the other way round —
+    it has `aten.topk.values` but no `aten.sort.values`, so a graph reaching lowering with an `argsort` in it
+    produces a `.pte` that fails to *load* (`Missing operator: aten::sort.values`). A model that sorts on its
+    own hits that wall the same way (muse_glimmer's vision tower inverts its window permutation with
+    `torch.argsort`), so the rewrite is applied here rather than left to each model.
+
+    `topk` over the whole axis is a full sort, and `largest=descending` matches `argsort`'s ordering.
+    """
+
+    def patch(input, dim=-1, descending=False, stable=False):
+        return torch.topk(input, input.shape[dim], dim=dim, largest=descending, sorted=True).indices
+
+    return patch
+
+
+@register_patch("executorch", "transformers.models.deepseek_v2.modeling_deepseek_v2.DeepseekV2RotaryEmbedding.forward")
+def _patch_deepseek_v2_rotary_forward(original):
+    """Carry deepseek_v2's rotary frequencies as a real `[cos, sin]` pair rather than a complex tensor.
+
+    ExecuTorch's portable registry ships neither `aten::polar.out` nor `aten::view_as_complex_copy.out`, so
+    a graph building `torch.polar(ones, freqs)` produces a `.pte` that cannot load (`0x14`). The pair is the
+    same numbers — `polar(1, θ)` is `cos θ + i sin θ` — and `_patch_deepseek_v2_apply_rotary_emb` consumes
+    it, so no complex tensor is created. The two are a set: neither works without the other.
+
+    `@dynamic_rope_update` on the original updates `inv_freq` for the dynamic RoPE types before the body
+    runs; it is kept by wrapping the original rather than reimplementing that, and only the complex tail
+    differs.
+    """
+
+    def patch(self, x, position_ids):
+        from ..utils.generic import maybe_autocast
+
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
+            freqs_cis = torch.stack((torch.cos(freqs), torch.sin(freqs)), dim=-1)
+            freqs_cis = freqs_cis * self.attention_scaling
+        return freqs_cis
+
+    return patch
+
+
+@register_patch("executorch", "transformers.models.deepseek_v2.modeling_deepseek_v2.apply_rotary_emb")
+def _patch_deepseek_v2_apply_rotary_emb(original):
+    """deepseek_v2's rotary as real arithmetic, against the pair the patch above produces.
+
+    A complex multiply is two real multiplies: `(a + bi)(c + di)` is `(ac - bd) + (ad + bc)i`. Writing it
+    out keeps the same float operations in the same order, so the result matches the complex path rather
+    than approximating it."""
+
+    def patch(xq, xk, freqs_cis):
+        cos = freqs_cis[..., 0].unsqueeze(1).to(xq.device)
+        sin = freqs_cis[..., 1].unsqueeze(1).to(xq.device)
+
+        def rotate(x):
+            paired = x.float().reshape(*x.shape[:-1], -1, 2)
+            real, imaginary = paired[..., 0], paired[..., 1]
+            rotated = torch.stack((real * cos - imaginary * sin, real * sin + imaginary * cos), dim=-1)
+            return rotated.flatten(3).type_as(x)
+
+        return rotate(xq), rotate(xk)
+
+    return patch
+
+
+@register_patch("executorch", "torch.unsqueeze", "torch.Tensor.unsqueeze")
+def _patch_unsqueeze(original):
+    """Insert the axis with a reshape, so XNNPACK never sees an `unsqueeze_copy` to refuse.
+
+    XNNPACK's partitioner claims `aten.unsqueeze_copy` and its compiler then rejects the partition on a
+    dynamic graph (`0x1`, `Propagating input shapes failed with code: xnn_status_invalid_parameter`). It is
+    the only one of the 52 partitioner configs that does: excluding `UnsqueezeCopyConfig` alone lets
+    deepseek_v2's dynamic export run delegated, and excluding any of the other 51 changes nothing. A reshape
+    to the same shape is the same operation and is claimed by a config XNNPACK honours.
+    """
+
+    def patch(input, dim):
+        shape = list(input.shape)
+        shape.insert(dim if dim >= 0 else dim + len(shape) + 1, 1)
+        return input.reshape(shape)
+
+    return patch
+
+
 @register_patch("executorch.xnnpack", "torch.detach", "torch.Tensor.detach")
 @register_patch("executorch.cuda", "torch.detach", "torch.Tensor.detach")
 def _patch_detach(_original):
@@ -420,6 +891,105 @@ def _patch_avg_pool2d(original):
     return patch
 
 
+@register_patch(
+    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
+)
+def _patch_remove_empty_tensors_from_cat(_original):
+    """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
+
+    The original checks ``input.numel() != 0`` directly; for tensors with
+    unbacked dynamic shapes (e.g. ``74 * u176``) that raises
+    ``GuardOnDataDependentSymNode`` because ``Ne(74*u176, 0)`` can't be proved
+    either way at trace time. Using ``guard_or_true`` keeps unbacked-shape
+    inputs conservatively (the pass is purely an optimisation).
+    """
+    from torch.fx.experimental.symbolic_shapes import guard_or_true
+
+    def patch(self, graph_module, cat_node):
+        pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
+        cat_node.args = (pruned,) + cat_node.args[1:]
+        if not pruned:
+            cat_tensor = cat_node.meta["val"]
+            with graph_module.graph.inserting_after(cat_node):
+                full_like = graph_module.graph.create_node(
+                    "call_function",
+                    target=exir_ops.edge.aten.full.default,
+                    args=(tuple(cat_tensor.shape), 0),
+                    kwargs={"dtype": cat_tensor.dtype},
+                )
+                full_like.meta = cat_node.meta
+                cat_node.replace_all_uses_with(full_like)
+
+    return patch
+
+
+@register_patch("executorch", "torch.nn.functional.pad")
+def _patch_pad(original):
+    """Split a negative pad into the crop it means plus the non-negative remainder — torch treats a negative
+    amount as trimming that edge, and ExecuTorch's portable kernel refuses it outright ("Padding values must
+    be non-negative", execute 0x12; longt5's local-attention blocking and rwkv's shifted state both pad
+    negatively)."""
+
+    def patch(input, pad, mode="constant", value=None):
+        # Only a provably non-negative pad goes through untouched: under a dynamic export the amounts are
+        # SymInts (`block_len - seq`) whose sign is not knowable here, so those take the general form too.
+        if all(isinstance(amount, int) and amount >= 0 for amount in pad):
+            return original(input, pad, mode, value)
+        output = original(input, [torch.sym_max(amount, 0) for amount in pad], mode, value)
+        # Pad and crop act on opposite edges independently, so clamping first and trimming after is the
+        # same tensor as torch's crop-then-pad — and it needs no branch on a symbolic sign.
+        for i in range(len(pad) // 2):
+            left, right, dim = pad[2 * i], pad[2 * i + 1], input.dim() - 1 - i
+            start = torch.sym_max(-left, 0)
+            stop = output.size(dim) - torch.sym_max(-right, 0)
+            output = output.narrow(dim, start, stop - start)
+        return output
+
+    return patch
+
+
+@register_patch("executorch", "torch.nn.functional.conv3d")
+def _patch_conv3d(original):
+    """Decompose conv3d into a sum of conv2d's over the kernel's depth — ExecuTorch's portable convolution
+    kernel takes 3-D/4-D inputs only ("Expect input tensor to be 3-D or 4-D, but got, 5", execute 0x12), and
+    a video/temporal vision tower's patch embedding is a Conv3d (glm4v and family, cosmos3_omni,
+    cohere_compass).
+
+    For each depth offset `kt`, the matching strided temporal slice contributes one conv2d over `(H, W)`:
+    the output frames fold into the batch axis, the 2-D geometry (stride/padding/dilation/groups) applies
+    unchanged, and the contributions sum. Bias is added once at the end.
+    """
+
+    def patch(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+        def triple(value):
+            return (value, value, value) if isinstance(value, int) else tuple(value)
+
+        (stride_t, stride_h, stride_w) = triple(stride)
+        (pad_t, pad_h, pad_w) = triple(padding)
+        (dil_t, dil_h, dil_w) = triple(dilation)
+        batch, _, frames, height, width = input.shape
+        out_channels, _, kernel_t, _, _ = weight.shape
+        if pad_t:
+            input = torch.nn.functional.pad(input, (0, 0, 0, 0, pad_t, pad_t))
+            frames = frames + 2 * pad_t
+        out_frames = (frames - dil_t * (kernel_t - 1) - 1) // stride_t + 1
+        output = None
+        for kt in range(kernel_t):
+            start = kt * dil_t
+            frame_slice = input[:, :, start : start + (out_frames - 1) * stride_t + 1 : stride_t]
+            folded = frame_slice.transpose(1, 2).reshape(batch * out_frames, input.shape[1], height, width)
+            planes = torch.nn.functional.conv2d(
+                folded, weight[:, :, kt], None, (stride_h, stride_w), (pad_h, pad_w), (dil_h, dil_w), groups
+            )
+            contribution = planes.reshape(batch, out_frames, out_channels, *planes.shape[2:]).transpose(1, 2)
+            output = contribution if output is None else output + contribution
+        if bias is not None:
+            output = output + bias.reshape(1, -1, 1, 1, 1)
+        return output
+
+    return patch
+
+
 @register_patch("executorch", "torch.nn.functional.adaptive_avg_pool2d")
 def _patch_adaptive_avg_pool2d(original):
     """Decompose adaptive_avg_pool2d (no portable adaptive-pool kernel).
@@ -448,45 +1018,6 @@ def _patch_adaptive_avg_pool2d(original):
             for hs, he in bounds(h, oh)
         ]
         return torch.cat(rows, dim=-2)
-
-    return patch
-
-
-def _cumulative_reduce(input: torch.Tensor, dim: int, maximum: bool) -> torch.Tensor:
-    """``cummax``/``cummin`` values via a triangular-masked ``amax``/``amin`` (no portable scan
-    kernel). Output ``[..., i]`` reduces over ``j <= i``: broadcast the sequence against a
-    lower-triangular keep-mask, fill the rest with the dtype's min/max, then reduce."""
-    seq = input.transpose(dim, -1)
-    length = seq.shape[-1]
-    positions = torch.arange(length, device=input.device)
-    keep = positions.unsqueeze(0) <= positions.unsqueeze(1)  # [i, j] = j <= i
-    info = torch.finfo if input.is_floating_point() else torch.iinfo
-    fill = info(input.dtype).min if maximum else info(input.dtype).max
-    windows = torch.where(keep, seq.unsqueeze(-2), fill)
-    reduced = windows.amax(dim=-1) if maximum else windows.amin(dim=-1)
-    return reduced.transpose(dim, -1)
-
-
-@register_patch("executorch", "torch.cummax", "torch.Tensor.cummax")
-def _patch_cummax(_original):
-    """Decompose ``cummax`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
-    Returns ``(values, indices)`` like ``torch.cummax``; indices are zeros (callers use the values)."""
-
-    def patch(input, dim):
-        values = _cumulative_reduce(input, dim, maximum=True)
-        return torch.return_types.cummax((values, torch.zeros_like(values, dtype=torch.long)))
-
-    return patch
-
-
-@register_patch("executorch", "torch.cummin", "torch.Tensor.cummin")
-def _patch_cummin(_original):
-    """Decompose ``cummin`` (no portable cumulative-scan kernel) — see ``_cumulative_reduce``.
-    Returns ``(values, indices)`` like ``torch.cummin``; indices are zeros (callers use the values)."""
-
-    def patch(input, dim):
-        values = _cumulative_reduce(input, dim, maximum=False)
-        return torch.return_types.cummin((values, torch.zeros_like(values, dtype=torch.long)))
 
     return patch
 
@@ -666,38 +1197,6 @@ def _patch_eval_upper_bound(original):
     return patch
 
 
-@register_patch(
-    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
-)
-def _patch_remove_empty_tensors_from_cat(_original):
-    """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
-
-    The original checks ``input.numel() != 0`` directly; for tensors with
-    unbacked dynamic shapes (e.g. ``74 * u176``) that raises
-    ``GuardOnDataDependentSymNode`` because ``Ne(74*u176, 0)`` can't be proved
-    either way at trace time. Using ``guard_or_true`` keeps unbacked-shape
-    inputs conservatively (the pass is purely an optimisation).
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_true
-
-    def patch(self, graph_module, cat_node):
-        pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
-        cat_node.args = (pruned,) + cat_node.args[1:]
-        if not pruned:
-            cat_tensor = cat_node.meta["val"]
-            with graph_module.graph.inserting_after(cat_node):
-                full_like = graph_module.graph.create_node(
-                    "call_function",
-                    target=exir_ops.edge.aten.full.default,
-                    args=(tuple(cat_tensor.shape), 0),
-                    kwargs={"dtype": cat_tensor.dtype},
-                )
-                full_like.meta = cat_node.meta
-                cat_node.replace_all_uses_with(full_like)
-
-    return patch
-
-
 @register_patch("executorch", "executorch.exir.verification.verifier._check_tensor_args_matching_op_allowed_dtype")
 def _patch_check_tensor_args_dtype(original):
     """Suppress complex-dtype violations in
@@ -718,45 +1217,6 @@ def _patch_check_tensor_args_dtype(original):
             if "mismatched dtypes" in msg and ("complex64" in msg or "complex128" in msg):
                 return
             raise
-
-    return patch
-
-
-@register_patch(
-    "executorch",
-    "executorch.exir.tensor.dim_order_from_stride",
-    "executorch.exir.tensor_layout.dim_order_from_stride",
-    "executorch.exir.emit._emitter.dim_order_from_stride",
-    "executorch.exir.passes.replace_view_copy_with_view_pass.dim_order_from_stride",
-)
-def _patch_dim_order_from_stride(_original):
-    """Replacement for ``executorch.exir.tensor.dim_order_from_stride``.
-
-    The upstream version compares strides with ``guard_size_oblivious`` to sort
-    them. When the strides are unbacked SymInts (e.g. ``splinter`` slicing on a
-    data-dependent index), the comparison raises ``GuardOnDataDependentSymNode``
-    deep inside ``spec_prop_pass``. Use ``guard_or_true`` / ``guard_or_false``
-    so the sort still produces *a* dim order when the comparison is unbacked —
-    the exact order on unbacked dims doesn't affect correctness, just memory layout.
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
-
-    def patch(stride):
-        for s in stride:
-            if guard_or_false(s == 0):
-                raise ValueError("0 in strides is not supported for ExecuTorch.")
-
-        class K:
-            __slots__ = ("stride",)
-
-            def __init__(self, stride):
-                self.stride = stride
-
-            def __lt__(self, other):
-                return guard_or_true(self.stride < other.stride)
-
-        sorted_dims = [i[0] for i in sorted(enumerate(stride), key=lambda x: K(x[1]), reverse=True)]
-        return tuple(sorted_dims)
 
     return patch
 
@@ -1082,7 +1542,8 @@ def _patch_squeeze_node_visitors(original):
 # Caps for `int_oo` dynamic-dim upper bounds. ExecuTorch's XNNPACK memory planner pre-allocates
 # buffers from the upper bound, so an unbounded dim must get a finite cap; capping too tight rejects
 # legitimate trace-time shapes (e.g. VLM image-token counts). Each dim's cap is `max(lower, trace) *
-# multiplier`, floored so a dim traced small still gets a usable range.
+# multiplier`, floored so a dim traced small still gets a usable range. A modality's own axes are the
+# exception and take no multiplier at all (see `_modality_axis_symbols`).
 _MAX_DIM_MULTIPLIER = 4
 # 1024 covers the largest single unbounded dim we see in practice (VLM image-token counts, seq lens)
 # without over-allocating; 64 keeps a dim usable even when several are unbounded (see `_dim_floor`).
@@ -1117,6 +1578,75 @@ def _as_int(x, default: int = 0) -> int:
 
 
 @register_fx_program_fix("executorch")
+def _fix_constant_dim_orders(exported_program: ExportedProgram) -> None:
+    """Make every constant tensor contiguous — a weight stored channels-last (an audio tower's conv kernels)
+    keeps those strides through serialization, invisible to any scan of the graph's activation vals, and at
+    runtime feeds a portable kernel whose planned output is contiguous ("2 input tensors have different dim
+    orders", `slice_copy`/`squeeze_copy` refusing 0x12). The values are unchanged; only the layout is."""
+    for holder in (exported_program.state_dict, exported_program.constants):
+        for name, tensor in holder.items():
+            if isinstance(tensor, torch.Tensor) and not tensor.is_contiguous():
+                holder[name] = tensor.contiguous()
+
+
+def _query_axis_symbols(exported_program: ExportedProgram, var_to_val: dict) -> tuple[set, int]:
+    """The symbols on the token axis of the graph's text inputs, and the sequence scale to bound them by:
+    the larger of their own hint and the cache's length hint (the prompt a merged decode was captured after).
+    """
+
+    def hint(dim) -> int:
+        return dim if isinstance(dim, int) else _as_int(var_to_val.get(dim.node.expr), 0)
+
+    placeholders = {
+        node.name: node.meta.get("val")
+        for node in exported_program.graph_module.graph.nodes
+        if node.op == "placeholder"
+    }
+    symbols, sequence_hint = set(), 0
+    for name, axis in (("input_ids", 1), ("inputs_embeds", 1), ("decoder_input_ids", 1), ("position_ids", -1)):
+        value = placeholders.get(name)
+        if isinstance(value, torch.Tensor) and value.dim() >= 2 and not isinstance(value.shape[axis], int):
+            symbols.add(value.shape[axis].node.expr)
+            sequence_hint = max(sequence_hint, hint(value.shape[axis]))
+    for name, value in placeholders.items():
+        if (
+            name.startswith(("past_key_values", "cache_params"))
+            and isinstance(value, torch.Tensor)
+            and value.dim() == 4
+        ):
+            sequence_hint = max(sequence_hint, hint(value.shape[2]))
+    return symbols, sequence_hint
+
+
+def _modality_axis_symbols(exported_program: ExportedProgram) -> set:
+    """The symbols on a modality input's own axes — a patch count, a number of frames, an audio window.
+
+    They are bounded by what the trace saw and nothing else, where a text axis gets the generous floor. The
+    two want opposite things: a sequence traced at 1024 has to grow, so its bound cannot be its own length;
+    a vision tower traced at 13 patches will never see 1024 of them, and the floor that keeps the sequence
+    usable is what made SmolVLM's arena 13.5 GB instead of 0.9 GB — the planner sizes each buffer from the
+    product of these axes, so one over-generous count is multiplied through every intermediate.
+
+    Read off the input's name, since that is what says which kind of tensor an axis belongs to.
+    """
+    modality_inputs = tuple(
+        {key for _name, _getter, input_keys, *_rest in _MODALITY_SPECS for key in input_keys}
+        | {grid for *_head, grid, _token in _MODALITY_SPECS if grid}
+    )
+    symbols = set()
+    for node in exported_program.graph_module.graph.nodes:
+        if node.op != "placeholder" or not node.name.startswith(modality_inputs):
+            continue
+        value = node.meta.get("val")
+        if not isinstance(value, torch.Tensor):
+            continue
+        for dim in value.shape:
+            if not isinstance(dim, int):
+                symbols.add(dim.node.expr)
+    return symbols
+
+
+@register_fx_program_fix("executorch")
 def _fix_range_constraints(exported_program: ExportedProgram) -> None:
     """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
 
@@ -1133,10 +1663,25 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
         if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
             shape_env = val.fake_mode.shape_env
             range_dicts.append(shape_env.var_to_range)
-            var_to_val = getattr(shape_env, "backed_var_to_val", None) or shape_env.var_to_val
+            # `is None`, not `or`: an empty backed mapping is falsy and would fall through to the
+            # deprecated name.
+            var_to_val = getattr(shape_env, "backed_var_to_val", None)
+            if var_to_val is None:
+                var_to_val = shape_env.var_to_val
             break  # all nodes share the same shape_env, so we only need one
 
     floor = _dim_floor(len({sym for rd in range_dicts for sym, vr in rd.items() if isinstance(vr.upper, IntInfinity)}))
+
+    # The query axis is bounded from the *sequence* scale the graph was traced at, not from its own hint: a
+    # merged multi-token decode is captured at two tokens yet serves the whole prompt (a multi-modal export
+    # has no separate prefill graph), and its cache already carries that prompt's length — so the query
+    # symbols take `max(query hint, cache-length hint)`. Traced at two, a 64-token bound refused a 71-token
+    # prompt ("Attempted to resize a bounded tensor with a maximum capacity of 512 elements to 568").
+    query_symbols, sequence_hint = _query_axis_symbols(exported_program, var_to_val)
+    # A modality's own axes are bounded by the trace alone — see `_modality_axis_symbols` for why they
+    # cannot share the text floor. A symbol carrying both (a vision graph whose patches are also its
+    # sequence) keeps the text treatment, which is the safe direction.
+    modality_symbols = _modality_axis_symbols(exported_program) - query_symbols
 
     unbounded = []
     for rd in range_dicts:
@@ -1144,7 +1689,12 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
             if isinstance(vr.upper, IntInfinity):
                 lower = _as_int(vr.lower, 2)
                 trace_val = _as_int(var_to_val.get(sym), 0)
-                upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, floor)
+                if sym in query_symbols:
+                    trace_val = max(trace_val, sequence_hint)
+                if sym in modality_symbols:
+                    upper = max(trace_val, lower, _MIN_DIM_FLOOR)
+                else:
+                    upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, floor)
                 rd[sym] = ValueRanges(vr.lower, upper)
                 unbounded.append((str(sym), lower, upper))
 
@@ -1201,8 +1751,15 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
             feeder = stack.pop()
             if feeder in erased or feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
                 continue
+            # Best effort: on some graphs (glmasr / musicflamingo audio towers) erasing a dead `sym_size`
+            # feeder trips a C-level fx bug (`SystemError` in `_update_args_kwargs`, an arg already nulled).
+            # A leftover dead `sym_size` is harmless — the tracer only chokes on the `Piecewise` cast/eq
+            # chain, which erases fine — so skip the node and keep the rest of the cleanup.
+            try:
+                module.graph.erase_node(feeder)
+            except SystemError:
+                continue
             stack.extend(feeder.all_input_nodes)
-            module.graph.erase_node(feeder)
             erased.add(feeder)
         module.recompile()
 
@@ -1247,6 +1804,60 @@ def _fix_missing_placeholder_vals(exported_program: ExportedProgram) -> None:
 # `@register_fx_node_fix("executorch")` on `(gm, node) -> bool` per-node fixers,
 # applied in place by ``apply_fx_node_fixes("executorch", gm)`` right after the
 # program fixes. Return ``True`` to consume the node; DCE runs at the end of the walk.
+
+
+# `a % b` and the ops that rebuild it, per level: symbolic ints go through `operator`, tensors through the
+# aten schemas `torch.export` records for `tensor % int`.
+_FLOORED_MOD_OPS = {operator.mod: (operator.add, operator.mod)}
+if is_torch_available():
+    _FLOORED_MOD_OPS[torch.ops.aten.remainder.Scalar] = (
+        torch.ops.aten.add.Tensor,
+        torch.ops.aten.remainder.Scalar,
+    )
+
+
+@register_fx_node_fix("executorch")
+def _fix_floored_mod(gm, node) -> bool:
+    """Rewrite `a % b` (positive literal `b`) as `((a % b) + b) % b` — the same value under floored *and*
+    truncated modulo.
+
+    torch computes Python's floored modulo (`-9 % 4 = 3`), ExecuTorch C's truncated one (`-9 % 4 = -1`), and
+    both its symbolic evaluator and its `remainder` kernel take the C answer. Symbolically, a pad amount like
+    longt5's `-seq % block` arrives negative and the kernel refuses it ("Padding values must be non-negative").
+    On tensors the disagreement is silent and worse: `(-5) % 16` returns `-5`, so timesfm's
+    `(idx_range - indices) % num_seq` produces negative indices and the `gather` that consumes them fails
+    bounds-checking (`0x12` at `aten::gather.out`) — for a positive `indices` the values were simply wrong.
+
+    The double-mod form is a graph-level identity no simplifier removes, and evaluates identically either way:
+    under flooring the inner result is already in `[0, b)` so the outer mod is a no-op, and under truncation
+    `(trunc + b)` lands in `(0, 2b)` and the outer mod brings it back.
+    """
+    add_op, mod_op = _FLOORED_MOD_OPS.get(node.target, (None, None))
+    if node.op != "call_function" or add_op is None:
+        return False
+    divisor = node.args[1]
+    if not isinstance(divisor, int) or divisor <= 0:
+        return False
+    # Already the wrapped form (its operand is the `+ divisor` this fix inserts) — the node list iteration
+    # reaches freshly inserted nodes, so without this the rewrap would wrap itself forever.
+    operand = node.args[0]
+    if (
+        getattr(operand, "op", None) == "call_function"
+        and operand.target is add_op
+        and len(operand.args) == 2
+        and operand.args[1] == divisor
+    ):
+        return False
+    graph = gm.graph
+    with graph.inserting_after(node):
+        shifted = graph.call_function(add_op, (node, divisor))
+    with graph.inserting_after(shifted):
+        rewrapped = graph.call_function(mod_op, (shifted, divisor))
+    rewrapped.meta = dict(node.meta)
+    node.replace_all_uses_with(rewrapped)
+    # `replace_all_uses_with` also rewired the chain itself — point it back at the original.
+    shifted.update_arg(0, node)
+    return True
 
 
 @register_fx_node_fix("executorch")
@@ -1320,8 +1931,12 @@ def _fix_clone_memory_format(gm: torch.fx.GraphModule, node: torch.fx.Node) -> b
         return False
     if node.kwargs.get("memory_format") is not None:
         return False
+    from torch._prims_common import is_contiguous_or_false
+
     input_val = node.args[0].meta.get("val") if hasattr(node.args[0], "meta") else None
-    if not (isinstance(input_val, torch.Tensor) and not input_val.is_contiguous()):
+    # Guard-free contiguity, for the same reason as the reshape patch above: this runs on the traced
+    # `FakeTensor`, whose sizes may be unbacked.
+    if not (isinstance(input_val, torch.Tensor) and not is_contiguous_or_false(input_val)):
         return False
     node.kwargs = {**node.kwargs, "memory_format": torch.contiguous_format}
     return True
@@ -1399,3 +2014,53 @@ def _fix_negative_slice_start(gm: torch.fx.GraphModule, node: torch.fx.Node) -> 
     node.args = (*node.args[:2], add_node, *node.args[3:])
     node.meta.pop("unbacked_bindings", None)
     return True
+
+
+@register_patch("executorch", "torch._subclasses.fake_impls.op_implementations_dict")
+def _patch_nonzero_fake_layout(original):
+    """Report `nonzero`'s result as contiguous, matching the layout ExecuTorch's kernel actually writes.
+
+    ATen's CPU `nonzero` fills a `(ndim, nnz)` buffer and returns its transpose, and the fake kernel is
+    faithful to it: `new_empty_strided((nnz, ndim), (1, nnz))`. ExecuTorch's planner turns those strides into
+    a dim order of `(1, 0)`, but its `nonzero.out` kernel writes the tensor row-major — so the label
+    contradicts the bytes, and reading it back scrambles the values. For `[[1, -1, 1], [-1, 1, -1]]` the
+    program returns `[[0, 2], [0, 1], [0, 1]]` where eager gives `[[0, 0], [0, 2], [1, 1]]` (row-major bytes
+    `[0, 0, 0, 2, 1, 1]` re-read with stride `(1, 3)`). Consumers that assert
+    `tensors_have_same_dim_order(in, out)` against their contiguous, planner-allocated output refuse the call
+    instead — `0x12` at `aten::slice_copy.Tensor_out` for musicflamingo's audio-token positions
+    (`torch.where(diff == 1)`) and `aten::squeeze_copy.dims_out` for qwen3_asr's (`.nonzero().squeeze(-1)`).
+
+    Fixed at the fake kernel because that is the only place it holds: `to_edge_transform_and_lower` and
+    `to_executorch` each re-run it, so a rewritten stride on either graph is recomputed, and the emitted
+    program is already serialized by the time it can be edited. Swapping the registry dict for a copy leaves
+    the key set intact, so the membership check that `register_op_impl` bound to the original dict still
+    agrees with this lookup (`dispatch_to_op_implementations_dict` reads the module attribute).
+    """
+    inner = original.get(torch.ops.aten.nonzero.default)
+    if inner is None:
+        return original
+
+    def contiguous_nonzero(fake_mode, func, arg):
+        result = inner(fake_mode, func, arg)
+        return result.new_empty(result.shape) if isinstance(result, torch.Tensor) else result
+
+    return {**original, torch.ops.aten.nonzero.default: contiguous_nonzero}
+
+
+@register_patch("executorch", "torch.nn.functional.one_hot")
+def _patch_one_hot(original):
+    """Build the one-hot matrix by comparison against `arange` instead of calling `aten.one_hot`.
+
+    `one_hot`'s fake kernel has to know `num_classes` to give the result a shape, and raises
+    `DynamicOutputShapeException` when it cannot — which includes a symbolic count, as in longt5's
+    transient-global attention (`one_hot(block_ids, global_seq_len + 1)`, where the global length comes from
+    the input's block count). `arange` takes a `SymInt` happily, and broadcasting the comparison gives the
+    same matrix with a shape expressed in that symbol.
+    """
+
+    def patch(input, num_classes=-1):
+        if isinstance(num_classes, int) and num_classes < 0:
+            return original(input, num_classes)
+        return (input.unsqueeze(-1) == torch.arange(num_classes, device=input.device)).to(torch.long)
+
+    return patch

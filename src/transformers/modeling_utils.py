@@ -82,7 +82,7 @@ from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
-from .integrations.moe import ALL_EXPERTS_FUNCTIONS
+from .integrations.moe import ALL_EXPERTS_FUNCTIONS, dispatches_experts_implementation
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -1931,27 +1931,13 @@ class PreTrainedModel(
 
     @classmethod
     def _can_set_experts_implementation(cls) -> bool:
-        """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source
-        as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
-        on the first successful call.
+        """Whether this class's experts resolve their implementation per forward, so it can be switched at
+        runtime with `set_experts_implementation`.
         """
-        # Early return if there is a cached value
-        cached_value = getattr(cls, "_can_set_experts_implementation_cached_value", None)
-        if isinstance(cached_value, bool):
-            return cached_value
-
-        class_module = sys.modules.get(cls.__module__)
-        # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
-        if class_module is None:
-            return False
-        try:
-            code = inspect.getsource(class_module)
-        except (OSError, TypeError):
-            return False
-        # Heuristic: if the `@use_experts_implementation` decorator is used, then we can set it
-        can_set = "@use_experts_implementation" in code
-        cls._can_set_experts_implementation_cached_value = can_set
-        return can_set
+        module = sys.modules.get(cls.__module__)
+        return module is not None and any(
+            isinstance(obj, type) and dispatches_experts_implementation(obj) for obj in vars(module).values()
+        )
 
     def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
         """
@@ -2105,6 +2091,7 @@ class PreTrainedModel(
                 self.config._experts_implementation_internal = requested_implementation
 
         # Apply it to all submodels as well
+        handled_subconfigs = set()
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
             # e.g. ForCausalLM has a Model inside, but no need to check it again)
@@ -2112,8 +2099,12 @@ class PreTrainedModel(
                 submodule is not self
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
-                and submodule._can_set_experts_implementation()  # avoids bugs when text_model has MoEs but encoder no
             ):
+                # Register it even if we skip it below, as we would otherwise try to set it in the dark afterwards
+                handled_subconfigs.add(id(submodule.config))
+                # Avoids bugs when text_model has MoEs but encoder no
+                if not submodule._can_set_experts_implementation():
+                    continue
                 # Set the experts on the submodule
                 sub_implementation = requested_implementation
                 if isinstance(experts_implementation, dict):
@@ -2127,6 +2118,25 @@ class PreTrainedModel(
                 # Check the module can use correctly, otherwise we raise an error if requested experts can't be set for submodule
                 sub_implementation = submodule.get_correct_experts_implementation(sub_implementation)
                 submodule.config._experts_implementation_internal = sub_implementation
+
+        # We need this as some models build their experts straight from a subconfig, without declaring the owning
+        # module as a `PreTrainedModel` -- the loop above never reaches those, and the experts forward keeps
+        # dispatching on the stale subconfig value
+        for subconfig_key in self.config.sub_configs:
+            subconfig = getattr(self.config, subconfig_key, None)
+            if subconfig is not None and id(subconfig) not in handled_subconfigs:
+                subconfig._experts_implementation_internal = (
+                    requested_implementation
+                    if not isinstance(experts_implementation, dict)
+                    else experts_implementation.get(subconfig_key, subconfig._experts_implementation)
+                )
+
+        if requested_implementation not in self.get_experts_implementation().values():
+            logger.warning(
+                f"Could not set the experts implementation to {requested_implementation!r} on "
+                f"{self.__class__.__name__} or any of its submodels; their experts are not wrapped by "
+                "`use_experts_implementation`."
+            )
 
     def enable_input_require_grads(self):
         """

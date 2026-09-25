@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 # NeoMME
 
 [![Hugging Face](https://img.shields.io/badge/Collection-FFD21E?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/collections/Hcompany/neomme)
-[![arXiv](https://img.shields.io/badge/arXiv-2609.01657-b31b1b.svg?style=for-the-badge)](https://arxiv.org/abs/2609.01657)
+[![arXiv](https://img.shields.io/badge/arXiv-2609.01657-b31b1b.svg?style=for-the-badge)](https://huggingface.co/papers/2609.01657)
 
 NeoMME is a family of efficient 260M and 800M parameter multimodal-native multilingual foundation encoders from H Company. It processes multilingual text tokens and raw image patches in a single bidirectional Transformer encoder, without a separately pretrained vision tower or causal language model.
 
@@ -203,6 +203,6 @@ print(late_scores, dense_scores)
       eprint={2609.01657},
       archivePrefix={arXiv},
       primaryClass={cs.IR},
-      url={https://arxiv.org/abs/2609.01657},
+      url={https://huggingface.co/papers/2609.01657},
 }
 ```

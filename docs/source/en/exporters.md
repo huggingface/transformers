@@ -21,7 +21,7 @@ Export any [`PreTrainedModel`] to ONNX, ExecuTorch, or a standalone PyTorch prog
 ```python
 exporter = DynamoExporter()  # or OnnxExporter, ExecutorchExporter
 config = DynamoConfig(dynamic=True)
-exported = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 The exporters live inside Transformers instead of a downstream library, so architecture changes,
@@ -31,9 +31,13 @@ in the modeling code.
 > [!WARNING]
 > The exporters are experimental. Many of the patches in this module work around specific upstream bugs (Torch, ONNX Script, ONNX Runtime, ExecuTorch) and will be removed as soon as the fix lands upstream. Until the API stabilizes, treat the patches as tied to the versions used in the test suite. Pin those versions in production tooling, and expect new patches to appear and old ones to disappear as upstream changes land.
 
-| Exporter               | Output                     | Runtime                                    |
+Every exporter returns an [`~exporters.ExportArtifacts`]; `artifact` is the backend's own program object.
+
+| Exporter               | `artifact`                 | Runtime                                    |
 | ---------------------- | -------------------------- | ------------------------------------------ |
 | [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation       |
+| [`AotiExporter`]       | `bytes` (a `.pt2` package) | PyTorch, compiled ahead of time            |
+| [`TensorrtExporter`]   | `ExportedProgram`          | NVIDIA GPUs, through TensorRT engines      |
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)       |
 | [`OpenVINOExporter`]   | `openvino.Model`           | OpenVINO runtime (Intel CPU/GPU/NPU)       |
@@ -49,7 +53,7 @@ export_config_dict = {"export_format": "onnx", "dynamic": True}
 config = AutoExportConfig.from_dict(export_config_dict)
 exporter = AutoHfExporter.from_config(config)
 
-onnx_program = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 ## Installation
@@ -66,6 +70,20 @@ Install the dependencies for the backend you plan to export to.
 
 ```bash
 pip install transformers "torch==2.12.0"
+```
+
+</hfoption>
+<hfoption id="AOTInductor">
+
+```bash
+pip install transformers "torch==2.12.0"   # plus a C++ toolchain: Inductor compiles the package it writes
+```
+
+</hfoption>
+<hfoption id="TensorRT">
+
+```bash
+pip install transformers torch torch-tensorrt   # the two are released in matched pairs
 ```
 
 </hfoption>
@@ -112,9 +130,11 @@ pip install transformers "torch==2.12.0" "openvino==2026.3.1"
 
 ## Export a model
 
-All exporters share the same interface. Create an exporter with a config, and call [`~exporters.HfExporter.export`].
+All exporters share the same interface. Create an exporter with a config, and call
+[`~exporters.HfExporter.export`]. It returns an [`~exporters.ExportArtifacts`]: the exported graph, what
+the trace recorded about it, and the configs it was traced with — everything needed to run it or save it.
 
-Switch between runtimes by swapping the exporter class.
+Switch between runtimes by swapping the exporter class; nothing else in the flow changes.
 
 <hfoptions id="exporters-quickstart">
 <hfoption id="Dynamo">
@@ -127,12 +147,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 
-exporter = DynamoExporter()
-config = DynamoConfig(dynamic=True)
-exported = exporter.export(model, inputs, config=config)
-
-# run the exported graph directly
-outputs = exported.module()(**inputs)
+exported_artifacts = DynamoExporter().export(model, inputs, config=DynamoConfig(dynamic=True))
 ```
 
 </hfoption>
@@ -146,18 +161,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 
-exporter = OnnxExporter()
-config = OnnxConfig(dynamic=True)
-onnx_program = exporter.export(model, inputs, config=config)
-
-# save and load with ONNX Runtime
-onnx_program.save("model.onnx")
-
-import onnxruntime as ort
-
-session = ort.InferenceSession("model.onnx")
-ort_inputs = {k: v.numpy() for k, v in inputs.items()}
-outputs = session.run(None, ort_inputs)
+exported_artifacts = OnnxExporter().export(model, inputs, config=OnnxConfig(dynamic=True))
 ```
 
 </hfoption>
@@ -176,47 +180,118 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 
-exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
-et_program = exporter.export(model, inputs, config=config)
-
-# save for on-device deployment
-et_program.save("model.pte")
-
-# load and run via the ExecuTorch Python runtime
-from executorch.runtime import Runtime
-
-program = Runtime.get().load_program("model.pte")
-method = program.load_method("forward")
-outputs = method.execute(list(inputs.values()))
-```
-
-</hfoption>
-<hfoption id="OpenVINO">
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters import OpenVINOExporter, OpenVINOConfig
-
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = tokenizer("Hello, world!", return_tensors="pt")
-
-exporter = OpenVINOExporter()
-config = OpenVINOConfig(dynamic=True)
-ov_model = exporter.export(model, inputs, config=config)
-
-ov_model.save("model.xml")
-
-# compile and run on CPU (or "GPU" / "NPU" if available)
-import openvino as ov
-compiled = ov.Core().compile_model(ov_model, "CPU")
-ov_inputs = {k: v.numpy() for k, v in inputs.items()}
-outputs = compiled(ov_inputs)
+exported_artifacts = ExecutorchExporter().export(
+    model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
+)
 ```
 
 </hfoption>
 </hfoptions>
+
+### Run it
+
+`runner()` binds the graph to the runtime that runs it — an unlifted `torch.export` module, an ONNX Runtime
+session, a loaded `.pte` — and returns its outputs as named tensors, whichever backend produced it.
+
+```python
+outputs = exported_artifacts.runtime()(**inputs)
+logits = outputs["logits"]
+```
+
+`runtime()` goes one level up and gives something that behaves like the model: an
+[`~exporters.ExportedModel`] for a single graph, an [`~exporters.ExportedGenerator`] for an export that
+`generate` drives (see [Generative models](#generative-models)).
+
+```python
+outputs = exported_artifacts.runtime()(**inputs)   # -> ModelOutput, so outputs.logits works
+```
+
+To reach the backend's own program object — for tooling that speaks ONNX or ExecuTorch directly — use
+`artifact`:
+
+```python
+exported_artifacts.artifact                        # ONNXProgram / ExportedProgram / ExecutorchProgramManager
+```
+
+### Save and load it
+
+`save_pretrained` writes the graph, the configs, and a manifest describing both. The manifest is what makes
+the directory loadable: it records the backend, which file each component is, and what the trace recorded
+about each graph — the precision it computes in, the cache it was traced against, the shapes it saw. A
+runner without that would have to infer them from tensor names and shapes, and get them wrong quietly.
+
+```python
+exported_artifacts.save_pretrained("qwen3-export")
+```
+
+```
+qwen3-export/
+├── config.json
+├── export.json          # backend, components, and per-graph metadata
+└── model.onnx           # or model.pt2 / model.pte
+```
+
+[`AutoExportedModel`] loads it back as whatever it was exported as, no need to remember which backend
+wrote it:
+
+```python
+from transformers.exporters import AutoExportedModel
+
+exported_model = AutoExportedModel.from_pretrained("qwen3-export")
+outputs = exported_model(**inputs)
+```
+
+> [!TIP]
+> Loading refuses a directory whose manifest has no recorded metadata rather than falling back to
+> inference, because a runner that guesses the precision or the cache layout still runs — and produces
+> quietly wrong numbers. Re-save with `save_pretrained` if you hit this.
+
+## Compile ahead of time
+
+[`AotiExporter`] compiles the same graph [`DynamoExporter`] traces. A `torch.export` program replays its
+ATen graph through the ordinary eager kernels, so tracing buys you a portable graph but not speed;
+handing that graph to AOTInductor generates and compiles kernels for it and packages them as a `.pt2`,
+which loads with no warm-up to pay.
+
+```python
+from transformers.exporters import AotiExporter, AotiConfig
+
+exported_artifacts = AotiExporter().export(model, inputs, config=AotiConfig(dynamic=True))
+exported_artifacts.save_pretrained("qwen3-compiled")
+```
+
+Everything else is unchanged: the package loads through [`AutoExportedModel`] like any other export, and a
+generative model decomposes and runs exactly as it does on the other backends.
+
+A package holds machine code for the device it was compiled on, so it cannot be moved afterwards — export
+again for another kind of device.
+
+```python
+AotiConfig(dynamic=True, inductor_configs={"max_autotune": True})   # tuning knobs go straight to Inductor
+```
+
+## Compile with TensorRT
+
+[`TensorrtExporter`] hands the same graph to TensorRT, through Torch-TensorRT's `dynamo` frontend. What
+comes back is still an `ExportedProgram`, with each engine sitting in the graph as a `tensorrt.execute_engine`
+call — so it saves, loads and runs like any other export, and the runtime drives it unchanged.
+
+```python
+from transformers.exporters import TensorrtConfig, TensorrtExporter
+
+exported_artifacts = TensorrtExporter().export_for_generation(
+    model, inputs, config=TensorrtConfig(dynamic=False), generation_config=generation_config
+)
+```
+
+Conversion is partial by nature: TensorRT takes the subgraphs it can build engines for and leaves the rest
+as torch ops, so a converted model is engines with torch segments between them rather than one engine.
+`min_block_size` decides how small a run of ops is still worth an engine, and `torch_executed_ops` names the
+ones to leave alone — a cache write (`index_put`) is there by default, because the converter cannot build it.
+
+Export against a **static cache** (`cache_implementation="static"`). TensorRT holds its engines to the shape
+range they were built for, where `torch.export` treats that range as advisory, and a growing cache asks the
+decode graph to take a length it never traced — zero, at the first step, which TensorRT refuses outright.
 
 ## Dynamic shapes
 
@@ -251,7 +326,7 @@ config = DynamoConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-exported = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -278,7 +353,7 @@ config = OnnxConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-onnx_program = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -306,7 +381,7 @@ config = ExecutorchConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-et_program = exporter.export(model, inputs, config=config)
+exported_artifacts = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -345,17 +420,11 @@ For autoregressive generation, the model's `forward` has different shapes at the
 (full prompt, no KV cache) versus the decode step (single token, populated KV cache). Exporters
 expose [`~HfExporter.export_for_generation`], which splits both stages and exports each.
 
-For multi-modal generative models, the prefill additionally splits into an image or audio
-encoder, the language model, and `lm_head`. Encoder and language-model discovery uses
-[`~PreTrainedModel.get_encoder`] (`modality="image"` or `"audio"`) and
-[`~PreTrainedModel.get_decoder`] accessors, so any new architecture using these
-work out of the box.
-
-A projector component appears only when the model exposes one
-under an attribute name (`multi_modal_projector`, `connector`, `embed_vision`,
-`embed_audio`). Qwen2-VL below folds its projector into the vision tower, so its component dict
-has no separate `multi_modal_projector` key. New architectures must align their projector
-attribute to one of these names instead of growing the list.
+For multi-modal generative models the prompt splits further: one graph per modality from the model's own
+`get_<modality>_features` method (`image_encoder`, `audio_encoder` — the tower *and* its projector, since
+that method runs both), and `embed_tokens` for `input_ids -> inputs_embeds`. The text stack stays whole as
+`decode`, taking `inputs_embeds`, so the runtime scatters each modality's features into the embeddings
+before running it. Any architecture exposing those methods works without further wiring.
 
 <hfoptions id="generate">
 <hfoption id="Dynamo">
@@ -372,8 +441,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ExportedProgram, "language_model": ExportedProgram, "lm_head": ExportedProgram, "decode": ExportedProgram}
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
+# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
+# program through `exported_artifacts["decode"].artifact`
 ```
 
 </hfoption>
@@ -391,8 +461,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ONNXProgram, "language_model": ONNXProgram, "lm_head": ONNXProgram, "decode": ONNXProgram}
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
+# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
+# program through `exported_artifacts["decode"].artifact`
 ```
 
 </hfoption>
@@ -410,8 +481,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
+# exported = {"image_encoder": ..., "embed_tokens": ..., "decode": ...} — reach a backend
+# program through `exported_artifacts["decode"].artifact`
 ```
 
 </hfoption>
@@ -459,26 +531,29 @@ Call `decompose_for_generation` directly to act between decomposing and exportin
 running an eager forward for verification, swapping a submodule's inputs, or skipping a stage.
 
 ```python
-from transformers.exporters.utils import decompose_for_generation
+from transformers.exporters.decompose import decompose_for_generation
 
 components = decompose_for_generation(model, inputs)
-# {"image_encoder": (submodel, fwd_kwargs), "language_model": (...), ..., "decode": (...)}
+# {"image_encoder": Component, "embed_tokens": Component, "decode": Component}
 
-exported = {}
-for name, (submodel, subinputs) in components.items():
-    eager_outputs = submodel(**subinputs)  # sanity-check the eager forward before exporting
-    exported[name] = exporter.export(submodel, subinputs, config=config)
+artifacts, metadata = {}, {}
+for name, component in components.items():
+    eager_outputs = component.module(**component.inputs)  # sanity-check the eager forward before exporting
+    artifacts[name], metadata[name] = exporter.export_artifact(component.module, component.inputs, config=config)
 ```
+
+`export_for_generation` is this loop plus the [`~exporters.ExportArtifacts`] it wraps the results in.
 
 ### Multi-token decode
 
-By default the `decode` component is a **single-token** step — one query token against the KV cache —
-so `torch.export` specializes its query-sequence axis to 1. Pass `multi_token_decode=True` to capture
-`decode` as a **multi-token** decode instead: [`~exporters.utils.decompose_for_generation`] merges two
-consecutive decode steps (it captures with `max_new_tokens=3`) into one forward, so that axis stays
-symbolic. A single graph then serves every query length — one token (ordinary decoding), many tokens
-at once (continuation-from-past, e.g. accepting a chunk of speculative tokens), and a plain prefill
-when the cache is empty.
+A dynamic export (`dynamic=True`) captures `decode` as a **multi-token** decode:
+[`~exporters.utils.decompose_for_generation`] merges two consecutive decode steps (it captures with
+`max_new_tokens=3`) into one forward, so the query-sequence axis stays symbolic. A single graph then serves
+every query length — one token (ordinary decoding), many tokens at once (continuation-from-past, e.g.
+accepting a chunk of speculative tokens), and a plain prefill when the cache is empty — so the export ships
+one text stack instead of two. A prompt graph is kept only where the decode graph provably cannot stand in.
+Pass `multi_token_decode=False` to keep a single-token `decode` beside a separate `prefill` graph anyway — for
+a runtime that wants a fixed one-token decode shape.
 
 <hfoptions id="multi-token-decode">
 <hfoption id="Dynamo">
@@ -488,7 +563,7 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
@@ -500,7 +575,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
@@ -512,17 +587,17 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
 </hfoptions>
 
-The query axis only stays symbolic under a dynamic-shape export (`dynamic=True`); a static export
-freezes it at the captured length, giving a fixed multi-token graph. It composes with the static KV
-cache below — the merged decode writes each step's tokens into the fixed-size cache in place, and the
-cache handles where they land internally.
+A static export cannot keep the query axis symbolic, so it captures a **single-token** `decode` step
+instead, with a separate `prefill` graph for the prompt (asking it for `multi_token_decode=True` is refused). The multi-token decode composes with the static KV
+cache below — the merged decode writes each step's tokens into the fixed-size cache in place, and the cache
+handles where they land internally.
 
 ### Static KV cache
 
@@ -536,7 +611,7 @@ the current position each step. Combined with a [multi-token decode](#multi-toke
 generation into a single exported graph: the `decode` graph takes a fixed-size cache and a *variable*
 number of query tokens, so one graph serves both the prompt (empty cache → prefill) and each generated
 token (populated cache → decode). Export it by forwarding a `GenerationConfig` with
-`cache_implementation="static"` (and a `max_cache_len`) alongside `multi_token_decode=True`:
+`cache_implementation="static"` (and a `max_cache_len`) with a dynamic export:
 
 <hfoptions id="static-cache">
 <hfoption id="Dynamo">
@@ -548,7 +623,7 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 exporter = DynamoExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
 components = exporter.export_for_generation(
-    model, inputs, config=DynamoConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
+    model, inputs, config=DynamoConfig(dynamic=True), generation_config=gen_config
 )
 ```
 
@@ -562,7 +637,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 exporter = OnnxExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
 components = exporter.export_for_generation(
-    model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
+    model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config
 )
 ```
 
@@ -576,7 +651,7 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 exporter = ExecutorchExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
 components = exporter.export_for_generation(
-    model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True), generation_config=gen_config, multi_token_decode=True
+    model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True), generation_config=gen_config
 )
 ```
 
@@ -589,21 +664,15 @@ length (`max_cache_len`, resizable at load time). `dynamic=True` marks these (an
 
 #### Zero-copy in-place updates
 
-The static cache is passed in and mutated in place, so one buffer carries state across decode steps
-with no host copies — as long as the runtime binds the caller's buffers rather than copying through its
-own arena. What that takes is the only per-backend part left:
+The static cache is passed in and mutated in place, so one buffer carries state across decode steps with no
+host copies — as long as the runtime binds the caller's buffers rather than copying through its own arena.
+[`~exporters.ExportedGenerator`] and the runners under it do this for you: `torch.export` records the cache
+write as a `USER_INPUT_MUTATION` so the tensors passed in are updated directly, and
+[`OnnxModelRunner`] binds each matched `input.<name>` / `output.<name>` pair to one device buffer, so the
+cache is read and updated in place across the loop with no per-step allocation.
 
-- **Dynamo** — the exported program models the cache write as a `USER_INPUT_MUTATION`, so calling
-  `components["decode"].module()(...)` updates the cache tensors you pass in directly. Reuse the same
-  tensors each step; nothing to configure.
-
-- **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`
-  pairs. ORT's `CudaSession.set_buffer_sharing` (`onnxruntime.transformers.io_binding_helper`) binds
-  each pair to one device buffer, so the cache is read and updated in place across the loop with no host
-  round-trips.
-
-- **ExecuTorch (XNNPACK)** — turn off the memory-planning allocations on [`ExecutorchConfig`] so the in-place
-  write can land in the caller's own tensor (see the reference for what each flag does):
+ExecuTorch (XNNPACK) needs one thing from you: turn off the memory-planning allocations on [`ExecutorchConfig`] so the
+in-place write can land in the caller's own tensor (see the reference for what each flag does):
 
   ```python
   config = ExecutorchConfig(
@@ -619,205 +688,78 @@ own arena. What that takes is the only per-backend part left:
   > The zero-copy in-place write also needs the caller to bind output buffers at runtime via
   > `Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
   > exposes only `execute`/`set_inputs`/`get_outputs`). The flags above set it up, but the in-place
-  > write is a **C++-only** path (see the ExecuTorch decode-loop example below). From Python, read the
-  > updated cache back from the method outputs each step.
+  > write is a **C++-only** path. From Python, read the updated cache back from the method outputs each
+  > step.
+
+### Generate from an export
+
+The components an export produces are not much use one at a time: generation needs a loop that grows a
+cache, advances positions, rebuilds the mask each step, and — on ONNX Runtime — binds the cache in and out
+of one device buffer so nothing is reallocated per token. [`~exporters.ExportedGenerator`] is that loop. It
+takes the exported components and drives them through the ordinary `generate` API.
+
+```python
+from transformers import GenerationConfig
+from transformers.exporters import OnnxExporter, OnnxConfig
+
+gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
+exported_artifacts = OnnxExporter().export_for_generation(
+    model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config
+)
+```
+
+There are two ways to run it, and neither needs per-backend code — the same calls drive `torch.export`,
+ONNX Runtime and ExecuTorch.
+
+Straight from the export, without touching disk:
+
+```python
+runtime = exported_artifacts.runtime()
+ids = runtime.generate(**inputs, max_new_tokens=32)
+```
+
+Or save it and load it back, which is the deployment path:
+
+```python
+from transformers.exporters import AutoExportedModel
+
+exported_artifacts.save_pretrained("qwen3-generate")
+
+runtime = AutoExportedModel.from_pretrained("qwen3-generate")   # a local directory or a Hub repo
+ids = runtime.generate(**inputs, max_new_tokens=32)
+```
+
+The `generation_config` travels with the artifacts, which matters here: it declares the cache the graphs
+were traced against, so a load that guessed a different one would build the wrong cache.
+
+This covers decoder-only text, VLMs (including the multi-axis M-RoPE position ids, which the runtime
+builds by running the model class's own `get_rope_index` on the saved config, with no weights loaded),
+and encoder-decoder models.
 
 <details>
 
-<summary>Decode-loop inference examples</summary>
+<summary>Driving the steps yourself</summary>
 
-The loop is the same shape on every backend — it's the *same* graph throughout. Start from an empty
-fixed-size cache, feed the whole prompt once (empty cache → prefill), then one token at a time
-(populated cache → decode). Each call passes `input_ids`, a causal `attention_mask`, and `position_ids`
-(advanced by the number of new tokens each step), plus the cache, and gets back logits for every query
-position. Where each token lands in the cache is tracked internally by the static cache, so there's
-nothing extra to thread through the call. How the cache is set up differs per runtime (a `StaticCache`
-object for Dynamo, raw device buffers for ONNX Runtime, caller arrays in C++ for ExecuTorch), so each
-tab builds its own below. The Dynamo and ONNX Runtime tabs update the cache in place; ExecuTorch's
-in-place path is C++ (its Python runtime can't, as noted above).
-
-<hfoptions id="decode-loop">
-<hfoption id="Dynamo">
-
-torch.export records the static-cache write as a `USER_INPUT_MUTATION`, so the loaded graph's `module()`
-updates the `StaticCache` you pass in **directly** — one cache carries state across the whole loop with
-nothing to bind or thread back out. `register_pytree_node(StaticCache)` lets `torch.export.load` unflatten
-the `StaticCache` input. The cache has to be **initialized up front** (torch.export bakes the allocated K/V
-into the input spec, so a lazy blank cache won't match) — but the saved program carries its own
-`example_inputs`, so reuse that already-initialized `StaticCache` template, reset to empty:
+For a loop you write yourself — custom serving, speculative decoding, anything `generate` does not cover —
+build the runners and assemble them: `load_export_runners` opens a saved export into `{component: runner}`,
+and [`~exporters.ExportedGenerator.from_runners`] turns those into a runtime. Each runner takes and returns
+named tensors whatever the backend produced it, so a step can be driven directly.
 
 ```python
-import copy
-import torch
-from transformers import StaticCache
-from transformers.exporters.exporter_dynamo import register_pytree_node
+from transformers.exporters.base import load_export_runners
 
-register_pytree_node(StaticCache)
-exported = torch.export.load("decode.pt2")
-decode = exported.module()   # runs on the device its inputs / cache live on (CUDA here)
-
-# the artifact carries an initialized StaticCache template — reuse it (reset to empty)
-_, example_kwargs = exported.example_inputs
-past_key_values = copy.deepcopy(example_kwargs["past_key_values"])
-past_key_values.reset()
-
-def causal_mask(positions, cache_len):   # [1, 1, len(positions), cache_len]
-    return (torch.arange(cache_len, device="cuda")[None, :] <= positions[:, None])[None, None]
-
-# prefill: the whole prompt in one call
-positions = torch.arange(prompt_len, device="cuda")
-logits = decode(input_ids=prompt_ids, attention_mask=causal_mask(positions, max_cache_len),
-                position_ids=positions[None], past_key_values=past_key_values).logits
-next_token = logits[:, -1:].argmax(-1)
-
-# decode: query=1 buffers reused in place
-input_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
-position_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
-attention_mask = torch.empty((1, 1, 1, max_cache_len), dtype=torch.bool, device="cuda")
-slots = torch.arange(max_cache_len, device="cuda")
-for position in range(prompt_len, max_cache_len):
-    input_ids.copy_(next_token)
-    position_ids.fill_(position)
-    attention_mask[0, 0, 0].copy_(slots <= position)
-    logits = decode(input_ids=input_ids, attention_mask=attention_mask,
-                    position_ids=position_ids, past_key_values=past_key_values).logits
-    next_token = logits[:, -1:].argmax(-1)
+runners, manifest = load_export_runners("qwen3-generate")
+outputs = runners["decode"](input_ids=..., attention_mask=..., position_ids=..., past_key_values=...)
+logits = outputs["logits"]
 ```
 
-</hfoption>
-<hfoption id="ONNX Runtime">
+The cache is whatever the graphs were traced against — a `StaticCache` for `torch.export`, device buffers
+for ONNX Runtime, caller arrays in C++ for ExecuTorch.
 
-ONNX Runtime runs the graph as-is; the in-place cache update is done with ORT's `CudaSession`
-(`onnxruntime.transformers.io_binding_helper`), a thin wrapper over ORT io-binding. `set_buffer_sharing`
-binds a cache `input.<name>` and its matching `output.<name>` to **one** device buffer, so the mutated
-K/V/counter are written straight back into the input; `allocate_buffers` allocates the remaining
-(non-shared) outputs — here just `logits`; and `infer(feed_dict)` binds your CUDA tensors by pointer
-and runs. The cache buffers come straight from the graph's own input metadata (`get_inputs()` shape and
-type), so no model config is needed — the one symbolic axis (cache length) becomes `max_cache_len`:
-
-```python
-import torch
-import onnxruntime as ort
-from onnxruntime.transformers.io_binding_helper import CudaSession, TypeHelper
-
-def causal_mask(positions, cache_len):
-    return (torch.arange(cache_len, device="cuda")[None, :] <= positions[:, None])[None, None]
-
-session = ort.InferenceSession("decode.onnx", providers=["CUDAExecutionProvider"])
-cuda = CudaSession(session, torch.device("cuda"))
-
-# fresh device cache buffers built from each cache input's own shape/dtype; share each
-# input.<name>/output.<name> pair on one buffer so the update lands in place
-cache = {}
-for i in session.get_inputs():
-    if not i.name.startswith("input."):
-        continue
-    name = i.name[len("input.") :]
-    dims = [max_cache_len if isinstance(d, str) and not d.isdigit() else int(d) for d in i.shape]
-    cache[name] = torch.zeros(dims, dtype=TypeHelper.ort_type_to_torch_type(i.type), device="cuda")
-    cuda.set_buffer_sharing(f"input.{name}", f"output.{name}")
-cache_feed = {f"input.{name}": buf for name, buf in cache.items()}
-
-vocab_size = next(o.shape[-1] for o in session.get_outputs() if o.name.endswith("logits"))
-
-# prefill: the whole prompt in one call
-positions = torch.arange(prompt_len, device="cuda")
-cuda.allocate_buffers({"logits": (1, prompt_len, vocab_size)})
-out = cuda.infer({"input_ids": prompt_ids, "attention_mask": causal_mask(positions, max_cache_len),
-                  "position_ids": positions[None], **cache_feed})
-next_token = out["logits"][:, -1:].argmax(-1)
-
-# decode: query=1 buffers reused in place
-cuda.allocate_buffers({"logits": (1, 1, vocab_size)})
-input_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
-position_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
-attention_mask = torch.empty((1, 1, 1, max_cache_len), dtype=torch.bool, device="cuda")
-slots = torch.arange(max_cache_len, device="cuda")
-for position in range(prompt_len, max_cache_len):
-    input_ids.copy_(next_token)
-    position_ids.fill_(position)
-    attention_mask[0, 0, 0].copy_(slots <= position)
-    out = cuda.infer({"input_ids": input_ids, "attention_mask": attention_mask,
-                      "position_ids": position_ids, **cache_feed})
-    next_token = out["logits"][:, -1:].argmax(-1)
-```
-
-</hfoption>
-<hfoption id="ExecuTorch XNNPACK">
-
-ExecuTorch's on-device runtime is C++, and the in-place cache update relies on
-`Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
-exposes only `execute`/`set_inputs`/`get_outputs`), so the zero-copy decode is a C++-only path. Bind
-each mutated-cache **output** onto its matching cache **input** buffer, and the new K/V/counter land in
-the caller's `StaticCache` buffers with no copies. As in the other tabs the shapes and sizes come from the
-artifact itself — here the program's `method_meta` (`input_tensor_meta`/`output_tensor_meta` →
-`TensorInfo::nbytes()`), the C++ has no Python runtime to query:
-
-```cpp
-#include <executorch/extension/data_loader/file_data_loader.h>
-#include <executorch/extension/tensor/tensor_ptr.h>
-#include <executorch/runtime/executor/method.h>
-#include <executorch/runtime/executor/program.h>
-
-using namespace executorch::runtime;
-using executorch::extension::FileDataLoader;
-using executorch::extension::make_tensor_ptr;
-
-// load the exported decode and its `forward` method (Result error-checks elided for brevity)
-auto loader = FileDataLoader::from("decode.pte");
-auto program = Program::load(&loader.get());
-
-// method-execution memory: a fixed arena for bookkeeping + one buffer per the method's memory plan
-std::array<uint8_t, 4 * 1024 * 1024> arena;
-MemoryAllocator method_allocator(arena.size(), arena.data());
-auto meta = program->method_meta("forward");
-std::vector<std::vector<uint8_t>> planned(meta->num_memory_planned_buffers());
-std::vector<Span<uint8_t>> planned_spans;
-for (size_t i = 0; i < planned.size(); ++i) {
-    planned[i].resize(meta->memory_planned_buffer_size(i).get());
-    planned_spans.push_back({planned[i].data(), planned[i].size()});
-}
-HierarchicalAllocator planned_allocator({planned_spans.data(), planned_spans.size()});
-MemoryManager memory_manager(&method_allocator, &planned_allocator);
-auto decode = std::move(program->load_method("forward", &memory_manager).get());
-
-// shapes and sizes come from method_meta — no external config. Inputs are [ids, mask, position_ids,
-// cache×N]; outputs are [returned cache×N, logits, mutated cache×N].
-const size_t num_cache_tensors = meta->num_inputs() - 3;
-const size_t logits_out_idx = num_cache_tensors;
-std::vector<size_t> cache_nbytes(num_cache_tensors), cache_out_idx(num_cache_tensors);
-for (size_t i = 0; i < num_cache_tensors; ++i) {
-    cache_nbytes[i] = meta->input_tensor_meta(3 + i)->nbytes();
-    cache_out_idx[i] = num_cache_tensors + 1 + i;   // mutated cache = the last N outputs
-}
-const size_t logits_nbytes = meta->output_tensor_meta(logits_out_idx)->nbytes();
-
-// one set of StaticCache buffers (K/V + per-layer counters) is reused across steps, bound in place each call
-auto forward = [&](const TensorPtr& input_ids, const TensorPtr& mask, const TensorPtr& position_ids) {
-    decode.set_input(EValue(*input_ids), 0);
-    decode.set_input(EValue(*mask), 1);
-    decode.set_input(EValue(*position_ids), 2);
-    for (int i = 0; i < num_cache_tensors; ++i)
-        decode.set_input(EValue(*cache_tensor[i]), 3 + i);
-    // bind each mutated-cache output onto that same input tensor's data → the write lands in place, zero copies
-    for (int i = 0; i < num_cache_tensors; ++i)
-        decode.set_output_data_ptr(cache_tensor[i]->mutable_data_ptr(), cache_nbytes[i], cache_out_idx[i]);
-    decode.set_output_data_ptr(logits_data, logits_nbytes, logits_out_idx);
-    decode.execute();                 // cache updated in place; logits written to logits_data
-    return argmax_last(logits_data);  // greedy pick
-};
-
-// prefill the whole prompt, then decode one token per step — the cache carries in place across all calls
-int64_t next_token = forward(prompt_ids, prompt_mask, prompt_positions);
-for (int64_t position = prompt_len; position < max_cache_len; ++position) {
-    next_token = forward(make_tensor_ptr({1, 1}, &next_token, ScalarType::Long),
-                         causal_mask(position),  // [1, 1, 1, max_cache_len] bool
-                         make_tensor_ptr({1, 1}, &position, ScalarType::Long));
-}
-```
-
-</hfoption>
-</hfoptions>
+> [!NOTE]
+> ExecuTorch's zero-copy in-place cache write needs `Method::set_output_data_ptr`, which its Python runtime
+> does not expose (`executorch.runtime.Method` offers only `execute`/`set_inputs`/`get_outputs`), so from
+> Python read the updated cache back from the method outputs each step. The in-place path is C++-only.
 
 </details>
 

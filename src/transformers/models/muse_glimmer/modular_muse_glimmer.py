@@ -547,6 +547,21 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     merge_size: int = 2
     pos_emb_height: int = 32
     pos_emb_width: int = 32
+    interpolation_mode: str = "bilinear"
+    interpolation_padding: str = "zeros"
+    # unlike kimi_k25, this encoder attends per frame rather than over the whole clip
+    merge_temporal_attention: bool = False
+
+    @property
+    def window_size(self) -> int:
+        """Attention window in pixels, as the vision module derives it from the position grid."""
+        return self.pos_emb_height * self.patch_size
+
+    @property
+    def spatial_merge_size(self) -> int:
+        """Spatial merge factor under the name every other vision config uses for it."""
+        return self.merge_size
+
     hidden_act: str = "gelu"
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     layer_norm_eps: float = 1e-05
@@ -908,11 +923,12 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
         # FIXME: only if square images - vision utils don't yet support non-square
         # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
-        self.num_grid_per_side = config.pos_emb_height
+        self.num_grid_per_side = config.num_grid_per_side
         # muse_glimmer resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
-        self.interpolation_mode = "bilinear"
-        self.interpolation_align_corners = False
-        self.interpolation_padding = "zeros"
+        self.interpolation_mode = config.interpolation_mode
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_padding = config.interpolation_padding
+        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
     def forward(
         self,
@@ -935,7 +951,7 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
+            spatial_merge_size=self.resample_merge_size,
             padding=self.interpolation_padding,
             kwargs=kwargs,
         )
@@ -1031,7 +1047,9 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width patch-grid dimensions for each packed image or video.
         """
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(
+            grid_thw, merge_temporal=self.config.merge_temporal_attention, kwargs=kwargs
+        )
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,

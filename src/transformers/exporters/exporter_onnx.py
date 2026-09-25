@@ -29,7 +29,7 @@ into an ONNX model via `torch.onnx.export`:
    per-node in-place rewrites on the `GraphModule` to drop or replace nodes ONNX
    can't lower (alias, in-place ops, dead comparisons, `_assert_*`, …). Triggered
    both directly after `torch.export` and indirectly via the stage 2 hook.
-4. **ONNX translations** (`_ONNX_TRANSLATION_TABLE`): custom onnxscript functions
+4. **ONNX translations** (`_get_onnx_translation_table`): custom onnxscript functions
    passed as `custom_translation_table` that override the default torchlib
    lowering for specific aten ops where it's buggy or missing.
 5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
@@ -40,18 +40,24 @@ from __future__ import annotations
 
 import copy
 import functools
+import json
 import operator
 from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+from typing import Sequence as TypingSequence  # noqa: UP035  # onnxscript.script classifies attrs via typing.Sequence
 
 import numpy as np
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
-from .configs import OnnxConfig
+from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
+from .metadata import (
+    EXPORT_METADATA_KEY,
+)
 from .utils import (
+    _resolve_dotted_path,
     apply_fx_node_fixes,
     apply_patches,
     duplicate_leaf_tensors,
@@ -63,12 +69,12 @@ from .utils import (
 
 if is_torch_available():
     import torch
-    from torch.export import ExportedProgram
     from torch.onnx import ONNXProgram
 
 
 if is_onnxscript_available():
     import onnx_ir
+    from onnxscript import FLOAT, INT64, script  # runtime: `@script` evaluates these annotations at import
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
@@ -97,7 +103,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
     if is_onnxscript_available():
-        from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
+        from onnxscript.function_libs.torch_lib.ops.core import BOOL, TReal
 
 
 logger = logging.get_logger(__file__)
@@ -118,10 +124,13 @@ class OnnxExporter(DynamoExporter):
     ```
     """
 
-    required_packages = ["torch", "onnx", "onnxscript"]
-    tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
+    export_format = ExportFormat.ONNX
+    artifact_suffix = ".onnx"
 
-    def export(
+    required_packages = ["torch", "onnx", "onnxscript"]
+    tested_versions = {"torch": "2.13.0", "onnx": "1.22.0", "onnxscript": "0.7.1"}
+
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -132,8 +141,8 @@ class OnnxExporter(DynamoExporter):
         elif type(config) is not OnnxConfig:
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+        with apply_patches("onnx"), patch_model_outputs(model) as (inputs_names, outputs_names):
+            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -143,8 +152,7 @@ class OnnxExporter(DynamoExporter):
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
-                custom_translation_table=_ONNX_TRANSLATION_TABLE,
-                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
+                custom_translation_table=_get_onnx_translation_table(),
                 opset_version=config.opset_version,
                 external_data=config.external_data,
                 export_params=config.export_params,
@@ -152,7 +160,22 @@ class OnnxExporter(DynamoExporter):
             )
 
         apply_onnx_ir_fixes(onnx_program)
-        return onnx_program
+        # What the graph means, alongside what it declares: an ORT session reports names, shapes and types,
+        # but nothing about precision or mask layout, so the runner would have to infer them
+        # (`build_export_metadata`). `metadata_props` survives saving and comes back through
+        # `session.get_modelmeta().custom_metadata_map`.
+        # Also inside the file, so a lone `.onnx` handed to someone else still describes itself; the
+        # authoritative copy for a saved directory is the one `export_artifact` hands back.
+        onnx_program.model.metadata_props[EXPORT_METADATA_KEY] = json.dumps(metadata)
+        return onnx_program, metadata
+
+    @classmethod
+    def save_artifact(cls, artifact, path) -> None:
+        """`metadata_props` is part of the model proto, so the payload is already inside what gets written.
+        Whether the initializers spill to a sidecar file is left to ONNX, which decides on the graph's size —
+        the export-time `external_data` flag governs the trace, not this. Each component is saved under its
+        own name because those sidecars are named after the file."""
+        artifact.save(path)
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────
@@ -172,9 +195,19 @@ def patch_model_outputs(model):
 
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
-        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
-        inputs_names.extend(get_leaf_tensors(kwargs).keys())
-        outputs_names.extend(outputs.keys())
+        # Input names BEFORE the forward, and replacing rather than appending: the forward mutates its
+        # pytree kwargs in place, so a cache whose states the model creates on this very call would
+        # otherwise contribute leaf names the graph never took as inputs — shifting every later name onto
+        # the wrong tensor (a recurrent model's `attention_mask` came out named
+        # `cache_params.layers.0.conv_states.0`). Repeated traces then compounded it by appending again.
+        inputs = get_leaf_tensors(kwargs)
+        inputs_names[:] = inputs.keys()
+        # The inputs count as already-seen identities: an output handed straight back is the graph's own
+        # placeholder value, which would collapse the pair onto one name (see `duplicate_leaf_tensors`).
+        outputs = get_leaf_tensors(
+            duplicate_leaf_tensors(original_forward(*args, **kwargs), seen={id(tensor) for tensor in inputs.values()})
+        )
+        outputs_names[:] = outputs.keys()
         return outputs
 
     try:
@@ -185,11 +218,20 @@ def patch_model_outputs(model):
 
 
 def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> tuple[list[str], list[str]]:
-    """Prefix any name that appears in both lists with `input.` / `output.`."""
-    for name in set(inputs_names).intersection(set(outputs_names)):
-        inputs_names[inputs_names.index(name)] = f"input.{name}"
-        outputs_names[outputs_names.index(name)] = f"output.{name}"
-    return inputs_names, outputs_names
+    """Prefix any name that appears in both lists with `input.` / `output.`.
+
+    Also prefix an output named exactly `output`: FX reserves that name for every graph's terminal node
+    (top-level and HOP subgraphs alike), and `torch.onnx.export` can't disambiguate a requested output
+    name from it — a component returning a bare unnamed tensor (the default leaf name `output`, see
+    `_iter_leaf_tensors`) would define the name twice and produce an invalid model (ORT: "Duplicate
+    definition of name (output)"). Consumers strip the `output.` prefix the same way they do for the
+    input/output collision above.
+    """
+    collisions = set(inputs_names).intersection(outputs_names)
+    return (
+        [f"input.{name}" if name in collisions else name for name in inputs_names],
+        [f"output.{name}" if name in collisions or name == "output" else name for name in outputs_names],
+    )
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
@@ -198,6 +240,28 @@ def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> 
 # `"torch.Tensor.unsqueeze"`). Installation and restoration go through `apply_patches`.
 #
 # To add a new patch: define a `_patch_*` factory and decorate it.
+
+
+@register_patch(
+    "onnx",
+    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
+    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
+    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
+    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
+)
+def _patch_mamba_selective_scan(original):
+    """Keep an SSM scan sequential unless its `pointwise` combine mode is available. Only that mode (cuda /
+    xpu) is ONNX-exportable: the `generic` mode a cpu tensor selects lowers through `vmap`, which
+    `run_decompositions` cannot take apart ("tensor may have escaped from inside a function being
+    vmapped"), and it pins the scan's step axis anyway. Read off the tensor that selects the mode, so the
+    decision is per call rather than per export."""
+
+    def patch(hidden_states, *args, **kwargs):
+        if hidden_states.device.type not in ("cuda", "xpu"):
+            kwargs["use_associative_scan"] = False
+        return original(hidden_states, *args, **kwargs)
+
+    return patch
 
 
 @register_patch("onnx", "torch.where")
@@ -342,9 +406,73 @@ def _patch_optimize_ir(original):
 
     def patch(model, *args, **kwargs):
         kwargs.setdefault("should_fold", lambda node: False if node.op_type == "Resize" else None)
-        return original(model, *args, **kwargs)
+        with _exact_identity_rewrites():
+            return original(model, *args, **kwargs)
 
     return patch
+
+
+@register_patch("onnx", "onnx_ir.passes.common.DeduplicateInitializersPass")
+def _patch_deduplicate_initializers(original):
+    """Keep distinct initializers distinct, even when they hold the same values.
+
+    The optimizer merges equal initializers of up to 1024 elements, so two parameters that merely hold the
+    same values (DPT's zero-initialised `cls_token` and `position_embeddings`) become one initializer read by
+    nodes ORT places on different devices — which onnxruntime-gpu 1.23.2 refuses to open
+    (`SaveInitializedTensors`: `!utils::HasExternalDataInMemory`). Merging tensors that small saves nothing.
+    """
+    from onnx_ir.passes import PassResult
+
+    class KeepInitializers(original):
+        def call(self, model):
+            return PassResult(model, modified=False)
+
+    return KeepInitializers
+
+
+@functools.cache
+def _identity_pattern_constants() -> tuple:
+    """The `0` / `1` constants in onnxscript's default rewrite rules — fixed for the process, so found once."""
+    import onnxscript.rewriter as rewriter
+    from onnxscript.rewriter import _pattern_ir
+
+    def constants(node, seen):
+        if id(node) in seen:
+            return
+        seen.add(id(node))
+        if isinstance(node, _pattern_ir.Constant):
+            yield node
+            return
+        for value in vars(node).values() if hasattr(node, "__dict__") else ():
+            for item in value if isinstance(value, (list, tuple)) else (value,):
+                if hasattr(item, "__dict__") and type(item).__module__.startswith("onnxscript"):
+                    yield from constants(item, seen)
+
+    seen = set()
+    return tuple(
+        constant
+        for rule in rewriter._DEFAULT_REWRITE_RULES
+        for constant in constants(rule, seen)
+        if isinstance(constant._value, (int, float)) and constant._value in (0, 1)
+    )
+
+
+@contextmanager
+def _exact_identity_rewrites():
+    """Let onnxscript's identity rewrites (`x + 0`, `x * 1`, …) fire on an exact 0 or 1 only.
+
+    A pattern constant matches within `math.isclose(rel_tol=1e-5, abs_tol=1e-8)`, so `x + 1e-10` counts as
+    `x + 0` and the epsilon a guarded division adds is deleted: patchtst's `loss.sum() / (mask.sum() +
+    1e-10)` turns into `0 / 0 = nan` whenever nothing is masked. Held only while the optimizer runs.
+    """
+    tightened = [(constant, constant._rel_tol, constant._abs_tol) for constant in _identity_pattern_constants()]
+    for constant, _, _ in tightened:
+        constant._rel_tol = constant._abs_tol = 0.0
+    try:
+        yield
+    finally:
+        for constant, rel_tol, abs_tol in tightened:
+            constant._rel_tol, constant._abs_tol = rel_tol, abs_tol
 
 
 def _patch_cummax_or_cummin(original, *, mode: str):
@@ -619,15 +747,70 @@ def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
 
 
 @register_fx_node_fix("onnx")
-def _fix_detach_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place detach_ with out-of-place detach."""
-    if node.target is not torch.ops.aten.detach_.default:
+def _fix_noop_squeeze(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Drop the axes of a `squeeze` that are not of size 1, which torch leaves in place.
+
+    `x.squeeze(0)` on a `[12, dim]` tensor is `x` in torch, but torchlib lowers `squeeze.dim` to ONNX `Squeeze`
+    unconditionally, and ORT rejects the graph outright (`Dimension of input 0 must be 1 instead of 12`) —
+    mistral3 squeezes its image features twice, once too often. Only a static size is decided here: a
+    symbolic one may be 1 at runtime, and there the `Squeeze` is what torch would have done.
+    """
+    if node.target not in (torch.ops.aten.squeeze.dim, torch.ops.aten.squeeze.dims):
         return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.detach.default, args=node.args, kwargs=node.kwargs)
-    node.replace_all_uses_with(new)
+    source = node.args[0]
+    value = source.meta.get("val") if isinstance(source, torch.fx.Node) else None
+    if not isinstance(value, torch.Tensor) or value.dim() == 0:
+        return False
+    dims = [node.args[1]] if isinstance(node.args[1], int) else list(node.args[1])
+    sizes = [value.shape[dim] for dim in dims]
+    kept = [dim for dim, size in zip(dims, sizes) if not (isinstance(size, int) and size != 1)]
+    if len(kept) == len(dims):
+        return False
+    if kept:
+        node.target = torch.ops.aten.squeeze.dims
+        node.args = (source, kept)
+        return False
+    node.replace_all_uses_with(source)
     gm.graph.erase_node(node)
     return True
+
+
+# Overloads torch.export emits that ONNX cannot take, each with a drop-in twin: the in-place ops
+# (`aot_autograd` rejects them in a functional graph) and the `.Scalar` forms whose "scalar" arrives as a
+# graph node after decomposition, where torchlib either has no translation or calls `int()` on it
+# (pytorch/pytorch#194382). The rewrite is one shape -- insert the twin, forward the uses, erase -- so it
+# is written once and the table says which op maps to which.
+_FUNCTIONAL_TWINS = {}
+_TENSOR_OVERLOAD_TWINS = {}
+if is_torch_available():
+    _FUNCTIONAL_TWINS.update(
+        {
+            torch.ops.aten.detach_.default: torch.ops.aten.detach.default,
+            torch.ops.aten.index_put_.default: torch.ops.aten.index_put.default,
+            torch.ops.aten.triu_.default: torch.ops.aten.triu.default,
+        }
+    )
+    _TENSOR_OVERLOAD_TWINS.update(
+        {
+            torch.ops.aten.mul.Scalar: torch.ops.aten.mul.Tensor,
+            torch.ops.aten.remainder.Scalar: torch.ops.aten.remainder.Tensor,
+        }
+    )
+
+
+@register_fx_node_fix("onnx")
+def _fix_overload_with_twin(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Swap an unexportable overload for its twin, per `_FUNCTIONAL_TWINS` / `_TENSOR_OVERLOAD_TWINS`.
+
+    A `.Scalar` form is only swapped when its second argument really is a graph node holding a tensor or
+    symbolic value -- with a Python literal there, the original overload is the right one.
+    """
+    if (replacement := _FUNCTIONAL_TWINS.get(node.target)) is None:
+        replacement = _TENSOR_OVERLOAD_TWINS.get(node.target)
+        if replacement is None or len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
+            return False
+        if not isinstance(node.args[1].meta.get("val"), (torch.Tensor, torch.SymFloat, torch.SymInt, torch.SymBool)):
+            return False
 
 
 @register_fx_node_fix("onnx")
@@ -715,18 +898,6 @@ def _fix_index_put_last_dim_index(gm: torch.fx.GraphModule, node: torch.fx.Node)
     return True
 
 
-@register_fx_node_fix("onnx")
-def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place index_put_ with out-of-place index_put."""
-    if node.target is not torch.ops.aten.index_put_.default:
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.index_put.default, args=node.args, kwargs=node.kwargs)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
 _ASSERTION_OPS = set()
 if is_torch_available():
     _ASSERTION_OPS.update(
@@ -764,18 +935,6 @@ def _fix_fill_diagonal_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) ->
         eye_bool = gm.graph.call_function(torch.ops.aten.to.dtype, args=(eye, torch.bool))
         fill_tensor = gm.graph.call_function(torch.ops.aten.full_like.default, args=(tensor_arg, fill_value))
         new = gm.graph.call_function(torch.ops.aten.where.self, args=(eye_bool, fill_tensor, tensor_arg))
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_triu_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place triu_ with out-of-place triu."""
-    if node.target is not torch.ops.aten.triu_.default:
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.triu.default, args=node.args, kwargs=node.kwargs)
     node.replace_all_uses_with(new)
     gm.graph.erase_node(node)
     return True
@@ -866,64 +1025,116 @@ def _fix_integral_tensor_float_scalar(gm: torch.fx.GraphModule, node: torch.fx.N
     return True
 
 
-@register_fx_node_fix("onnx")
-def _fix_mul_scalar_symbolic(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Rewrite `mul.Scalar` to `mul.Tensor` when its 'scalar' is a graph node.
+_TENSOR_FACTORY_OPS = set()
+if is_torch_available():
+    _TENSOR_FACTORY_OPS.update(
+        {
+            torch.ops.aten.zeros.default,
+            torch.ops.aten.ones.default,
+            torch.ops.aten.empty.memory_format,
+            torch.ops.aten.full.default,
+            torch.ops.aten.new_zeros.default,
+            torch.ops.aten.new_ones.default,
+            torch.ops.aten.new_full.default,
+        }
+    )
 
-    The other half of pytorch/pytorch#194382: torchlib registers no real-valued `aten.mul.Scalar`
-    translation at all, and decomposition also produces that overload with a *symbolic* second operand — a
-    division result rather than a literal (`mul.Scalar(x, %truediv_1)`) — which the promotion fix above
-    cannot address, since there is no Python constant to promote against. `mul.Tensor` has the two-operand
-    translation, which is the same rewrite `_fix_remainder_scalar` makes for the same reason.
 
-    That operand is a `SymFloat`, not a tensor: across the affected families every one of the 33 sites is
-    an `operator.truediv` result. `mul.Tensor`'s translation takes a symbolic scalar there — it becomes a
-    graph value like any other — so the rewrite is sound, but the guard below names both accepted forms
-    rather than trusting that a `Node` implies a tensor. Anything else (a nested list, an unbacked value
-    with no `val`) is left as `mul.Scalar` to fail visibly in translation instead of silently here.
-
-    Reached because the FX fixes run a second time right after `run_decompositions`, where this overload
-    appears.
-    """
-    if node.target is not torch.ops.aten.mul.Scalar:
-        return False
-    if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
-        return False
-    other = node.args[1].meta.get("val")
-    if not isinstance(other, (torch.Tensor, torch.SymFloat, torch.SymInt, torch.SymBool)):
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.mul.Tensor, args=node.args)
-    new.meta.update(node.meta)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
+def _sym_expr(value) -> str | None:
+    """Return the sympy expression string of a SymInt-valued FX node/val, else None."""
+    if isinstance(value, torch.fx.Node):
+        value = value.meta.get("val")
+    if isinstance(value, torch.SymInt):
+        return str(value.node.expr)
+    return None
 
 
 @register_fx_node_fix("onnx")
-def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Rewrite remainder.Scalar to remainder.Tensor when the 'scalar' arg is actually a tensor.
+def _fix_symbolic_factory_shape(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Size ``zeros``/``full``/… off a live tensor's runtime shape instead of a derived floor-div SymInt.
 
-    After decomposition the second operand of ``aten.remainder.Scalar`` can be a graph
-    node (SymbolicTensor) rather than a Python scalar.  The ONNX torchlib translation for
-    ``remainder.Scalar`` calls ``int()`` on it and crashes.  Rewriting to
-    ``remainder.Tensor`` uses the two-tensor ONNX translation which handles this correctly.
+    A conv/pool output length reaches a tensor factory (e.g. ``torch.zeros((batch, feat_len))`` for an
+    audio feature mask) as a *derived* SymInt — a floor-div chain of the input length. onnxscript lowers
+    that signed floor-div as ``Sub(Div, Cast(And(...Mod...Sign)))``, which ORT's CUDA EP mis-evaluates to a
+    negative dim → ``Expand``/``Reshape`` failures. When another tensor already in the graph carries that
+    exact symbolic dim in its shape, rewrite the factory's size element to read it as ``aten.sym_size``
+    (a plain ``Shape`` gather at export) so no floor-div is recomputed. Only touches factory *size* args —
+    never arithmetic ``Div`` nodes — so numeric floor-divs (relative-position lengths) are left intact.
     """
-    if node.target is not torch.ops.aten.remainder.Scalar:
+    if node.target not in _TENSOR_FACTORY_OPS:
         return False
-    if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
+    # The size list is the first list/tuple arg holding at least one SymInt-valued node.
+    size_pos = next(
+        (i for i, a in enumerate(node.args) if isinstance(a, (list, tuple)) and any(_sym_expr(e) for e in a)),
+        None,
+    )
+    if size_pos is None:
         return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.remainder.Tensor, args=node.args)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
+    size = list(node.args[size_pos])
+
+    # Map each floor-div symbolic dim to a live tensor dim defined earlier in the graph.
+    sources: dict[str, tuple[torch.fx.Node, int]] = {}
+    for prior in gm.graph.nodes:
+        if prior is node:
+            break
+        if prior.target in _TENSOR_FACTORY_OPS:
+            continue
+        val = prior.meta.get("val") if hasattr(prior, "meta") else None
+        shape = getattr(val, "shape", None)
+        if shape is None or isinstance(val, torch.SymInt):
+            continue
+        for dim, s in enumerate(shape):
+            expr = _sym_expr(s)
+            if expr and expr not in sources:
+                sources[expr] = (prior, dim)
+
+    changed = False
+    for i, element in enumerate(size):
+        expr = _sym_expr(element)
+        if expr is None or "//" not in expr or expr not in sources:
+            continue
+        src_node, src_dim = sources[expr]
+        with gm.graph.inserting_before(node):
+            sym_size = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(src_node, src_dim))
+        # Carry the original SymInt value so downstream shape reasoning / ONNX translation still sees it.
+        sym_size.meta["val"] = element.meta["val"]
+        size[i] = sym_size
+        changed = True
+    if not changed:
+        return False
+    node.update_arg(size_pos, size)
     return True
 
 
 # ── Stage 4: ONNX translations ────────────────────────────────────────────────
-# Custom onnxscript `_aten_*` functions registered in `_ONNX_TRANSLATION_TABLE`
-# that override `torchlib`'s default lowering for specific aten ops where the
-# default is buggy or missing. Passed to `torch.onnx.export` as `custom_translation_table`.
+# Custom onnxscript `_aten_*` functions that override `torchlib`'s default lowering for specific aten
+# ops where the default is buggy or missing. Each is registered with `@register_onnx_translation` and
+# assembled by `_get_onnx_translation_table` into `torch.onnx.export`'s `custom_translation_table`.
+# ONNX-only (translation tables have no ExecuTorch / Dynamo equivalent), so the registry lives here
+# rather than in the backend-generic `utils.py` alongside `_PATCHES` / `_FX_NODE_FIXES`.
+
+_ONNX_TRANSLATIONS: dict[Any, callable] = {}
+
+
+def register_onnx_translation(*paths: str):
+    """Append the decorated lowering `fn` to `_ONNX_TRANSLATIONS`, keyed by each op `path`.
+
+    Like `register_patch`, each `path` is a dotted string — an op overload
+    (`"torch.ops.aten.index_put.default"`) or an `operator` builtin (`"operator.floordiv"`) — resolved
+    to its object at decoration time. Unresolvable paths (torch not installed, op not yet registered)
+    are skipped so the module still imports. Passing several paths registers the SAME `fn` for each
+    (e.g. `masked_fill.Scalar` + `masked_fill.Tensor`). External code adds translations the same way;
+    `_get_onnx_translation_table` reads them into the `custom_translation_table`.
+    """
+
+    def decorator(fn):
+        for path in paths:
+            op = _resolve_dotted_path(path)
+            if op is not None:
+                _ONNX_TRANSLATIONS[op] = fn
+        return fn
+
+    return decorator
 
 
 def _values_broadcast_to_self(values: TReal, self: TReal) -> bool:
@@ -947,6 +1158,39 @@ def _values_broadcast_to_self(values: TReal, self: TReal) -> bool:
     return True
 
 
+@register_onnx_translation("torch.ops.aten.mul.Scalar")
+def _aten_mul_scalar(self: TReal, other: float) -> TReal:
+    """`aten.mul.Scalar` has no torchlib lowering, so any multiply the decompositions leave in that overload
+    reaches translation and fails to dispatch. What gets there is the type-promoting case — an integer tensor
+    times a float scalar (bros scales an int64 `bbox`) — which PyTorch computes in the promoted float type
+    while ONNX has no promotion of its own, so make the cast explicit and multiply there."""
+    if not isinstance(other, (bool, int, float)):
+        # A symbolic scalar (a dynamic dim folded into the multiply) arrives as a graph value rather than a
+        # python number, carrying its own dtype — line it up with the tensor's and multiply there.
+        return op.Mul(self, op.CastLike(other, self))
+    scalar = op.Constant(value_float=float(other))
+    if isinstance(other, float) and not self.dtype.is_floating_point():
+        return op.Mul(op.Cast(self, to=onnx_ir.DataType.FLOAT), scalar)
+    return op.Mul(self, op.CastLike(scalar, self))
+
+
+@register_onnx_translation("torch.ops.aten.rsub.Scalar")
+def _aten_rsub_scalar(self: TReal, other: float, alpha: float = 1.0) -> TReal:
+    """`aten.rsub.Scalar` (`scalar - tensor`, big_bird's `1.0 - to_mask`) has no torchlib lowering, and its
+    decomposition emits `aten.sub(scalar, tensor)` — a scalar-first call no `sub` overload accepts, which
+    the decomposition step's own type promotion then chokes on. Registering it here keeps the op out of the
+    decomposition entirely and lowers it directly, promoting the same way `_aten_mul_scalar` does."""
+    scalar = op.Constant(value_float=float(other))
+    if isinstance(other, float) and not self.dtype.is_floating_point():
+        self = op.Cast(self, to=onnx_ir.DataType.FLOAT)
+    else:
+        scalar = op.CastLike(scalar, self)
+    if alpha != 1.0:
+        self = op.Mul(self, op.CastLike(op.Constant(value_float=float(alpha)), self))
+    return op.Sub(scalar, self)
+
+
+@register_onnx_translation("torch.ops.aten.index_put.default")
 def _aten_index_put(
     self: TReal,
     indices: Sequence[INT64 | BOOL | None],
@@ -990,6 +1234,7 @@ def _aten_index_put(
     return op.Reshape(result, op.Shape(self))
 
 
+@register_onnx_translation("torch.ops.aten.bincount.default")
 def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:
     """ONNX implementation of `torch.bincount`: count occurrences of non-negative ints.
 
@@ -1051,6 +1296,7 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     return result
 
 
+@register_onnx_translation("torch.ops.aten.repeat_interleave.self_int")
 def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):
     """ONNX implementation of `aten.repeat_interleave.self_int`.
 
@@ -1094,6 +1340,7 @@ def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):
     return op.Reshape(tiled, final_shape)
 
 
+@register_onnx_translation("operator.floordiv")
 def _operator_floordiv(self, other):
     """Correct floor division (toward -inf) for signed integer SymInts.
 
@@ -1112,6 +1359,7 @@ def _operator_floordiv(self, other):
     return op.Sub(op.Div(self, other), op.Cast(offset, to=dtype))
 
 
+@register_onnx_translation("torch.ops.aten.masked_fill.Scalar", "torch.ops.aten.masked_fill.Tensor")
 def _aten_masked_fill(self, mask, value):
     """ONNX implementation of `aten.masked_fill.{Scalar,Tensor}`.
 
@@ -1129,20 +1377,152 @@ def _aten_masked_fill(self, mask, value):
     return op.Where(mask, value_cast, self)
 
 
-_ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
-if is_onnxscript_available():
-    _ONNX_TRANSLATION_TABLE.update(
-        {
-            torch.ops.aten.bincount.default: _aten_bincount,
-            torch.ops.aten.index_put.default: _aten_index_put,
-            torch.ops.aten._grouped_mm.default: _aten_grouped_mm,
-            torch.ops.transformers.grouped_mm_fallback.default: _aten_grouped_mm,
-            torch.ops.aten.repeat_interleave.self_int: _aten_repeat_interleave_self_int,
-            torch.ops.aten.masked_fill.Scalar: _aten_masked_fill,
-            torch.ops.aten.masked_fill.Tensor: _aten_masked_fill,
-            operator.floordiv: _operator_floordiv,
-        }
-    )
+@functools.cache
+def _compiled_varlen_translation():
+    """Compile (once) the `@script` translation of `torch_attn::_varlen_attn`.
+
+    Kept out of the module-level `@register_onnx_translation` decorators because the `@script` compile (and
+    the onnxscript APIs it exercises) must run only inside `OnnxExporter.export`, after `validate_environment`
+    has confirmed a compatible onnxscript — never on the bare import path. `@functools.cache` compiles at most
+    once. The compile is self-contained (only `op.*` / `FLOAT` / `INT64`); importing `torch.nn.attention.varlen`
+    to register the op key is the caller's concern, not a prerequisite for compiling.
+    """
+
+    @script()
+    def _aten_varlen_attn(
+        query: FLOAT,
+        key: FLOAT,
+        value: FLOAT,
+        cu_seq_q: INT64,
+        cu_seq_k: INT64,
+        max_q: INT64,
+        max_k: INT64,
+        is_causal: bool,
+        scale: float,
+        window_size: TypingSequence[int],
+    ) -> tuple[FLOAT, FLOAT, FLOAT]:
+        """ONNX translation of `torch_attn::_varlen_attn` — the varlen attention emitted by the chunked
+        vision/audio attention export patch. Lowers to an ONNX `Loop` over the `cu_seq_q` segments (each
+        iteration a dense SDPA on that segment's `n_i` tokens, concatenated), i.e. the true variable-length
+        shape — O(sum n_i^2), no N×N block mask materialised. The op has three outputs `(out, softmax_lse,
+        rng_state)`; only `out` is consumed downstream, so the two aux tensors are empty stubs.
+
+        `max_q`/`max_k` are the (unused) flash-kernel bounds — kept as tensor inputs, not `int` attributes,
+        because they arrive as symints under dynamic export. `window_size` must be typed via `typing.Sequence`
+        (not `collections.abc`), which `onnxscript.script`'s annotation parser rejects."""
+        one = op.Constant(value_ints=[1])
+        two = op.Constant(value_ints=[2])
+        three = op.Constant(value_ints=[3])
+        axis0 = op.Constant(value_ints=[0])
+        cu = op.Cast(cu_seq_q, to=7)  # INT64
+        num_segments = op.Squeeze(op.Sub(op.Shape(cu), one))
+        # Grouped-query attention: key/value carry fewer heads than query (e.g. Exaone4.5 vision). The
+        # flash op broadcasts them internally; here we materialise the `repeat_kv` expansion once up
+        # front — (L, Hkv, D) → (L, Hq, D) by repeating each kv head `Hq // Hkv` times — so the per-
+        # segment MatMul sees matching head counts. `n_rep == 1` (multi-head attention) makes it a no-op.
+        q_heads = op.Slice(op.Shape(query), one, two, axis0)
+        k_shape = op.Shape(key)
+        k_len = op.Slice(k_shape, axis0, one, axis0)
+        k_heads = op.Slice(k_shape, one, two, axis0)
+        k_dim = op.Slice(k_shape, two, three, axis0)
+        n_rep = op.Div(q_heads, k_heads)
+        expand_shape = op.Concat(k_len, k_heads, n_rep, k_dim, axis=0)
+        grouped_shape = op.Concat(k_len, q_heads, k_dim, axis=0)
+        key = op.Reshape(op.Expand(op.Unsqueeze(key, two), expand_shape), grouped_shape)
+        value = op.Reshape(op.Expand(op.Unsqueeze(value, two), expand_shape), grouped_shape)
+        output = op.Slice(query, op.Constant(value_ints=[0]), op.Constant(value_ints=[0]), axis0)  # empty (0, H, D)
+        for i in range(num_segments):
+            index = op.Reshape(i, one)
+            start = op.Slice(cu, index, op.Add(index, one), axis0)
+            end = op.Slice(cu, op.Add(index, one), op.Add(index, two), axis0)
+            query_heads = op.Transpose(op.Slice(query, start, end, axis0), perm=[1, 0, 2])
+            key_heads = op.Transpose(op.Slice(key, start, end, axis0), perm=[1, 0, 2])
+            value_heads = op.Transpose(op.Slice(value, start, end, axis0), perm=[1, 0, 2])
+            scores = op.Mul(op.MatMul(query_heads, op.Transpose(key_heads, perm=[0, 2, 1])), scale)
+            segment = op.Transpose(op.MatMul(op.Softmax(scores, axis=-1), value_heads), perm=[1, 0, 2])
+            output = op.Concat(output, segment, axis=0)
+        aux = op.CastLike(op.Constant(value_float=0.0), query)
+        return output, aux, aux
+
+    return _aten_varlen_attn
+
+
+def _translate_associative_scan(combine, xs, additional_inputs):
+    """Translate the `higher_order.associative_scan` the SSM mixers trace under export.
+
+    The combine subgraph arrives as an `onnx_ir.Function`; the one combine the mixers use —
+    `(a_l * a_r, a_r * b_l + b_r)`, a first-order recurrence over two leaves — is lowered by
+    `_compiled_ssm_scan_translation` to an ONNX `Loop`. Anything else is rejected here, loudly."""
+    combine_ops = sorted(node.op_type for node in combine)
+    if combine_ops != ["Add", "Mul", "Mul"] or len(xs) != 2 or len(additional_inputs) != 0:
+        raise NotImplementedError(
+            f"No ONNX translation for an associative_scan with combine {combine_ops} over {len(xs)} leaves "
+            "— only the SSM mixers' first-order recurrence is supported."
+        )
+    return _compiled_ssm_scan_translation()(*xs)
+
+
+@functools.cache
+def _compiled_ssm_scan_translation():
+    """Compile (once) the `@script` body of `_translate_associative_scan` — see
+    `_compiled_varlen_translation` for why the compile lives behind a cache instead of a module-level
+    decorator. Lowers the first-order recurrence to an ONNX `Loop` with a *dynamic* trip count, so the
+    step axis stays symbolic where torch's python scan loop would unroll it. Sequential like the mixers'
+    own fallback — same numerics, O(seq) iterations. The carried states start at the combine monoid's
+    identity (`a` products at 1, states at 0 — any cached initial state is already folded into `b`'s
+    first step by the mixer)."""
+
+    @script()
+    def _transformers_ssm_scan(a: FLOAT, b: FLOAT) -> tuple[FLOAT, FLOAT]:
+        one = op.Constant(value_ints=[1])
+        axis0 = op.Constant(value_ints=[0])
+        zero_f = op.CastLike(op.Constant(value_float=0.0), b)
+        one_f = op.CastLike(op.Constant(value_float=1.0), a)
+        seq_len = op.Squeeze(op.Slice(op.Shape(a), axis0, one, axis0))
+        # carried states, kept `[1, ...]` so each step concatenates straight into the outputs
+        state = op.Mul(op.Slice(b, axis0, one, axis0), zero_f)
+        a_acc = op.Add(op.Mul(op.Slice(a, axis0, one, axis0), zero_f), one_f)
+        # empty `(0, ...)` accumulators, the varlen translation's trick
+        a_products = op.Slice(a, axis0, axis0, axis0)
+        states = op.Slice(b, axis0, axis0, axis0)
+        for i in range(seq_len):
+            index = op.Reshape(i, one)
+            a_step = op.Slice(a, index, op.Add(index, one), axis0)
+            b_step = op.Slice(b, index, op.Add(index, one), axis0)
+            a_acc = op.Mul(a_acc, a_step)
+            state = op.Add(op.Mul(a_step, state), b_step)
+            a_products = op.Concat(a_products, a_acc, axis=0)
+            states = op.Concat(states, state, axis=0)
+        return a_products, states
+
+    return _transformers_ssm_scan
+
+
+def _get_onnx_translation_table() -> dict[Any, Any]:
+    """Assemble the `custom_translation_table` for `torch.onnx.export`.
+
+    Merges the module-level `@register_onnx_translation(...)` entries (plus any registered by external
+    code) with three ops whose availability is probed here rather than decorated at import: `_grouped_mm`,
+    `grouped_mm_fallback`, and the `@script` varlen op (compiled once via `_compiled_varlen_translation`).
+    Not cached, so a translation registered by a late-imported module is still picked up on the next export.
+    """
+    # None of these three op keys are guaranteed to exist as attributes here, so probe with `hasattr`
+    # rather than referencing them unconditionally (a missing key raises AttributeError):
+    #   - `aten._grouped_mm` is absent on older torch;
+    #   - `transformers::grouped_mm_fallback` only exists once `transformers.integrations.moe` is imported
+    #     (lazy — pulled in while tracing a model that uses it);
+    #   - `torch_attn::_varlen_attn` is registered when `exporter_dynamo` imports `torch.nn.attention.varlen`.
+    # Adding a translation whose op isn't in the graph is harmless — torch.onnx ignores unused entries.
+    table = dict(_ONNX_TRANSLATIONS)
+    if hasattr(torch.ops.aten, "_grouped_mm"):
+        table[torch.ops.aten._grouped_mm.default] = _aten_grouped_mm
+    if hasattr(torch.ops.transformers, "grouped_mm_fallback"):
+        table[torch.ops.transformers.grouped_mm_fallback.default] = _aten_grouped_mm
+    if hasattr(torch.ops.torch_attn, "_varlen_attn"):
+        table[torch.ops.torch_attn._varlen_attn.default] = _compiled_varlen_translation()
+    if hasattr(torch.ops.higher_order, "associative_scan"):
+        table[torch.ops.higher_order.associative_scan] = _translate_associative_scan
+    return table
 
 
 # ── Stage 5: ONNX IR fixes ────────────────────────────────────────────────────

@@ -16,28 +16,74 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
+
+from ..models.auto import AutoConfig
 from ..utils import logging
-from .base import HfExporter
-from .configs import ExportConfigMixin, ExportFormat
+from .base import EXPORT_CONFIG_NAME, ExportedModel, HfExporter, ModelRunner
+from .configs import AotiConfig, ExportConfigMixin, ExportFormat, TensorrtConfig
+from .exporter_aoti import AotiExporter
 from .exporter_dynamo import DynamoConfig, DynamoExporter
 from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from .exporter_onnx import OnnxConfig, OnnxExporter
 from .exporter_openvino import OpenVINOConfig, OpenVINOExporter
+from .exporter_tensorrt import TensorrtExporter
+from .runner_aoti import AotiModelRunner
+from .runner_dynamo import DynamoModelRunner
+from .runner_executorch import ExecutorchModelRunner
+from .runner_onnx import OnnxModelRunner
+from .runner_openvino import OpenVINOModelRunner
+from .runner_tensorrt import TensorrtModelRunner
 
 
-AUTO_EXPORTER_MAPPING = {
-    "executorch": ExecutorchExporter,
-    "openvino": OpenVINOExporter,
-    "dynamo": DynamoExporter,
-    "onnx": OnnxExporter,
+@dataclass
+class ExportBackend:
+    """What one export format is made of: the config that parameterizes it, the exporter that writes it,
+    and the runner that runs what was written.
+
+    One entry per format rather than three parallel tables keyed by the same strings, so a backend cannot be
+    half-registered without it being visible — which it was: there used to be no way to register a runner at
+    all, so a third-party backend could export and save artifacts that nothing could load.
+    """
+
+    config: type[ExportConfigMixin] | None = None
+    exporter: type[HfExporter] | None = None
+    runner: type | None = None
+
+
+EXPORT_BACKENDS: dict[str, ExportBackend] = {
+    "executorch": ExportBackend(ExecutorchConfig, ExecutorchExporter, ExecutorchModelRunner),
+    "dynamo": ExportBackend(DynamoConfig, DynamoExporter, DynamoModelRunner),
+    "onnx": ExportBackend(OnnxConfig, OnnxExporter, OnnxModelRunner),
+    "aoti": ExportBackend(AotiConfig, AotiExporter, AotiModelRunner),
+    "tensorrt": ExportBackend(TensorrtConfig, TensorrtExporter, TensorrtModelRunner),
+    "openvino": ExportBackend(OpenVINOConfig, OpenVINOExporter, OpenVINOModelRunner),
 }
 
-AUTO_EXPORT_CONFIG_MAPPING = {
-    "executorch": ExecutorchConfig,
-    "openvino": OpenVINOConfig,
-    "dynamo": DynamoConfig,
-    "onnx": OnnxConfig,
-}
+
+def export_backend(export_format, part: str | None = None):
+    """The registered backend for a format, or one named part of it, with an error that says what is missing.
+
+    `export_format` takes an [`ExportFormat`] or its string value, since a manifest carries the string and
+    a config carries the enum.
+    """
+    if export_format is None:
+        raise ValueError(f"No export format given — registered formats are {sorted(EXPORT_BACKENDS)}.")
+    name = export_format.value if isinstance(export_format, ExportFormat) else export_format
+    backend = EXPORT_BACKENDS.get(name)
+    if backend is None:
+        raise ValueError(f"Unknown export format '{name}' — registered formats are {sorted(EXPORT_BACKENDS)}.")
+    if part is None:
+        return backend
+    registered = getattr(backend, part)
+    if registered is None:
+        raise ValueError(
+            f"The '{name}' backend has no {part} registered, so it cannot be used for this. Register one "
+            f"with `register_{part}('{name}')`."
+        )
+    return registered
+
 
 logger = logging.get_logger(__name__)
 
@@ -50,24 +96,9 @@ class AutoExportConfig:
 
     @classmethod
     def from_dict(cls, export_config_dict: dict):
-        export_format = export_config_dict.get("export_format")
-
-        if export_format is None:
-            raise ValueError("export_config_dict must contain key 'export_format' set to exporter name")
-
-        # Allow passing an ExportFormat enum value or a plain string
-        if isinstance(export_format, ExportFormat):
-            name = export_format.value
-        else:
-            name = export_format
-
-        if name not in AUTO_EXPORT_CONFIG_MAPPING:
-            raise ValueError(
-                f"Unknown exporter type, got {name} - supported exporters are: {list(AUTO_EXPORT_CONFIG_MAPPING.keys())}"
-            )
-
-        target_cls = AUTO_EXPORT_CONFIG_MAPPING[name]
-        return target_cls.from_dict(export_config_dict)
+        # `export_backend` takes the enum or its string value, and says what is missing if anything is --
+        # including the key itself, so the absent case is not re-checked here.
+        return export_backend(export_config_dict.get("export_format"), "config").from_dict(export_config_dict)
 
 
 class AutoHfExporter:
@@ -78,110 +109,109 @@ class AutoHfExporter:
 
     @classmethod
     def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter:
-        # Normalize to a dict so ``supports_export_format`` can act as the single gate.
         export_config_dict = export_config.to_dict() if isinstance(export_config, ExportConfigMixin) else export_config
-        if not cls.supports_export_format(export_config_dict):
-            raise ValueError(
-                f"Unsupported export config: {export_config_dict!r}. "
-                f"Registered exporters: {sorted(AUTO_EXPORTER_MAPPING)}."
-            )
-
-        export_format = export_config_dict["export_format"]
-        name = export_format.value if isinstance(export_format, ExportFormat) else export_format
-        return AUTO_EXPORTER_MAPPING[name](**kwargs)
+        return export_backend(export_config_dict.get("export_format"), "exporter")(**kwargs)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter | None:
-        """
-        Load an exporter instance from a pretrained model/checkpoint that ships an export config.
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter:
+        """Build the exporter a checkpoint's own export recipe asks for.
 
-        **Not implemented yet** — placeholder for a first-class "export recipe" workflow.
-
-        The idea: model owners publish an ``export_config.json`` (or an ``export_config`` field in
-        ``config.json``) alongside their weights on the Hub. That file captures the settings the
-        owner has already validated for their architecture — the target format (``dynamo`` /
-        ``onnx`` / ``executorch``), exact dynamic-shape specs (e.g. ``text_ids`` dynamic to 4096,
-        image tiles fixed at 448, ``batch=1`` for edge deployment), ``strict`` flag, ONNX opset,
-        prefill vs. decode layout, ExecuTorch backend choice, and any other knob that today lives
-        as tribal knowledge in a README or a private notebook.
-
-        Consumers then get the owner-validated export in one call::
+        A model owner publishes an `export_config.json` next to their weights (or an `export_config` field
+        in `config.json`) recording the settings they validated for their architecture — the target format,
+        the dynamic-shape spec, opset, ExecuTorch backend, and the rest of what otherwise lives in a README.
+        Consumers get that export in one call instead of re-deriving it:
 
             exporter = AutoHfExporter.from_pretrained("org/model-name")
             program = exporter.export(model, inputs)
 
-        Composes with the [`register_export_input_preparer`] registry: the owner supplies the
-        shape spec via ``export_config.json``, transformers supplies the data-dependent
-        precomputations (``cu_seqlens``, vision position ids, window indices, …) for that
-        architecture. Together they cover the two hard parts of exporting new models — knowing
-        the right shape contract and preparing the right inputs — so downstream users don't
-        re-derive either from scratch (and don't break in production when they get it wrong).
+        `kwargs` are split: anything naming an export-config field overrides the recipe, everything else is
+        forwarded to the download and to the exporter's constructor.
         """
-        raise NotImplementedError(
-            "AutoHfExporter.from_pretrained is not implemented yet. "
-            "Load/export configs explicitly and call AutoHfExporter.from_config(...) instead."
-        )
+        config_dict = cls._load_export_config_dict(pretrained_model_name_or_path, **kwargs)
+        overrides = {key: kwargs.pop(key) for key in list(kwargs) if key in config_dict}
+        config_dict = {**config_dict, **overrides}
+        return cls.from_config(AutoExportConfig.from_dict(config_dict), **kwargs)
 
     @staticmethod
-    def supports_export_format(export_config_dict: dict) -> bool:
-        """Return True if the provided dict describes an ``export_format`` that has both a
-        registered config class and a registered exporter class. Warns with an actionable message
-        when the format is missing entirely, unknown, or only half-registered."""
-        export_fmt = export_config_dict.get("export_format")
-        if export_fmt is None:
-            logger.warning(
-                "No 'export_format' key in export config — supported values are: "
-                f"{sorted(AUTO_EXPORTER_MAPPING)}. Skipping."
-            )
-            return False
+    def _load_export_config_dict(pretrained_model_name_or_path, **kwargs) -> dict:
+        """Find the export recipe: a standalone `export_config.json`, else an `export_config` field on the
+        model config. Local directories and Hub repos both go through `cached_file`, which resolves either."""
+        from .base import resolve_export_file, split_download_kwargs
 
-        name = export_fmt.value if isinstance(export_fmt, ExportFormat) else export_fmt
-        has_config = name in AUTO_EXPORT_CONFIG_MAPPING
-        has_exporter = name in AUTO_EXPORTER_MAPPING
+        download_kwargs, _ = split_download_kwargs(dict(kwargs))
+        resolved = resolve_export_file(pretrained_model_name_or_path, EXPORT_CONFIG_NAME, **download_kwargs)
+        if resolved is not None:
+            with open(resolved, encoding="utf-8") as file:
+                return json.load(file)
 
-        if not has_config and not has_exporter:
-            logger.warning(
-                f"Unknown export format {export_fmt!r} — supported values are: "
-                f"{sorted(set(AUTO_EXPORTER_MAPPING) & set(AUTO_EXPORT_CONFIG_MAPPING))}. Skipping."
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **download_kwargs)
+        export_config = getattr(config, "export_config", None)
+        if export_config is None:
+            raise OSError(
+                f"{pretrained_model_name_or_path} ships no export recipe: no `{EXPORT_CONFIG_NAME}` and no "
+                "`export_config` field in its `config.json`. Build the config yourself and call "
+                "`AutoHfExporter.from_config(...)`."
             )
-            return False
-        if not has_config:
-            logger.warning(
-                f"Export format {name!r} has a registered exporter but no config class. "
-                f"Register one via ``@register_export_config({name!r})``. Skipping."
-            )
-            return False
-        if not has_exporter:
-            logger.warning(
-                f"Export format {name!r} has a registered config class but no exporter. "
-                f"Register one via ``@register_exporter({name!r})``. Skipping."
-            )
-            return False
-        return True
+        return dict(export_config)
+
+
+class AutoExportedModel:
+    """Load a saved export as whatever it was exported as.
+
+    The manifest records what each saved component is, so this picks the same shape the export produced
+    without the caller having to remember: an [`ExportedGenerator`] where a decode graph was saved (a
+    decomposed, cache-driven export), an [`ExportedModel`] for a single graph (a classifier, an encoder,
+    a feature extractor).
+
+    Example:
+        runtime = AutoExportedModel.from_pretrained("out/")
+    """
+
+    @classmethod
+    def from_pretrained(cls, save_directory, **kwargs):
+        """Load a saved export from a local directory or a Hub repo."""
+        from .base import ComponentRole, read_export_manifest, saved_roles, split_download_kwargs
+        from .generator import ExportedGenerator
+
+        download_kwargs, _ = split_download_kwargs(dict(kwargs))
+        manifest = read_export_manifest(save_directory, **download_kwargs)
+        # The same question `ExportArtifacts.runtime` asks of an export it just produced: is there a decode graph?
+        can_generate = ComponentRole.DECODE in saved_roles(manifest).values()
+        target = ExportedGenerator if can_generate else ExportedModel
+        return target.from_pretrained(save_directory, **kwargs)
+
+
+def _register(name: str, part: str, base: type):
+    """Fill one slot of a format's [`ExportBackend`], creating the entry if this is its first part."""
+
+    def register(cls):
+        if not issubclass(cls, base):
+            raise TypeError(f"{part.capitalize()} must extend {base.__name__}")
+        backend = EXPORT_BACKENDS.setdefault(name, ExportBackend())
+        if getattr(backend, part) is not None:
+            logger.warning(f"{part.capitalize()} for '{name}' is already registered and will be overwritten.")
+        setattr(backend, part, cls)
+        return cls
+
+    return register
 
 
 def register_exporter(name: str):
-    def register_exporter_fn(cls):
-        if name in AUTO_EXPORTER_MAPPING:
-            logger.warning(f"Exporter '{name}' is already registered and will be overwritten.")
-        if not issubclass(cls, HfExporter):
-            raise TypeError("Exporter must extend HfExporter")
-        AUTO_EXPORTER_MAPPING[name] = cls
-        return cls
-
-    return register_exporter_fn
+    """Register the exporter that writes a format."""
+    return _register(name, "exporter", HfExporter)
 
 
 def register_export_config(name: str):
-    def register_export_config_fn(cls):
-        if name in AUTO_EXPORT_CONFIG_MAPPING:
-            logger.warning(f"Export config '{name}' is already registered and will be overwritten.")
-        if not issubclass(cls, ExportConfigMixin):
-            raise TypeError("Export config must extend ExportConfigMixin")
-        AUTO_EXPORT_CONFIG_MAPPING[name] = cls
-        return cls
+    """Register the config that parameterizes a format."""
+    return _register(name, "config", ExportConfigMixin)
 
-    return register_export_config_fn
+
+def register_runner(name: str):
+    """Register the runner that runs a saved artifact of a format.
+
+    Without one a backend can export and save, but nothing can load what it wrote.
+    """
+    return _register(name, "runner", ModelRunner)
 
 
 def get_hf_exporter(export_config) -> HfExporter:

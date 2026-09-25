@@ -15,39 +15,37 @@
 
 """Shared export utilities used by all exporter backends.
 
-Organised into five sections (search for the `# ── Name ──` banners):
+Organised into four sections (search for the `# ── Name ──` banners):
 
 - **Patch and fix registries** — backend-keyed `_PATCHES` / `_FX_NODE_FIXES` /
   `_FX_PROGRAM_FIXES` populated via `@register_patch(backend, *paths)` /
   `@register_fx_node_fix` / `@register_fx_program_fix`, applied via
   `apply_patches` / `apply_fx_node_fixes` / `apply_fx_program_fixes`.
+- **Cross-backend patches** — the `@register_patch` replacements more than one
+  backend needs (`torch.where` dtype mismatches, `bucketize`, the cumulative
+  reductions).
 - **Recursive structure traversal** — internal helpers (`_map_leaf_tensors`,
   `_iter_leaf_tensors`) that drive every other tensor utility.
-- **Public tensor utilities** — `get_leaf_tensors`, `duplicate_leaf_tensors`,
-  `cast_leaf_tensors`, and `prepare_for_export` (sets attention/experts impl,
-  patches non-exportable patterns, strips output flags).
-- **Export input preparers** — `@register_export_input_preparer(marker)`
-  registry that precomputes the per-encoder kwargs (`cu_seqlens`, `position_ids`,
-  audio chunks, …) the model would otherwise need data-dependent ops for.
-- **Decomposition** — `decompose_prefill_decode` (split a generative forward
-  into prefill + decode) and `decompose_multimodal` + `is_multimodal` (split a
-  multimodal forward into one entry per submodule), backed by `_capture_forward`.
+- **Public tensor utilities** — `runner_feed`, `get_leaf_tensors`,
+  `duplicate_leaf_tensors`, `cast_leaf_tensors`, and `prepare_for_export` (sets
+  attention/experts impl, patches non-exportable patterns, strips output flags).
+
+Taking a model apart is `decompose.py`'s, the modules a decomposition wraps it in are
+`components.py`'s, and the inputs a model would have computed for itself are `precompute.py`'s.
 """
 
 from __future__ import annotations
 
 import contextlib
-import copy
 import enum
-import functools
+import importlib
 import inspect
-import sys
 from collections.abc import MutableMapping
 from typing import Any
 
 from ..utils import logging
-from ..utils.generic import get_max_seqlen
 from ..utils.import_utils import is_torch_available
+from .precompute import precompute_export_inputs
 
 
 logger = logging.get_logger(__name__)
@@ -55,18 +53,9 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-    from torch._prims_common import is_contiguous_or_false
 
     from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
-    from ..vision_utils import (
-        get_vision_attention_seqlens,
-        get_vision_interpolation_indices_and_weights,
-        get_vision_merged_shape,
-        get_vision_nearest_position_ids,
-        get_vision_position_ids,
-        get_vision_window_index,
-    )
 
 
 # ── Patch and fix registries ────────────────────────────────────────────────
@@ -77,12 +66,12 @@ if is_torch_available():
 # as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
 
 _PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
-_FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
+_FX_NODE_FIXES: dict[str, list[callable]] = {}
 
 
 @contextlib.contextmanager
-def patch_attribute(obj: Any, attribute: str, factory: Any):
+def _patch_attribute(obj: Any, attribute: str, factory: Any):
     """Swap `obj.<attribute>` with `factory(original)` for the duration of the block."""
     original = getattr(obj, attribute)
     setattr(obj, attribute, factory(original))
@@ -96,12 +85,12 @@ def patch_attribute(obj: Any, attribute: str, factory: Any):
 def patch_attributes(patches: list[tuple[Any, str, callable]]):
     """Install `(obj, attribute, factory)` patches for the duration of the block.
 
-    Plural form of `patch_attribute` — each `factory(original)` returns the replacement
+    Plural form of `_patch_attribute` — each `factory(original)` returns the replacement
     callable. Originals are restored on exit, even if the body raises.
     """
     with contextlib.ExitStack() as stack:
         for obj, attribute, factory in patches:
-            stack.enter_context(patch_attribute(obj, attribute, factory))
+            stack.enter_context(_patch_attribute(obj, attribute, factory))
         yield
 
 
@@ -173,8 +162,6 @@ def _resolve_dotted_path(path: str):
     """Resolve a dotted Python path to the actual object — importing submodules where
     possible, falling back to `getattr` for class attributes (e.g. `torch.Tensor`).
     Returns `None` if the path can't be resolved (e.g. the backend isn't installed)."""
-    import importlib
-
     parts = path.split(".")
     try:
         obj = importlib.import_module(parts[0])
@@ -218,739 +205,9 @@ def apply_fx_node_fixes(backend: str, graph_module) -> None:
             pass
 
 
-# ── Recursive structure traversal ──────────────────────────────────────────
-# All tensor utilities share this traversal. _map_leaf_tensors applies a function
-# to every tensor leaf; _iter_leaf_tensors yields (path, tensor) pairs.
-
-# Types that should not be recursed into when extracting leaf tensors. Sym* types
-# carry PyTorch shape_env internals that cause infinite recursion; Enums are scalars
-# with no tensor fields.
-_LEAF_SKIP_TYPES: tuple[type, ...] = (type,)
-if is_torch_available():
-    _LEAF_SKIP_TYPES += (enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
-
-
-def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
-    """Apply `fn` to every tensor in a nested structure, preserving container types.
-
-    Mutates dicts and `__dict__`-bearing objects in place (preserving identity — callers
-    rely on this so downstream pops/mutations propagate back to the original mapping);
-    rebuilds lists/tuples/sets/frozensets (immutable or order-sensitive containers).
-    Skips non-traversable leaf types (enum, SymInt, etc.).
-    """
-    if isinstance(obj, _LEAF_SKIP_TYPES):
-        return obj
-    if isinstance(obj, torch.Tensor):
-        return fn(obj)
-    if isinstance(obj, (list, tuple, set)):
-        return type(obj)(_map_leaf_tensors(item, fn) for item in obj)
-    if isinstance(obj, dict):
-        for k in list(obj):
-            obj[k] = _map_leaf_tensors(obj[k], fn)
-        return obj
-    if hasattr(obj, "__dict__"):
-        for attr, attr_val in vars(obj).items():
-            setattr(obj, attr, _map_leaf_tensors(attr_val, fn))
-    return obj
-
-
-def _iter_leaf_tensors(obj: Any, prefix: str = ""):
-    """Yield `(dotted_path, tensor)` for every tensor in a nested structure."""
-    if isinstance(obj, _LEAF_SKIP_TYPES):
-        return
-    if isinstance(obj, torch.Tensor):
-        yield prefix or "output", obj
-    elif isinstance(obj, (list, tuple, set)):
-        for index, item in enumerate(obj):
-            path = f"{prefix}.{index}" if prefix else str(index)
-            yield from _iter_leaf_tensors(item, path)
-    elif isinstance(obj, dict):
-        for key, value in obj.items():
-            path = f"{prefix}.{key}" if prefix else key
-            yield from _iter_leaf_tensors(value, path)
-    elif hasattr(obj, "__dict__"):
-        yield from _iter_leaf_tensors(vars(obj), prefix)
-
-
-# ── Public tensor utilities ────────────────────────────────────────────────
-# Extract or cast tensors from nested model outputs.
-
-
-def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
-    """Recursively retrieve all leaf tensors from a potentially nested structure.
-
-    Args:
-        obj (`Any`):
-            A tensor, dataclass, dict, list, tuple, or any nesting thereof.
-
-    Returns:
-        `dict[str, torch.Tensor]`: Flat mapping from dotted path strings to tensors.
-    """
-    return dict(_iter_leaf_tensors(obj))
-
-
-def duplicate_leaf_tensors(obj: Any) -> Any:
-    """Clone tensors that appear more than once in an output structure.
-
-    When a model returns the same tensor under two output names (e.g. `last_hidden_state`
-    and `hidden_states[0]`), the ONNX optimizer deduplicates the two output nodes and
-    renames one, breaking the expected name mapping. Cloning duplicates gives each output
-    leaf a distinct identity so the optimizer has nothing to merge.
-    """
-    seen = set()
-
-    def _dedup(tensor: torch.Tensor) -> torch.Tensor:
-        if id(tensor) in seen:
-            return tensor.clone()
-        seen.add(id(tensor))
-        return tensor
-
-    return _map_leaf_tensors(obj, _dedup)
-
-
-def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any:
-    """Recursively cast all floating-point tensors to the given dtype and device."""
-
-    def _cast(tensor: torch.Tensor) -> torch.Tensor:
-        return tensor.to(dtype=dtype, device=device) if tensor.is_floating_point() else tensor.to(device=device)
-
-    return _map_leaf_tensors(obj, _cast)
-
-
-def module_device(model: PreTrainedModel | torch.nn.Module) -> torch.device | None:
-    """`.device` for any `nn.Module`. `PreTrainedModel` exposes it directly via `ModuleUtilsMixin`;
-    for plain submodules (e.g. a `Linear` or `MultiModalProjector` from a decomposed multimodal model)
-    we fall back to the first parameter. Returns `None` if the module has no parameters at all."""
-    if hasattr(model, "device"):
-        return model.device
-    try:
-        return next(model.parameters()).device
-    except StopIteration:
-        return None
-
-
-def module_dtype(model: PreTrainedModel | torch.nn.Module) -> torch.dtype | None:
-    """`.dtype` for any `nn.Module`. Same fallback story as `module_device`."""
-    if hasattr(model, "dtype"):
-        return model.dtype
-    try:
-        return next(model.parameters()).dtype
-    except StopIteration:
-        return None
-
-
-# Output flags that should be set on `model.config`, not passed as forward() kwargs.
-_OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
-
-
-def prepare_for_export(
-    model: PreTrainedModel | torch.nn.Module, inputs: MutableMapping[str, Any]
-) -> tuple[PreTrainedModel | torch.nn.Module, MutableMapping[str, Any], dict[str, Any]]:
-    """Configure model and inputs for export. Mutates both `model` and `inputs` in place,
-    returning `(model, inputs, output_flags)` where `output_flags` holds the values popped
-    from `inputs` for `use_cache`, `return_dict`, etc. (to be applied reversibly onto
-    `model.config` by `patch_model_config` during the trace).
-
-    - Strips label inputs (`labels`, `future_values`) — loss computation is unsupported.
-    - Pops output flags (`use_cache`, `return_dict`, …) from `inputs` so they don't appear
-      as traced kwargs; the values are returned for the trace block to apply onto
-      `model.config`.
-    - Pre-computes data-dependent vision/audio kwargs registered via
-      `@register_export_input_preparer` and writes them into `inputs`.
-    - Casts input tensors to match the model's `dtype` / `device`.
-    """
-    # Strip label inputs — loss computation is not supported during export.
-    for label_key in ("labels", "future_values"):
-        value = inputs.pop(label_key, None)
-        if value is not None:
-            raise ValueError(
-                f"Found '{label_key}' in inputs. Loss computation is not supported during export. "
-                f"Please remove '{label_key}' from your inputs before calling export()."
-            )
-    if hasattr(model, "config") and getattr(model.config, "return_loss", False):
-        raise ValueError(
-            "Found 'model.config.return_loss=True'. Loss computation is not supported during export. "
-            "Please set 'model.config.return_loss=False' before calling export()."
-        )
-    if inputs.get("return_loss", False):
-        raise ValueError(
-            "Found 'return_loss=True' in inputs. Loss computation is not supported during export. "
-            "Please remove 'return_loss' from your inputs or set it to False."
-        )
-
-    # Pop output flags from `inputs` and return them so the caller can decide how to
-    # honour them during the trace (we don't want them as traced kwargs).
-    output_flags = {flag: inputs.pop(flag) for flag in _OUTPUT_FLAGS if flag in inputs}
-
-    # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
-    # repeat_interleave, or itertools.groupby — untraceable by dynamo.
-    # TODO: use the collator API once it covers these cases.
-    with torch.no_grad():
-        precompute_export_inputs(model, inputs)
-
-    # Cast all input tensors to match the model's dtype and device (e.g. cache objects
-    # created before the model was moved to bfloat16/CUDA by a backend preparation step).
-    dtype = module_dtype(model)
-    device = module_device(model)
-    if dtype is not None or device is not None:
-        inputs = cast_leaf_tensors(inputs, dtype=dtype, device=device)
-
-    return model, inputs, output_flags
-
-
-# ── Export input preparers ────────────────────────────────────────────────────
-# Registry of `model_type -> (model, inputs) -> None` callables that precompute the
-# data-dependent tensors (cu_seqlens, position_ids, padded audio chunks, …) the model
-# would otherwise compute in its forward via `.tolist()` / `nonzero()` / etc. Inject
-# the results into `inputs` so the forward skips the untraceable branch.
-
-
-def _find_submodule_attr(model: torch.nn.Module, name: str) -> Any | None:
-    """Return the first non-None value of `name` found on `model` or any of its submodules."""
-    for module in model.modules():
-        if (value := getattr(module, name, None)) is not None:
-            return value
-    return None
-
-
-_EXPORT_INPUT_PREPARERS: dict[tuple[str, ...], callable] = {}
-
-
-def register_export_input_preparer(*markers: str):
-    """Register `fn(model, inputs) -> None`. Dispatched when every `marker` is a key in
-    `inputs` with a non-`None` value — no model_type list to maintain. Use multiple
-    markers to narrow the match when a single kwarg is too ambiguous (e.g.
-    `("input_features", "feature_lens")` for omni audio encoders)."""
-
-    def decorator(fn):
-        _EXPORT_INPUT_PREPARERS[markers] = fn
-        return fn
-
-    return decorator
-
-
-@register_export_input_preparer("grid_thw")
-def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `max_seqlen`, `position_ids`, plus optional
-    `window_index`/`cu_window_seqlens`/`max_window_seqlen` (XNet-style window attn) and
-    `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
-
-    Optional helpers are gated by a submodule attribute (`window_size`+`patch_size` for window
-    attention, `num_grid_per_side` for bilinear) or, for model-specific ones, by the encoder's
-    modeling module defining the helper (`get_vision_frame_index` / `get_vision_temporal_merge_index`
-    for kimi_k25) — so a model that doesn't use a feature won't get its kwarg injected.
-    """
-    grid_thw = inputs["grid_thw"]
-    spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
-    if spatial_merge_size is None:
-        # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has
-        # none (its encoder hard-codes `1` because spatial merging happens in the projector).
-        spatial_merge_size = inputs.get("merge_sizes", 1)
-
-    # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
-    # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
-    # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
-    module = sys.modules[type(model).__module__]
-    temporal_encoder = hasattr(module, "get_vision_frame_index")
-    inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
-        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
-    )
-    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
-    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
-    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
-    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
-
-    window_size = _find_submodule_attr(model, "window_size")
-    patch_size = _find_submodule_attr(model, "patch_size")
-    if window_size is not None and patch_size is not None:
-        inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
-            grid_thw, spatial_merge_size, window_size, patch_size
-        )
-        inputs["max_window_seqlen"] = get_max_seqlen(
-            inputs["cu_window_seqlens"], model.config, kwargs=inputs, kwarg_name="max_window_seqlen"
-        )
-
-    num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
-    if num_grid_per_side is not None:
-        # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
-        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear, muse_glimmer uses a
-        # grid_sample-style zeros padding); read the flags rather than inferring, so the precomputed
-        # tensors match exactly what the model computes.
-        mode = _find_submodule_attr(model, "interpolation_mode") or "bilinear"
-        padding = _find_submodule_attr(model, "interpolation_padding") or "border"
-        align_corners = _find_submodule_attr(model, "interpolation_align_corners") is True
-        inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side,
-            mode=mode,
-            align_corners=align_corners,
-            spatial_merge_size=spatial_merge_size,
-            padding=padding,
-        )
-
-    # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.
-    if temporal_encoder:
-        inputs["frame_index"] = module.get_vision_frame_index(grid_thw)
-
-    # Temporal-pooling spatial merger (kimi_k25): one gather index replaces its per-clip merge loop.
-    if hasattr(module, "get_vision_temporal_merge_index"):
-        merge_kernel_size = _find_submodule_attr(model, "merge_kernel_size")
-        kernel_height, kernel_width = (
-            merge_kernel_size if not isinstance(merge_kernel_size, int) else (merge_kernel_size, merge_kernel_size)
-        )
-        inputs["temporal_merge_index"] = module.get_vision_temporal_merge_index(grid_thw, kernel_height, kernel_width)
-
-    # Pixel-shuffle spatial merger (muse_glimmer): one gather index replaces its per-image merge loop.
-    if hasattr(module, "get_vision_pixel_shuffle_index"):
-        merge_size = _find_submodule_attr(model, "merge_size")
-        inputs["pixel_shuffle_index"] = module.get_vision_pixel_shuffle_index(grid_thw, merge_size)
-
-
-@register_export_input_preparer("target_sizes")
-def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
-    Synthesise `grid_thw = [1, h, w]` and run the nearest-position-id / window-index /
-    merged-shape / maximum-sequence-length helpers outside the traced graph."""
-    target_sizes = inputs["target_sizes"]
-    num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
-    if num_patches_per_side is not None:
-        inputs["position_ids"] = get_vision_nearest_position_ids(target_sizes, num_patches_per_side)
-
-    window_kernel_size = _find_submodule_attr(model, "window_kernel_size")
-    if window_kernel_size is not None:
-        grid_thw = torch.nn.functional.pad(target_sizes, (1, 0), value=1)
-        inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
-            grid_thw, spatial_merge_size=1, window_size=window_kernel_size[0], patch_size=1
-        )
-        inputs["merged_shape"] = get_vision_merged_shape(target_sizes, window_kernel_size)
-        cu_seqlens = torch.nn.functional.pad(
-            torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
-        )
-        inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
-
-
-@register_export_input_preparer("image_sizes")
-def _prepare_image_sizes_as_ints(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Replace a tensor `image_sizes` with a python list of `(h, w)` int-tuples (the `.tolist()` runs here,
-    outside the traced graph).
-
-    `image_sizes` is per-image geometry, and encoders crop/split each image by it — e.g.
-    `image_sizes[i] // patch_size` (Pixtral) or `int(image_sizes[i] / factor)` (Emu3 VQVAE). As a tensor
-    those bounds become unbacked symints under `torch.export`; as python ints they stay static (matching
-    each encoder's own `image_sizes is None` fallback, which already builds int-tuples). Models that route
-    `image_sizes` around the traced graph (e.g. LLaVA-NeXT resolves anyres before tracing) never hit this.
-    """
-    image_sizes = inputs["image_sizes"]
-    if not torch.is_tensor(image_sizes):
-        return
-    inputs["image_sizes"] = [tuple(int(v) for v in row) for row in image_sizes.tolist()]
-
-
-@register_export_input_preparer("input_features", "feature_lens")
-def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Replace `input_features`/`feature_lens` with precomputed `padded_feature`, `chunk_lengths`,
-    `cu_seqlens`, `max_seqlen`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni-style encoders) so the
-    encoder's `.split(.tolist(), dim=0)` and related data-dependent ops happen outside the
-    traced graph.
-
-    The helpers (`chunk_and_pad_features`, `get_audio_cu_seqlens`, …) all live in the model's
-    own ``modeling_*.py`` module, so we resolve them via ``type(model).__module__`` rather than
-    hard-coding one Omni variant. ``n_window_infer`` selects the Qwen3-Omni-style four-arg
-    ``get_audio_cu_seqlens`` over the Qwen2.5-Omni-style single-arg form.
-    """
-    feature_lens = inputs["feature_lens"]
-    input_features = inputs["input_features"]
-    module = sys.modules[type(model).__module__]
-
-    chunk_and_pad_features = getattr(module, "chunk_and_pad_features")
-    get_audio_cu_seqlens = getattr(module, "get_audio_cu_seqlens")
-    get_valid_indices = getattr(module, "get_valid_indices")
-
-    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
-    inputs["padded_feature"] = padded_feature
-    inputs["chunk_lengths"] = chunk_lengths
-    if hasattr(model, "n_window_infer"):
-        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
-        inputs["valid_indices"] = get_valid_indices(chunk_lengths, model.n_window)
-    else:
-        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
-        inputs["valid_indices"] = get_valid_indices(chunk_lengths)
-        inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
-    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
-
-
-@register_export_input_preparer("input_features", "input_features_mask")
-def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute `cu_seqlens` and `max_seqlen` for Qwen3-ASR so the encoder pops them from
-    ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
-    ``Qwen3ASREncoder.forward``.
-    """
-    from ..models.qwen3_asr.modeling_qwen3_asr import get_audio_cu_seqlens
-
-    n_window = _find_submodule_attr(model, "n_window")
-    n_window_infer = _find_submodule_attr(model, "n_window_infer")
-    if n_window is None or n_window_infer is None:
-        return
-
-    input_features_mask = inputs["input_features_mask"]
-    batch_size, padded_feature_length = input_features_mask.shape
-    num_chunks = padded_feature_length // (n_window * 2)
-    feature_lens = input_features_mask.sum(-1).to(torch.long)
-    chunk_lengths = input_features_mask.view(batch_size, num_chunks, -1).sum(dim=-1).reshape(-1).to(torch.long)
-    inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
-    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
-
-
-def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Inject precomputed tensors for data-dependent ops the model would otherwise hit during tracing.
-
-    Two layers:
-    - Outer LLM rope index (`get_rope_index`) — generic `hasattr` probe; covers Qwen-VL / GLM-4V etc.
-    - Per-encoder preparer dispatched by marker kwargs present in `inputs` (e.g. `grid_thw`,
-      `target_sizes`, `(input_features, feature_lens)`) — see `register_export_input_preparer`.
-      A preparer fires only when every one of its markers is present in `inputs`.
-    """
-    # Outer-model: LLM rope index. Self-detecting via `hasattr` since model_type at this level
-    # varies (qwen2_vl vs qwen2_5_omni_thinker vs ...) and the get_rope_index signature is stable.
-    if inputs.get("position_ids") is None and hasattr(model, "get_rope_index"):
-        input_ids = inputs.get("input_ids")
-        attn_mask = inputs.get("attention_mask")
-        is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
-        if is_prefill:
-            rope_params = set(inspect.signature(model.get_rope_index).parameters)
-            rope_inputs = {k: inputs[k] for k in rope_params if k in inputs}
-            position_ids, _ = model.get_rope_index(**rope_inputs)
-            inputs["position_ids"] = position_ids
-
-    # Encoder-level: dispatch by marker kwargs (preparer fires when every marker is in `inputs`
-    # with a non-`None` value).
-    for markers, preparer in _EXPORT_INPUT_PREPARERS.items():
-        if all(inputs.get(m) is not None for m in markers):
-            preparer(model, inputs)
-
-
-# ── Decomposition ─────────────────────────────────────────────────────────────
-# Split a model into independently exportable components. `decompose_prefill_decode`
-# captures the prefill and decode forward kwargs from a real `model.generate()` call;
-# `decompose_multimodal` runs a single forward and captures per-submodule kwargs (one
-# entry per encoder / projector / language model). Both rely on `_capture_forward` to
-# wrap a target submodule and record every call's kwargs.
-
-
-@contextlib.contextmanager
-def _capture_forward(module: torch.nn.Module):
-    """Capture forward call kwargs into a list (one dict per call).
-
-    Positional args are normalised to kwargs via `inspect.signature` so the
-    captured dicts can be passed directly as `kwargs=inputs` to `torch.export`.
-    """
-
-    calls: list[dict] = []
-    original = module.forward
-    sig = inspect.signature(original)
-
-    @functools.wraps(original)
-    def wrapper(*args, **kwargs):
-        captured = {}
-        bound = sig.bind(*args, **kwargs)
-        for name, value in bound.arguments.items():
-            param = sig.parameters[name]
-            if param.kind == inspect.Parameter.VAR_KEYWORD:
-                captured.update(copy.deepcopy(value))
-            elif param.kind != inspect.Parameter.VAR_POSITIONAL:
-                captured[name] = copy.deepcopy(value)
-        calls.append(captured)
-        return original(*args, **kwargs)
-
-    module.forward = wrapper
-    try:
-        yield calls
-    finally:
-        module.forward = original
-
-
-def _merge_decode_calls(decode_calls: list[dict]) -> dict:
-    """Merge consecutive single-token decode captures into one multi-token decode input.
-
-    Each `model.generate` decode step feeds a single new token, so `torch.export` (with `Dim.AUTO`)
-    sees a query-sequence axis of length 1 and specializes it to a constant — the exported decode can
-    then only ever run one token. Concatenating `N` consecutive decode steps along that axis yields a
-    genuine `N`-token decode input: the traced graph is identical (a KV-cache forward), but the sequence
-    axis now has hint `N > 1` so it stays dynamic. The exported decode then handles both a single token
-    (ordinary decoding) and many (continuation-from-past for multi-turn, or a plain prefill when the cache is empty).
-
-    The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill, before
-    the chunk). The per-token tensors are concatenated along their sequence axis; `attention_mask` is
-    handled below (its layout depends on the cache).
-    """
-    first = decode_calls[0]
-    merged = copy.copy(first)
-
-    # Concatenation assumes single-token decode steps. When `use_cache` is off the steps re-run the whole
-    # growing sequence (query length > 1) — each is already a valid multi-token forward, so take the last.
-    def query_length(call: dict) -> int | None:
-        for key in ("input_ids", "inputs_embeds"):
-            value = call.get(key)
-            if value is not None:
-                return value.shape[1]
-        return None
-
-    if any(query_length(call) != 1 for call in decode_calls):
-        return copy.copy(decode_calls[-1])
-
-    def concat_along(key: str, dim: int) -> None:
-        values = [call[key] for call in decode_calls if call.get(key) is not None]
-        if len(values) == len(decode_calls):
-            merged[key] = torch.cat(values, dim=dim)
-
-    concat_along("input_ids", 1)
-    concat_along("inputs_embeds", 1)
-    concat_along("cache_position", 0)
-    # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
-    # last in both, so a negative dim concatenates it correctly either way.
-    concat_along("position_ids", -1)
-
-    # `attention_mask` is either a 2D padding mask `[batch, kv]` (a growing `DynamicCache`: the model
-    # rebuilds the causal mask from `position_ids` / `cache_position` internally, so the last step's
-    # mask — spanning the most positions — is all it needs) or a 4D causal mask `[batch, heads, query,
-    # kv]` (a static cache passes the mask in explicitly). For the 4D case each single-token step is one
-    # causal query row against the fixed-size cache, so concatenating along the query axis rebuilds the
-    # correct `N`-token causal mask; taking just the last step would freeze the query axis at 1 and the
-    # exported decode could never run more than one token. Hybrid-attention models pass a dict
-    # `{attention_type: 4D mask}` instead of a single tensor — merge each entry the same way.
-    masks = [call.get("attention_mask") for call in decode_calls]
-    if all(mask is not None for mask in masks):
-        merged["attention_mask"] = _merge_step_masks(masks)
-
-    return merged
-
-
-def _merge_step_masks(masks: list[Any]) -> Any:
-    """Merge one attention mask per decode step into a single multi-token mask.
-
-    A 4D causal mask `[batch, heads, query, kv]` is concatenated along the query axis (each step is one
-    causal row against the fixed cache); a 2D padding mask keeps the last step (it already spans the most
-    positions). A dict `{attention_type: mask}` (hybrid-attention models) is merged entry by entry, and a
-    `None` mask (an attention type the model leaves unmasked) is preserved as `None`.
-    """
-    last_mask = masks[-1]
-    if last_mask is None:
-        return None
-    if isinstance(last_mask, dict):
-        return {key: _merge_step_masks([mask[key] for mask in masks]) for key in last_mask}
-    if last_mask.dim() == 4 and all(mask.shape[3] == last_mask.shape[3] for mask in masks):
-        return torch.cat(masks, dim=2)
-    return last_mask
-
-
-def decompose_prefill_decode(
-    model: PreTrainedModel,
-    inputs: dict[str, Any],
-    generation_config: Any = None,
-    multi_token_decode: bool = False,
-) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Run `model.generate()` and capture prefill and decode inputs.
-
-    Reuses the full generation machinery so every architecture (decoder-only, SSM,
-    encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
-
-    `generation_config` is forwarded to `generate()` (defaulting to the model's own), so the captured
-    inputs use whatever cache `generate()` would build. Pass one with `cache_implementation="static"`
-    and `max_cache_len=N` to capture a **statically sized** cache in the decode inputs — the basis for
-    a static-cache export. `max_cache_len` sizes the cache independently of the capture, so the
-    exported decode takes a fixed `[..., N, ...]` cache rather than a growing one.
-
-    When `multi_token_decode`, the `decode` component is captured as a **multi-token** decode — two
-    consecutive decode steps merged (see `_merge_decode_calls`) so its query-sequence axis stays
-    symbolic (a single-token decode would specialize that axis to 1). It then handles both one token
-    (ordinary decoding) and many (continuation-from-past, or a plain prefill when the cache is empty). Otherwise `decode` is the
-    classic single-token decode.
-
-    Returns:
-        `dict[str, tuple[torch.nn.Module, dict]]`:
-        `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`.
-    """
-    # 1 prefill forward + 1 decode (or 2 decode steps merged, when `multi_token_decode`) forward to capture.
-    # Set the capture window on the config itself, not as generate() kwargs — passing a
-    # `generation_config` alongside generation kwargs is deprecated. Base it on the model's own config
-    # when none is given (preserving its defaults), and deep-copy into a distinct `capture_config` so
-    # the caller's `generation_config` is never mutated.
-    num_new_tokens = 3 if multi_token_decode else 2
-    capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
-    capture_config.max_new_tokens = num_new_tokens
-    capture_config.min_new_tokens = num_new_tokens
-    try:
-        with _capture_forward(model) as calls:
-            model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
-    except Exception as e:
-        raise RuntimeError(
-            f"decompose_prefill_decode failed for {type(model).__name__}. "
-            f"Inputs passed: {list(inputs.keys())}. "
-            f"Make sure the inputs are compatible with model.generate()."
-        ) from e
-
-    if len(calls) < num_new_tokens:
-        raise RuntimeError(
-            f"decompose_prefill_decode expected at least {num_new_tokens} calls to "
-            f"{type(model).__name__}.forward() during generate(max_new_tokens={num_new_tokens}), but "
-            f"captured {len(calls)}. This likely means generate() bypasses the top-level forward() "
-            "(e.g. delegates to an inner model), so prefill/decode decomposition is not supported "
-            "for this architecture."
-        )
-
-    # Remove `logits_to_keep` from the captured calls — it's a generation-time hint for the model's
-    # internal top-k pruning, not a forward input. The export graph should not depend on it.
-    for call in calls:
-        call.pop("logits_to_keep", None)
-
-    # A single-token decode specializes its query-sequence axis to 1 (never dynamic). When
-    # `multi_token_decode`, merge the two decode steps into one multi-token decode so that axis stays
-    # symbolic (continuation-from-past, or a plain prefill when the cache is empty, and it still covers seq == 1).
-    prefill_inputs = calls[0]
-    decode_inputs = _merge_decode_calls(calls[1:num_new_tokens]) if multi_token_decode else calls[1]
-    return {
-        "prefill": (copy.copy(model), prefill_inputs),
-        "decode": (copy.copy(model), decode_inputs),
-    }
-
-
-# Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
-# Encoders and language model are resolved via `get_encoder(modality)` / `get_decoder()`.
-_MULTIMODAL_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
-_MULTIMODAL_LM_HEAD_NAMES = ("lm_head",)
-
-
-def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
-    """Return `{attr_name: module}` for multi-modal submodules found on `model`.
-
-    Uses the canonical `PreTrainedModel.get_encoder("image"/"audio")` and `get_decoder()`
-    accessors for encoders and the language model. Projectors and `lm_head` are looked
-    up by name on `model` and its `base_model` (e.g. `LlavaModel` under `LlavaForConditionalGeneration`).
-
-    Only returns results when at least one modal encoder AND a language model are found —
-    otherwise the model is not multi-modal and should be exported as a single unit.
-    """
-    found: dict[str, torch.nn.Module] = {}
-
-    has_encoder = False
-    for modality in ("image", "audio"):
-        encoder = model.get_encoder(modality=modality)
-        # `get_encoder` returns `self` as the "no match" fallback, and some models keep
-        # `self.audio_tower = None` / `self.vision_tower = None` when the corresponding
-        # sub-config is absent — `hasattr` is True but `getattr` is None.
-        if encoder is not None and encoder is not model:
-            found[f"{modality}_encoder"] = encoder
-            has_encoder = True
-
-    decoder = model.get_decoder()
-    if decoder is not None and decoder is not model:
-        found["language_model"] = decoder
-
-    for root in {model, model.base_model}:
-        for name in _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_HEAD_NAMES:
-            if name not in found and getattr(root, name, None) is not None:
-                found[name] = getattr(root, name)
-
-    if not has_encoder or "language_model" not in found:
-        return {}
-
-    return found
-
-
-def is_multimodal(model: PreTrainedModel | torch.nn.Module) -> bool:
-    """Returns `True` if the model is multi-modal with modal encoders and a language model.
-
-    A non-`PreTrainedModel` (e.g. a bare `nn.Module`) has no canonical `get_encoder`/`get_decoder`
-    accessors and is trivially not multi-modal, so it short-circuits to `False`.
-    """
-    return isinstance(model, PreTrainedModel) and bool(_find_multimodal_submodules(model))
-
-
-def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Capture inputs to each multi-modal submodule via a single forward pass.
-
-    Detects all known multi-modal submodules by attribute name (vision tower, projector,
-    language model, lm_head, …) and captures their forward kwargs during one
-    `model(**inputs)` call.
-
-    Each submodule is returned as a separate `name: (module, inputs)` entry for
-    independent export. The token-merge step (e.g. `masked_scatter` for multi-modal models)
-    is intentionally left outside the exported graphs — it is the caller's responsibility
-    to assemble `inputs_embeds` from the encoder outputs before running the decoder.
-
-    Returns:
-        `dict[str, tuple[torch.nn.Module, dict]]`: One `name: (module, inputs)`
-        entry per detected submodule (image/audio encoder, projector, language model, lm_head).
-
-    Raises:
-        `ValueError`: if no known multi-modal submodules are found on the model.
-    """
-    submodules = _find_multimodal_submodules(model)
-    if not submodules:
-        raise ValueError(
-            f"decompose_multimodal found no multi-modal submodules on {type(model).__name__}. "
-            f"Expected an image/audio encoder + language model, found neither."
-        )
-
-    try:
-        with contextlib.ExitStack() as stack, torch.no_grad():
-            submodule_inputs = {
-                name: stack.enter_context(_capture_forward(module)) for name, module in submodules.items()
-            }
-            model(**copy.deepcopy(inputs))
-    except Exception as e:
-        raise RuntimeError(
-            f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
-        ) from e
-
-    return {
-        name: (module, submodule_inputs[name][-1])
-        for name, module in submodules.items()
-        if submodule_inputs[name]  # skip submodules not called (e.g. lm_head on base models)
-    }
-
-
-def decompose_for_generation(
-    model: PreTrainedModel, inputs: dict[str, Any], generation_config: Any = None, multi_token_decode: bool = False
-) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Decompose a generative model into independently exportable `(model, forward_inputs)` pairs.
-
-    Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
-    `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
-    further splits it into one entry per submodule (vision/audio encoder, projector, language model,
-    `lm_head`) via `decompose_multimodal`.
-
-    Args:
-        model: Generative model. Must support `model.generate(**inputs)`.
-        inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
-        generation_config: Optional `GenerationConfig` forwarded to `generate()` during capture. Pass
-            one with `cache_implementation="static"` + `max_cache_len=N` to export against a statically
-            sized cache (see `decompose_prefill_decode`).
-        multi_token_decode: When `True`, capture the `decode` component as a multi-token decode (dynamic
-            query sequence axis: multiple tokens at once — continuation-from-past, or a plain prefill when the cache is empty); a
-            single-token decode can't stay dynamic (see `decompose_prefill_decode`).
-
-    Returns:
-        `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
-        plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
-        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
-    """
-    stages = decompose_prefill_decode(
-        model, inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
-    )
-    prefill_model, prefill_inputs = stages["prefill"]
-
-    if not is_multimodal(prefill_model):
-        return stages
-
-    components = decompose_multimodal(prefill_model, prefill_inputs)
-    components["decode"] = stages["decode"]
-    return components
-
-
-# ── Cross-backend patches ───────────────────────────────────────────────────
-# Registered against every backend that needs them, so a workaround lives in one place even when the
-# backends break the op for different reasons.
+# ── Cross-backend patches ─────────────────────────────────────────────────────
+# Registered for more than one backend because the problem is the same one: these used to be two
+# definitions apiece that had drifted in wording and in one case in behaviour.
 
 
 @register_patch("onnx", "transformers.models.blt.modeling_blt.byte_group_hash_function")
@@ -1028,95 +285,6 @@ def _patch_histc(original):
         return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
 
     return patch
-
-
-@register_patch("onnx", "torch.searchsorted")
-@register_patch("openvino", "torch.searchsorted")
-@register_patch("executorch", "torch.searchsorted")
-def _patch_searchsorted(original):
-    """Decompose `searchsorted` into a broadcast comparison + sum — the insertion index into a sorted
-    sequence is the count of entries below. O(N*M) instead of O(M log N), but no backend has the op:
-    ONNX lacks it, OV rejects the node when `sorter`/`out` trace as `None`, and the portable runtime
-    ships no kernel.
-    """
-
-    def patch(sorted_sequence, values, *, out_int32=False, right=False, side=None, out=None, sorter=None):
-        if side is not None:
-            right = side == "right"
-        if right:
-            mask = sorted_sequence.unsqueeze(-1) <= values.unsqueeze(-2)
-        else:
-            mask = sorted_sequence.unsqueeze(-1) < values.unsqueeze(-2)
-        result = mask.sum(-2)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("onnx", "torch.bucketize")
-@register_patch("executorch", "torch.bucketize")
-def _patch_bucketize(original):
-    """Decompose `bucketize` into a broadcast comparison + sum — `searchsorted` with the arguments the
-    other way round. ONNX's own decomposition materialises scalar constants that become
-    `alias`/`detach_` and break aot's functional-graph assertion; the portable runtime has no
-    `bucketize.Tensor_out` kernel.
-    """
-
-    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
-        if boundaries.numel() == 0:
-            result = torch.zeros_like(input, dtype=torch.int64)
-        else:
-            below = boundaries <= input.unsqueeze(-1) if right else boundaries < input.unsqueeze(-1)
-            result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
-@register_patch("openvino", "transformers.masking_utils._vmap_expansion_sdpa")
-@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion.
-
-    No backend traces `torch.vmap`: OV's frontend sees inputs that "escaped" the vmap context,
-    and `aot_autograd`/`gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering.
-    """
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            return mask_function(*broadcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-
-        return _expanded
-
-    return patch
-
-
-@register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
-@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
-def _patch_reshape(original):
-    """Materialise a non-contiguous input before `reshape`/`view`.
-
-    Both backends refuse the resulting `aten.view`, and both eat a plain `.contiguous()` (the ONNX
-    optimizer folds it, functionalization drops it) — a clone survives. `contiguous_format` is not
-    optional: a bare `.clone()` preserves a transposed dim-order ExecuTorch can't map to a
-    `torch.memory_format`.
-    """
-
-    def patch(input, *shape, **kwargs):
-        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
-            input = input.clone(memory_format=torch.contiguous_format)
-        return original(input, *shape, **kwargs)
-
-    return patch
-
-
-# ── Cross-backend FX fixes ──────────────────────────────────────────────────
 
 
 @register_fx_node_fix("onnx")
@@ -1233,3 +401,414 @@ def _fix_scatter_reduce(gm, node):
         return True
 
     return False
+
+
+@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("openvino", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
+def _patch_broadcast_mask_expansion(_original):
+    """Replace vmap-based mask expansion with broadcast expansion.
+
+    No backend traces `torch.vmap`: OV's frontend sees inputs that "escaped" the vmap context,
+    and `aot_autograd`/`gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering.
+    """
+
+    def patch(mask_function):
+        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
+            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
+            return mask_function(*broadcasted).expand(
+                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
+            )
+
+        return _expanded
+
+    return patch
+
+
+@register_patch("executorch", "torch.nn.attention.varlen.varlen_attn")
+def _patch_varlen_attn(original):
+    """Lower `varlen_attn` to the block-diagonal masked SDPA it stands for.
+
+    The chunked vision/audio attention patch calls it to express packed sequences as one op, and
+    ExecuTorch cannot take it from there: the edge-dialect verifier trips on the CUDA flash op's aux
+    outputs. The masked form is core-aten. Returns just the output tensor, which is `varlen_attn`'s
+    contract — the underlying op's is `(output, *aux)`. OpenVINO keeps the op and converts it instead
+    (`_convert_varlen_attn`), which is where a packed lowering belongs.
+    """
+    from .exporter_dynamo import varlen_attn_masked_sdpa
+
+    def varlen_attn(*args, **kwargs):
+        return varlen_attn_masked_sdpa(*args, **kwargs)
+
+    return varlen_attn
+
+
+@register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+def _patch_reshape(original):
+    """Materialise a non-contiguous input before `reshape` / `view`.
+
+    Both lowerings refuse the view a non-contiguous tensor would need: `torch.export` raises `Cannot view
+    a tensor with shape ... and strides ...` for ONNX (whose optimizer folds a plain `aten.contiguous`
+    away), and ExecuTorch's edge reshape reference refuses it outright. Cloning first is semantically a
+    no-op -- eager `reshape` already copies in this case -- and only copies when the view would fail.
+
+    `is_contiguous_or_false`, not `is_contiguous()`: under dynamic shapes contiguity is a data-dependent
+    question, and the guard-free form answers "don't know" as "not contiguous", which is the safe side.
+    The clone must force `contiguous_format`, since a bare `.clone()` preserves the input's layout.
+    """
+    from torch._prims_common import is_contiguous_or_false
+
+    def patch(input, *shape, **kwargs):
+        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
+            input = input.clone(memory_format=torch.contiguous_format)
+        return original(input, *shape, **kwargs)
+
+    return patch
+
+
+@register_patch("onnx", "torch.bucketize")
+@register_patch("executorch", "torch.bucketize")
+def _patch_bucketize(_original):
+    """Decompose `bucketize` into a broadcast comparison and a sum.
+
+    Neither backend has a kernel for it (ONNX has no op; the portable runtime ships no
+    `bucketize.Tensor_out`, which VLM vision position ids reach — idefics2/3, smolvlm, phi4_multimodal).
+    `boundaries` is 1-D and sorted, so the bucket index is the count of boundaries below each value.
+    """
+
+    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
+        if boundaries.numel() == 0:
+            result = torch.zeros_like(input, dtype=torch.int64)
+        else:
+            below = boundaries <= input.unsqueeze(-1) if right else boundaries < input.unsqueeze(-1)
+            result = below.sum(dim=-1)
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.searchsorted")
+@register_patch("openvino", "torch.searchsorted")
+@register_patch("executorch", "torch.searchsorted")
+def _patch_searchsorted(_original):
+    """Decompose `searchsorted` the same way as `bucketize`: for a sorted sequence the insertion index is
+    the count of entries below each value. O(N*M) rather than a real binary search, but only ops both
+    backends can lower."""
+
+    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
+        if side is not None:
+            right = side == "right"
+        seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
+        below = seq <= val if right else seq < val
+        result = below.sum(dim=-1)
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.cummax", "torch.Tensor.cummax")
+@register_patch("executorch", "torch.cummax", "torch.Tensor.cummax")
+def _patch_cummax(original):
+    """`cummax` via a triangular-masked reduction — see `_cumulative_reduce`."""
+    return _cumulative_reduce(mode="max")
+
+
+@register_patch("onnx", "torch.cummin", "torch.Tensor.cummin")
+@register_patch("executorch", "torch.cummin", "torch.Tensor.cummin")
+def _patch_cummin(original):
+    """`cummin` via a triangular-masked reduction — see `_cumulative_reduce`."""
+    return _cumulative_reduce(mode="min")
+
+
+def _cumulative_reduce(*, mode: str):
+    """Replace `cummax` / `cummin` with a triangular-masked reduction: neither backend has a
+    cumulative-scan kernel. Output `[..., i]` reduces over `j <= i`.
+
+    The reduction is the two-output `max`/`min` so the real argmax comes back with it — a caller reading
+    `.indices` gets the same answer it would from the op.
+    """
+
+    def patch(input, dim):
+        sequence = input.movedim(dim, -1)
+        positions = torch.arange(sequence.shape[-1], device=input.device)
+        keep = positions.unsqueeze(0) <= positions.unsqueeze(1)
+        if input.dtype == torch.bool:
+            fill = mode != "max"
+        else:
+            info = torch.finfo if input.is_floating_point() else torch.iinfo
+            fill = info(input.dtype).min if mode == "max" else info(input.dtype).max
+        windows = torch.where(
+            keep, sequence.unsqueeze(-2), torch.full((), fill, dtype=input.dtype, device=input.device)
+        )
+        reduced = windows.max(dim=-1) if mode == "max" else windows.min(dim=-1)
+        # The op returns a named tuple, and callers read it by field (`torch.cummax(x, -1).values`).
+        return getattr(torch.return_types, f"cum{mode}")(
+            (reduced.values.movedim(-1, dim), reduced.indices.movedim(-1, dim))
+        )
+
+    return patch
+
+
+# ── Recursive structure traversal ──────────────────────────────────────────
+# All tensor utilities share this traversal. _map_leaf_tensors applies a function
+# to every tensor leaf; _iter_leaf_tensors yields (path, tensor) pairs.
+
+# Types that should not be recursed into when extracting leaf tensors. Sym* types
+# carry PyTorch shape_env internals that cause infinite recursion; Enums are scalars
+# with no tensor fields.
+_LEAF_SKIP_TYPES: tuple[type, ...] = (type,)
+if is_torch_available():
+    _LEAF_SKIP_TYPES += (enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
+
+
+def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
+    """Apply `fn` to every tensor in a nested structure, preserving container types.
+
+    Mutates dicts and `__dict__`-bearing objects in place (preserving identity — callers
+    rely on this so downstream pops/mutations propagate back to the original mapping);
+    rebuilds lists/tuples/sets/frozensets (immutable or order-sensitive containers).
+    Skips non-traversable leaf types (enum, SymInt, etc.).
+    """
+    if isinstance(obj, _LEAF_SKIP_TYPES):
+        return obj
+    if isinstance(obj, torch.Tensor):
+        return fn(obj)
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        return type(obj)(_map_leaf_tensors(item, fn) for item in obj)
+    if isinstance(obj, dict):
+        for k in list(obj):
+            obj[k] = _map_leaf_tensors(obj[k], fn)
+        return obj
+    if hasattr(obj, "__dict__"):
+        for attr, attr_val in vars(obj).items():
+            setattr(obj, attr, _map_leaf_tensors(attr_val, fn))
+    return obj
+
+
+def _iter_leaf_tensors(obj: Any, prefix: str = ""):
+    """Yield `(dotted_path, tensor)` for every tensor in a nested structure."""
+    if isinstance(obj, _LEAF_SKIP_TYPES):
+        return
+    if isinstance(obj, torch.Tensor):
+        # `!= ""` rather than falsiness, and `str(key)` below: a dict keyed by *integers* (granite4_vision
+        # keys its deepstack features by layer index) hands down a path of `0` for the first entry, which is
+        # falsy — so a truthiness test renamed that leaf "output", a name the graph never declared, and its
+        # real one went missing from the feed ("Required inputs (['deepstack_features.0']) are missing").
+        # Only bites a container flattened at the top level: nested under a name the path is already a
+        # non-empty string.
+        yield prefix if prefix != "" else "output", obj
+    elif isinstance(obj, (list, tuple, set, frozenset)):
+        for index, item in enumerate(obj):
+            path = f"{prefix}.{index}" if prefix else str(index)
+            yield from _iter_leaf_tensors(item, path)
+    elif isinstance(obj, dict):
+        for key, value in obj.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            yield from _iter_leaf_tensors(value, path)
+    elif hasattr(obj, "__dict__"):
+        yield from _iter_leaf_tensors(vars(obj), prefix)
+
+
+# ── Public tensor utilities ────────────────────────────────────────────────
+# Extract or cast tensors from nested model outputs.
+
+
+def _class_to_path(cls: type) -> str:
+    """A class as `module:qualname` — how a graph's pytree contexts and its recorded metadata both name a
+    type they cannot hold a reference to."""
+    return f"{cls.__module__}:{cls.__qualname__}"
+
+
+def _path_to_class(path: str) -> type:
+    """The class `_class_to_path` wrote, importing its module. That import is the point as much as the
+    class is: importing a modeling module is what registers its `ModelOutput` types as pytree nodes, which
+    a graph loaded from disk needs before it can be called with one."""
+    module_name, qualname = path.split(":", 1)
+    obj = importlib.import_module(module_name)
+    for part in qualname.split("."):
+        obj = getattr(obj, part)
+    return obj
+
+
+def runner_feed(runner, kwargs: dict, *, warn_unused: bool = False) -> dict:
+    """The subset of `kwargs` this graph takes, keyed the way it names them.
+
+    The rule is the same wherever a graph is called -- an encoder component, the decode step, a
+    single-graph `ExportedModel` -- so it is written once: a graph refuses a kwarg it was never traced
+    with, and a caller should be free to pass a processor's whole output. `warn_unused` says so out loud,
+    which only the single-graph case wants (the loop drops `generate`'s bookkeeping every step).
+    """
+    if not runner.input_names:
+        return dict(kwargs)
+    feed = {name: value for name, value in kwargs.items() if runner.declares(name, value)}
+    if warn_unused and (unused := [name for name in kwargs if name not in feed]):
+        logger.warning_once(
+            f"Ignoring {unused}, which this graph was not traced with (it takes {sorted(runner.input_names)})."
+        )
+    return feed
+
+
+# The inputs whose leading axis is the batch, in the order they are trusted to say it.
+BATCH_INPUTS = ("input_ids", "inputs_embeds", "decoder_input_ids", "decoder_inputs_embeds", "attention_mask")
+
+
+def leaf_name(name: str) -> str:
+    """The kwarg-space name behind a graph port's name — `disambiguate_io_names` only ever prefixes."""
+    for prefix in ("input.", "output."):
+        if name.startswith(prefix):
+            return name[len(prefix) :]
+    return name
+
+
+def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
+    """Recursively retrieve all leaf tensors from a potentially nested structure.
+
+    Args:
+        obj (`Any`):
+            A tensor, dataclass, dict, list, tuple, or any nesting thereof.
+
+    Returns:
+        `dict[str, torch.Tensor]`: Flat mapping from dotted path strings to tensors.
+    """
+    return dict(_iter_leaf_tensors(obj))
+
+
+def duplicate_leaf_tensors(obj: Any, seen: set[int] | None = None) -> Any:
+    """Clone tensors that appear more than once in an output structure.
+
+    When a model returns the same tensor under two output names (e.g. `last_hidden_state`
+    and `hidden_states[0]`), the ONNX optimizer deduplicates the two output nodes and
+    renames one, breaking the expected name mapping. Cloning duplicates gives each output
+    leaf a distinct identity so the optimizer has nothing to merge.
+
+    `seen` pre-seeds the identities that already count as taken — pass the *input* tensors so an output the
+    model hands straight back is cloned too. Returned unmutated, an input is the very value the graph's
+    placeholder holds, so the pair collapses to one name and the output's wins: prophetnet's decode returns
+    its `encoder_outputs.last_hidden_state` as `encoder_last_hidden_state`, and its cross-attention cache
+    (filled at prefill, untouched at decode) comes back under the name it went in with — both leaving the
+    input name the runtime feeds absent from the session. A *mutated* input is a distinct value by then, so
+    this only adds a copy where the graph would otherwise have lost a name.
+    """
+    seen = set() if seen is None else set(seen)
+
+    def _dedup(tensor: torch.Tensor) -> torch.Tensor:
+        if id(tensor) in seen:
+            return tensor.clone()
+        seen.add(id(tensor))
+        return tensor
+
+    return _map_leaf_tensors(obj, _dedup)
+
+
+def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any:
+    """Recursively cast all floating-point tensors to the given dtype and device."""
+
+    def _cast(tensor: torch.Tensor) -> torch.Tensor:
+        return tensor.to(dtype=dtype if tensor.is_floating_point() else None, device=device)
+
+    return _map_leaf_tensors(obj, _cast)
+
+
+def _module_attr(model: PreTrainedModel | torch.nn.Module, name: str):
+    """`.device` / `.dtype` for any `nn.Module`.
+
+    `PreTrainedModel` exposes both directly via `ModuleUtilsMixin`; a plain submodule (a `Linear` or a
+    `MultiModalProjector` split out of a multi-modal model) does not, so fall back to its first parameter.
+    `None` when the module has no parameters at all.
+    """
+    if hasattr(model, name):
+        return getattr(model, name)
+    try:
+        return getattr(next(model.parameters()), name)
+    except StopIteration:
+        return None
+
+
+def module_device(model: PreTrainedModel | torch.nn.Module) -> torch.device | None:
+    """Where this module's parameters live — see `_module_attr`."""
+    return _module_attr(model, "device")
+
+
+def module_dtype(model: PreTrainedModel | torch.nn.Module) -> torch.dtype | None:
+    """The precision this module's parameters are in — see `_module_attr`."""
+    return _module_attr(model, "dtype")
+
+
+# Output flags that should be set on `model.config`, not passed as forward() kwargs.
+_OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
+
+
+def prepare_for_export(
+    model: PreTrainedModel | torch.nn.Module, inputs: MutableMapping[str, Any]
+) -> tuple[PreTrainedModel | torch.nn.Module, MutableMapping[str, Any], dict[str, Any]]:
+    """Configure model and inputs for export. Mutates both `model` and `inputs` in place,
+    returning `(model, inputs, output_flags)` where `output_flags` holds the values popped
+    from `inputs` for `use_cache`, `return_dict`, etc. (to be applied reversibly onto
+    `model.config` by `patch_model_config` during the trace).
+
+    - Strips label inputs (`labels`, `future_values`) — loss computation is unsupported.
+    - Pops output flags (`use_cache`, `return_dict`, …) from `inputs` so they don't appear
+      as traced kwargs; the values are returned for the trace block to apply onto
+      `model.config`.
+    - Pre-computes data-dependent vision/audio kwargs registered via
+      `@register_export_input_preparer` and writes them into `inputs`.
+    - Casts input tensors to match the model's `dtype` / `device`.
+    """
+    # Strip label inputs — loss computation is not supported during export.
+    for label_key in ("labels", "future_values"):
+        value = inputs.pop(label_key, None)
+        if value is not None:
+            raise ValueError(
+                f"Found '{label_key}' in inputs. Loss computation is not supported during export. "
+                f"Please remove '{label_key}' from your inputs before calling export()."
+            )
+    if hasattr(model, "config") and getattr(model.config, "return_loss", False):
+        raise ValueError(
+            "Found 'model.config.return_loss=True'. Loss computation is not supported during export. "
+            "Please set 'model.config.return_loss=False' before calling export()."
+        )
+    if inputs.get("return_loss", False):
+        raise ValueError(
+            "Found 'return_loss=True' in inputs. Loss computation is not supported during export. "
+            "Please remove 'return_loss' from your inputs or set it to False."
+        )
+
+    # Pop output flags from `inputs` and return them so the caller can decide how to
+    # honour them during the trace (we don't want them as traced kwargs).
+    output_flags = {flag: inputs.pop(flag) for flag in _OUTPUT_FLAGS if flag in inputs}
+
+    # Drop kwargs that are `None`: `torch.export` still records them as placeholders carrying no value, so
+    # the graph declares an "input" there and dynamo then demands the key back on every call — a hole the
+    # runtime has to fill with `None` for no benefit. Only when the parameter's default is `None` too, or
+    # omitting it would switch the traced path (a `use_cache=True` default handed `None` would flip to True).
+    forward = getattr(model, "forward", None)
+    if forward is not None:
+        parameters = inspect.signature(forward).parameters
+        for name in [name for name, value in inputs.items() if value is None]:
+            parameter = parameters.get(name)
+            if parameter is not None and parameter.default is None:
+                inputs.pop(name)
+
+    # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
+    # repeat_interleave, or itertools.groupby — untraceable by dynamo.
+    # TODO: use the collator API once it covers these cases.
+    with torch.no_grad():
+        # A decomposed component is a plain `nn.Module` and need not carry a config: an encoder-decoder's
+        # `FSMTEncoder`, an RNN-T's `ParakeetRNNTDecoder`. Nothing to precompute from, so skip it — the
+        # data-dependent tensors below are all config-derived.
+        if (config := getattr(model, "config", None)) is not None:
+            inputs.update(precompute_export_inputs(config, inputs))
+
+    # Move input tensors onto the model's device (e.g. a cache built on CPU before a backend moved the
+    # model). Dtypes are left as-is on purpose: inputs already carry the caller's/model's dtype, and cache
+    # entries keep the dtype the model allocated them at — notably SSM/recurrent states the mixer holds in
+    # fp32 for scan stability even in a bf16 model — which a blanket downcast would corrupt, making an
+    # exported decode step diverge from eager.
+    device = module_device(model)
+    if device is not None:
+        inputs = cast_leaf_tensors(inputs, dtype=None, device=device)
+
+    return model, inputs, output_flags

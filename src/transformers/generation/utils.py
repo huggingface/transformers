@@ -33,8 +33,8 @@ from ..cache_utils import (
     EncoderDecoderCache,
     QuantizedCache,
     StaticCache,
+    kv_cache_geometry,
 )
-from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
 from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
@@ -1966,29 +1966,43 @@ class GenerationMixin(ContinuousMixin):
 
     def _get_static_cache_init_shape(
         self: "GenerativePreTrainedModel",
-    ) -> tuple[int | list[int], int | list[int]] | None:
+    ) -> tuple[list[int], list[int], list[int]] | None:
         """
-        Returns the per-rank `(num_heads, head_dim)` to eagerly initialize a `StaticCache`, with the head count sharded
-        for tensor parallelism. Either of them is a list with a value per layer if the layers differ in it. Returns
-        `None` when the cache cannot be early initialized.
+        Returns the per-rank `(num_heads, key_head_dim, value_head_dim)` to eagerly initialize a `StaticCache`, each a
+        list with one entry per layer, with the head count sharded for tensor parallelism. The two head dims differ for
+        latent attention, which caches the compressed latent as keys and the shared rope part as values. Returns `None`
+        when the cache cannot be early initialized.
         """
         if hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1:
             # The model layers are on different devices
             return None
-        text_config = self.config.get_text_config(decoder=True)
-        if getattr(text_config, "qk_head_dim", None) is not None:
-            # MLA models have distinct key (`qk_head_dim`) and value (`v_head_dim`) sizes.
+        geometry = kv_cache_geometry(self.config.get_text_config(decoder=True))
+        if geometry is None:
             return None
-        num_heads, head_dim = get_head_shapes(text_config)
         tp_size = getattr(self, "_tp_size", None) or 1
-        if tp_size > 1:
-            layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
-            if any(heads % tp_size for heads in layer_heads):
-                # The model cannot be evenly sharded by head
-                return None
-            # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
-            num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
-        return num_heads, head_dim
+        if any(num_key_value_heads % tp_size for num_key_value_heads, _, _ in geometry):
+            # The model cannot be evenly sharded by head
+            return None
+        return (
+            [num_key_value_heads // tp_size for num_key_value_heads, _, _ in geometry],
+            [key_head_dim for _, key_head_dim, _ in geometry],
+            [value_head_dim for _, _, value_head_dim in geometry],
+        )
+
+    def _cross_attention_cache_config(self: "GenerativePreTrainedModel"):
+        """The decoder's config with its sliding layers flattened.
+
+        A cross-attention cache holds the encoder states in full and is written once, so it is never sliding —
+        whatever the decoder's own `layer_types` say. Built from a copy, so the decoder's config is untouched.
+        """
+        config = copy.deepcopy(self.config.get_text_config(decoder=True))
+        config.sliding_window = None
+        # Only flatten a list that is already there, and keep its length: a config that declares no
+        # `layer_types` builds its cache a layer at a time, and spelling them out here would make the cross
+        # half eager where the self half stays lazy.
+        if getattr(config, "layer_types", None) is not None:
+            config.layer_types = ["full_attention"] * len(config.layer_types)
+        return config
 
     def _prepare_static_cache(
         self: "GenerativePreTrainedModel",
@@ -1997,14 +2011,16 @@ class GenerationMixin(ContinuousMixin):
         max_cache_len: int,
         prefill_chunk_size: int | None,
         model_kwargs,
+        max_length_attr_name: str = "_previous_max_cache_length",
     ) -> Cache:
         """
         Create a static cache for `generate`. To avoid recompilation, the new cache will use the maximum between the current
         `max_cache_len` and the potential previous value of `max_cache_len`, if there was some previous `generate` calls with
-        static cache.
+        static cache. That length is memorized under `max_length_attr_name`, which a model driving two decode streams
+        (VibeVoice's CFG branches) overrides so each keeps its own.
         """
         offload_cache = "offloaded" in cache_implementation
-        previous_max_len = getattr(self, "_previous_max_cache_length", -1)
+        previous_max_len = getattr(self, max_length_attr_name, -1)
         effective_length = max(max_cache_len, previous_max_len)
 
         self_attention_cache_kwargs = {
@@ -2015,7 +2031,7 @@ class GenerationMixin(ContinuousMixin):
         cache = StaticCache(**self_attention_cache_kwargs)
         if self.config.is_encoder_decoder:
             cross_attention_cache_kwargs = {
-                "config": self.config.get_text_config(decoder=True),
+                "config": self._cross_attention_cache_config(),
                 "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
                 "offloading": offload_cache,
             }
@@ -2025,17 +2041,18 @@ class GenerationMixin(ContinuousMixin):
             # (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
             init_shape = self._get_static_cache_init_shape()
             if init_shape is not None:
-                num_heads, head_dim = init_shape
+                num_heads, key_head_dim, value_head_dim = init_shape
                 cache.early_initialization(
                     batch_size=batch_size,
                     num_heads=num_heads,
-                    head_dim=head_dim,
+                    head_dim=key_head_dim,
                     dtype=self.dtype,
                     device=self.device,
+                    value_head_dim=value_head_dim,
                 )
 
         # Set the current length on the current model, to avoid recompilation later if we can
-        self._previous_max_cache_length = effective_length
+        setattr(self, max_length_attr_name, effective_length)
 
         return cache
 
@@ -2157,7 +2174,7 @@ class GenerationMixin(ContinuousMixin):
         ):
             model_kwargs[cache_name] = EncoderDecoderCache(
                 model_kwargs[cache_name],  # self-attention cache
-                DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
+                DynamicCache(**{**dynamic_cache_kwargs, "config": self._cross_attention_cache_config()}),
             )
 
         # If we just created a cache for an assistant model, mark it for past recording, as we will need to rollback it

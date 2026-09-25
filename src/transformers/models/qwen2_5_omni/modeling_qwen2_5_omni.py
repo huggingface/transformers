@@ -1784,8 +1784,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         audio_outputs = self.audio_tower(
             input_features, feature_lens=feature_lens, aftercnn_lens=audio_feat_lengths, **kwargs
         )
-        if audio_outputs.last_hidden_state.shape[0] != sum(audio_output_lengths.tolist()):
-            raise ValueError("length of audio_features should match audio_output_lengths")
+        torch_compilable_check(
+            audio_outputs.last_hidden_state.shape[0] == audio_output_lengths.sum(),
+            "length of audio_features should match audio_output_lengths",
+        )
 
         return audio_outputs
 
@@ -2347,13 +2349,10 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                 self.rope_deltas = rope_deltas - delta0
 
             else:
-                if inputs_embeds is not None:
-                    batch_size, seq_length, _ = inputs_embeds.shape
-                else:
-                    batch_size, seq_length = input_ids.shape
-
-                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
-                position_ids = torch.arange(seq_length, device=input_ids.device)
+                tokens = inputs_embeds if input_ids is None else input_ids
+                batch_size, seq_length = tokens.shape[:2]
+                delta = (past_key_values_length + self.rope_deltas).to(tokens.device)
+                position_ids = torch.arange(seq_length, device=tokens.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
