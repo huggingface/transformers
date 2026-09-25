@@ -24,7 +24,6 @@ sectors.
 """
 
 import logging
-from contextlib import nullcontext
 from math import ceil
 
 import torch
@@ -35,6 +34,7 @@ from .cache_allocators import CachePool
 from .distributed import DistributedHelper
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
 from .scheduler import Scheduler
+from .utils import device_stream_ctx
 
 
 def contiguous_runs(indices: list[int]) -> list[tuple[int, int, int]]:
@@ -67,11 +67,13 @@ class OffloadingManager:
         scheduler: Scheduler,
         cpu_offload_space_gib: float | None,
         safety_threshold: float,
-        compute_stream: torch.cuda.Stream | None,
+        compute_stream,
         distributed_helper: DistributedHelper,
     ) -> None:
         self.cache = cache
         self.scheduler = scheduler
+        cache_device = torch.device(cache.device)
+        self.device_module = torch.get_device_module(cache_device) if cache_device.type in ("cuda", "xpu") else None
         # All offloading transfers run on the compute stream (stream-ordered, like the fork copy path)
         self._compute_stream = compute_stream
 
@@ -151,7 +153,7 @@ class OffloadingManager:
 
     def _stream_ctx(self):
         """Returns a context manager that runs enclosed ops on the compute stream, or a no-op when none is set."""
-        return torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
+        return device_stream_ctx(self._compute_stream)
 
     def offload_requests(self) -> bool:
         """Evict enough active requests that, at the next batch, every remaining starved request can allocate the
