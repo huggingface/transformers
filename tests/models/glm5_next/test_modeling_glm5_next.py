@@ -105,10 +105,12 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("layer_types", ["linear_attention", "indexed_attention"])
         super().__init__(parent, **kwargs)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                batch_size * (self.image_size**2) // (self.patch_size**2),
                 self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             ]
         )
@@ -128,13 +130,14 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
         input_ids[:, 1 + self.num_image_tokens] = self.image_end_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[:, 1 : 1 + self.num_image_tokens] = 1
         patches_per_side = self.image_size // self.patch_size
         return {
             "image_grid_thw": torch.tensor(
-                [[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device
+                [[1, patches_per_side, patches_per_side]] * batch_size, device=torch_device
             ),
             "mm_token_type_ids": mm_token_type_ids,
         }
@@ -199,16 +202,6 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
         config = copy.deepcopy(config)
         config.text_config.head_dim = config.text_config.qk_head_dim
         return VLMModelTest._prepare_config_headdim(config, requested_dim)
-
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        """Override similar to GLM4V: images shaped as (bs*patch_len, dim) so we can't slice to batches in generate"""
-        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size)
-        _, full_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-        num_patches = int(inputs_dict["image_grid_thw"].prod(-1).sum().item())
-        inputs_dict["pixel_values"] = full_inputs["pixel_values"][:num_patches]
-
-        return config, inputs_dict
 
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, 3 * config.linear_num_heads * config.linear_head_dim, config.linear_conv_kernel_dim)
@@ -402,59 +395,6 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
                     text_config.hidden_size,
                 ),
             )
-
-    def test_mismatching_num_image_tokens(self):
-        """
-        Overridden as flattened over patches, so slicing one row removes one patch rather than one complete image.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)  # successful forward with no modifications
-
-            # Test 1: remove one image but leave the image token in text
-            # Key change: Handle flattened patches properly
-            image_grid_thw = curr_input_dict["image_grid_thw"][-1:, ...]
-            curr_input_dict["image_grid_thw"] = image_grid_thw
-            num_patches = int(image_grid_thw.prod(dim=-1).sum().item())
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-num_patches:, ...]
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # Test 2: simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            # First, take just the first item from each tensor
-            curr_input_dict = {
-                key: val if key == "pixel_values" else val[:1]  # only slice pixel values
-                for key, val in curr_input_dict.items()
-            }
-
-            # Double the batch size for all batch-dimension tensors except pixel_values
-            # This simulates having 2 prompts (each with image tokens) but only 1 image
-            batch_tensors_to_double = ["input_ids", "attention_mask", "token_type_ids"]
-            for key in batch_tensors_to_double:
-                if key in curr_input_dict and curr_input_dict[key] is not None:
-                    curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
-
-            # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # Test 3: two images and two image tokens don't raise an error
-            curr_input_dict["pixel_values"] = torch.cat(
-                [curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0
-            )
-            curr_input_dict["image_grid_thw"] = torch.cat(
-                [curr_input_dict["image_grid_thw"], curr_input_dict["image_grid_thw"]], dim=0
-            )
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = torch.cat(
-                    [curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0
-                )
-            _ = model(**curr_input_dict)
 
     @pytest.mark.generate
     @pytest.mark.torch_compile_test

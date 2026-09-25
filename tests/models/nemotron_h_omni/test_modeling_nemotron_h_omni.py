@@ -205,11 +205,11 @@ class NemotronHOmniAudio2TextModelTester(ALMModelTester):
         # the vision tower is always built, so keep it tiny
         return {**super()._build_modality_sub_configs(), "vision_config": get_tiny_vision_config(self)}
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
         # Parakeet takes `(batch, frames, mel_bins)`
         return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
 
-    def create_audio_mask(self):
+    def create_audio_mask(self, batch_size: int | None = None):
         # clips are right-padded; at least one uses every frame
         lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length).abs() + 1
         lengths[0] = self.feat_seq_length
@@ -336,15 +336,6 @@ class NemotronHOmniModelTestMixin:
 @require_torch
 class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTest, unittest.TestCase):
     model_tester_class = NemotronHOmniVision2TextModelTester
-
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
-        # packed patches cannot be sliced per sample like the other inputs; keep the patches of the kept images
-        grid_size = self.model_tester.image_size // self.model_tester.patch_size
-        inputs_dict["pixel_values"] = floats_tensor(
-            [len(inputs_dict["image_grid_hw"]) * grid_size**2, 3 * self.model_tester.patch_size**2]
-        )
-        return config, inputs_dict
 
     def test_mismatching_num_image_tokens(self):
         # packed `pixel_values` have no batch dimension, so images are dropped or added by their patches

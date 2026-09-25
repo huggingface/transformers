@@ -1624,7 +1624,6 @@ class ModelTesterMixin(ExportTesterMixin):
             "tie_word_embeddings",
         ]
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size = self.model_tester.batch_size
 
         config_dict = config.to_diff_dict()
         for common_config_property in common_config_properties:
@@ -1651,17 +1650,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             model = model_class(copy.deepcopy(config)).to(torch_device).eval()
-            single_batch_input = {}
-            for key, value in batched_input.items():
-                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
-                    single_batch_shape = value.shape[0] // batch_size
-                    single_batch_input[key] = value[:single_batch_shape]
-                else:
-                    single_batch_input[key] = value
-
             with torch.no_grad():
-                model(**single_batch_input)
+                model(**batched_input)
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:

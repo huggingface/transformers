@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch HunYuanVL model."""
 
-import copy
 import unittest
 
 import requests
@@ -113,9 +112,11 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return torch.ones_like(input_ids, device=torch_device)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
-            [self.batch_size * self.num_image_patches, self.num_channels * self.patch_size * self.patch_size]
+            [batch_size * self.num_image_patches, self.num_channels * self.patch_size * self.patch_size]
         ).to(torch_device)
 
     def place_image_tokens(self, input_ids, config):
@@ -124,11 +125,12 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
         input_ids[:, : self.num_image_placeholder_tokens] = self.image_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids, device=torch_device)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, self.grid_hw, self.grid_hw]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, self.grid_hw, self.grid_hw]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
 
@@ -148,33 +150,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
-
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        filtered_inputs_dict = {}
-        for key, value in inputs_dict.items():
-            if key == "pixel_values":
-                filtered_inputs_dict[key] = value[: batch_size * self.model_tester.num_image_patches]
-            elif key == "image_grid_thw":
-                filtered_inputs_dict[key] = value[:batch_size]
-            elif key == "position_ids":
-                continue
-            elif isinstance(value, torch.Tensor):
-                filtered_inputs_dict[key] = value[:batch_size, ...]
-            else:
-                filtered_inputs_dict[key] = value
-
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
 
     def test_auto_model_uses_base_model(self):
         config = self.model_tester.get_config()
@@ -264,42 +239,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         config = HunYuanVLConfig(**legacy_kwargs)
         for alias in aliases:
             self.assertNotIn(alias, config.to_dict())
-
-    def test_mismatching_num_image_tokens(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            _ = model(**input_dict)
-
-            curr_input_dict = copy.deepcopy(input_dict)
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][: -self.model_tester.num_image_patches]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][:-1]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            input_ids = input_dict["input_ids"][:1]
-            attention_mask = input_dict["attention_mask"][:1]
-            pixel_values = input_dict["pixel_values"][: self.model_tester.num_image_patches]
-            image_grid_thw = input_dict["image_grid_thw"][:1]
-            mm_token_type_ids = input_dict["mm_token_type_ids"][:1]
-
-            with self.assertRaises(ValueError):
-                _ = model(
-                    input_ids=torch.cat([input_ids, input_ids], dim=0),
-                    attention_mask=torch.cat([attention_mask, attention_mask], dim=0),
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
-                )
-
-            _ = model(
-                input_ids=torch.cat([input_ids, input_ids], dim=0),
-                attention_mask=torch.cat([attention_mask, attention_mask], dim=0),
-                pixel_values=torch.cat([pixel_values, pixel_values], dim=0),
-                image_grid_thw=torch.cat([image_grid_thw, image_grid_thw], dim=0),
-                mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
-            )
 
     def test_prepare_inputs_for_generation_drops_pixel_values_after_prefill(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

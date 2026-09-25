@@ -190,20 +190,6 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
         )
         return input_ids
 
-    def _navit_pixel_values(self, batch_size):
-        """Build NaViT-packed pixel_values: (1, C, patch_size, total_L)."""
-        C = self.num_channels
-        P = self.patch_size
-        h_patches = self.image_size // self.patch_size
-        w_patches = self.image_size // self.patch_size
-        total_L = batch_size * h_patches * w_patches * P
-        return floats_tensor([1, C, P, total_L])
-
-    def _target_sizes(self, batch_size):
-        h_patches = self.image_size // self.patch_size
-        w_patches = self.image_size // self.patch_size
-        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
-
     def _mm_token_type_ids(self, input_ids):
         """What the processor emits: 0 for text, 1 for image tokens, 2 for video tokens."""
         mm_token_type_ids = torch.zeros_like(input_ids)
@@ -235,12 +221,24 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
             mm_token_type_ids=self._mm_token_type_ids(input_ids),
         )
 
-    def create_pixel_values(self):
-        return self._navit_pixel_values(self.batch_size)
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        C = self.num_channels
+        P = self.patch_size
+        h_patches = self.image_size // self.patch_size
+        w_patches = self.image_size // self.patch_size
+        total_L = batch_size * h_patches * w_patches * P
+        return floats_tensor([1, C, P, total_L])
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        h_patches = self.image_size // self.patch_size
+        w_patches = self.image_size // self.patch_size
+        target_sizes = torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
+
         return {
-            "target_sizes": self._target_sizes(self.batch_size),
+            "target_sizes": target_sizes,
             "mm_token_type_ids": self._mm_token_type_ids(input_ids),
         }
 
@@ -293,12 +291,7 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
 @require_torch
 class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniCPMV4_7VisionText2TextModelTester
-
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
-        inputs_dict["pixel_values"] = self.model_tester._navit_pixel_values(batch_size)
-        inputs_dict["target_sizes"] = self.model_tester._target_sizes(batch_size)
-        return config, inputs_dict
+    additional_model_inputs = ["target_sizes", "target_sizes_videos"]
 
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -316,20 +309,9 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
             "target_sizes_videos": inputs_dict["target_sizes"],
         }
 
-    @unittest.skip(
-        "NaViT packing puts all images in a single tensor with dim-0 = 1; "
-        "the default test cannot correctly simulate image count mismatches"
-    )
-    def test_mismatching_num_image_tokens(self):
-        pass
-
     @unittest.skip(reason="Compile not yet supported for MiniCPM-V models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip("FlashAttention only supports fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     @unittest.skip(
@@ -337,13 +319,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         "generic batch-splitting logic cannot separate individual samples"
     )
     def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="NaViT packs all images into a single tensor (batch dim=1); "
-        "generic batch-splitting logic cannot separate individual samples"
-    )
-    def test_model_forward_default_config_values(self):
         pass
 
     @unittest.skip(reason="Vision backbone is packed Qwen-style and return no attentions yet")

@@ -397,10 +397,12 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
     def _special_token_ids(self):
         return super()._special_token_ids | {self.video_token_id, self.vision_start_token_id, self.vision_end_token_id}
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
             [
-                self.batch_size * (self.image_size // self.patch_size) ** 2,
+                batch_size * (self.image_size // self.patch_size) ** 2,
                 self.num_channels * self.patch_size**2 * self.temporal_patch_size,
             ]
         )
@@ -412,11 +414,12 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
         input_ids[:, 1] = self.image_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
 
@@ -501,40 +504,6 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
                     output_hidden_states=True,
                 )
             self.assertListEqual([hidden_state.shape for hidden_state in outputs.hidden_states], expected_shapes)
-
-    def test_mismatching_num_image_tokens(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            with torch.no_grad():
-                model(**inputs_dict)
-
-            mismatched_inputs = copy.deepcopy(inputs_dict)
-            mismatched_inputs["pixel_values"] = mismatched_inputs["pixel_values"][-1:]
-            mismatched_inputs["image_grid_thw"] = mismatched_inputs["image_grid_thw"][-1:]
-            with self.assertRaises(ValueError):
-                model(**mismatched_inputs)
-
-            single_inputs = {
-                key: value[:1] if isinstance(value, torch.Tensor) else value for key, value in inputs_dict.items()
-            }
-            two_prompt_inputs = {
-                key: torch.cat([value, value]) if isinstance(value, torch.Tensor) else value
-                for key, value in single_inputs.items()
-            }
-            two_prompt_inputs["pixel_values"] = single_inputs["pixel_values"]
-            two_prompt_inputs["image_grid_thw"] = single_inputs["image_grid_thw"]
-            with self.assertRaises(ValueError):
-                model(**two_prompt_inputs)
-
-            two_prompt_inputs["pixel_values"] = torch.cat(
-                [single_inputs["pixel_values"], single_inputs["pixel_values"]]
-            )
-            two_prompt_inputs["image_grid_thw"] = torch.cat(
-                [single_inputs["image_grid_thw"], single_inputs["image_grid_thw"]]
-            )
-            with torch.no_grad():
-                model(**two_prompt_inputs)
 
     @unittest.skip("QSA index selection has data-dependent control flow")
     def test_generate_compile_model_forward_fullgraph(self):

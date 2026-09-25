@@ -209,46 +209,6 @@ class Ernie4_5_VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        """
-        Same as in GLM4V, see `tests/models/glm4v/test_modeling_glm4v.py` for reference
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # We don't want a few model inputs in our model input dictionary for generation tests
-        input_keys_to_ignore = [
-            # we don't want encoder-decoder models to start from filled decoder ids
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            # we'll set cache use in each test differently
-            "use_cache",
-            # ignore labels if it is in the input dict
-            "labels",
-        ]
-
-        # The diff from the general `prepare_config_and_inputs_for_generate` lies here
-        patch_size = config.vision_config.patch_size
-        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
-        filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
-            for k, v in inputs_dict.items()
-            if k not in input_keys_to_ignore
-        }
-        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-
-        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
-
     def _video_features_prepare_config_and_inputs(self):
         """
         Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.

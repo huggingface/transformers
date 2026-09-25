@@ -101,7 +101,7 @@ class ShieldGemma2ModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_id] = 1
         return {"token_type_ids": token_type_ids}
