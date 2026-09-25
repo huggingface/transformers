@@ -845,7 +845,7 @@ else:
     _create_module_alias(f"{__name__}.image_processing_utils_fast", ".image_processing_backends")
 
     for _proc_file in sorted((Path(__file__).parent / "models").rglob("image_processing_*.py")):
-        _model = ".".join(_proc_file.parent.relative_to(Path(__file__).parent / "models").parts)
+        _model = _proc_file.parent.name
         _module = _proc_file.stem
         _target = f".models.{_model}.{_module}"
         _create_module_alias(f"{__name__}.models.{_model}.{_module}_fast", _target)

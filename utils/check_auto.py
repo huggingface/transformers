@@ -25,7 +25,6 @@ from typing import Any
 from sort_auto_mappings import sort_auto_mapping
 
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES as COMPLETE_CONFIG_MAPPING_NAMES
-from transformers.models.auto.configuration_auto import DEPRECATED_MODELS
 from transformers.models.auto.feature_extraction_auto import MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES
 from transformers.models.auto.image_processing_auto import MISSING_IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.processing_auto import MISSING_PROCESSOR_MAPPING_NAMES
@@ -132,10 +131,9 @@ def build_processor_mapping(
         module = model_type.replace("-", "_")
         processor_name = None
 
-        folder = f"deprecated/{module}" if module in DEPRECATED_MODELS else module
-        processor_path = f"src/transformers/models/{folder}/{processor_filename}_{module}.py"
-        if os.path.exists(processor_path):
-            with open(processor_path, "r", encoding="utf-8") as f:
+        processor_paths = glob.glob(f"src/transformers/models/**/{module}/{processor_filename}_{module}.py", recursive=True)
+        if processor_paths:
+            with open(processor_paths[0], "r", encoding="utf-8") as f:
                 content = f.read()
 
             tree = ast.parse(content)
