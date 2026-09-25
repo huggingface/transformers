@@ -102,7 +102,7 @@ class GemmaConfig(PreTrainedConfig):
     use_bidirectional_attention: bool | None = None
 
     def __post_init__(self, **kwargs):
-        # #35235 dropped this conversion which we now handle here instead
+        # #35235 dropped this conversion (which is needed per #29402) which we now handle here instead
         if self.hidden_act == "gelu":
             logger.warning_once(
                 'We found `hidden_act="gelu"` in this Gemma config. This is a legacy value of the official '
