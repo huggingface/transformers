@@ -63,7 +63,7 @@ from transformers.generation.continuous_batching.requests import (
     get_device_and_memory_breakdown,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
-from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
+from transformers.integrations.sdpa_attention import sdpa_attention_forward
 from transformers.testing_utils import (
     backend_empty_cache,
     backend_memory_allocated,
@@ -266,7 +266,7 @@ def _make_allocator(
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
-        [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_paged_forward)]
+        [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_forward)]
     )
     def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
         # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
