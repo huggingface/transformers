@@ -33,6 +33,7 @@ if is_torch_available():
 if is_torchvision_available():
     from transformers.models.idefics2.image_processing_idefics2 import convert_to_rgb as convert_to_rgb_torch
 
+
 class Idefics2ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
