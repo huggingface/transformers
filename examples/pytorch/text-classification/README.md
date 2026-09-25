@@ -69,7 +69,7 @@ The following example fine-tunes BERT on the `imdb` dataset hosted on our [hub](
 ```bash
 python run_glue.py \
   --model_name_or_path google-bert/bert-base-cased \
-  --dataset_name imdb  \
+  --dataset_name stanfordnlp/imdb  \
   --do_train \
   --do_predict \
   --max_seq_length 128 \
@@ -84,10 +84,10 @@ python run_glue.py \
 ## Text classification
 As an alternative, we can use the script [`run_classification.py`](./run_classification.py) to fine-tune models on a single/multi-label classification task. 
 
-The following example fine-tunes BERT on the `en` subset of  [`amazon_reviews_multi`](https://huggingface.co/datasets/amazon_reviews_multi) dataset.
+The following example fine-tunes BERT on the `en` subset of  [`amazon_reviews_multi`](https://huggingface.co/datasets/defunct-datasets/amazon_reviews_multi) dataset.
 We can specify the metric, the label column and also choose which text columns to use jointly for classification.
 ```bash
-dataset="amazon_reviews_multi"
+dataset="defunct-datasets/amazon_reviews_multi"
 subset="en"
 python run_classification.py \
     --model_name_or_path  google-bert/bert-base-uncased \
@@ -108,9 +108,9 @@ python run_classification.py \
 ```
 Training for 1 epoch results in acc of around 0.5958 for review_body only and 0.659 for title+body+category.
 
-The following is a multi-label classification example. It fine-tunes BERT on the `reuters21578` dataset hosted on our [hub](https://huggingface.co/datasets/reuters21578):
+The following is a multi-label classification example. It fine-tunes BERT on the `reuters21578` dataset hosted on our [hub](https://huggingface.co/datasets/ucirvine/reuters21578):
 ```bash
-dataset="reuters21578"
+dataset="ucirvine/reuters21578"
 subset="ModApte"
 python run_classification.py \
     --model_name_or_path google-bert/bert-base-uncased \
