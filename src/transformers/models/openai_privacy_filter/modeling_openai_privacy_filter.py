@@ -32,7 +32,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_rocm_platform
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -405,13 +405,13 @@ class OpenAIPrivacyFilterPreTrainedModel(PreTrainedModel):
         "attentions": OpenAIPrivacyFilterAttention,
     }
     _keep_in_fp32_modules = []
-    # metal-flash-sdpa carries the sliding-window + attention-sink path on MPS (Apple Silicon);
-    # the others remain the defaults on CUDA.
-    _compatible_flash_implementations = (
-        ["kernels-community/aiter-flash-attn"]
-        if is_rocm_platform()
-        else ["kernels-community/vllm-flash-attn3", "flash_attention_4", "kernels-community/metal-flash-sdpa"]
-    )
+    # metal-flash-sdpa covers MPS and aiter-flash-attn ROCm, the others CUDA
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/metal-flash-sdpa",
+        "kernels-community/aiter-flash-attn",
+    ]
     _keep_in_fp32_modules_strict = ["sinks"]
 
     @torch.no_grad()

@@ -418,7 +418,11 @@ class GraniteMoeSWAPreTrainedModel(PreTrainedModel):
         "hidden_states": GraniteMoeSWADecoderLayer,
         "attentions": GraniteMoeSWAAttention,
     }
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/aiter-flash-attn",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
