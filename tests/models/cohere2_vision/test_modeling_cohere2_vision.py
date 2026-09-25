@@ -240,6 +240,7 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             f"\nExpected logits: {expected_logits}"
             f"\nDifference: {torch.abs(actual_logits - expected_logits)}",
         )
+        del model
 
     @slow
     @require_torch_accelerator
@@ -388,6 +389,7 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             expected_output,
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
+        del model
 
     @slow
     @require_torch_accelerator
@@ -472,6 +474,7 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             expected_output,
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
+        del model
 
 
 @slow
