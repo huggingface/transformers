@@ -1700,7 +1700,6 @@ def convert_and_load_state_dict_in_model(
                         if hasattr(tensor, "get_dtype")
                         else tensor.is_floating_point()
                     )
-                    or hf_quantizer.param_keeps_checkpoint_dtype(renamed_key)
                 )
             ):
                 # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,

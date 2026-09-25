@@ -62,11 +62,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
     quantization_config: "FineGrainedConfig"
     default_activation_format: str | None = None
     quantization_param_suffixes = ("_scale_inv",)
-
-    def param_keeps_checkpoint_dtype(self, param_name: str) -> bool:
-        # a scale loads as the checkpoint ships it (Qwen3 and Mistral ship BF16, DeepSeek-V3 fp32): the
-        # kernels read either, and a save then writes it back unchanged
-        return param_name.endswith(("_scale_inv", "activation_scale", "_global_scale"))
+    # a scale loads as the checkpoint ships it (Qwen3 and Mistral ship BF16, DeepSeek-V3 fp32): the kernels
+    # read either, and a save then writes it back unchanged
+    dtype_plan = dict.fromkeys(("_scale_inv", "activation_scale", "_global_scale"))
 
     @property
     def supports_dequantize(self) -> bool:

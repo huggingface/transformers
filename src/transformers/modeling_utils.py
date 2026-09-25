@@ -4284,6 +4284,8 @@ class PreTrainedModel(
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
+        if hf_quantizer is not None:
+            dtype_plan.update(hf_quantizer.dtype_plan)
 
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)

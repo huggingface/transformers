@@ -84,10 +84,14 @@ class HfQuantizer(ABC):
         quantization_param_suffixes (`tuple[str, ...]`):
             Suffixes of the parameters quantization adds to a weight (`weight` -> `weight_scale_inv`).
             A save runs each through its weight's reversed conversion, so it lands in the weight's layout.
+        dtype_plan (`dict`):
+            Entries added to the model's dtype plan: a parameter pattern and the dtype it loads in, `None`
+            keeping the checkpoint's (e.g. quantization scales, which a checkpoint may ship in any float dtype).
     """
 
     requires_calibration = False
     quantization_param_suffixes: tuple[str, ...] = ()
+    dtype_plan: dict = {}
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -134,13 +138,6 @@ class HfQuantizer(ABC):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
         Check whether a given param needs to be quantized.
-        """
-        return False
-
-    def param_keeps_checkpoint_dtype(self, param_name: str) -> bool:
-        """
-        Whether a pre-quantized checkpoint's `param_name` loads in the dtype it ships in rather than the model's
-        (e.g. quantization scales, which a checkpoint may ship narrower or wider than the model dtype).
         """
         return False
 

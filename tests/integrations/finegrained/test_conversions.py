@@ -95,7 +95,9 @@ def _load_and_save(checkpoint, quantization_config):
     with mock.patch.object(fg, "is_sm100", return_value=False):
         quantizer._process_model_before_weight_loading(model)
         load_config = LoadStateDictConfig(
-            weight_mapping=quantizer.update_weight_conversions(_model_mapping()), hf_quantizer=quantizer
+            weight_mapping=quantizer.update_weight_conversions(_model_mapping()),
+            hf_quantizer=quantizer,
+            dtype_plan=quantizer.dtype_plan,
         )
         info, _ = convert_and_load_state_dict_in_model(
             model, {k: v.clone() for k, v in checkpoint.items()}, load_config
