@@ -21,6 +21,11 @@ from get_previous_daily_ci import get_last_daily_ci_run
 from huggingface_hub import HfApi
 
 
+# Bucket for failures that no code change could have caused, so that they stay visible in the report without being
+# attributed to the author of the test that surfaced them.
+ENVIRONMENT_FAILURE_LABEL = "CI environment (not a regression)"
+
+
 if __name__ == "__main__":
     api = HfApi()
 
@@ -103,11 +108,17 @@ if __name__ == "__main__":
     for model, model_result in data.items():
         for device, failed_tests in model_result.items():
             for failed_test in failed_tests:
-                author = failed_test["author"]
+                if failed_test.get("is_environment_failure"):
+                    # No code change could have caused this failure (see `utils/check_bad_commit.py`), so it is not
+                    # anyone's regression. Group it under a fixed label rather than counting it against an author: it
+                    # still needs someone to act on it, but blaming the last person to touch the test is wrong.
+                    author = ENVIRONMENT_FAILURE_LABEL
+                else:
+                    author = failed_test["author"]
 
-                # If author is not a team member, and the PR is already merged: change to the one who merged the PR
-                if author not in team_members and failed_test["merged_by"] is not None:
-                    author = failed_test["merged_by"]
+                    # If author is not a team member, and the PR is already merged: change to the one who merged the PR
+                    if author not in team_members and failed_test["merged_by"] is not None:
+                        author = failed_test["merged_by"]
 
                 if author not in new_data:
                     new_data[author] = Counter()
@@ -123,7 +134,11 @@ if __name__ == "__main__":
                 failed_tests = [
                     x
                     for x in failed_tests
-                    if x["author"] == author or (x["merged_by"] is not None and x["merged_by"] == author)
+                    if (
+                        author == ENVIRONMENT_FAILURE_LABEL
+                        if x.get("is_environment_failure")
+                        else x["author"] == author or (x["merged_by"] is not None and x["merged_by"] == author)
+                    )
                 ]
                 model_result[device] = failed_tests
             _data[model] = {k: v for k, v in model_result.items() if len(v) > 0}
