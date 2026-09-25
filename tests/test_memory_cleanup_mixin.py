@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import math
 import os
 import warnings
@@ -43,6 +44,7 @@ _MEMORY_CLEANUP_ATTRS = frozenset(
         "_memory_cleanup_instance_attrs",
         "_memory_cleanup_baseline",
         "_memory_cleanup_rss_baseline",
+        "_memory_cleanup_class_baseline",
     }
 )
 
@@ -60,8 +62,8 @@ def with_no_grad(method):
 
 
 def _memory_leak_settings() -> tuple[float | None, str]:
-    """Return `(threshold_mib, mode)` from the environment; `threshold_mib` is `None` when the check is off."""
-    raw = os.environ.get("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", "").strip()
+    """Default to warnings above 10 MiB; an explicitly empty threshold disables checking."""
+    raw = os.environ.get("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", "10").strip()
     if not raw:
         return None, "warn"
     try:
@@ -74,6 +76,33 @@ def _memory_leak_settings() -> tuple[float | None, str]:
     if mode not in ("warn", "error"):
         raise ValueError(f"`TRANSFORMERS_TEST_MEMORY_LEAK_MODE` must be 'warn' or 'error', got {mode!r}.")
     return threshold, mode
+
+
+def _install_class_baseline_hook(cls) -> None:
+    """Wrap `cls.setUpClass` to read the device baseline before the class allocates anything.
+
+    Wrapped rather than written as a `setUpClass` on the mixin: half the in-tree overrides never call
+    `super().setUpClass()`, and those are the ones that load a checkpoint at class scope.
+    """
+    static = inspect.getattr_static(cls, "setUpClass", None)
+    if static is None:
+        return
+    original = getattr(static, "__func__", static)
+    if getattr(original, "_memory_cleanup_reads_baseline", False):
+        # `class Child(MemoryCleanupTestCase): pass` reuses the inherited wrapper, bound to Child.
+        return
+
+    def set_up_class(inner_cls, *args, **kwargs):
+        # Preserve the first reading when TestHubKernels calls super().setUpClass().
+        # `__dict__` excludes a parent's baseline that getattr(Child, ...) would inherit.
+        if _memory_leak_settings()[0] is not None and "_memory_cleanup_class_baseline" not in inner_cls.__dict__:
+            inner_cls._memory_cleanup_class_baseline = _device_memory_allocated()
+        return original(inner_cls, *args, **kwargs)
+
+    set_up_class._memory_cleanup_reads_baseline = True
+    set_up_class.__name__ = "setUpClass"
+    set_up_class.__qualname__ = f"{cls.__qualname__}.setUpClass"
+    cls.setUpClass = classmethod(set_up_class)
 
 
 class MemoryCleanupMixin:
@@ -97,8 +126,11 @@ class MemoryCleanupMixin:
     Attributes assigned in the class body are kept; everything added later is dropped. An overridden `setUp` must
     call `super().setUp()` (the instance snapshot is taken there) or the test errors out saying so.
 
-    Leak check, off by default since collecting frees what a reproducer needs: `TRANSFORMERS_TEST_MEMORY_LEAK_MIB=<n>`
-    reports tests leaving more than `<n>` MiB on the device, `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` fails them.
+    Leak checks warn by default when more than 10 MiB remains allocated on the device after cleanup.
+    `TRANSFORMERS_TEST_MEMORY_LEAK_MIB=<n>` overrides the threshold; an empty value disables checking.
+    `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` fails leaking tests instead of warning.
+    The same threshold is applied again at the class boundary (against a baseline read before `setUpClass`),
+    since a leaked class fixture sits inside every test's own baseline and so reports zero on all of them.
 
     Known leak, still unfixed: compiling with `cache_implementation="static"` leaves memory in the cache.
     """
@@ -107,6 +139,8 @@ class MemoryCleanupMixin:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
+        # Before the snapshot, so `_drop_new_attributes` counts the wrapper as class body and keeps it.
+        _install_class_baseline_hook(cls)
         # Taking the snapshot at class-creation time records the class body and nothing else, so whatever
         # `setUpClass` assigns later is always dropped, whatever order it calls `super()` in.
         snapshot = set(vars(cls))
@@ -121,6 +155,10 @@ class MemoryCleanupMixin:
             # `setUpClass` may have parked a model on the class; nothing else drops it.
             _drop_new_attributes(cls, cls._memory_cleanup_class_attrs)
             _run_cleanup()
+            leak = cls._class_memory_leak_report()
+        # Outside the `finally`: a teardown that raised is the real failure, and must not be replaced.
+        if leak is not None:
+            _emit_leak(leak, _memory_leak_settings()[1])
 
     def setUp(self):
         super().setUp()
@@ -175,13 +213,46 @@ class MemoryCleanupMixin:
             "Something still references a device tensor: a model on `self`/the class, captured by a closure, or "
             "held by a `@cached_property`."
         )
-        if mode == "error":
-            raise AssertionError(message)
-        warnings.warn(message, stacklevel=2)
+        _emit_leak(message, mode)
+
+    @classmethod
+    def _class_memory_leak_report(cls) -> str | None:
+        """What the class still holds now `tearDownClass` has run, as a message, or `None` when that is fine.
+
+        Returned rather than raised so the caller can tell whether an exception is already on its way up.
+        """
+        baseline = cls.__dict__.get("_memory_cleanup_class_baseline")
+        if baseline is not None:
+            try:
+                delattr(cls, "_memory_cleanup_class_baseline")  # so a second run measures itself
+            except AttributeError:
+                pass
+        threshold_mib, _ = _memory_leak_settings()
+        # No baseline means the check was off when `setUpClass` ran, so there is nothing to compare to.
+        if threshold_mib is None or baseline is None:
+            return None
+        leaked_mib = (_device_memory_allocated() - baseline) / 1024**2
+        if leaked_mib <= threshold_mib:
+            return None
+        baseline_mib = baseline / 1024**2
+        return (
+            f"{cls.__module__}.{cls.__qualname__} left {leaked_mib:+.1f} MiB allocated on {torch_device} after "
+            f"tearDownClass: {baseline_mib:.1f} MiB before setUpClass, {baseline_mib + leaked_mib:.1f} MiB after "
+            f"the class finished (threshold {threshold_mib:.1f} MiB). Something outside the class still "
+            "references a device tensor it allocated. The next class inherits it, and the OOM will be "
+            "reported against that class's first test."
+        )
 
 
 class MemoryCleanupTestCase(MemoryCleanupMixin, TestCasePlus):
     """`TestCasePlus` plus `MemoryCleanupMixin`, for integration tests that load real checkpoints."""
+
+
+def _emit_leak(message: str, mode: str) -> None:
+    """Fail on a leak under `error`, report it under `warn`."""
+    if mode == "error":
+        raise AssertionError(message)
+    warnings.warn(message, stacklevel=3)
 
 
 def _run_cleanup() -> None:
