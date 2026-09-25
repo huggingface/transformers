@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...integrations.mla import conditional_kv_expansion
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -261,6 +262,7 @@ class MiniCPM3Attention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
+        self.is_mla = True
 
         self.q_proj = (
             None
@@ -299,10 +301,14 @@ class MiniCPM3Attention(nn.Module):
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
 
+    @conditional_kv_expansion
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Expands the compressed latents into key and value states. Args:
+        """Expands the compressed latents into key and value states.
+
+        Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
             - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape
