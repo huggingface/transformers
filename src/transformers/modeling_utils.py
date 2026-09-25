@@ -57,7 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
-from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
+from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
 from .distributed.utils import (
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
@@ -4153,9 +4153,10 @@ class PreTrainedModel(
             distributed_config = DistributedConfig(tp_plan=tp_plan, tp_size=tp_size)
 
         if distributed_config is not None:
-            distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
+            distributed_config, device_map, mesh_manager = cls.prepare_distribute_model(
                 distributed_config, device_map=device_map
             )
+            device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp")) if mesh_manager is not None else None
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4302,7 +4303,7 @@ class PreTrainedModel(
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
-            model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
+            model = cls.maybe_distribute_model(model, distributed_config, mesh_manager)
 
         # Prepare the full device map
         if device_map is not None:
@@ -5005,7 +5006,7 @@ def get_total_byte_count(
         param_byte_count = param.numel() * dtype_size
 
         if len(tp_plan) > 0:
-            is_part_of_plan = _get_parameter_tp_plan(param_name, tp_plan, is_weight=True) is not None
+            is_part_of_plan = _get_parameter_plan(param_name, tp_plan, is_weight=True) is not None
             param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
 
         total_byte_count[device] += param_byte_count

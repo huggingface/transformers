@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
     from .configuration_utils import DistributedConfig
+    from .utils import MeshManager
 
 if is_torch_available():
     import torch
@@ -63,10 +64,10 @@ def is_fsdp_managed_module(module: nn.Module) -> bool:
 
 def _get_fsdp_policy_kwargs(distributed_config: DistributedConfig | None) -> dict[str, Any]:
     """Build ``fully_shard`` policy kwargs from ``DistributedConfig`` runtime flags."""
-    if distributed_config is None:
-        return {}
-
     fsdp_policy_kwargs = {}
+    if distributed_config is None:
+        return fsdp_policy_kwargs
+
     if distributed_config.fsdp_cpu_offload:
         fsdp_policy_kwargs["offload_policy"] = CPUOffloadPolicy()
     if distributed_config.fsdp_mixed_precision:
@@ -185,14 +186,20 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
 
 
 def apply_fully_sharded_data_parallelism(
-    model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
+    model: nn.Module,
+    mesh_manager: MeshManager,
 ) -> nn.Module:
     """
-    Apply FSDP2 (fully_shard) to a model.
+    Apply FSDP2 (fully_shard) using the dense and expert axes from the mesh manager.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
+
+    With token dispatch, routed experts are wrapped separately on `efsdp`, even when its size is one,
+    so the surrounding model's `fsdp` wrapper excludes them.
     """
+    distributed_config = model.config.distributed_config
+    fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
         raise ValueError(
@@ -200,11 +207,15 @@ def apply_fully_sharded_data_parallelism(
             "`base_model_fsdp_plan` on the config and `_fsdp_plan` on the head class."
         )
 
-    distributed_config = getattr(model.config, "distributed_config", None)
-    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
-
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
+
+    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
+    if distributed_config.ep_size > 1 and "ep_dispatch_experts" in model.ep_plan.values():
+        expert_mesh = mesh_manager.get_mesh("efsdp")
+        for module in model.modules():
+            if getattr(module, "_is_expert_parallel", False):
+                fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
