@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 from ..utils import is_kernels_available, is_torch_available
@@ -27,6 +28,14 @@ if is_torch_available():
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import NVFP4Config
+
+
+warnings.warn(
+    "quantizer_nvfp4 is frozen for backward compatibility and no longer "
+    "receives new recipes; the fine-grained quantization machinery lives in transformers.quantizers.quantizer_finegrained "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
+    DeprecationWarning,
+)
 
 
 def _as_cuda_device(device) -> torch.device | None:

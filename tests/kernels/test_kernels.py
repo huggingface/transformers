@@ -475,7 +475,7 @@ class TestKernelUtilities(TestCasePlus):
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.ModuleType("sentinel_kernel_module")
 
-        def fake_get_kernel(repo_id, revision=None, version=None, allow_all_kernels=False):
+        def fake_get_kernel(repo_id, revision=None, version=None, allow_all_kernels=False, check_arch=True):
             self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
             self.assertFalse(allow_all_kernels)
             return sentinel
@@ -520,7 +520,7 @@ class TestKernelUtilities(TestCasePlus):
         sentinel_mod = types.ModuleType("sentinel_kernel_module")
         call_count = {"n": 0}
 
-        def fake_get_kernel(repo_id, revision=None, version=None, allow_all_kernels=False):
+        def fake_get_kernel(repo_id, revision=None, version=None, allow_all_kernels=False, check_arch=True):
             call_count["n"] += 1
             self.assertEqual(repo_id, "kernels-community/causal-conv1d")
             self.assertIsNone(revision)

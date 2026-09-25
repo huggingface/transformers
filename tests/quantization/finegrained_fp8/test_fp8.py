@@ -309,7 +309,8 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         Simple test that checks if the quantized model returns an error when loading with cpu/disk offloaded
         """
         with self.assertRaisesRegex(
-            ValueError, "You are attempting to load an FP8 model with a device_map that contains a cpu/disk device."
+            ValueError,
+            "You are attempting to load a fine-grained quantized model with a device_map that contains a cpu/disk",
         ):
             AutoModelForCausalLM.from_pretrained(
                 self.model_name, device_map=self.offload_device_map, quantization_config=self.quantization_config

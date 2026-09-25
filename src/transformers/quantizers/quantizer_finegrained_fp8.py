@@ -26,6 +26,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
+        logger.warning_once(
+            "`FineGrainedFP8Config` is frozen for backward compatibility and receives no new "
+            "recipes. `FineGrainedConfig` supersedes it (block-FP8, MXFP8, MXFP4, NVFP4, "
+            "weight-only)."
+        )
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():

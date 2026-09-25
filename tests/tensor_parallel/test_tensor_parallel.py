@@ -365,3 +365,36 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+
+@is_tensor_parallel_test
+class TestZeroDimParameterSharding(TestCasePlus):
+    """A 0-dim parameter has no axis to shard, so every owning rank takes the whole value.
+
+    Reachable in practice: quantized checkpoints carry per-tensor scalar scales, and a ModelOpt
+    NVFP4 model ships one `weight_scale_2` / `input_scale` per expert projection — thousands of
+    0-dim tensors. Without the guard, `shard_tensor` builds an empty slice tuple and `source[()]`
+    is not a form a lazy safetensors slice accepts.
+    """
+
+    @staticmethod
+    def _op(placements, axis0_offset=0, axis0_local=2):
+        op = DtensorShardOperation.__new__(DtensorShardOperation)
+        op.placements = placements
+        op.param_ndim = 3
+        op._axis0_offset = axis0_offset
+        op._axis0_local_size = axis0_local
+        return op
+
+    def test_dense_scalar_replicates(self):
+        out = self._op(placements=()).shard_tensor(torch.tensor(3.5))
+        self.assertEqual(out.shape, torch.Size([]))
+        self.assertEqual(out.item(), 3.5)
+
+    def test_moe_scalar_follows_expert_ownership(self):
+        from torch.distributed.tensor.placement_types import Shard
+
+        op = self._op(placements=(Shard(0),), axis0_offset=2, axis0_local=2)  # owns experts [2, 4)
+        owned = op.shard_tensor(torch.tensor(3.5), tensor_idx=3)
+        self.assertEqual(owned.item(), 3.5)
+        self.assertIsNone(op.shard_tensor(torch.tensor(3.5), tensor_idx=1))
