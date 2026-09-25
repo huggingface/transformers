@@ -1463,6 +1463,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
 class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     config: MiniMaxM3VLConfig
 
     def __init__(self, config: MiniMaxM3VLConfig):

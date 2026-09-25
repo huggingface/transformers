@@ -1557,6 +1557,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 @auto_docstring
 class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: DeepseekOcr2Config):
         super().__init__(config)

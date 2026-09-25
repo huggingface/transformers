@@ -720,6 +720,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 @auto_docstring
 class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 

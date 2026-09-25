@@ -269,6 +269,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
 )
 class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
