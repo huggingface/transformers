@@ -2217,7 +2217,7 @@ PYTESSERACT_IMPORT_ERROR = """
 # docstyle-ignore
 PYCTCDECODE_IMPORT_ERROR = """
 {0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
-`pip install pyctcdecode`. Please note that you may need to restart your runtime after installation.
+`pip install pyctcdecode` or `pip install transformers[speech-lm]`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
