@@ -338,6 +338,11 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertFalse(should_convert_module("lm_head", patterns))
         self.assertTrue(should_convert_module("experts", patterns))
 
+        # A literal pattern must not skip a longer name that only shares its prefix
+        # (regression: `mlp.gate` used to also match `mlp.gate_proj`).
+        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", ["model.layers.0.mlp.gate"]))
+        self.assertFalse(should_convert_module("model.layers.0.mlp.gate", ["model.layers.0.mlp.gate"]))
+
     @require_torch
     def test_convert_moe_packed_tensors(self):
         """Test unpacking of quantized tensors"""
