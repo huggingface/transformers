@@ -149,12 +149,12 @@ class OPTAttention(nn.Module):
         # original order of scaling to follow the original implementation
         # and enforce no scaling (1.0) in the attention call below.
         query_states = self.q_proj(hidden_states) * self.scaling
-        query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, tgt_len, -1, self.head_dim).transpose(1, 2)
 
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, tgt_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, tgt_len, -1, self.head_dim).transpose(1, 2)
 
         if past_key_values is not None:
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -407,6 +407,10 @@ class OPTModel(OPTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @property
+    def base_model(self):
+        return self.decoder
+
     def get_input_embeddings(self):
         return self.decoder.embed_tokens
 
@@ -445,6 +449,7 @@ class OPTModel(OPTPreTrainedModel):
 
 class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)
