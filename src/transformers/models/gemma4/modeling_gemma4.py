@@ -1968,6 +1968,11 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
             ),
         )
         if attention_mask is not None:
+            # `create_bidirectional_mask` returns a bool mask for sdpa/flex, but an additive float mask
+            # (0 / dtype min) for eager. The blocked conversion and the attention below both expect bool
+            # semantics (`True` = attend), so normalize here to keep every backend on the same mask.
+            if attention_mask.dtype != torch.bool:
+                attention_mask = attention_mask == 0
             attention_mask = self._convert_4d_mask_to_blocked_5d(attention_mask)
 
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:

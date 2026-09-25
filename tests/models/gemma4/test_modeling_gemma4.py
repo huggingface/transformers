@@ -341,6 +341,47 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    def test_audio_tower_eager_matches_sdpa(self):
+        """Regression test for #48818; the audio tower masks identically under eager and sdpa.
+
+        `create_bidirectional_mask` hands back a bool mask for sdpa but an additive float mask for
+        eager. `Gemma4AudioAttention` consumes it with `masked_fill(mask.logical_not(), ...)`, so an
+        un-normalized float mask inverts the mask and the two backends disagree.
+        """
+        from transformers.models.gemma4.configuration_gemma4 import Gemma4AudioConfig
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4AudioModel
+
+        config = Gemma4AudioConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            subsampling_conv_channels=[16, 8],
+            conv_kernel_size=3,
+            attention_chunk_size=4,
+            attention_context_left=5,
+            attention_context_right=0,
+            output_proj_dims=32,
+            use_clipped_linears=False,
+        )
+
+        batch_size, num_frames = 2, 96
+        input_features = floats_tensor([batch_size, num_frames, config.subsampling_conv_channels[0]])
+        input_features_mask = torch.ones(batch_size, num_frames, dtype=torch.bool, device=torch_device)
+        input_features_mask[1, num_frames // 2 :] = False
+
+        outputs = {}
+        for attn_implementation in ("eager", "sdpa"):
+            set_seed(42)
+            model = Gemma4AudioModel(config).to(torch_device)
+            model.set_attn_implementation(attn_implementation)
+            model.eval()
+            with torch.no_grad():
+                outputs[attn_implementation] = model(
+                    input_features=input_features, attention_mask=input_features_mask
+                ).last_hidden_state
+
+        torch.testing.assert_close(outputs["eager"], outputs["sdpa"], rtol=1e-5, atol=1e-5)
+
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
         """Regression test for #45468; attention context size is properly read from config"""
         from transformers.models.gemma4.configuration_gemma4 import Gemma4AudioConfig
