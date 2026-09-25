@@ -17,8 +17,8 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
-   move the model to the target device/dtype and build the partitioner list.
+1. **Backend preparation** (`_BACKEND_PREPARE`): move the model to the target device/dtype
+   and build the partitioner list.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -74,6 +74,7 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
+    from ..cache_utils import EncoderDecoderCache, StaticCache
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -165,7 +166,8 @@ class ExecutorchExporter(DynamoExporter):
                 edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                     exported_program,
                     partitioner=partitioner,
-                    compile_config=_get_edge_compile_config(exported_program),
+                    compile_config=_get_edge_compile_config(exported_program, config.backend),
+                    transform_passes=_get_transform_passes(config.backend),
                     # A `.pte` binds its inputs positionally and reports only counts and shapes, so what
                     # the graph *is* rides along as one constant method — the same schema the ONNX
                     # exporter writes into `metadata_props` (`build_export_metadata`).
@@ -299,7 +301,16 @@ def _uses_channels_last(exported_program: ExportedProgram) -> bool:
     return False
 
 
-def _get_edge_compile_config(exported_program: ExportedProgram) -> EdgeCompileConfig:
+def _get_transform_passes(backend: str):
+    """Return backend-specific graph transforms, or ``None`` for defaults."""
+    if backend == "mlx":
+        from executorch.backends.mlx.passes import get_default_passes
+
+        return get_default_passes()
+    return None
+
+
+def _get_edge_compile_config(exported_program: ExportedProgram, backend: str) -> EdgeCompileConfig:
     """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
 
     Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
@@ -309,6 +320,8 @@ def _get_edge_compile_config(exported_program: ExportedProgram) -> EdgeCompileCo
     but aren't in the core ATen opset. The CPU portable kernels handle them at
     runtime; XNNPACK leaves them in the non-delegated CPU portion of the graph.
     """
+    if backend == "mlx":
+        return EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True)
     return EdgeCompileConfig(
         # Keep the plain ATen ops instead of the `dim_order_ops` variants wherever the graph allows it:
         # `_empty_dim_order` declares its size as `int[]` where `aten.empty`'s is `SymInt[]`, so dispatch
@@ -487,10 +500,34 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], excl
     return model, _make_contiguous(sample_inputs), partitioner
 
 
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
+    """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
+    for value in sample_inputs.values():
+        caches = [value]
+        if isinstance(value, EncoderDecoderCache):
+            caches = [value.self_attention_cache, value.cross_attention_cache]
+        if any(isinstance(cache, StaticCache) for cache in caches):
+            raise ValueError(
+                "StaticCache is not supported by the ExecuTorch MLX backend. "
+                "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
+            )
+
+    from executorch.backends.mlx import MLXPartitioner
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    # MLX does not support grouped MoE kernels.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
+    partitioner = [MLXPartitioner()]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
 _BACKEND_PREPARE = {
     "openvino": prepare_for_openvino,
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
+    "mlx": prepare_for_mlx,
 }
 
 
@@ -812,7 +849,8 @@ def _patch_unsqueeze(original):
     return patch
 
 
-@register_patch("executorch", "torch.detach", "torch.Tensor.detach")
+@register_patch("executorch.xnnpack", "torch.detach", "torch.Tensor.detach")
+@register_patch("executorch.cuda", "torch.detach", "torch.Tensor.detach")
 def _patch_detach(_original):
     """No-op detach."""
 

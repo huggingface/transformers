@@ -14,6 +14,7 @@
 
 import copy
 import functools
+import importlib.util
 import inspect
 import itertools
 import os
@@ -59,6 +60,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_executorch_available
 
 
 # ──────────────────────────── skip lists ────────────────────────────
@@ -786,6 +788,38 @@ GENERATE_EXPORT_PARAMS = parameterized.expand(
         f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}"
         + ("_multi_token" if p.args[1] else "")
         + (f"_{p.args[2].cache_implementation}_cache" if p.args[2].cache_implementation else "")
+    ),
+)
+
+
+_EXECUTORCH_BACKENDS = ("xnnpack",)
+if is_executorch_available() and importlib.util.find_spec("executorch.backends.mlx") is not None:
+    try:
+        from executorch.runtime import Runtime
+
+        if "MLXBackend" in Runtime.get().backend_registry.registered_backend_names:
+            _EXECUTORCH_BACKENDS += ("mlx",)
+    except ImportError:
+        pass  # The Python backend can be installed without the native runtime.
+
+EXECUTORCH_EXPORT_PARAMS = parameterized.expand(
+    list(itertools.product(_EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES)),
+    name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}_{p.args[0]}",
+)
+EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
+    [
+        (backend, dynamic, multi_token, config)
+        for backend, dynamic, multi_token, config in itertools.product(
+            _EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES, _EXPORT_DECODE_MODES, _EXPORT_GENERATION_CONFIGS
+        )
+        # See `GENERATE_EXPORT_PARAMS`; MLX has no static cache.
+        if not (multi_token and not dynamic) and not (backend == "mlx" and config.cache_implementation == "static")
+    ],
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}"
+        + ("_multi_token" if p.args[2] else "")
+        + (f"_{p.args[3].cache_implementation}_cache" if p.args[3].cache_implementation else "")
+        + f"_{p.args[0]}"
     ),
 )
 
@@ -1667,25 +1701,28 @@ class ExportTesterMixin:
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @DYNAMIC_EXPORT_PARAMS
+    @EXECUTORCH_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export(self, dynamic, atol=1e-3, rtol=1e-3):
+    def test_executorch_export(self, backend, dynamic, atol=1e-3, rtol=1e-3):
         """ExportArtifacts each model class to ExecuTorch, run it, and verify its outputs match eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
+            if any(
+                self._should_skip(model_class, dynamic=dynamic, backend=scope) for scope in ("executorch", backend)
+            ):
                 continue
 
             # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
             config = ExecutorchConfig(
+                backend=backend,
                 dynamic=dynamic,
                 partition=_executorch_partition_enabled(model_class, dynamic),
                 partition_exclude=_executorch_partition_exclude(model_class, dynamic),
@@ -2073,32 +2110,38 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @GENERATE_EXPORT_PARAMS
+    @EXECUTORCH_GENERATE_EXPORT_PARAMS
     @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
+    def test_executorch_export_generate(
+        self, backend, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3
+    ):
         """ExportArtifacts prefill and decode stages to ExecuTorch, run each, and verify they match eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
 
         for model_class in self.all_generative_model_classes:
-            if self._should_skip(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="executorch",
-                multi_token=multi_token_decode,
-                generation_config=generation_config,
+            if any(
+                self._should_skip(
+                    model_class,
+                    generate=True,
+                    dynamic=dynamic,
+                    backend=scope,
+                    multi_token=multi_token_decode,
+                    generation_config=generation_config,
+                )
+                for scope in ("executorch", backend)
             ):
                 continue
 
             # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
             config = ExecutorchConfig(
+                backend=backend,
                 dynamic=dynamic,
                 partition=_executorch_partition_enabled(model_class, dynamic),
                 partition_exclude=_executorch_partition_exclude(model_class, dynamic),

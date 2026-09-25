@@ -1650,10 +1650,10 @@ def _patch_sdpa(original):
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
-        # OV's SDPA diverges from aten on a boolean mask even when nothing is masked, and returns `NaN`
-        # for a row that masks every key (openvinotoolkit/openvino#31630) — rows left padding makes
-        # legitimate. Hand it an additive mask so it never takes that path, with fp16's minimum as the
-        # masked value to keep the arithmetic in range, as optimum-intel does.
+        # OV's SDPA diverges from aten on a *boolean* mask and returns NaN for fully masked rows
+        # (legit under left padding + causal), poisoning the batch entry
+        # (https://github.com/openvinotoolkit/openvino/issues/31630). Pass an additive mask with a
+        # finite dtype minimum instead, like optimum-intel does.
         unattended = None
         if attn_mask is not None:
             masked_value = torch.finfo(query.dtype).min
