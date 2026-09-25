@@ -892,12 +892,12 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
             inputs_embeds[special_image_mask].numel() == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features:"
             f" {image_features.shape[0]}",
         )
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     def forward(
