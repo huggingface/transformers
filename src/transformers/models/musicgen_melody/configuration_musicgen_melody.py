@@ -42,7 +42,7 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     use_cache: bool = True
     activation_function: str = "gelu"
     hidden_size: int = 1024
-    dropout: float | int = 0.1
+    dropout: float | int = 0.0  # released MusicGen checkpoints were trained with 0
     attention_dropout: float | int = 0.0
     activation_dropout: float | int = 0.0
     initializer_factor: float = 0.02

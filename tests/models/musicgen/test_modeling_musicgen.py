@@ -184,6 +184,38 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_default_decoder_dropout_is_zero(self):
+        # Released MusicGen checkpoints were trained without dropout (#49094).
+        config = MusicgenDecoderConfig()
+        self.assertEqual(config.dropout, 0.0)
+        self.assertEqual(config.attention_dropout, 0.0)
+        self.assertEqual(config.activation_dropout, 0.0)
+
+    def test_train_mode_matches_eval_mode_by_default(self):
+        # With the default config (dropout=0), train and eval forwards must match.
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MusicgenForCausalLM(config).eval()
+        torch.manual_seed(0)
+        eval_logits = model(**inputs).logits
+        model.train()
+        torch.manual_seed(0)
+        train_logits = model(**inputs).logits
+        torch.testing.assert_close(eval_logits, train_logits)
+
+    def test_train_warns_once_when_decoder_dropout_nonzero(self):
+        import logging
+
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.dropout = 0.1
+        model = MusicgenForCausalLM(config)
+        # transformers uses its own logger name, not the root logger
+        with self.assertLogs("transformers.models.musicgen.modeling_musicgen", level="WARNING") as cm:
+            model.train()
+            model.train()  # second call must not warn again
+        dropout_warnings = [r.getMessage() for r in cm.records if "MusicGen decoder dropout is non-zero" in r.getMessage()]
+        self.assertEqual(len(dropout_warnings), 1)
+
+
     # special case for labels
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)

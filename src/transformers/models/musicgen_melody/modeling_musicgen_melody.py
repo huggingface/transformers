@@ -54,6 +54,8 @@ from .configuration_musicgen_melody import MusicgenMelodyConfig, MusicgenMelodyD
 if TYPE_CHECKING:
     from ...generation.streamers import BaseStreamer
 
+from ..musicgen.modeling_musicgen import _warn_if_musicgen_decoder_dropout_nonzero
+
 logger = logging.get_logger(__name__)
 
 
@@ -647,6 +649,11 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_heads = new_embeddings
+
+    def train(self, mode: bool = True):
+        if mode:
+            _warn_if_musicgen_decoder_dropout_nonzero(self)
+        return super().train(mode)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1384,6 +1391,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             text_encoder=text_encoder.config, audio_encoder=audio_encoder.config, decoder=decoder.config, **kwargs
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
+
+    def train(self, mode: bool = True):
+        if mode:
+            _warn_if_musicgen_decoder_dropout_nonzero(self)
+        return super().train(mode)
 
     @merge_with_config_defaults
     @capture_outputs

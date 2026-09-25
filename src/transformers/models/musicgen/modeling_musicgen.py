@@ -620,6 +620,32 @@ class MusicgenModel(MusicgenPreTrainedModel):
         return decoder_outputs
 
 
+def _warn_if_musicgen_decoder_dropout_nonzero(model) -> None:
+    """Hub MusicGen configs historically shipped decoder dropout=0.1 even though the
+    released weights were trained with 0. Fine-tuning under that config optimises a
+    path that generate()/eval never use (see #49094).
+    """
+    if getattr(model, "_warned_musicgen_nonzero_dropout", False):
+        return
+    decoder_config = getattr(model.config, "decoder", model.config)
+    nonzero = {
+        name: value
+        for name in ("dropout", "attention_dropout", "activation_dropout")
+        if (value := getattr(decoder_config, name, 0) or 0)
+    }
+    if not nonzero:
+        return
+    logger.warning(
+        "MusicGen decoder dropout is non-zero (%s). The public facebook/musicgen-* "
+        "checkpoints were trained with dropout=0, so train() will diverge from "
+        "eval/generate. Set the decoder dropout fields to 0 before fine-tuning, e.g. "
+        "`model.config.decoder.dropout = 0` (or `model.config.dropout = 0` on "
+        "MusicgenForCausalLM).",
+        nonzero,
+    )
+    model._warned_musicgen_nonzero_dropout = True
+
+
 @auto_docstring(
     custom_intro="""
     The MusicGen decoder model with a language modelling head on top.
@@ -652,6 +678,11 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_heads = new_embeddings
+
+    def train(self, mode: bool = True):
+        if mode:
+            _warn_if_musicgen_decoder_dropout_nonzero(self)
+        return super().train(mode)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1416,6 +1447,11 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             text_encoder=text_encoder.config, audio_encoder=audio_encoder.config, decoder=decoder.config, **kwargs
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
+
+    def train(self, mode: bool = True):
+        if mode:
+            _warn_if_musicgen_decoder_dropout_nonzero(self)
+        return super().train(mode)
 
     @can_return_tuple
     @auto_docstring
