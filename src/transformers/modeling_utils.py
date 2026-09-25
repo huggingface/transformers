@@ -91,7 +91,6 @@ from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
     FLASH_ATTN_KERNEL_FALLBACK,
     lazy_import_flash_attention,
-    lazy_import_paged_flash_attention,
 )
 from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .monkey_patching import apply_patches, patch_output_recorders
@@ -1793,12 +1792,7 @@ class PreTrainedModel(
         if is_kernel(applicable_attn_implementation):
             try:
                 # preload flash attention here to allow compile with fullgraph
-                if is_paged:
-                    lazy_import_paged_flash_attention(
-                        applicable_attn_implementation, allow_all_kernels=allow_all_kernels
-                    )
-                else:
-                    lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
+                lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
