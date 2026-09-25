@@ -159,5 +159,5 @@ trainer.push_to_hub()
 - Read the [Subclassing Trainer methods](./trainer_customize) guide to learn how to subclass [`Trainer`] methods to support new and custom functionalities.
 - Read the [Callbacks](./trainer_callbacks) guide to learn how to hook into training events for logging, early stopping, and other custom behavior.
 - Read the [Data collators](./data_collators) guide to learn how to customize how samples are assembled into batches.
-- Run any example script on a rented GPU with [Hugging Face Jobs](https://huggingface.co/docs/hub/jobs-training); see [Run a script on Hugging Face Jobs](./run_scripts#run-a-script-on-hugging-face-jobs).
+- Run any example script on a rented GPU with [Hugging Face Jobs](https://huggingface.co/docs/hub/jobs-training) (see [Run a script on Hugging Face Jobs](./run_scripts#run-a-script-on-hugging-face-jobs)).
 - Browse [transformers/examples/pytorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [notebooks](./notebooks), or the **Resources > Task Recipes** section for additional training examples on different text, audio, vision, and multimodal tasks.
