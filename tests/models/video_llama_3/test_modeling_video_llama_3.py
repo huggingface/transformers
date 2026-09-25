@@ -53,6 +53,7 @@ from transformers.utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -985,3 +986,32 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+
+
+@require_torch
+class VideoLlama3FastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-VideoLlama3ForConditionalGeneration"
+    all_model_classes = (VideoLlama3ForConditionalGeneration,) if is_torch_available() else ()
+    input_modalities = ("text", "image")
+
+    def _get_processor_inputs(self):
+        image = self._load_image()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": self._DEFAULT_TEXT_INPUT},
+                ],
+            }
+        ]
+        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        return {"text": [text], "images": [image]}
+
+    def _prepare_model_inputs(self, model, inputs):
+        # Tiny model config.image_token_id (random default) may not match processor's image token
+        image_token_id = getattr(self.processor, "image_token_id", None)
+        if image_token_id is not None and hasattr(model.config, "image_token_id"):
+            if model.config.image_token_id != image_token_id:
+                model.config.image_token_id = image_token_id
+        return inputs

@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
@@ -546,3 +547,8 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
             ]
         ]
         self.assertEqual(decoded, decoded_1b)
+
+
+class LlamaFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-LlamaForCausalLM"
+    all_model_classes = (LlamaForCausalLM,) if is_torch_available() else ()
