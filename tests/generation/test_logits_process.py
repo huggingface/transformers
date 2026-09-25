@@ -795,6 +795,24 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == filtered_scores))
 
+    def test_bias_dist_processor_token_zero_list_format(self):
+        # Bug A: token id 0 should be accepted in the list format, like the dict format
+        vocab_size = 5
+        input_ids = torch.tensor([[1, 2]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros((1, vocab_size), dtype=torch.float, device=torch_device)
+        bias_dist_proc = SequenceBiasLogitsProcessor(sequence_bias=[[[0], -5.0]])
+        filtered_scores = bias_dist_proc(input_ids, scores)
+        self.assertListEqual(filtered_scores.tolist(), [[-5.0, 0.0, 0.0, 0.0, 0.0]])
+
+    def test_no_bad_words_prefix_equal_to_context(self):
+        # Bug B: a banned sequence whose prefix is exactly the whole context should still be blocked
+        vocab_size = 6
+        input_ids = torch.tensor([[3]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros((1, vocab_size), dtype=torch.float, device=torch_device)
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=[[3, 4]])
+        filtered_scores = no_bad_words_dist_proc(input_ids, scores)
+        self.assertListEqual(torch.isinf(filtered_scores).tolist(), [[False, False, False, False, True, False]])
+
     def test_processor_list(self):
         batch_size = 4
         sequence_length = 10
