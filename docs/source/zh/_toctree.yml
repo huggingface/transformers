@@ -67,6 +67,8 @@
   - local: performance
     title: 综述
   - sections:
+    - local: accelerator_selection
+      title: 加速器选择
     - local: fsdp
       title: 完全分片数据并行
     - local: perf_train_special
