@@ -1292,6 +1292,7 @@ class GenerationMixin(ContinuousMixin):
                     EncoderRepetitionPenaltyLogitsProcessor(
                         penalty=generation_config.encoder_repetition_penalty,
                         encoder_input_ids=encoder_input_ids,
+                        normalize=bool(generation_config.encoder_repetition_penalty_normalize),
                     )
                 )
             else:
@@ -1301,7 +1302,12 @@ class GenerationMixin(ContinuousMixin):
                     UserWarning,
                 )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+            processors.append(
+                RepetitionPenaltyLogitsProcessor(
+                    penalty=generation_config.repetition_penalty,
+                    normalize=bool(generation_config.repetition_penalty_normalize),
+                )
+            )
             if not self.config.is_encoder_decoder and (input_ids_seq_length is None or input_ids_seq_length == 0):
                 warnings.warn(
                     "Passing `repetition_penalty` with `inputs_embeds` and without `input_ids` to `generate` will "
