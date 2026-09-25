@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for the PyTorch Dots 3 Note Preview model."""
 
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -21,10 +22,12 @@ from parameterized import parameterized
 from safetensors import safe_open
 
 from transformers import (
+    AutoModelForCausalLM,
     AutoModelForMultimodalLM,
     Dots3NoteConfig,
     Dots3NoteForConditionalGeneration,
     Dots3NoteModel,
+    Dots3NoteTextConfig,
     is_torch_available,
 )
 from transformers.cache_utils import (
@@ -139,7 +142,7 @@ def get_tiny_config(use_dsa=False):
 class Dots3NoteTextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Dots3NoteTextModel
-        config_class = Dots3NoteConfig
+        config_class = Dots3NoteTextConfig
         causal_lm_class = Dots3NoteForCausalLM
 
     def __init__(self, parent):
@@ -159,7 +162,7 @@ class Dots3NoteTextModelTester(CausalLMModelTester):
         self.is_training = False
 
     def get_config(self):
-        config = get_tiny_config()
+        config = get_tiny_config().text_config
         # Common cache assertions assume uniform KV widths and no sliding-window eviction.
         # The dedicated cache/batching tests exercise the released asymmetric MLA layout.
         config.v_head_dim = config.head_dim
@@ -174,6 +177,11 @@ class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (Dots3NoteForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-generation": Dots3NoteForCausalLM} if is_torch_available() else {}
     _is_stateful = True
+
+    def setUp(self):
+        super().setUp()
+        # DSA and SWA have different head counts, so no global num_attention_heads exists.
+        self.config_tester.common_properties = ["hidden_size", "num_hidden_layers"]
 
     @unittest.skip(reason="Initial Dots 3 Note Preview support is inference-only.")
     def test_gradient_checkpointing_enable_disable(self):
@@ -196,6 +204,60 @@ class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Dots3NoteModelTest(unittest.TestCase):
+    def test_vision_head_override_roundtrip(self):
+        config = get_tiny_config().vision_config
+        config_class = type(config)
+        with tempfile.TemporaryDirectory() as directory:
+            config.save_pretrained(directory)
+            config = config_class.from_pretrained(directory, num_attention_heads=8)
+            self.assertEqual(Dots3NoteVisionModel(config).blocks[0].attn.num_heads, 8)
+            self.assertNotIn("num_heads", config.to_dict())
+            config.save_pretrained(directory)
+            self.assertEqual(config_class.from_pretrained(directory).num_attention_heads, 8)
+        legacy = config.to_dict()
+        legacy.pop("num_attention_heads")
+        legacy["num_heads"] = 4
+        converted = config_class(**legacy)
+        self.assertEqual(converted.num_attention_heads, 4)
+        self.assertNotIn("num_heads", converted.to_dict())
+
+    def test_heterogeneous_attention_dimensions(self):
+        config = get_tiny_config(use_dsa=True).text_config
+        values = config.to_dict()
+        values["per_layer_config"]["1"] = {
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "q_lora_rank": 8,
+            "kv_lora_rank": 8,
+        }
+        config = Dots3NoteTextConfig(**values)
+        model = Dots3NoteForCausalLM(config).eval()
+        attention = model.model.layers[1].self_attn
+        self.assertEqual(attention.num_heads, 2)
+        self.assertEqual(attention.q_a_proj.out_features, 8)
+        self.assertEqual(attention.kv_lora_rank, 8)
+        with torch.no_grad():
+            output = model(torch.tensor([[1, 7, 2]]), use_cache=True)
+        self.assertEqual(output.logits.shape, (1, 3, config.vocab_size))
+
+    def test_legacy_text_config_loading(self):
+        config = get_tiny_config()
+        legacy = config.to_dict()
+        legacy.update(legacy.pop("text_config"))
+        legacy["model_type"] = "dots3_note"
+        quantization_config = {"quant_method": "fp8", "weight_block_size": [128, 128]}
+        quantized = Dots3NoteConfig(**(legacy | {"quantization_config": quantization_config}))
+        self.assertEqual(quantized.quantization_config, quantization_config)
+        self.assertEqual(quantized.text_config.model_type, "dots3_note_text")
+        model = AutoModelForCausalLM.from_config(Dots3NoteConfig(**legacy)).eval()
+        input_ids = torch.tensor([[1, 7, 2]])
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            Dots3NoteConfig(**legacy).save_pretrained(directory)
+            loaded = AutoModelForCausalLM.from_pretrained(directory).eval()
+            with torch.no_grad():
+                torch.testing.assert_close(model(input_ids).logits, loaded(input_ids).logits)
+
     all_model_classes = (
         (
             Dots3NoteAudioModel,
@@ -210,7 +272,7 @@ class Dots3NoteModelTest(unittest.TestCase):
 
     @parameterized.expand([True, False])
     def test_dsa_shared_mask_reaches_indexer_and_attention(self, boolean_mask):
-        config = get_tiny_config(use_dsa=True)
+        config = get_tiny_config(use_dsa=True).text_config
         config._attn_implementation = "eager"
         attention = Dots3NoteTextAttention(config, layer_idx=0).eval()
         allowed = torch.ones(1, 1, 5, 5, dtype=torch.bool).tril()
@@ -239,7 +301,7 @@ class Dots3NoteModelTest(unittest.TestCase):
             attention(hidden, (cos, torch.zeros_like(cos)), mask.expand(1, 2, 5, 5))
 
     def test_dsa_chunked_prefill_matches_one_shot(self):
-        config = get_tiny_config(use_dsa=True)
+        config = get_tiny_config(use_dsa=True).text_config
         # Keep every key in this cache-parity test. Randomly initialized tiny indexers can produce exact
         # score ties, for which `topk` is allowed to pick different tied keys as the cached key width grows.
         # Sparse top-k math and sparse cached generation are covered independently below.
@@ -268,7 +330,7 @@ class Dots3NoteModelTest(unittest.TestCase):
 
     def test_dsa_left_padded_batch_cache_matches_unpadded_decode(self):
         torch.manual_seed(0)
-        config = get_tiny_config(use_dsa=True)
+        config = get_tiny_config(use_dsa=True).text_config
         config.layer_types = ["deepseek_sparse_attention"] * config.num_hidden_layers
         # Select every key so this test targets physical cache/padding coordinates rather than
         # the numerical discontinuity of hard top-k selection on a randomly initialized indexer.
@@ -327,7 +389,7 @@ class Dots3NoteModelTest(unittest.TestCase):
 
     def test_dsa_static_cache_matches_dynamic_cache(self):
         torch.manual_seed(0)
-        config = get_tiny_config(use_dsa=True)
+        config = get_tiny_config(use_dsa=True).text_config
         model = Dots3NoteForCausalLM(config).eval()
         input_ids = torch.tensor([[1, 7, 11, 9]])
         attention_mask = torch.ones_like(input_ids)
@@ -362,7 +424,7 @@ class Dots3NoteModelTest(unittest.TestCase):
         torch.testing.assert_close(static_decode.logits, dynamic_decode.logits, rtol=1e-4, atol=1e-4)
 
     def test_dsa_precomputed_mask_uses_dispatched_layer_type(self):
-        model = Dots3NoteForCausalLM(get_tiny_config(use_dsa=True)).eval()
+        model = Dots3NoteForCausalLM(get_tiny_config(use_dsa=True).text_config).eval()
         full_mask = torch.ones(1, 1, 2, 2, dtype=torch.bool)
         sliding_mask = torch.eye(2, dtype=torch.bool).view(1, 1, 2, 2)
 
@@ -388,6 +450,7 @@ class Dots3NoteModelTest(unittest.TestCase):
 
     def test_vision_forward(self):
         config = get_tiny_config().vision_config
+        config.is_causal = False
         model = Dots3NoteVisionModel(config).eval()
         pixel_values = torch.randn(4, 3 * config.patch_size**2)
         grid_thw = torch.tensor([[1, 2, 2]])
@@ -436,6 +499,26 @@ class Dots3NoteModelTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(input_ids=input_ids, use_cache=False, **media_inputs)
+            embedded_outputs = model(
+                inputs_embeds=model.get_input_embeddings()(input_ids), use_cache=False, **media_inputs
+            )
+            torch.testing.assert_close(embedded_outputs[0], outputs[0])
+            backbone = model if variant == "base" else model.model
+            for modality, args in (
+                ("image", (pixel_values, media_inputs["image_grid_thw"])),
+                ("video", (pixel_values, media_inputs["video_grid_thw"])),
+                ("audio", (media_inputs["input_features"], media_inputs["chunk_sample_lengths"])),
+            ):
+                with self.subTest(modality=modality):
+                    get_features = getattr(backbone, f"get_{modality}_features")
+                    expected = get_features(*args, return_dict=True).to_tuple()
+                    actual = get_features(*args, return_dict=False)
+                    self.assertIsInstance(actual, tuple)
+                    torch.testing.assert_close(actual, expected)
+            config.return_dict = False
+            tuple_outputs = model(input_ids=input_ids, use_cache=False, return_dict=False, **media_inputs)
+            torch.testing.assert_close(tuple_outputs[0], outputs[0])
+            config.return_dict = True
             if variant == "conditional_generation":
                 generated = model.generate(
                     input_ids,
@@ -447,14 +530,14 @@ class Dots3NoteModelTest(unittest.TestCase):
                 )
                 self.assertEqual(generated.shape, (1, input_ids.shape[1] + 2))
         output = outputs.last_hidden_state if variant == "base" else outputs.logits
-        width = config.hidden_size if variant == "base" else config.vocab_size
+        width = config.text_config.hidden_size if variant == "base" else config.text_config.vocab_size
         self.assertEqual(output.shape, (1, input_ids.shape[1], width))
         self.assertTrue(torch.isfinite(output).all())
 
     def test_multimodal_chunked_prefill_processes_cached_media(self):
         torch.manual_seed(0)
         config = get_tiny_config(use_dsa=True)
-        config.index_topk = config.max_position_embeddings
+        config.text_config.index_topk = config.text_config.max_position_embeddings
         model = Dots3NoteForConditionalGeneration(config).eval()
         prefix_ids = torch.tensor([[1, 5]])
         patch_width = config.vision_config.num_channels * config.vision_config.patch_size**2
@@ -527,7 +610,12 @@ class Dots3NoteModelTest(unittest.TestCase):
 
             model.config.architectures = ["Dots3NoteForCausalLM"]
             legacy_config = model.config.to_dict() | {"rope_scaling": None}
-            Dots3NoteConfig(**legacy_config).save_pretrained(tmpdirname)
+            text_config = legacy_config.pop("text_config")
+            legacy_config.update(text_config)
+            legacy_config["model_type"] = "dots3_note"
+            legacy_config["architectures"] = ["Dots3NoteForCausalLM"]
+            with open(f"{tmpdirname}/config.json", "w") as config_file:
+                json.dump(legacy_config, config_file)
             reloaded, info = AutoModelForMultimodalLM.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertIsInstance(reloaded, Dots3NoteForConditionalGeneration)
             self.assertFalse(info["missing_keys"])

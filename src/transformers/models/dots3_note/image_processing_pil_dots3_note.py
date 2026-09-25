@@ -22,13 +22,12 @@ import math
 from collections.abc import Iterable
 
 import numpy as np
-from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import PilBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
+from ...utils import TensorType, auto_docstring
 
 
 class Dots3NoteImageProcessorKwargs(ImagesKwargs, total=False):
@@ -81,28 +80,9 @@ def smart_resize(
     return h_bar, w_bar
 
 
-# Adapted from transformers.models.dots3_note.image_processing_dots3_note.convert_to_rgb
-def convert_to_rgb(image: ImageInput) -> ImageInput:
-    """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
-    """
-    if not is_vision_available() or not isinstance(image, Image.Image):
-        return image
-
-    if image.mode == "RGB":
-        return image
-
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-    return alpha_composite
-
-
 @auto_docstring
 class Dots3NoteImageProcessorPil(PilBackend):
-    """Qwen2-VL PIL preprocessing with Dots image defaults and white-background RGBA compositing."""
+    """Qwen2-VL PIL preprocessing with Dots image defaults."""
 
     do_resize = True
     resample = PILImageResampling.BICUBIC
@@ -294,9 +274,6 @@ class Dots3NoteImageProcessorPil(PilBackend):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
-
-    def convert_to_rgb(self, image):
-        return convert_to_rgb(image)
 
 
 __all__ = ["Dots3NoteImageProcessorPil"]

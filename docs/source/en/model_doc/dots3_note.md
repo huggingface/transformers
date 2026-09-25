@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-19.*
+*This model was contributed to Hugging Face Transformers on 2026-09-25.*
 
 # Dots 3 Note Preview
 
@@ -79,6 +79,10 @@ language-model head and generation interface. `Dots3NoteForCausalLM` is the text
 ## Dots3NoteConfig
 
 [[autodoc]] Dots3NoteConfig
+
+## Dots3NoteTextConfig
+
+[[autodoc]] Dots3NoteTextConfig
 
 ## Dots3NoteVisionConfig
 

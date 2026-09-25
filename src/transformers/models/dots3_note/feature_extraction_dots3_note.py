@@ -49,6 +49,7 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
         chunk_length: int = 60,
         chunk_seconds: int | None = None,
         return_attention_mask: bool = False,
+        dither: float = 0.0,
         **kwargs,
     ):
         super().__init__(
@@ -58,7 +59,6 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-        kwargs.pop("dither", None)
         chunk_length = chunk_length if chunk_seconds is None else chunk_seconds
         self.n_fft = n_fft
         self.hop_length = hop_length
@@ -66,7 +66,7 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
-        self.dither = 0.0
+        self.dither = dither
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=1 + n_fft // 2,
             num_mel_filters=feature_size,

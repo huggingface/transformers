@@ -17,15 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from ...image_utils import SizeDict
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-_RELEASE_VISION_SIZE = SizeDict(shortest_edge=56 * 56, longest_edge=(36 * 28) ** 2)
-_QWEN2_VL_IMAGE_DEFAULT_SIZE = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
-_QWEN2_VL_VIDEO_DEFAULT_SIZE = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}
 
 
 @auto_docstring
@@ -40,18 +33,6 @@ class Dots3NoteProcessor(ProcessorMixin):
         feature_extractor=None,
         chat_template=None,
     ):
-        # Correct legacy Qwen2-VL defaults without overriding custom pixel limits.
-        if image_processor is not None:
-            if dict(image_processor.size) == _QWEN2_VL_IMAGE_DEFAULT_SIZE:
-                image_processor.size = SizeDict(**dict(_RELEASE_VISION_SIZE))
-            if image_processor.temporal_patch_size == 2:
-                image_processor.temporal_patch_size = 1
-        if video_processor is not None:
-            if dict(video_processor.size) == _QWEN2_VL_VIDEO_DEFAULT_SIZE:
-                video_processor.size = SizeDict(**dict(_RELEASE_VISION_SIZE))
-            if video_processor.temporal_patch_size == 2:
-                video_processor.temporal_patch_size = 1
-
         self.image_token = "<|imgpad|>"
         self.image_start_token = "<|img|>"
         self.image_end_token = "<|endofimg|>"

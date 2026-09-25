@@ -28,7 +28,6 @@ from transformers import (
     Dots3NoteProcessor,
     Dots3NoteVideoProcessor,
     PreTrainedTokenizerFast,
-    Qwen2VLVideoProcessor,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch, require_torchvision
@@ -93,11 +92,11 @@ def get_tiny_processor():
 @require_torch
 @require_torchvision
 class Dots3NoteProcessorTest(unittest.TestCase):
-    def test_legacy_checkpoint_defaults_without_processor_config(self):
+    def test_component_defaults(self):
         processor = Dots3NoteProcessor(
             image_processor=Dots3NoteImageProcessorPil(),
             tokenizer=get_tiny_tokenizer(),
-            video_processor=Qwen2VLVideoProcessor(),
+            video_processor=Dots3NoteVideoProcessor(),
             feature_extractor=Dots3NoteFeatureExtractor(),
         )
 

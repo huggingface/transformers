@@ -1052,6 +1052,9 @@ def _build_checkpoint_conversion_mapping():
         "dots3_note_audio_encoder": [
             WeightRenaming(r"dots_encoder\.speech_encoder\.", "speech_encoder."),
             WeightRenaming(r"speech_encoder\.(conv2d[123]|conv_out)\.", r"speech_encoder.conv_stem.\1."),
+            WeightRenaming(r"conv_stem\.conv2d1\.", "conv_stem.convs.0."),
+            WeightRenaming(r"conv_stem\.conv2d2\.", "conv_stem.convs.1."),
+            WeightRenaming(r"conv_stem\.conv2d3\.", "conv_stem.convs.2."),
             WeightRenaming(r"(speech_encoder\.layers\.\d+\.self_attn)\.out_proj\.", r"\1.o_proj."),
             WeightRenaming(r"\.self_attn_layer_norm\.", ".input_layernorm."),
             WeightRenaming(r"\.final_layer_norm\.", ".post_attention_layernorm."),

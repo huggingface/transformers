@@ -21,25 +21,19 @@
 import math
 
 import numpy as np
-from PIL import Image
+import torch
 from torchvision.transforms.v2 import functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_vision_available,
     logging,
 )
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-
-
-if is_torch_available():
-    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -113,25 +107,6 @@ def smart_resize(
         w_bar = math.ceil(width * beta / factor) * factor
 
     return h_bar, w_bar
-
-
-# Adapted from transformers.models.dots3_note.image_processing_dots3_note.convert_to_rgb
-def convert_to_rgb(image: ImageInput) -> ImageInput:
-    """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
-    """
-    if not is_vision_available() or not isinstance(image, Image.Image):
-        return image
-
-    if image.mode == "RGB":
-        return image
-
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-    return alpha_composite
 
 
 @auto_docstring

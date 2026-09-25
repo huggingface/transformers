@@ -26,13 +26,14 @@ if is_torch_available():
 
 @require_torch
 class Dots3NoteFeatureExtractorTest(unittest.TestCase):
-    def get_feature_extractor(self):
+    def get_feature_extractor(self, **kwargs):
         return Dots3NoteFeatureExtractor(
             feature_size=8,
             sampling_rate=32,
             n_fft=16,
             hop_length=4,
             chunk_length=2,
+            **kwargs,
         )
 
     def test_audio_token_length_boundaries(self):
@@ -81,13 +82,14 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
         self.assertEqual(output.chunk_sample_lengths.tolist(), [64, 64, 1])
 
     def test_save_and_reload(self):
-        extractor = self.get_feature_extractor()
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            extractor.save_pretrained(tmpdirname)
-            reloaded = Dots3NoteFeatureExtractor.from_pretrained(tmpdirname)
-
-        self.assertEqual(extractor.to_dict(), reloaded.to_dict())
-        self.assertTrue(np.array_equal(extractor.mel_filters, reloaded.mel_filters))
+        for dither in (0.0, 0.001):
+            with self.subTest(dither=dither), tempfile.TemporaryDirectory() as tmpdirname:
+                extractor = self.get_feature_extractor(dither=dither)
+                extractor.save_pretrained(tmpdirname)
+                reloaded = Dots3NoteFeatureExtractor.from_pretrained(tmpdirname)
+                self.assertEqual(reloaded.dither, dither)
+                self.assertEqual(extractor.to_dict(), reloaded.to_dict())
+                self.assertTrue(np.array_equal(extractor.mel_filters, reloaded.mel_filters))
 
     def test_rejects_wrong_sample_rate(self):
         with self.assertRaisesRegex(ValueError, "sampling rate"):
