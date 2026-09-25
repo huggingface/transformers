@@ -655,6 +655,8 @@ def _process_flash_attention_kwargs(
             The maximum sequence length in the query tensor during a varlen forward.
         max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the key/value tensor during a varlen forward.
+        block_table (`torch.Tensor`, *optional*):
+            The block table used by paged flash attention to know where to read and write the KV cache.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
@@ -766,6 +768,7 @@ def _flash_attention_forward(
         (process_flash_kwargs_fn, process_paged_kwargs_fn),
     ) = lazy_import_flash_attention(attn_implementation)
     batch_size = query_states.size(0)
+    indices_q = None  # indices to re-pad the out of the attention. Left as None unless we use the attention mask path
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
     query_states, key_states, value_states = fa_peft_integration_check(
@@ -797,16 +800,14 @@ def _flash_attention_forward(
 
     # There is a block table: we use the paged flash function to compute attention and update the cache and return early
     if is_fa_with_paged_kwargs:
-        flash_kwargs = flash_kwargs_fn(
-            max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
-        )
-        out = _flash_attention_forward_kvcache(
-            flash_kvcache_fn, query_states, key_states, value_states, cu_seq_lens_k, k_cache, v_cache, **flash_kwargs
-        )
-        return out.view(batch_size, -1, *out.shape[-2:])
+        # Flash paged happens in [seq_len, 1, num_heads, head_dim] format to match the cache
+        q, k, v = (x.reshape(-1, 1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
+        # Also, rather than cu_seq_lens_k, we use cache_seqlens, which is the number of cache tokens per sequence
+        num_sequences = k.size(0)  # NOTE: this holds because for now block table is only available for decode
+        cache_seqlens = cu_seq_lens_k[1 : num_sequences + 1] - cu_seq_lens_k[:num_sequences] - 1
 
     # Contains at least one padding token in the sequence: unpad compute cu_seqlen and max_length from attention mask
-    if attention_mask is not None:
+    elif attention_mask is not None:
         q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
@@ -822,42 +823,29 @@ def _flash_attention_forward(
         q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
             query_states, key_states, value_states, position_ids
         )
+
     # Padding free and same sequence lengths: we can run flash (no varlen) and return early
     else:
         out = flash_fn(query_states, key_states, value_states, **flash_kwargs_fn())
         return out[0] if isinstance(out, tuple) else out
 
-    # TODO for now this is required to work with
-    # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-    cu_seq_lens_k = cu_seq_lens_k.clone() if "mps" in str(q.device) else cu_seq_lens_k
+    if is_fa_with_paged_kwargs:
+        flash_kwargs = flash_kwargs_fn(
+            max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
+        )
+        out = flash_kvcache_fn(q, k_cache, v_cache, k, v, cache_seqlens=cache_seqlens, **flash_kwargs)
+    else:
+        # TODO for now this is required to work with
+        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
+        cu_seq_lens_k = cu_seq_lens_k.clone() if "mps" in str(q.device) else cu_seq_lens_k
 
-    flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
-    out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
+        flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+        out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
+
     out = out[0] if isinstance(out, tuple) else out
 
-    if attention_mask is not None:
+    if indices_q is not None:
         return pad_fn(out, indices_q, batch_size, query_length)
 
-    return out.view(batch_size, -1, out.size(-2), out.size(-1))
-
-
-def _flash_attention_forward_kvcache(
-    flash_kvcache_fn: Callable,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
-    cu_seq_lens_k: torch.LongTensor,
-    k_cache: torch.Tensor,
-    v_cache: torch.Tensor,
-    **flash_kwargs,
-) -> torch.Tensor:
-    # Flash paged happens in [seq_len, 1, num_heads, head_dim] format to match the cache
-    query_states = query_states.reshape(-1, 1, *query_states.shape[-2:])
-    key_states = key_states.reshape(-1, 1, *key_states.shape[-2:])
-    value_states = value_states.reshape(-1, 1, *value_states.shape[-2:])
-    # Also, rather than cu_seq_lens_k, we use cache_seqlens, which is the number of tokens in the cache per sequence
-    num_sequences = key_states.size(0)  # NOTE: this holds because for now block table is only available for decode
-    flash_kwargs["cache_seqlens"] = cu_seq_lens_k[1 : num_sequences + 1] - cu_seq_lens_k[:num_sequences] - 1
-
-    out = flash_kvcache_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
-    return out[0] if isinstance(out, tuple) else out
+    # Works with varlen out.shape [seq_len, num_heads, head_dim] and paged out.shape [seq_len, 1, num_heads, head_dim]
+    return out.view(batch_size, -1, *out.shape[-2:])
