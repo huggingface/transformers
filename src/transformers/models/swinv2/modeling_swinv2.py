@@ -378,8 +378,8 @@ class Swinv2SelfAttention(nn.Module):
         )
 
         relative_coords_table, relative_position_index = self.create_coords_table_and_index()
-        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
-        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.relative_coords_table = nn.Buffer(relative_coords_table, persistent=False)
+        self.relative_position_index = nn.Buffer(relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
@@ -617,32 +617,29 @@ class Swinv2Layer(nn.Module):
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
 
-    def get_attn_mask(self, height, width, dtype):
-        if self.shift_size > 0:
-            # calculate attention mask for shifted window multihead self attention
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
-            height_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            width_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            count = 0
-            for height_slice in height_slices:
-                for width_slice in width_slices:
-                    img_mask[:, height_slice, width_slice, :] = count
-                    count += 1
+    def get_attn_mask(self, height, width, dtype, device=None):
+        """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
-            mask_windows = window_partition(img_mask, self.window_size)
-            mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
-        else:
-            attn_mask = None
+        Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
+        as ``h_region * 3 + w_region``. Regions per axis:
+        - 0: indices ``[0, axis - window_size)``
+        - 1: indices ``[axis - window_size, axis - shift_size)``
+        - 2: indices ``[axis - shift_size, axis)``
+        Implementation note: a single arithmetic pass on `torch.arange` (two comparisons +
+        broadcast add) replaces the original 9-iteration nested-Python-loop slice-assignment —
+        fully vectorised, no per-cell host-side scatter, no GPU↔host sync.
+        """
+        if self.shift_size <= 0:
+            return None
+        h_idx = torch.arange(height, device=device)
+        w_idx = torch.arange(width, device=device)
+        h_region = (h_idx >= height - self.window_size).long() + (h_idx >= height - self.shift_size).long()
+        w_region = (w_idx >= width - self.window_size).long() + (w_idx >= width - self.shift_size).long()
+        img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).to(dtype)
+        mask_windows = window_partition(img_mask, self.window_size)
+        mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
         return attn_mask
 
     def maybe_pad(self, hidden_states, height, width):
@@ -675,9 +672,9 @@ class Swinv2Layer(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(hidden_states_windows.device)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
 
         attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
 
@@ -876,14 +873,8 @@ class Swinv2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, Swinv2Embeddings):
+        super()._init_weights(module)
+        if isinstance(module, Swinv2Embeddings):
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
@@ -1031,7 +1022,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, Swinv2ForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1139,12 +1130,6 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | Swinv2ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.swinv2(
@@ -1213,7 +1198,7 @@ class Swinv2Backbone(BackboneMixin, Swinv2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

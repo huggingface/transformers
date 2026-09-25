@@ -35,11 +35,15 @@ def topological_sort(dependencies: dict) -> list[list[str]]:
     while len(graph) > 0:
         # Find the nodes with 0 out-degree
         leaf_nodes = {node for node in graph if len(graph[node]) == 0}
+        # No node is free of dependencies, but graph isn't empty so it's necessarily a cyclic inter-dependency among the remaining nodes
+        if not leaf_nodes:
+            remaining = list(graph.keys())
+            raise ValueError(f"Cyclic dependency detected among nodes: {remaining}")
+
         # Add them to the list as next level
         sorting_list.append([name_mapping[node] for node in leaf_nodes])
         # Remove the leaves from the graph (and from the deps of other nodes)
         graph = {node: deps - leaf_nodes for node, deps in graph.items() if node not in leaf_nodes}
-
     return sorting_list
 
 

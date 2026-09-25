@@ -18,12 +18,12 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, load_image
+from transformers.image_utils import load_image
 from transformers.models.ernie4_5_vl_moe.image_processing_ernie4_5_vl_moe import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
 
 
@@ -34,48 +34,16 @@ if is_vision_available():
     from PIL import Image
 
 
-class Ernie4_5_VLMoeImageProcessorTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=56,
-        max_resolution=1024,
-        size=None,
-        do_resize=True,
-        do_normalize=True,
-        do_convert_rgb=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        patch_size=14,
-        merge_size=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        if size is None:
-            size = {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28}
-        self.size = size
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.patch_size = patch_size
-        self.merge_size = merge_size
+class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "size": self.size,
-            "patch_size": self.patch_size,
-            "merge_size": self.merge_size,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28})
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -93,38 +61,7 @@ class Ernie4_5_VLMoeImageProcessorTester:
 @require_torch
 @require_vision
 class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Ernie4_5_VLMoeImageProcessorTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "merge_size"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size["shortest_edge"], 56 * 56)
-            self.assertEqual(image_processor.size["longest_edge"], 6177 * 28 * 28)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict,
-                size={"shortest_edge": 256 * 256, "longest_edge": 640 * 640},
-            )
-            self.assertEqual(image_processor.size["shortest_edge"], 256 * 256)
-            self.assertEqual(image_processor.size["longest_edge"], 640 * 640)
+    image_processor_tester_class = Ernie4_5_VLMoeImageProcessingTester
 
     def test_select_best_resolution(self):
         # Test with a final resize resolution
@@ -280,7 +217,11 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        dummy_image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+            )
+        )
 
         image_processor_pil = self.image_processing_classes["pil"](**self.image_processor_dict)
         image_processor_torchvision = self.image_processing_classes["torchvision"](**self.image_processor_dict)

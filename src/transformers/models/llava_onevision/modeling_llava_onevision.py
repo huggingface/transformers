@@ -107,7 +107,6 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
@@ -433,11 +432,11 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -521,10 +520,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
             ).pooler_output
-            image_newline = (
-                self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
-            )
-            video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1).to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
@@ -563,7 +558,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
         vision_feature_layer (`Union[int, list[int]], *optional*, defaults to -2`):
             The index of the layer to select the vision feature. If multiple indices are provided,
@@ -596,7 +591,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         video_features = self.apply_pooling(video_features)
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
-        vision_outputs.pooler_output = video_features
+        image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
+        vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
 
         return vision_outputs
 
@@ -701,16 +697,12 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             Aspect ratio used when processing image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
         >>> from transformers import LlavaOnevisionProcessor, LlavaOnevisionForConditionalGeneration
@@ -778,44 +770,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             video_hidden_states=outputs.video_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        image_sizes=None,
-        pixel_values_videos=None,
-        image_sizes_videos=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["image_sizes_videos"] = image_sizes_videos
-
-        return model_inputs
-
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
@@ -827,9 +781,9 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
-        vision_feature_layer (`Union[int, list[int]]`, *optional;*):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.

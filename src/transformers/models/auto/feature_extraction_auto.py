@@ -21,7 +21,15 @@ from collections import OrderedDict
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
+from ...utils import (
+    CONFIG_NAME,
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    cached_file,
+    logging,
+    resolve_revision,
+    safe_load_json_file,
+)
 from .auto_factory import _LazyAutoMapping
 from .auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES
 from .configuration_auto import (
@@ -37,18 +45,24 @@ logger = logging.get_logger(__name__)
 MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audioflamingo3", "WhisperFeatureExtractor"),
+        ("canary", "ParakeetFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),
+        ("granite_speech5_ctc", "GraniteSpeech5FeatureExtractor"),
+        ("granite_speech5_encoder", "GraniteSpeech5FeatureExtractor"),
         ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),
         ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
+        ("inkling_mm_model", "InklingFeatureExtractor"),
         ("lasr_ctc", "LasrFeatureExtractor"),
         ("lasr_encoder", "LasrFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
         ("musicgen", "EncodecFeatureExtractor"),
+        ("nemotron3_5_asr", "NemotronAsrStreamingFeatureExtractor"),
+        ("nemotron3_diarization", "NemotronAsrStreamingFeatureExtractor"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
@@ -63,6 +77,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
+        ("vibevoice", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral", "WhisperFeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
@@ -199,7 +214,7 @@ def get_feature_extractor_config(
     # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
     # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
-    feature_extractor_dict = {}
+    feature_extractor_dict = None
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
         if "feature_extractor" in processor_dict:
@@ -207,7 +222,7 @@ def get_feature_extractor_config(
 
     if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
         feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
-    return feature_extractor_dict
+    return feature_extractor_dict or {}
 
 
 class AutoFeatureExtractor:
@@ -297,6 +312,15 @@ class AutoFeatureExtractor:
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
 
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
         feature_extractor_class = config_dict.get("feature_extractor_type", None)

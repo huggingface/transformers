@@ -29,6 +29,7 @@ from ...utils import (
     cached_file,
     is_torchvision_available,
     logging,
+    resolve_revision,
     safe_load_json_file,
 )
 from ...utils.import_utils import requires
@@ -56,7 +57,9 @@ else:
         [
             ("cosmos3_omni", "Qwen3VLVideoProcessor"),
             ("exaone4_5", "Qwen2VLVideoProcessor"),
+            ("hyperclovax_vision_v2", "Qwen2VLVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
+            ("minicpmv4_7", "MiniCPMV4_6VideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
@@ -64,6 +67,7 @@ else:
             ("qwen3_5_moe", "Qwen3VLVideoProcessor"),
             ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
+            ("qwen4_exp", "Qwen3VLVideoProcessor"),
             ("videoprism", "LlavaOnevisionVideoProcessor"),
         ]
     )
@@ -213,7 +217,7 @@ def get_video_processor_config(
     # Load video_processor dict. Priority goes as (nested config if found -> video processor config -> image processor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
     # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
-    video_processor_dict = {}
+    video_processor_dict = None
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
         if "video_processor" in processor_dict:
@@ -222,7 +226,7 @@ def get_video_processor_config(
     if resolved_video_processor_file is not None and video_processor_dict is None:
         video_processor_dict = safe_load_json_file(resolved_video_processor_file)
 
-    return video_processor_dict
+    return video_processor_dict or {}
 
 
 @requires(backends=("vision", "torchvision"))
@@ -314,6 +318,15 @@ class AutoVideoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
+
         config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
@@ -336,25 +349,35 @@ class AutoVideoProcessor:
                 video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
-        if video_processor_class is None and video_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
-            # It could be in `config.video_processor_type``
-            video_processor_class = getattr(config, "video_processor_type", None)
-            if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
-                video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
+        if video_processor_class is None:
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
+
+                # It could be in `config.video_processor_type``
+                video_processor_class = getattr(config, "video_processor_type", None)
+                if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
+                    video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         if video_processor_class is not None:
             video_processor_class = video_processor_class_from_name(video_processor_class)
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
-        explicit_local_code = has_local_code and not (
-            video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)]
-        ).__module__.startswith("transformers.")
+        explicit_local_code = False
         if has_remote_code:
+            if has_local_code:
+                local_video_processor_class = video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)]
+                explicit_local_code = (
+                    local_video_processor_class is not None
+                    and not local_video_processor_class.__module__.startswith("transformers.")
+                )
             if "--" in video_processor_auto_map:
                 upstream_repo = video_processor_auto_map.split("--")[0]
             else:

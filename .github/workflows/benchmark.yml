@@ -41,10 +41,10 @@ jobs:
           persist-credentials: false
 
       - name: Install benchmark script dependencies
-        run: python3 -m pip install -r benchmark_v2/requirements.txt kernels
+        run: python3 -m pip install -r benchmark_v2/requirements.txt
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e ".[torch]"
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e ".[torch,kernels]"
 
       - name: Run benchmark
         run: |

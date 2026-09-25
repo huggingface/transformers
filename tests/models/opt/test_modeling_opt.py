@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import timeout_decorator  # noqa
 
@@ -24,6 +25,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -36,6 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
         GPT2Tokenizer,
@@ -44,6 +47,7 @@ if is_torch_available():
         OPTForSequenceClassification,
         OPTModel,
     )
+    from transformers.masking_utils import create_causal_mask
 
 
 def prepare_opt_inputs_dict(
@@ -195,6 +199,35 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_attention_mask_is_not_overwritten_for_causal_mask(self, config, inputs_dict):
+        """
+        OPT needs a dense 2D mask to compute its learned positional embeddings, but it must not leak into
+        `create_causal_mask`, otherwise sdpa can never rely on its `is_causal` argument.
+        """
+        config._attn_implementation = "sdpa"
+        model = OPTModel(config).to(torch_device).eval()
+
+        with patch(
+            "transformers.models.opt.modeling_opt.create_causal_mask", wraps=create_causal_mask
+        ) as mocked_create_causal_mask:
+            with torch.no_grad():
+                model(inputs_dict["input_ids"], attention_mask=None)
+
+        self.parent.assertTrue(mocked_create_causal_mask.called)
+        self.parent.assertIsNone(mocked_create_causal_mask.call_args.kwargs["attention_mask"])
+
+    def create_and_check_compiled_forward_dispatches_to_flash_attention(self, config, inputs_dict):
+        """
+        The dense mask must not reach sdpa: flash attention rejects any `attn_mask`, so a compiled forward
+        with the flash backend forced only runs if the mask creation was skipped.
+        """
+        config._attn_implementation = "sdpa"
+        model = OPTModel(config).to(torch_device, torch.float16).eval()
+        compiled_model = torch.compile(model, dynamic=False)
+
+        with torch.no_grad(), sdpa_kernel([SDPBackend.FLASH_ATTENTION]):
+            compiled_model(inputs_dict["input_ids"], attention_mask=None)
+
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -260,6 +293,16 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_attention_mask_is_not_overwritten_for_causal_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_attention_mask_is_not_overwritten_for_causal_mask(*config_and_inputs)
+
+    @require_torch_gpu
+    @require_torch_fp16
+    def test_compiled_forward_dispatches_to_flash_attention(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_compiled_forward_dispatches_to_flash_attention(*config_and_inputs)
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -365,7 +408,7 @@ def _long_tensor(tok_lst):
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
+        model = OPTModel.from_pretrained("facebook/opt-350m", torch_dtype=torch.float32).to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
 
         with torch.no_grad():

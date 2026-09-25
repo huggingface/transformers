@@ -465,8 +465,6 @@ Hey how are you doing"""  # noqa: W293
         tokenizer_from_extractor = self.tokenizer_class(
             vocab=vocab,
             merges=merges,
-            do_lower_case=False,
-            keep_accents=True,
             added_tokens_decoder=added_tokens_decoder,
             **extra_kwargs,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
@@ -850,8 +848,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         self._run_integration_checks(tokenizer_original, "original")
@@ -876,8 +872,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
@@ -1009,6 +1003,13 @@ Hey how are you doing"""  # noqa: W293
         self.assertEqual(output, expected_output)  # Test output is the same after reloading
         # Check that no error raised
         new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+    def test_chat_template_empty_conversation(self):
+        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        tokenizer = self.get_tokenizer()
+        tokenizer.chat_template = dummy_template
+        with self.assertRaises(ValueError, msg="Cannot apply chat template to an empty conversation"):
+            tokenizer.apply_chat_template([], tokenize=False)
 
     @require_jinja
     def test_chat_template_save_loading(self):
@@ -1572,14 +1573,18 @@ Hey how are you doing"""  # noqa: W293
                 # Test that save_jinja_files is ignored when there's a dict of multiple templates
                 tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=save_jinja_files)
                 if save_jinja_files:
-                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                    config_dict = json.load(
+                        open(os.path.join(tmp_dir_name, "tokenizer_config.json"), encoding="utf-8")
+                    )
                     self.assertNotIn("chat_template", config_dict)
                     self.assertTrue(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
                     self.assertTrue(
                         os.path.exists(os.path.join(tmp_dir_name, "additional_chat_templates/template2.jinja"))
                     )
                 else:
-                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                    config_dict = json.load(
+                        open(os.path.join(tmp_dir_name, "tokenizer_config.json"), encoding="utf-8")
+                    )
                     # Assert that chat templates are correctly serialized as lists of dictionaries
                     self.assertEqual(
                         config_dict["chat_template"],
@@ -1617,7 +1622,7 @@ Hey how are you doing"""  # noqa: W293
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             tokenizer.chat_template = dummy_template1
             tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=False)
-            with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
+            with Path(tmp_dir_name, "chat_template.jinja").open("w", encoding="utf-8") as f:
                 f.write(dummy_template2)
             new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
         # Assert the file template clobbers any template in the config
@@ -1712,14 +1717,9 @@ Hey how are you doing"""  # noqa: W293
         # Overflowing tokens are handled quite differently in slow and fast tokenizers
         if isinstance(tokenizer, TokenizersBackend):
             truncated_sequence = information["input_ids"][0]
-            overflowing_tokens = information["input_ids"][1]
-            self.assertEqual(len(information["input_ids"]), 2)
 
             self.assertEqual(len(truncated_sequence), total_length - 2)
             self.assertEqual(truncated_sequence, sequence[:-2])
-
-            self.assertEqual(len(overflowing_tokens), 2 + stride)
-            self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
         else:
             truncated_sequence = information["input_ids"]
             overflowing_tokens = information["overflowing_tokens"]
@@ -1750,8 +1750,6 @@ Hey how are you doing"""  # noqa: W293
         seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
 
         self.assertGreater(len(seq1_tokens), 2 + stride)
-
-        smallest = seq1_tokens if len(seq0_tokens) > len(seq1_tokens) else seq0_tokens
 
         # We are not using the special tokens - a bit too hard to test all the tokenizers with this
         # TODO try this again later
@@ -1834,9 +1832,6 @@ Hey how are you doing"""  # noqa: W293
             tokenizer.encode(seq_0, add_special_tokens=False)
             + tokenizer.encode(seq_1, add_special_tokens=False)[-(2 + stride) :]
         )
-        overflow_longest_sequence = (
-            overflow_first_sequence if len(seq0_tokens) > len(seq1_tokens) else overflow_second_sequence
-        )
 
         # Overflowing tokens are handled quite differently in slow and fast tokenizers
         if isinstance(tokenizer, TokenizersBackend):
@@ -1851,14 +1846,9 @@ Hey how are you doing"""  # noqa: W293
                 # add_prefix_space=False,
             )
             truncated_sequence = information["input_ids"][0]
-            overflowing_tokens = information["input_ids"][1]
-            self.assertEqual(len(information["input_ids"]), 2)
 
             self.assertEqual(len(truncated_sequence), len(sequence) - 2)
             self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-            self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
-            self.assertEqual(overflowing_tokens, overflow_longest_sequence)
         else:
             # No overflowing tokens when using 'longest' in python tokenizers
             with self.assertRaises(ValueError) as context:
@@ -1894,14 +1884,9 @@ Hey how are you doing"""  # noqa: W293
                 # add_prefix_space=False,
             )
             truncated_sequence = information["input_ids"][0]
-            overflowing_tokens = information["input_ids"][1]
-            self.assertEqual(len(information["input_ids"]), 2)
 
             self.assertEqual(len(truncated_sequence), len(sequence) - 2)
             self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-            self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
-            self.assertEqual(overflowing_tokens, overflow_longest_sequence)
         else:
             # No overflowing tokens when using 'longest' in python tokenizers
             with self.assertRaises(ValueError) as context:

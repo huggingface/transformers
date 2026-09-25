@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from datasets import load_dataset
 
 from transformers import AutoImageProcessor
@@ -34,7 +33,11 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    load_coco_image,
+)
 
 
 if is_torch_available():
@@ -44,69 +47,30 @@ if is_vision_available():
     from PIL import Image
 
 
-class ImageGPTImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-
-    def prepare_image_processor_dict(self):
-        return {
-            # here we create 2 clusters for the sake of simplicity
-            "clusters": np.asarray(
+class ImageGPTImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault(
+            "clusters",
+            np.asarray(
                 [
                     [0.8866443634033203, 0.6618829369544983, 0.3891746401786804],
                     [-0.6042559146881104, -0.02295008860528469, 0.5423797369003296],
                 ]
             ),
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-        }
+        )
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return (self.size["height"] * self.size["width"],)
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
 @require_vision
 class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = ImageGPTImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = ImageGPTImageProcessingTester
 
     @slow
     @require_torch_accelerator
@@ -127,22 +91,6 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self._assert_tensors_equivalence(
             output_eager.input_ids.float(), output_compiled.input_ids.float(), atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "clusters"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -285,9 +233,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

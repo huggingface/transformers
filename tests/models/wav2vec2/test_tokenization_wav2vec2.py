@@ -15,7 +15,6 @@
 
 import json
 import os
-import random
 import tempfile
 import unittest
 
@@ -24,24 +23,6 @@ from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-global_rng = random.Random()
-
-
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
@@ -181,7 +162,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_dict = {k: v for v, k in enumerate(set(sent.split()))}
         vocab_file = os.path.join(self.tmpdirname, "vocab_special.json")
 
-        with open(vocab_file, "w") as f:
+        with open(vocab_file, "w", encoding="utf-8") as f:
             json.dump(vocab_dict, f)
 
         tokenizer = Wav2Vec2CTCTokenizer(vocab_file)  # , unk_token="<unk>")
@@ -516,7 +497,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tempdir:
             tempfile_path = os.path.join(tempdir, "vocab.json")
-            with open(tempfile_path, "w") as temp_file:
+            with open(tempfile_path, "w", encoding="utf-8") as temp_file:
                 json.dump(nested_vocab, temp_file)
 
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(tempdir, target_lang="eng")

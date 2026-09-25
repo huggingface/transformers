@@ -49,12 +49,12 @@ def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(text, path):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(text, f)
 
 
@@ -106,7 +106,7 @@ def write_model(model_path, input_base_path, model_size):
 
     for layer_i in range(n_layers):
         # Sharded
-        # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
+        # Note that attention.w{q,k,v,o}, feed_forward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
 

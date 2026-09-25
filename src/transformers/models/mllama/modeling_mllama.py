@@ -15,7 +15,6 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -23,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, StaticLayer
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -36,11 +35,9 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import (
-    maybe_autocast,
-    merge_with_config_defaults,
-)
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -73,6 +70,18 @@ def _prepare_cross_attention_mask(
     cross_attention_mask *= full_text_row_masked_out_mask
 
     return cross_attention_mask, full_text_row_masked_out_mask
+
+
+def _has_cached_cross_attention_states(past_key_values: Cache | None, layer_idx: int) -> bool:
+    """
+    Whether the cross-attention layer `layer_idx` already holds the projected vision states. Not written as
+    `get_seq_length(layer_idx) > 0`, which is a 0-dim tensor on compileable layers, i.e. a data-dependent branch.
+    """
+    if past_key_values is None or layer_idx >= len(past_key_values.layers):
+        return False
+    layer = past_key_values.layers[layer_idx]
+    # `Cache.early_initialization` marks a layer as initialized while it is still empty, hence the second check.
+    return layer.is_initialized and layer.keys.numel() > 0
 
 
 def _prepare_aspect_ratio_attention_mask(
@@ -233,15 +242,16 @@ class MllamaVisionAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=False)
 
+    @deprecate_kwarg("hidden_state", new_name="hidden_states", version="v5.20")
     def forward(
         self,
-        hidden_state: torch.Tensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        query = self.q_proj(hidden_state)
-        key = self.k_proj(hidden_state)
-        value = self.v_proj(hidden_state)
+        query = self.q_proj(hidden_states)
+        key = self.k_proj(hidden_states)
+        value = self.v_proj(hidden_states)
 
         batch_size, q_seq_len, _ = query.shape
         _, kv_seq_len, _ = key.shape
@@ -290,28 +300,29 @@ class MllamaVisionEncoderLayer(nn.Module):
             self.gate_attn = nn.Parameter(torch.ones(1) * math.pi / 4)
             self.gate_ffn = nn.Parameter(torch.ones(1) * math.pi / 4)
 
+    @deprecate_kwarg("hidden_state", new_name="hidden_states", version="v5.20")
     def forward(
         self,
-        hidden_state: torch.Tensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
     ):
         # Self Attention
-        residual = hidden_state
-        hidden_state = self.input_layernorm(hidden_state)
-        hidden_state, attn_weights = self.self_attn(hidden_state, attention_mask=attention_mask)
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, attn_weights = self.self_attn(hidden_states, attention_mask=attention_mask)
         if self.is_gated:
-            hidden_state = self.gate_attn.tanh() * hidden_state
-        hidden_state = residual + hidden_state
+            hidden_states = self.gate_attn.tanh() * hidden_states
+        hidden_states = residual + hidden_states
 
         # Feed forward
-        residual = hidden_state
-        hidden_state = self.post_attention_layernorm(hidden_state)
-        hidden_state = self.mlp(hidden_state)
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         if self.is_gated:
-            hidden_state = self.gate_ffn.tanh() * hidden_state
-        hidden_state = residual + hidden_state
+            hidden_states = self.gate_ffn.tanh() * hidden_states
+        hidden_states = residual + hidden_states
 
-        return hidden_state
+        return hidden_states
 
 
 class MllamaVisionEncoder(nn.Module):
@@ -435,14 +446,12 @@ class MllamaTextCrossAttention(nn.Module):
                 # if we have a new image + new tokens, we only computed key_states on that new image
                 # we still update the cross key states, past_image, new_image. And use it!
                 key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        elif past_key_values is not None and past_key_values.get_seq_length() > 0:
+        else:
+            # `MllamaTextModel` skips this layer entirely when there is nothing cached, so assume the cache exists
+            # and let it fail loudly otherwise.
             key_states, value_states = (
                 past_key_values.layers[self.layer_idx].keys,
                 past_key_values.layers[self.layer_idx].values,
-            )
-        else:
-            raise ValueError(
-                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
             )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -705,8 +714,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LlamaConfig->MllamaTextConfig,Llama->Mllama
 class MllamaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MllamaTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -720,24 +728,17 @@ class MllamaRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: MllamaTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: MllamaTextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -746,12 +747,9 @@ class MllamaRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     # Ignore copy
     @torch.no_grad()
@@ -760,7 +758,7 @@ class MllamaRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -781,39 +779,25 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaCrossAttentionDecoderLayer",
         "MllamaSelfAttentionDecoderLayer",
     ]
-    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": [MllamaSelfAttentionDecoderLayer, MllamaCrossAttentionDecoderLayer],
-        "attentions": [
-            OutputRecorder(MllamaTextSelfAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(MllamaTextSelfAttention, index=1, layer_name="cross_attn"),
-            OutputRecorder(MllamaTextCrossAttention, index=1, layer_name="cross_attn"),
-        ],
+        # Cross-attention is a layer type here, not a second attention inside each layer (unlike in BigBird, etc.). So
+        # layers listed in `config.cross_attention_layers` attend to vision instead of self-attending, and `attentions`
+        # holds one tensor per layer, self or cross depending on the layer type (matching `hidden_states` above).
+        # Mllama captures everything under the `attentions` key for BC reasons.
+        "attentions": [MllamaTextSelfAttention, MllamaTextCrossAttention],
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, MllamaTextRMSNorm):
-            init.ones_(module.weight)
-        elif isinstance(module, MllamaVisionModel):
+        if isinstance(module, MllamaVisionModel):
             init.normal_(module.class_embedding, std=std)
         elif isinstance(module, MllamaPrecomputedPositionEmbedding):
             init.normal_(module.embedding, std=std)
@@ -827,15 +811,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
             if module.is_gated:
                 init.zeros_(module.gate)
-        elif isinstance(module, MllamaRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
 
 @auto_docstring(
@@ -926,7 +901,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MllamaVisionModel
 
@@ -1072,7 +1047,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1159,9 +1133,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             # Let's check if the layer is cross attention layer and if we have cross attention states
             # or cached cross attention states.
             is_cross_attention_layer = idx in self.cross_attention_layers
-            is_cross_attention_cache_empty = past_key_values is None or (
-                past_key_values is not None and past_key_values.get_seq_length(idx) == 0
-            )
+            is_cross_attention_cache_empty = not _has_cached_cross_attention_states(past_key_values, idx)
 
             if is_cross_attention_layer and cross_attention_states is None and is_cross_attention_cache_empty:
                 continue
@@ -1243,10 +1215,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
               the forward pass of cross-attention layers.
             This mask is derived from the cross_attention_mask and is used to handle cases where a text token
             should not attend to any image token.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -1387,6 +1355,14 @@ class MllamaModel(MllamaPreTrainedModel):
             )
 
         if cross_attention_mask is not None:
+            # `generate` already slices the mask down to the tokens being processed (see
+            # `prepare_inputs_for_generation`), but a plain `forward` call may pass the full mask with a cache.
+            seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+            if cross_attention_mask.shape[1] != seq_len:
+                # `int(...)` as compileable layers return a 0-dim tensor. Never reached from `generate`, so not traced.
+                past_seen_tokens = int(past_key_values.get_seq_length()) if past_key_values is not None else 0
+                cross_attention_mask = cross_attention_mask[:, past_seen_tokens : past_seen_tokens + seq_len]
+
             cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
                 cross_attention_mask,
                 num_vision_tokens=self.vision_model.num_patches,
@@ -1394,15 +1370,6 @@ class MllamaModel(MllamaPreTrainedModel):
             )
         else:
             full_text_row_masked_out_mask = None
-
-        if cross_attention_mask is not None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            current_pos = torch.arange(seq_len, device=device) + past_seen_tokens
-
-            cross_attention_mask = cross_attention_mask[:, :, current_pos]
-            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, current_pos]
 
         outputs = self.language_model(
             input_ids=input_ids,
@@ -1431,7 +1398,8 @@ class MllamaModel(MllamaPreTrainedModel):
     """,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
-    # _tied_weights_keys = {"lm_head.weight": "model.language_moddel.embed_tokens.weight"}
+    # _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _can_compile_fullgraph = True  # every cache layer is a fixed-size `StaticLayer`, see `_prepare_static_cache`
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
@@ -1486,16 +1454,12 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         cross_attention_states (`torch.FloatTensor`, *optional*):
             Output of the vision model, used for cross-attention. This tensor contains the processed image features that
             the language model will attend to.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MllamaForConditionalGeneration
 
@@ -1552,9 +1516,26 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
+    def _prepare_static_cache(self, *args, model_kwargs, **kwargs) -> Cache:
+        cache = super()._prepare_static_cache(*args, model_kwargs=model_kwargs, **kwargs)
+        # `max_cache_len` only counts text tokens. The interleaved cross-attention layers cache the vision states
+        # instead, so re-allocate them with the vision length, as the parent does for encoder-decoder models.
+        pixel_values = model_kwargs.get("pixel_values")
+        num_images = pixel_values.shape[1] if pixel_values is not None else 1
+        vision_config = self.config.vision_config
+        num_patches = (vision_config.image_size // vision_config.patch_size) ** 2 + 1
+        cross_attention_cache_len = num_images * vision_config.max_num_tiles * num_patches
+
+        cross_attention_layers = set(self.config.get_text_config(decoder=True).cross_attention_layers)
+        for layer_idx in range(len(cache.layers)):
+            if layer_idx in cross_attention_layers:
+                cache.layers[layer_idx] = StaticLayer(max_cache_len=cross_attention_cache_len)
+        return cache
+
     def prepare_inputs_for_generation(
         self,
         input_ids=None,
+        next_sequence_length=None,
         inputs_embeds=None,
         attention_mask=None,
         position_ids=None,
@@ -1564,7 +1545,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         cross_attention_mask=None,
         past_key_values=None,
         use_cache=False,
-        logits_to_keep=None,
+        logits_to_keep=0,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1572,6 +1553,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
+            next_sequence_length=next_sequence_length,
             past_key_values=past_key_values,
             use_cache=use_cache,
             inputs_embeds=inputs_embeds,
@@ -1592,6 +1574,22 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             model_inputs["pixel_values"] = None
             model_inputs["aspect_ratio_ids"] = None
             model_inputs["aspect_ratio_mask"] = None
+
+        cross_attention_mask = model_inputs.get("cross_attention_mask")
+        if cross_attention_mask is not None:
+            sequence_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+            padding_length = sequence_length - cross_attention_mask.shape[1]
+            if padding_length > 0:
+                cross_attention_mask = torch.cat(
+                    [cross_attention_mask, cross_attention_mask[:, -1:].expand(-1, padding_length, -1, -1)], dim=1
+                )
+            # The mask gains a row per decoded token: slice it down to the tokens being processed, otherwise dynamo
+            # recompiles at every step. The `clone` gives the slice a consistent stride, which it also guards on.
+            if next_sequence_length is not None:
+                cross_attention_mask = cross_attention_mask[:, -next_sequence_length:].clone(
+                    memory_format=torch.contiguous_format
+                )
+            model_inputs["cross_attention_mask"] = cross_attention_mask
 
         return model_inputs
 

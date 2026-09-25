@@ -50,9 +50,7 @@ class LiltTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -112,7 +110,7 @@ class LiltTextEmbeddings(nn.Module):
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
         Args:
-        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.:
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
             inputs_embeds: torch.Tensor
         Returns: torch.Tensor
         """
@@ -679,10 +677,6 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -795,8 +789,6 @@ class LiltForTokenClassification(LiltPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 

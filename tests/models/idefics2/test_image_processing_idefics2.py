@@ -19,7 +19,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_vision_available():
@@ -29,59 +29,16 @@ if is_torch_available():
     import torch
 
 
-class Idefics2ImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-        do_pad=True,
-        do_image_splitting=True,
-    ):
-        size = size if size is not None else {"shortest_edge": 378, "longest_edge": 980}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.num_images = num_images
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_convert_rgb = do_convert_rgb
-        self.do_pad = do_pad
-        self.do_image_splitting = do_image_splitting
+class Idefics2ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_images", 1)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_pad": self.do_pad,
-            "do_image_splitting": self.do_image_splitting,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 378, "longest_edge": 980})
+        kwargs.setdefault("do_image_splitting", True)
+
+        super().__init__(**kwargs)
 
     def get_expected_values(self, image_inputs, batched=False):
         if not batched:
@@ -170,27 +127,7 @@ class Idefics2ImageProcessingTester:
 @require_torch
 @require_vision
 class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Idefics2ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "do_image_splitting"))
+    image_processor_tester_class = Idefics2ImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -342,7 +279,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertIsNotNone(result.pixel_values)
 
     def test_backends_equivalence_batched(self):
-        """Override to also compare pixel_attention_mask across backends."""
+        """Override to use batches where samples have different numbers of images."""
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
@@ -361,9 +298,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_pixel_values = encodings[reference_backend].pixel_values
-        reference_mask = encodings[reference_backend].pixel_attention_mask.float()
-
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
-            self._assert_tensors_equivalence(reference_mask, encodings[backend_name].pixel_attention_mask.float())
+            self._assert_encodings_equivalence(
+                encodings[reference_backend], encodings[backend_name], reference_backend, backend_name
+            )

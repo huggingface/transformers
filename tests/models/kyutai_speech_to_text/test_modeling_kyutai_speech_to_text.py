@@ -261,7 +261,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def setUp(self):
         self.model_tester = KyutaiSpeechToTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=KyutaiSpeechToTextConfig, hidden_size=32)
+        self.config_tester = ConfigTester(self, config_class=KyutaiSpeechToTextConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -522,6 +522,11 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                 gc.collect()
 
                 assert_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3)
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Model expects inputs to be fixed shape and thus we cannot test scaling with long inputs")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch

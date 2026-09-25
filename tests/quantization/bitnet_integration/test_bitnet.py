@@ -71,6 +71,59 @@ class BitNetPackedWeightsTest(unittest.TestCase):
         self.assertEqual(result["weight"].shape, (out_features, in_features))
         self.assertTrue(torch.equal(result["weight"], original))
 
+    def test_unpack_packed_weights_uint8_checkpoint(self):
+        """
+        Regression test for a dtype mismatch when loading offline/autobitlinear checkpoints.
+
+        A real safetensors checkpoint stores the packed BitNet weights as ``uint8``. The
+        deserializer must unpack them into the module's compute dtype (``weight_scale.dtype``),
+        otherwise the ternary weights stay ``uint8`` and ``F.linear`` crashes with
+        "expected mat1 and mat2 to have the same dtype, but got: BFloat16 != unsigned char".
+        """
+        import torch.nn.functional as F
+
+        from transformers.integrations.bitnet import (
+            VALUES_PER_ITEM,
+            AutoBitLinear,
+            BitNetDeserialize,
+            pack_weights,
+        )
+
+        out_features = 128
+        in_features = 64
+        compute_dtype = torch.bfloat16
+
+        class SimpleModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = AutoBitLinear(
+                    in_features=in_features, out_features=out_features, bias=False, dtype=compute_dtype
+                )
+
+        model = SimpleModel()
+        # The module's compute dtype is carried by weight_scale (here bfloat16).
+        self.assertEqual(model.linear.weight_scale.dtype, compute_dtype)
+
+        original = torch.randint(-1, 2, (out_features, in_features)).to(compute_dtype)
+        # As stored in a real safetensors checkpoint: packed ternary weights kept as uint8.
+        packed = pack_weights(original.clone().float()).to(torch.uint8)
+        self.assertEqual(packed.dtype, torch.uint8)
+        self.assertEqual(packed.shape[0], out_features // VALUES_PER_ITEM)
+
+        deserializer = BitNetDeserialize(hf_quantizer=None)
+        result = deserializer.convert({"weight": packed}, model=model, full_layer_name="linear.weight")["weight"]
+
+        # The unpacked weight must use the compute dtype, not the packed uint8 dtype.
+        self.assertEqual(result.dtype, compute_dtype)
+        self.assertNotEqual(result.dtype, torch.uint8)
+        self.assertEqual(result.shape, (out_features, in_features))
+        self.assertTrue(torch.equal(result, original))
+
+        # The original crash happened here: F.linear against a bfloat16 activation.
+        activation = torch.randn(2, in_features, dtype=compute_dtype)
+        output = F.linear(activation, result)
+        self.assertEqual(output.dtype, compute_dtype)
+
 
 @require_torch_accelerator
 class BitNetQuantConfigTest(unittest.TestCase):

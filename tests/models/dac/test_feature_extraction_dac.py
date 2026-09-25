@@ -14,7 +14,6 @@
 """Tests for the dac feature extractor."""
 
 import itertools
-import random
 import unittest
 
 import numpy as np
@@ -23,6 +22,7 @@ from transformers import DacFeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
@@ -30,26 +30,8 @@ if is_torch_available():
     import torch
 
 
-global_rng = random.Random()
-
-
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
-
-
 @require_torch
-# Copied from transformers.tests.encodec.test_feature_extraction_dac.EncodecFeatureExtractionTester with Encodec->Dac
+# Copied from transformers.tests.encodec.test_feature_extraction_encodec.EncodecFeatureExtractionTester with Encodec->Dac
 class DacFeatureExtractionTester:
     # Ignore copy
     def __init__(
@@ -102,7 +84,7 @@ class DacFeatureExtractionTester:
 
 
 @require_torch
-# Copied from transformers.tests.encodec.test_feature_extraction_dac.EnCodecFeatureExtractionTest with Encodec->Dac
+# Copied from transformers.tests.encodec.test_feature_extraction_encodec.EnCodecFeatureExtractionTest with Encodec->Dac
 class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = DacFeatureExtractor
 

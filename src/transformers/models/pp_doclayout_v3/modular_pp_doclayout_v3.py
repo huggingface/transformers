@@ -33,6 +33,7 @@ from ...image_transforms import (
 )
 from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -524,6 +525,7 @@ class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, PPDocLayoutV3MultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
@@ -555,7 +557,7 @@ class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
             init.xavier_uniform_(module.decoder.class_embed.weight)
             init.constant_(module.decoder.class_embed.bias, bias)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -563,15 +565,6 @@ class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
-        if isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight.data[module.padding_idx])
 
 
 def mask_to_box_coordinate(mask, dtype):
@@ -585,23 +578,14 @@ def mask_to_box_coordinate(mask, dtype):
     x_coords = x_coords.to(dtype)
     y_coords = y_coords.to(dtype)
 
+    finfo_max = torch.full((), torch.finfo(dtype).max, dtype=dtype, device=mask.device)
     x_coords_masked = x_coords * mask
     x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    x_min = (
-        torch.where(mask, x_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    x_min = torch.where(mask, x_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     y_coords_masked = y_coords * mask
     y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    y_min = (
-        torch.where(mask, y_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    y_min = torch.where(mask, y_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     unnormalized_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
 
@@ -1039,7 +1023,7 @@ class PPDocLayoutV3Model(RTDetrModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1343,22 +1327,16 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 

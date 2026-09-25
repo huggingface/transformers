@@ -455,7 +455,7 @@ def get_all_doctest_files() -> list[str]:
     test_files_to_run = [x for x in test_files_to_run if not x.endswith(("__init__.py",))]
 
     # These are files not doctested yet.
-    with open("utils/not_doctested.txt") as fp:
+    with open("utils/not_doctested.txt", encoding="utf-8") as fp:
         not_doctested = {x.split(" ")[0] for x in fp.read().strip().split("\n")}
 
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
@@ -527,7 +527,7 @@ def get_doctest_files(diff_with_last_commit: bool = False) -> list[str]:
     test_files_to_run = list(set(test_files_to_run + new_test_files))
 
     # Do not run slow doctest tests on CircleCI
-    with open("utils/slow_documentation_tests.txt") as fp:
+    with open("utils/slow_documentation_tests.txt", encoding="utf-8") as fp:
         slow_documentation_tests = set(fp.read().strip().split("\n"))
     test_files_to_run = [
         x for x in test_files_to_run if x in all_test_files_to_run and x not in slow_documentation_tests
@@ -943,6 +943,36 @@ def should_run_repo_utils_tests(modified_files: list[str]) -> bool:
     return any(path.startswith("utils/") for path in modified_files)
 
 
+def get_conftest_tests() -> list[str]:
+    """
+    Return the list of tests guarding the pytest ``conftest.py`` machinery itself.
+
+    Returns:
+        `List[str]`: The conftest test files.
+    """
+    conftest_dir = PATH_TO_TESTS / "conftest_tests"
+    if not conftest_dir.is_dir():
+        return []
+    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in conftest_dir.glob("test_*.py"))
+
+
+def should_run_conftest_tests(modified_files: list[str]) -> bool:
+    """
+    Return whether the ``conftest.py`` tests should be scheduled based on the modified files.
+
+    These tests exercise the test runner (the repo-root ``conftest.py``) rather than the
+    library, so they only need to run when a ``conftest.py`` is touched.
+
+    Args:
+        modified_files (`List[str]`):
+            The list of modified files relative to the repo root.
+
+    Returns:
+        `bool`: Whether the conftest tests should run.
+    """
+    return any(os.path.basename(path) == "conftest.py" for path in modified_files)
+
+
 def _print_list(l) -> str:
     """
     Pretty print a list of elements with one line per element and a - starting each line.
@@ -1011,6 +1041,9 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
 
     if should_run_repo_utils_tests(modified_files):
         test_files_to_run.extend(get_repo_utils_tests())
+
+    if should_run_conftest_tests(modified_files):
+        test_files_to_run.extend(get_conftest_tests())
 
     test_files_to_run = sorted(set(test_files_to_run))
     # Remove SageMaker tests
@@ -1094,11 +1127,19 @@ JOB_TO_TEST_FILE = {
     "examples_torch": r"examples/pytorch/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
-    "tests_repo_utils": r"tests/repo_utils/test_.*\.py",
+    # conftest tests exercise the test runner (repo-root conftest.py); they share the
+    # consistency image and run alongside the repo utils tests in the same CI job.
+    "tests_repo_utils": r"tests/(?:repo_utils|conftest_tests)/test_.*\.py",
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
-    "tests_non_model": r"tests/[^/]*?/test_.*\.py",
+    # Exclude the suites that have a job of their own, or they run twice: peft_integration, and
+    # the conftest + repo utils tests that the repo_utils job above already claims. That job runs
+    # them in the consistency image they are written for; non_model would run them again in
+    # torch-light.
+    "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/|repo_utils/)[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
     "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
+    "tests_fsdp_ci": r"(tests/models/.*/test_modeling_.*|tests/test_fsdp_mixin\.py)",
+    "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
 }
 
 
@@ -1118,7 +1159,7 @@ def create_test_list_from_filter(full_test_list, out_path):
             to_output.append((job_name, file_name, files_to_test))
 
     for _, file_name, files_to_test in to_output:
-        with open(file_name, "w") as f:
+        with open(file_name, "w", encoding="utf-8") as f:
             f.write("\n".join(files_to_test))
 
 

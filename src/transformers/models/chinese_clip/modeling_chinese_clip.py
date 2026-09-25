@@ -85,12 +85,8 @@ class ChineseCLIPTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False)
 
     def forward(
         self,
@@ -154,7 +150,7 @@ class ChineseCLIPVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -537,6 +533,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, ChineseCLIPVisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
@@ -573,14 +570,6 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * factor,
             )
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=factor)
-            if module.bias is not None:
-                init.zeros_(module.bias)
 
 
 class ChineseCLIPTextEncoder(nn.Module):
@@ -676,7 +665,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import CLIPProcessor, ChineseCLIPVisionModel
@@ -684,7 +673,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         >>> model = ChineseCLIPVisionModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
         >>> processor = CLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
-        >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 
@@ -898,7 +887,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         >>> model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
         >>> processor = AutoProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
-        >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
         >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt")
@@ -945,7 +934,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         >>> model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
         >>> processor = AutoProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
-        >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
         >>> image = load_image(url)
 
         >>> inputs = processor(text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, return_tensors="pt", padding=True)

@@ -61,15 +61,18 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
     """
     batch_size, seq_length = attention_mask.shape
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
-    base = torch.tensor(
-        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
+    base = torch.full(
+        (), 2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
     )
     powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
     slopes = torch.pow(base, powers)
 
     if closest_power_of_2 != num_heads:
-        extra_base = torch.tensor(
-            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
+        extra_base = torch.full(
+            (),
+            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))),
+            device=attention_mask.device,
+            dtype=torch.float32,
         )
         num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
         extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
@@ -593,7 +596,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         # This part differs from other models because BLOOM needs a 2D mask to construct alibi tensor
         # The only difference is the usage of 2D instead of 4D mask, but the shape will be static
         if isinstance(past_key_values, StaticCache) and attention_mask is not None:
-            target_length = past_key_values.get_max_cache_shape()
+            target_length = past_key_values.get_max_length()
             batch_size, seq_length = attention_mask.shape
             diff = target_length - seq_length
 
@@ -659,7 +662,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
                 logits,
                 labels,
                 vocab_size=self.config.vocab_size,
-                num_items_in_batch=kwargs.get("num_items_in_batch"),
+                **kwargs,
             )
 
         if not return_dict:
@@ -725,10 +728,6 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 

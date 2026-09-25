@@ -1,6 +1,6 @@
 # Copyright 2021 The I-BERT Authors (Sehoon Kim, Amir Gholami, Zhewei Yao,
 # Michael Mahoney, Kurt Keutzer - UC Berkeley) and The HuggingFace Inc. team.
-# Copyright (c) 20121, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -69,9 +69,7 @@ class IBertEmbeddings(nn.Module):
         )
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -585,7 +583,8 @@ class IBertPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (QuantLinear, nn.Linear)):
+        super()._init_weights(module)
+        if isinstance(module, QuantLinear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -594,7 +593,7 @@ class IBertPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.fc_scaling_factor)
             if getattr(module, "bias_integer", None) is not None:
                 init.zeros_(module.bias_integer)
-        elif isinstance(module, (QuantEmbedding, nn.Embedding)):
+        elif isinstance(module, QuantEmbedding):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
@@ -602,9 +601,7 @@ class IBertPreTrainedModel(PreTrainedModel):
             if getattr(module, "weight_scaling_factor", None) is not None:
                 init.zeros_(module.weight_scaling_factor)
                 init.zeros_(module.weight_integer)
-        elif isinstance(module, (IntLayerNorm, nn.LayerNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+        elif isinstance(module, IntLayerNorm):
             if getattr(module, "shift", None) is not None:
                 init.zeros_(module.shift)
         elif isinstance(module, IBertLMHead):
@@ -764,12 +761,6 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> MaskedLMOutput | tuple[torch.FloatTensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -855,12 +846,6 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> SequenceClassifierOutput | tuple[torch.FloatTensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -952,10 +937,6 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -1039,10 +1020,6 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> TokenClassifierOutput | tuple[torch.FloatTensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(

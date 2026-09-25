@@ -16,144 +16,37 @@
 import unittest
 
 import numpy as np
-from datasets import load_dataset
 
 from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
 if is_torch_available():
     import torch
 
-    from transformers.modeling_outputs import SemanticSegmenterOutput
 
+class DPTImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
 
-class DPTImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_reduce_labels=False,
-        num_labels=5,
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_reduce_labels = do_reduce_labels
-        self.num_labels = num_labels
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_reduce_labels", False)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_reduce_labels": self.do_reduce_labels,
-        }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
-    def prepare_post_process_semantic_segmentation_inputs(self):
-        inputs = {
-            "outputs": SemanticSegmenterOutput(
-                logits=torch.randn(
-                    self.batch_size,
-                    self.num_labels,
-                    self.size["height"],
-                    self.size["width"],
-                )
-            )
-        }
-        expected_shape = {
-            "num_labels": self.num_labels,
-            "height": self.size["height"],
-            "width": self.size["width"],
-        }
-        return inputs, expected_shape
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = DPTImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "size_divisor"))
-            self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+    image_processor_tester_class = DPTImageProcessingTester
 
     def test_padding(self):
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -250,7 +143,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmen
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
-            image, segmentation_map = prepare_semantic_single_inputs()
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
             encoding = image_processor(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
@@ -275,7 +168,9 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmen
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = prepare_semantic_batch_inputs()
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+                batched=True
+            )
 
             encoding = image_processor(images, segmentation_maps, return_tensors="pt")
             self.assertEqual(
@@ -304,7 +199,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmen
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
-            image, map = prepare_semantic_single_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
             encoding = image_processor(image, map, return_tensors="pt")
             labels_no_reduce = encoding["labels"].clone()
             self.assertTrue(labels_no_reduce.min().item() >= 0)
@@ -322,7 +217,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmen
             self.assertEqual(encoding["labels"][first_non_zero_coords].item(), first_non_zero_value - 1)
 
             # Ensure reduce label returns the same number of masks
-            image, map = prepare_semantic_batch_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(batched=True)
             encoding = image_processor(image, map, return_tensors="pt")
             self.assertTrue(len(encoding["labels"]) == len(map))
 
@@ -332,7 +227,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmen
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = prepare_semantic_single_inputs()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         # Create processors for each backend
         encodings = {}
@@ -356,7 +251,9 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmen
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
 
         # Create processors for each backend
         encodings = {}

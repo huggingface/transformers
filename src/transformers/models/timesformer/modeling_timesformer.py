@@ -449,13 +449,11 @@ class TimesformerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
                 init.constant_(module.bias, 0)
-        elif isinstance(module, nn.LayerNorm):
-            init.constant_(module.bias, 0)
-            init.constant_(module.weight, 1.0)
         elif isinstance(module, TimesformerEmbeddings):
             init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
             init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
@@ -619,11 +617,6 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         **kwargs,
     ) -> tuple | ImageClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python

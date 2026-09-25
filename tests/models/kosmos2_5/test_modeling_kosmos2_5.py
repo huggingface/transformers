@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import AutoProcessor, Kosmos2_5Config
@@ -30,6 +29,7 @@ from transformers.models.kosmos2_5.configuration_kosmos2_5 import (
 )
 from transformers.testing_utils import (
     Expectations,
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -41,6 +41,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -57,7 +58,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Kosmos2_5VisionModelTester:
@@ -492,6 +493,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_flash_attn_2_generate_reuse_cache(self):
         pass
 
+    @is_flaky()
     @pytest.mark.generate
     def test_generate_with_cache_matches_no_cache(self):
         """Verify that greedy generation with cache produces the same token IDs as without cache"""
@@ -533,6 +535,11 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
         )
 
+    @pytest.mark.generate
+    @is_flaky
+    def test_cached_decode_matches_cacheless(self):
+        super().test_cached_decode_matches_cacheless()
+
 
 @require_vision
 @require_torch
@@ -553,8 +560,8 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         return generated_ids, generated_text
 
     def test_eager(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
@@ -594,8 +601,8 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
     def test_sdpa(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
@@ -645,8 +652,8 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"

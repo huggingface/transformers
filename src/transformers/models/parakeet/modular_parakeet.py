@@ -34,6 +34,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -71,29 +72,20 @@ class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: ParakeetEncoderConfig, device=None):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        inv_freq = self.compute_default_relative_positional_parameters(config, device)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_relative_positional_parameters(
-        config: ParakeetEncoderConfig | None = None,
-        device=None,
-    ) -> torch.Tensor:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig, device=None) -> torch.Tensor:
         base = 10000.0
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
-                / config.hidden_size
-            )
-        )
-        return inv_freq
+        inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
+        return inv_freq.to(device)
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
@@ -189,10 +181,7 @@ class ParakeetEncoderAttention(LlamaAttention):
         matrix_bd = matrix_bd * self.scaling
 
         if attention_mask is not None:
-            # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
-            # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
-            # we rather went for a straight-forward approach with float("-inf")
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), torch.finfo(matrix_bd.dtype).min)
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
@@ -429,7 +418,6 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
@@ -539,6 +527,11 @@ class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
         )
 
 
+class ParakeetEncoderCTCHead(nn.Conv1d):
+    def forward(self, hidden_states: torch.Tensor):
+        return super().forward(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+
 @auto_docstring(
     custom_intro="""
     Parakeet Encoder with a Connectionist Temporal Classification (CTC) head.
@@ -551,7 +544,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
-        self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
+        self.ctc_head = ParakeetEncoderCTCHead(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
         self.post_init()
 
@@ -593,7 +586,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = encoder_outputs.last_hidden_state
-        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
+        logits = self.ctc_head(hidden_states)
 
         loss = None
         if labels is not None:

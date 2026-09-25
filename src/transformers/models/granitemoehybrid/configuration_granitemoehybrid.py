@@ -92,8 +92,6 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     mamba_chunk_size: int | None = 256
     mamba_conv_bias: bool | None = True
     mamba_proj_bias: bool | None = False
-    time_step_min: float | None = 0.001
-    time_step_max: float | None = 0.1
     time_step_limit: list[float, float] | tuple[float, float] | None = (0.0, float("inf"))
 
     def __post_init__(self, **kwargs):
@@ -106,7 +104,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
 
         self.time_step_limit = tuple(self.time_step_limit) if self.time_step_limit is not None else None
         if self.layer_types is None:
-            self.layer_types = ["mamba"] * self.num_hidden_layers
+            self.layer_types = ["linear_attention"] * self.num_hidden_layers
 
         super().__post_init__(**kwargs)
 

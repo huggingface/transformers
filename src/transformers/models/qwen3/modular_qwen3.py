@@ -108,16 +108,13 @@ class Qwen3Attention(LlamaAttention):
 
 
 class Qwen3ForCausalLM(Qwen2ForCausalLM):
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

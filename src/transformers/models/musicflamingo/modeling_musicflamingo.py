@@ -22,9 +22,9 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import pi
-from typing import Optional
 
-from torch import Tensor, broadcast_tensors, nn
+import torch.nn as nn
+from torch import Tensor, broadcast_tensors
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -35,6 +35,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_musicflamingo import MusicFlamingoConfig
 
@@ -52,8 +53,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
     timestamps in seconds.
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MusicFlamingoConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -67,26 +67,21 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         position_angles = self._compute_position_angles(self.inv_freq)
-        self.register_buffer("position_angles", position_angles, persistent=False)
+        self.position_angles = nn.Buffer(position_angles, persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: MusicFlamingoConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: MusicFlamingoConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -97,12 +92,9 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
@@ -269,7 +261,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         """
         if input_ids is None:
             special_audio_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
         else:
@@ -315,7 +307,9 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -408,7 +402,6 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     """
 )
 class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = ["embed_positions"]
     _tied_weights_keys = None
 
     def __init__(self, config: MusicFlamingoConfig):
@@ -481,20 +474,6 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
-
-    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.pop("input_features_mask", None)
-
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-        if is_first_iteration or not model_inputs.get("use_cache", False):
-            if input_features is not None:
-                model_inputs["input_features"] = input_features
-            if input_features_mask is not None:
-                model_inputs["input_features_mask"] = input_features_mask
-
-        return model_inputs
 
 
 __all__ = ["MusicFlamingoForConditionalGeneration", "MusicFlamingoModel", "MusicFlamingoPreTrainedModel"]

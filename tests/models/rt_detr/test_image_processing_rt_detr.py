@@ -25,7 +25,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
 
 
@@ -36,48 +36,19 @@ if is_torch_available():
     import torch
 
 
-class RTDetrImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,
-        num_channels=3,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=False,
-        do_pad=False,
-        return_tensors="pt",
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.do_resize = do_resize
-        self.size = size if size is not None else {"height": 640, "width": 640}
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.do_pad = do_pad
-        self.return_tensors = return_tensors
+class RTDetrImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 4)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "do_pad": self.do_pad,
-            "return_tensors": self.return_tensors,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 640, "width": 640})
+        kwargs.setdefault("return_tensors", "pt")
 
-    def get_expected_values(self):
-        return self.size["height"], self.size["width"]
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values()
-        return self.num_channels, height, width
+        return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -94,33 +65,12 @@ class RTDetrImageProcessingTester:
 @require_torch
 @require_vision
 class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = RTDetrImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "resample"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "return_tensors"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 640, "width": 640})
+    image_processor_tester_class = RTDetrImageProcessingTester
 
     def test_valid_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         params = {"image_id": 39769, "annotations": target}
@@ -157,7 +107,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -216,14 +166,14 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_multiple_images_processor_outputs(self):
         images_urls = [
-            "http://images.cocodataset.org/val2017/000000000139.jpg",
-            "http://images.cocodataset.org/val2017/000000000285.jpg",
-            "http://images.cocodataset.org/val2017/000000000632.jpg",
-            "http://images.cocodataset.org/val2017/000000000724.jpg",
-            "http://images.cocodataset.org/val2017/000000000776.jpg",
-            "http://images.cocodataset.org/val2017/000000000785.jpg",
-            "http://images.cocodataset.org/val2017/000000000802.jpg",
-            "http://images.cocodataset.org/val2017/000000000872.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000285.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000632.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000724.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000776.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000785.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000802.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000872.jpg",
         ]
 
         images = []
@@ -263,7 +213,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         annotations_0 = {"image_id": 39769, "annotations": target}
@@ -380,7 +330,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_torchvision_processor_equivalence_cpu_accelerator_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}

@@ -35,6 +35,7 @@ if is_torch_available():
 
     from transformers import CohereAsrForConditionalGeneration
     from transformers.models.cohere_asr.modeling_cohere_asr import CohereAsrModel
+    from transformers.models.parakeet.modeling_parakeet import ParakeetEncoderModelOutput
 
 
 class CohereAsrModelTester:
@@ -174,6 +175,39 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_training_loss_no_double_shift(self):
+        # forward shifts labels into decoder_input_ids, so loss must be plain CE against the labels (no second shift)
+        from torch.nn import CrossEntropyLoss
+
+        config = self.model_tester.get_config()
+        config.pad_token_id = self.model_tester.pad_token_id
+        model = CohereAsrForConditionalGeneration(config).to(torch_device).eval()
+        vocab_size = config.vocab_size
+
+        torch.manual_seed(0)
+        bsz, enc_len, dec_len = 2, 10, 6
+        enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
+        encoder_outputs = ParakeetEncoderModelOutput(
+            last_hidden_state=enc_hidden,
+            attention_mask=torch.ones(bsz, enc_len, device=torch_device),
+        )
+        labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
+        padded = labels.clone()
+        padded[0, -1] = -100
+        padded[1, -2:] = -100
+
+        def aligned_ce(logits, lbl):
+            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+
+        def double_shift_ce(logits, lbl):
+            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+
+        for lbl in (labels, padded):
+            with torch.no_grad():
+                out = model(encoder_outputs=encoder_outputs, labels=lbl, use_cache=False)
+            self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
+            self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
 
     def test_reverse_loading_mapping(self):
         # proj_out conversion only applies to ForConditionalGeneration, not the base model
