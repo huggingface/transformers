@@ -79,11 +79,11 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 ## Lxmert specific outputs
 
-[[autodoc]] models.lxmert.modeling_lxmert.LxmertModelOutput
+[[autodoc]] models.deprecated.lxmert.modeling_lxmert.LxmertModelOutput
 
-[[autodoc]] models.lxmert.modeling_lxmert.LxmertForPreTrainingOutput
+[[autodoc]] models.deprecated.lxmert.modeling_lxmert.LxmertForPreTrainingOutput
 
-[[autodoc]] models.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
+[[autodoc]] models.deprecated.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
 
 ## LxmertModel
 
