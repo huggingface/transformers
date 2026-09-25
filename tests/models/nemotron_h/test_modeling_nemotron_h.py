@@ -510,10 +510,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("NemotronH hybrid cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
-        pass
-
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 

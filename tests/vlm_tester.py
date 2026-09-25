@@ -80,9 +80,10 @@ class VLMModelTester(MultiModalModelTester):
 
     # -- Overridable VLM-specific hooks ------------------------------------------------------
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
-        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0)
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor([batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0)
 
     def place_image_tokens(self, input_ids, config):
         # Override if the image tokens shouldn't be placed at the start of the test sequence
@@ -103,10 +104,11 @@ class VLMModelTester(MultiModalModelTester):
     def _build_modality_sub_configs(self):
         return {"vision_config": self.get_vision_config()}
 
-    def _prepare_modality_inputs(self, input_ids, config):
-        pixel_values = self.create_pixel_values()
+    def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
+        pixel_values = self.create_pixel_values(batch_size=batch_size)
         input_ids = self.place_image_tokens(input_ids, config)
-        return input_ids, {"pixel_values": pixel_values}
+        additional_inputs = self.get_additional_inputs(config, input_ids, pixel_values, batch_size=batch_size)
+        return input_ids, {"pixel_values": pixel_values, **additional_inputs}
 
     # -- Vision sub-config construction ------------------------------------------------------
 
@@ -145,22 +147,30 @@ class VLMModelTest(MultiModalModelTest):
             model = model_class(config).to(torch_device)
             model.eval()
             curr_input_dict = copy.deepcopy(input_dict)
+
+            input_ids = curr_input_dict["input_ids"]
+            batch_size = input_ids.shape[0]
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # Test 1: remove one image but leave the image token in text
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
+            smaller_input_ids, smaller_input_dict = self.model_tester._prepare_modality_inputs(
+                input_ids, config, batch_size=batch_size - 1
+            )
+            smaller_input_dict.update({k: v for k, v in curr_input_dict.items() if k not in smaller_input_dict})
+            if "mm_token_type_ids" in curr_input_dict:
+                smaller_input_dict["mm_token_type_ids"] = curr_input_dict["mm_token_type_ids"]
             with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
+                _ = model(**smaller_input_dict)
 
             # Test 2: simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            # First, take just the first item from each tensor
-            curr_input_dict = {key: val[:1] for key, val in curr_input_dict.items()}
+            # First, create multimodal inputs with bs=1, i.e. we have only one image in total
+            single_input_ids, single_input_dict = self.model_tester._prepare_modality_inputs(
+                input_ids, config, batch_size=1
+            )
 
-            # Double the batch size for all batch-dimension tensors except pixel_values
+            # Double the batch size for all batch-dimension tensors except `image/videos`
             # This simulates having 2 prompts (each with image tokens) but only 1 image
-            batch_tensors_to_double = ["input_ids", "attention_mask", "token_type_ids"]
+            batch_tensors_to_double = ["input_ids", "attention_mask", "token_type_ids", "mm_token_type_ids"]
             for key in batch_tensors_to_double:
                 if key in curr_input_dict and curr_input_dict[key] is not None:
                     curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
@@ -170,14 +180,13 @@ class VLMModelTest(MultiModalModelTest):
                 _ = model(**curr_input_dict)
 
             # Test 3: two images and two image tokens don't raise an error
-            curr_input_dict["pixel_values"] = torch.cat(
-                [curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0
+            double_input_ids, double_input_dict = self.model_tester._prepare_modality_inputs(
+                input_ids, config, batch_size=batch_size * 2
             )
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = torch.cat(
-                    [curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0
-                )
-            _ = model(**curr_input_dict)
+            double_input_dict.update({k: v for k, v in curr_input_dict.items() if k not in double_input_dict})
+            if "mm_token_type_ids" in curr_input_dict:
+                double_input_dict["mm_token_type_ids"] = curr_input_dict["mm_token_type_ids"]
+            _ = model(**double_input_dict)
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. "

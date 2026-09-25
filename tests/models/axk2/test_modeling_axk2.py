@@ -85,10 +85,6 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip("AXK2 uses indexed_attention layers which are not compatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
-        pass
-
 
 @slow
 @require_torch_accelerator
