@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 
@@ -429,6 +430,10 @@ class StaticLayer(CacheLayerMixin):
         self.max_cache_len = max_cache_len
         # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
         self.cumulative_length = torch.tensor(0, dtype=int)
+        self.buckets = True
+        if self.buckets:
+            # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
+            self.cumulative_length_int = 0
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -500,12 +505,20 @@ class StaticLayer(CacheLayerMixin):
             self.keys[:, :, cache_position] = key_states
             self.values[:, :, cache_position] = value_states
 
-        return self.keys, self.values
+        if self.buckets:
+            self.cumulative_length_int += kv_length
+            current_bucket = self.compute_current_bucket(self.cumulative_length_int)
+            return self.keys[:, :, :current_bucket, :], self.values[:, :, :current_bucket, :]
+        else:
+            return self.keys, self.values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         kv_offset = 0
-        kv_length = self.max_cache_len
+        if self.buckets:
+            kv_length = self.compute_current_bucket(self.cumulative_length_int + query_length)
+        else:
+            kv_length = self.max_cache_len
         return kv_length, kv_offset
 
     def get_seq_length(self) -> int:
@@ -515,6 +528,11 @@ class StaticLayer(CacheLayerMixin):
     def get_max_length(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
+
+    def compute_current_bucket(self, current_length: int) -> int:
+        # Either 512, or next upper power of 2
+        next_power_of_2 = 2 ** math.ceil(math.log2(max(1, current_length)))
+        return max(512, min(self.max_cache_len, next_power_of_2))
 
 
 class StaticSlidingWindowLayer(StaticLayer):
