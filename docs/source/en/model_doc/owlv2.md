@@ -139,3 +139,13 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
 [[autodoc]] Owlv2ForObjectDetection
     - forward
     - image_guided_detection
+
+## Owlv2HungarianMatcher
+
+[[autodoc]] Owlv2HungarianMatcher
+    - forward
+
+## Owlv2Loss
+
+[[autodoc]] Owlv2Loss
+    - forward
