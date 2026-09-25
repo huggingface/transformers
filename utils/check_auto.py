@@ -131,7 +131,9 @@ def build_processor_mapping(
         module = model_type.replace("-", "_")
         processor_name = None
 
-        processor_paths = glob.glob(f"src/transformers/models/**/{module}/{processor_filename}_{module}.py", recursive=True)
+        processor_paths = glob.glob(
+            f"src/transformers/models/**/{module}/{processor_filename}_{module}.py", recursive=True
+        )
         if processor_paths:
             with open(processor_paths[0], "r", encoding="utf-8") as f:
                 content = f.read()
