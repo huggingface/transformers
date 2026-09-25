@@ -135,13 +135,13 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
 _loaded_implementation = None
 _flash_fn = None
 _flash_varlen_fn = None
-_flash_paged_fn = None
+_flash_with_kvcache_fn = None
 _pad_fn = None
 _unpad_fn = None
 
 # function that processes kwargs, generalized to handle any supported kwarg within the function
 _process_flash_kwargs_fn = None
-_process_paged_kwargs_fn = None
+_process_with_kvcache_kwargs_fn = None
 # exceptions where hf API doesn't match the original flash attention API
 _hf_api_to_flash_mapping = {
     "dropout": "dropout_p",
@@ -272,30 +272,34 @@ def lazy_import_flash_attention(
     if implementation is None and _loaded_implementation is None:
         raise ValueError("Could not find any flash attn implementation based on your environment.")
 
-    global _flash_fn, _flash_varlen_fn, _flash_paged_fn, _pad_fn, _unpad_fn
-    global _process_flash_kwargs_fn, _process_paged_kwargs_fn
+    global _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn
+    global _process_flash_kwargs_fn, _process_with_kvcache_kwargs_fn
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
-        _flash_fn, _flash_varlen_fn, _flash_paged_fn_not_decorated, _pad_fn, _unpad_fn = _lazy_imports(
+        _flash_fn, _flash_varlen_fn, _bare_flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
 
         # Paged flash attention is not compatible with torch.compile, so we decorate it here (unless it doesnt exist)
-        if _flash_paged_fn_not_decorated is not None:
-            _flash_paged_fn = torch.compiler.disable(_flash_paged_fn_not_decorated)
+        if _bare_flash_with_kvcache_fn is not None:
+            _flash_with_kvcache_fn = torch.compiler.disable(_bare_flash_with_kvcache_fn)
         else:
-            _flash_paged_fn = None
+            _flash_with_kvcache_fn = None
 
         # Some kernels, like the MSA kernel from minimax, have no varlen function. In this case, the varlen path
         # can never be used, so no need to build a processing function for it, just return a dict builder.
-        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn) if _flash_varlen_fn else dict
+        _process_flash_kwargs_fn = (
+            _lazy_define_process_function(_flash_varlen_fn) if _flash_varlen_fn is not None else dict
+        )
         # Similarly, some kernels don't have a kvcache function
-        _process_paged_kwargs_fn = _lazy_define_process_function(_flash_paged_fn) if _flash_paged_fn else dict
+        _process_with_kvcache_kwargs_fn = (
+            _lazy_define_process_function(_flash_with_kvcache_fn) if _flash_with_kvcache_fn is not None else dict
+        )
 
     return (
-        (_flash_fn, _flash_varlen_fn, _flash_paged_fn, _pad_fn, _unpad_fn),
-        (_process_flash_kwargs_fn, _process_paged_kwargs_fn),
+        (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn),
+        (_process_flash_kwargs_fn, _process_with_kvcache_kwargs_fn),
     )
 
 
@@ -759,7 +763,7 @@ def _flash_attention_forward(
             The attention implementation to use. If None, will default to the one based on the environment.
     """
     (
-        (flash_fn, flash_varlen_fn, flash_paged_fn, pad_fn, unpad_fn),
+        (flash_fn, flash_varlen_fn, flash_with_kv_cache, pad_fn, unpad_fn),
         (process_flash_kwargs_fn, process_paged_kwargs_fn),
     ) = lazy_import_flash_attention(attn_implementation)
     batch_size = query_states.size(0)
@@ -774,7 +778,7 @@ def _flash_attention_forward(
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is
     # safe to use `flash_varlen_fn` knowing we already have all necessary the kwargs.
     is_fa_with_varlen_kwargs = all(x is not None for x in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k))
-    # We can also use `flash_paged_fn` to update the paged cache during the call if the kwargs are provided
+    # We can also use `flash_with_kv_cache` to update the paged cache during the call if the kwargs are provided
     is_fa_with_paged_kwargs = all(x is not None for x in (block_table, cu_seq_lens_k, k_cache, v_cache))
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
@@ -798,7 +802,7 @@ def _flash_attention_forward(
             max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
         )
         out = _flash_attention_forward_paged(
-            flash_paged_fn, query_states, key_states, value_states, cu_seq_lens_k, k_cache, v_cache, **flash_kwargs
+            flash_with_kv_cache, query_states, key_states, value_states, cu_seq_lens_k, k_cache, v_cache, **flash_kwargs
         )
         return out.view(batch_size, -1, *out.shape[-2:])
 
@@ -839,7 +843,7 @@ def _flash_attention_forward(
 
 
 def _flash_attention_forward_paged(
-    flash_paged_fn: Callable,
+    flash_with_kv_cache: Callable,
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
@@ -854,8 +858,7 @@ def _flash_attention_forward_paged(
     key_states = key_states.reshape(-1, 1, *key_states.shape[-2:])
     value_states = value_states.reshape(-1, 1, *value_states.shape[-2:])
     # Also, rather than cu_seq_lens_k, we use cache_seqlens, which is the number of tokens in the cache per sequence
-    num_sequences = key_states.size(0)
     flash_kwargs["cache_seqlens"] = cu_seq_lens_k[1 : num_sequences + 1] - cu_seq_lens_k[:num_sequences] - 1
 
-    out = flash_paged_fn(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
+    out = flash_with_kv_cache(query_states, k_cache, v_cache, key_states, value_states, **flash_kwargs)
     return out[0] if isinstance(out, tuple) else out
