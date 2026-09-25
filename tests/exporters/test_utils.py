@@ -78,6 +78,20 @@ CONCRETE_CONFIGS = [
 
 
 class ExportConfigMixinTest(unittest.TestCase):
+    def test_executorch_off_graph_cache_selection(self):
+        config = ExecutorchConfig(cache_implementation="executorch_off_graph_cache")
+        self.assertEqual(ExecutorchConfig.from_dict(config.to_dict()), config)
+        self.assertIsNone(ExecutorchConfig().cache_implementation)
+        with self.assertRaises(ValueError):
+            ExecutorchConfig(cache_implementation="dynamic")
+
+    def test_executorch_constant_methods(self):
+        self.assertIsNone(ExecutorchConfig().constant_methods)
+        config = ExecutorchConfig(constant_methods={"get_test_value": 42})
+        restored = ExecutorchConfig.from_dict(config.to_dict())
+        self.assertEqual(restored, config)
+        self.assertIsNot(restored.constant_methods, config.constant_methods)
+
     def test_to_dict_from_dict_roundtrip(self):
         for config_cls, export_format in CONCRETE_CONFIGS:
             with self.subTest(config_cls.__name__):

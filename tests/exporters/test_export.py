@@ -25,7 +25,11 @@ from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
-from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
+from transformers.exporters.exporter_executorch import (
+    _OFF_GRAPH_CACHE_BACKENDS,
+    ExecutorchConfig,
+    ExecutorchExporter,
+)
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.utils import (
@@ -597,18 +601,26 @@ EXECUTORCH_EXPORT_PARAMS = parameterized.expand(
 )
 EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
     [
-        (backend, dynamic, generation_config)
-        for backend, dynamic, generation_config in itertools.product(
-            _EXECUTORCH_BACKENDS, _EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS
+        (backend, dynamic, generation_config, cache_implementation)
+        for backend, dynamic, generation_config, cache_implementation in itertools.product(
+            _EXECUTORCH_BACKENDS,
+            _EXPORT_SHAPE_MODES,
+            _EXPORT_GENERATION_CONFIGS,
+            (None, "executorch_off_graph_cache"),
         )
-        if not (
-            backend == "mlx" and generation_config is not None and generation_config.cache_implementation == "static"
+        if (cache_implementation is None or backend in _OFF_GRAPH_CACHE_BACKENDS)
+        and not (
+            cache_implementation is None
+            and backend == "mlx"
+            and generation_config is not None
+            and generation_config.cache_implementation == "static"
         )
     ],
     name_func=lambda f, _, p: (
         f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}"
         + (f"_{p.args[2].cache_implementation}_cache" if p.args[2] is not None else "")
         + f"_{p.args[0]}"
+        + ("_off_graph_cache" if p.args[3] is not None else "")
     ),
 )
 
@@ -893,14 +905,17 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _export_scopes(self, generate=False, dynamic=False, backend=None, static_cache=False) -> list[str]:
+    def _export_scopes(
+        self, generate=False, dynamic=False, backend=None, static_cache=False, off_graph_cache=False
+    ) -> list[str]:
         """The ``EXPORT_SKIPS`` scopes matching the current test, broad to specific.
 
         ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
         for that shape variant on every backend, ``"generate.dynamic"`` for the multi-token decode path,
         ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache,
         ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` (including
-        ``"<backend>.static-cache"``) for the more-specific intersections.
+        ``"<backend>.static-cache"``) for the more-specific intersections. Generation scopes also
+        distinguish ``in_graph`` and ``off_graph`` cache variants.
         """
         scopes = ["all"]
         if generate:
@@ -914,12 +929,15 @@ class ExportTesterMixin:
             scopes.append(backend)
             if generate:
                 scopes.append(f"{backend}.generate")
+                scopes.append(f"{backend}.generate.{'off_graph' if off_graph_cache else 'in_graph'}")
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
             if static_cache:
                 scopes.append(f"{backend}.static-cache")
         return scopes
 
-    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
+    def _should_skip(
+        self, model_class, generate=False, dynamic=False, backend=None, generation_config=None, off_graph_cache=False
+    ):
         """Return True if this model class should be skipped for export tests.
 
         Walks the scopes from :meth:`_export_scopes` and returns ``True`` as soon as the model is
@@ -930,7 +948,17 @@ class ExportTesterMixin:
         static_cache = _needs_static_cache(generation_config)
         if static_cache and not model_class._can_compile_fullgraph:
             return True
-        scopes = self._export_scopes(generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache)
+        if off_graph_cache and (
+            not model_class._supports_attention_backend or not model_class._supports_default_dynamic_cache()
+        ):
+            return True
+        scopes = self._export_scopes(
+            generate=generate,
+            dynamic=dynamic,
+            backend=backend,
+            static_cache=static_cache,
+            off_graph_cache=off_graph_cache,
+        )
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _should_skip_exactness(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
@@ -1167,6 +1195,24 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     stage into individual submodules via :func:`decompose_multimodal`.
     """
 
+    def _prepare_export_generation_request(self, model_class, device=torch_device, off_graph_cache=False):
+        """Prepare the original generation request before the exporter captures components."""
+        kwargs = {"batch_size": 1} if off_graph_cache else {}
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate(**kwargs)
+        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
+        if off_graph_cache:
+            if "input_ids" in inputs_dict:
+                # Test a plain, unpadded token request without auxiliary generation inputs.
+                inputs_dict = {
+                    "input_ids": inputs_dict["input_ids"],
+                    "attention_mask": torch.ones_like(inputs_dict["input_ids"]),
+                }
+        set_config_for_less_flaky_test(config)
+        model = model_class(config).eval().to(device)
+        set_model_for_less_flaky_test(model)
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
+        return model, inputs_dict
+
     def _prepare_export_generate_model_and_inputs(
         self, model_class, device=torch_device, generation_config=None, multi_token_decode=False
     ):
@@ -1190,15 +1236,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         Returns:
             `{name: (model, inputs)}`: the components mapping (see `_prepare_export_model_and_inputs`).
         """
-        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
-
-        set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(device)
-        set_model_for_less_flaky_test(model)
-
-        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
-
+        model, inputs_dict = self._prepare_export_generation_request(model_class, device=device)
         return decompose_for_generation(
             model, inputs_dict, generation_config=generation_config, multi_token_decode=multi_token_decode
         )
@@ -1324,20 +1362,96 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, backend, dynamic, generation_config):
-        """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
-
+    def test_executorch_export_generate(self, backend, dynamic, generation_config, cache_implementation):
+        """Export generation components; check runtime outputs or off-graph cache export contracts."""
+        off_graph_cache = cache_implementation == "executorch_off_graph_cache"
         self._skip_if_not_exportable()
+        if off_graph_cache:
+            try:
+                from executorch.extension.llm.cache.update_and_attend import update_and_attend  # noqa: F401
+                from executorch.extension.llm.export.model_metadata import write_cache_geometry  # noqa: F401
+            except ImportError:
+                self.skipTest("Requires ExecuTorch's off-graph cache extension")
+            from executorch.runtime import Runtime
+
+            from transformers.cache_utils import get_layer_types_and_kwargs
+            from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(backend=backend, dynamic=dynamic)
+        config = ExecutorchConfig(
+            backend=backend,
+            dynamic=dynamic,
+            cache_implementation=cache_implementation,
+            constant_methods={"get_test_value": 42},
+        )
+        tested_off_graph = False
 
         for model_class in self.all_generative_model_classes:
             if any(
                 self._should_skip(
-                    model_class, generate=True, dynamic=dynamic, backend=scope, generation_config=generation_config
+                    model_class,
+                    generate=True,
+                    dynamic=dynamic,
+                    backend=scope,
+                    generation_config=generation_config,
+                    off_graph_cache=off_graph_cache,
                 )
                 for scope in ("executorch", backend)
             ):
+                continue
+            if off_graph_cache:
+                model, inputs = self._prepare_export_generation_request(
+                    model_class, device="cpu", off_graph_cache=True
+                )
+                if (
+                    model.config.is_encoder_decoder
+                    or is_multimodal(model)
+                    or getattr(model.config, "attn_logit_softcapping", None) is not None
+                    or inputs.get("head_mask") is not None
+                ):
+                    continue
+                layer_types, _ = get_layer_types_and_kwargs(model.config)
+                if not layer_types or not set(layer_types) <= {"full_attention", "sliding_attention"}:
+                    continue
+                tested_off_graph = True
+                with self.subTest(model_class.__name__):
+                    with torch.no_grad():
+                        eager_outputs = get_leaf_tensors(model(**inputs, use_cache=False))
+                    original_attention = model.config._attn_implementation
+                    original_mapping = ALL_ATTENTION_FUNCTIONS._global_mapping
+                    try:
+                        artifacts = exporter.export_for_generation(
+                            model, inputs, config, generation_config, multi_token_decode=dynamic
+                        )
+                    finally:
+                        self.assertEqual(model.config._attn_implementation, original_attention)
+                        self.assertIs(ALL_ATTENTION_FUNCTIONS._global_mapping, original_mapping)
+                    self.assertEqual(set(artifacts), {"prefill", "decode"})
+                    for artifact in artifacts.values():
+                        signature = artifact.exported_program().graph_signature
+                        self.assertEqual(set(signature.user_inputs), {"input_ids", "position_ids"})
+                        self.assertFalse(signature.buffers_to_mutate)
+                        self.assertFalse(signature.user_inputs_to_mutate)
+                        self.assertEqual(len(signature.user_outputs), len(eager_outputs))
+                        # Read constant methods without executing MLX inference.
+                        program = Runtime.get().load_program(artifact.buffer)
+                        self.assertEqual(
+                            program.method_names,
+                            {
+                                "forward",
+                                "get_test_value",
+                                "get_n_caches",
+                                "get_kv_heads",
+                                "get_head_dims",
+                                "get_windows",
+                            },
+                        )
+                        self.assertEqual(program.load_method("get_test_value").execute([]), [42])
+                    self.assertEqual(config.constant_methods, {"get_test_value": 42})
+                    conflicting_config = copy.deepcopy(config)
+                    conflicting_config.constant_methods = {"get_n_caches": 0}
+                    with self.assertRaisesRegex(ValueError, "constant_methods cannot override.*get_n_caches"):
+                        exporter.export(model, inputs, config=conflicting_config)
                 continue
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
@@ -1354,3 +1468,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
                     self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
+                    self.assertIn("get_test_value", program.config_methods)
+                    self.assertEqual(config.constant_methods, {"get_test_value": 42})
+
+        if off_graph_cache and not tested_off_graph:
+            self.skipTest("No model class supports the off-graph cache export configuration")
