@@ -25,12 +25,13 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 if is_vision_available():
     from PIL import Image
 
-    from transformers.models.idefics2.image_processing_idefics2 import convert_to_rgb as convert_to_rgb_torch
     from transformers.models.idefics2.image_processing_pil_idefics2 import convert_to_rgb as convert_to_rgb_pil
 
 if is_torch_available():
     import torch
 
+if is_torchvision_available():
+    from transformers.models.idefics2.image_processing_idefics2 import convert_to_rgb as convert_to_rgb_torch
 
 class Idefics2ImageProcessingTester(ImageProcessingTester):
     def __init__(
