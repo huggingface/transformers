@@ -89,8 +89,8 @@ from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
+    FLASH_ATTN_KERNEL_DEVICES,
     FLASH_ATTN_KERNEL_FALLBACK,
-    get_default_flash_implementation,
     lazy_import_flash_attention,
     lazy_import_paged_flash_attention,
 )
@@ -119,6 +119,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_env_variable_true,
     is_kernels_available,
+    is_rocm_platform,
     is_torch_flex_attn_available,
     is_torch_npu_available,
     is_torch_xpu_available,
@@ -1750,7 +1751,15 @@ class PreTrainedModel(
                 and compatible_flash_implementations is not None
                 and base_implementation not in compatible_flash_implementations
             ):
-                default_flash_implementation = get_default_flash_implementation(compatible_flash_implementations)
+                # Prefer the first implementation shipping builds for the current device
+                device = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
+                device = "rocm" if device == "cuda" and is_rocm_platform() else device
+                supported_flash_implementations = [
+                    impl
+                    for impl in compatible_flash_implementations
+                    if device in FLASH_ATTN_KERNEL_DEVICES.get(FLASH_ATTN_KERNEL_FALLBACK.get(impl, impl), (device,))
+                ]
+                default_flash_implementation = (supported_flash_implementations or compatible_flash_implementations)[0]
                 if is_paged:
                     default_flash_implementation = f"paged|{default_flash_implementation}"
 

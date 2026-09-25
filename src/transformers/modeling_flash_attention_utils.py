@@ -141,34 +141,6 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
 }
 
 
-def is_flash_implementation_supported_on_device(implementation: str) -> bool:
-    """Whether a flash implementation (mainline flavor or hub kernel) can run on the current hardware."""
-    if implementation in FLASH_ATTN_KERNEL_FALLBACK:
-        fa_version = int(implementation.rsplit("_", 1)[-1])
-        if FLASH_ATTENTION_COMPATIBILITY_MATRIX[fa_version]["general_availability_check"]():
-            return True
-        # Without the package, the kernel fallback is used
-        implementation = FLASH_ATTN_KERNEL_FALLBACK[implementation]
-
-    repo_id = implementation.split(":")[0].partition("@")[0]
-    supported_devices = FLASH_ATTN_KERNEL_DEVICES.get(repo_id)
-    if supported_devices is None:
-        return True
-
-    device = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
-    if device == "cuda" and is_rocm_platform():
-        device = "rocm"
-    return device in supported_devices
-
-
-def get_default_flash_implementation(compatible_flash_implementations: list[str]) -> str:
-    """First compatible implementation that can run on the current hardware, else the first one."""
-    return next(
-        (impl for impl in compatible_flash_implementations if is_flash_implementation_supported_on_device(impl)),
-        compatible_flash_implementations[0],
-    )
-
-
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
 _loaded_implementation = None
 _flash_fn = None
