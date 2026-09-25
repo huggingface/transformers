@@ -385,7 +385,7 @@ class ResponseHandler(BaseHandler):
         # 1. Normalize Responses API input (string/list/dict + instructions) → standard messages list
         # 2. Transform message content for the HF processor (VLM image handling, text joining, etc.)
         messages = self._normalize_input(body)
-        processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
+        processor_inputs = self.get_processor_inputs_from_messages(messages, modality, self.allowed_media_domains)
 
         has_video = any(
             c.get("type") == "video"
