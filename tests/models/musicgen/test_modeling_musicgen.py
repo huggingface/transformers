@@ -589,6 +589,27 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             )
         return inputs_dict
 
+    def test_forward_with_labels_without_decoder_start_token_id(self):
+        # Hub MusicGen configs ship decoder.decoder_start_token_id=None and rely on
+        # bos_token_id / generation_config; forward(labels=...) must not require the
+        # user to set decoder_start_token_id by hand (#49095).
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.decoder.decoder_start_token_id = None
+        self.assertIsNotNone(config.decoder.bos_token_id)
+
+        model = MusicgenForConditionalGeneration(config)
+        model.to(torch_device)
+        model.eval()
+
+        labels = torch.zeros(
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks),
+            dtype=torch.long,
+            device=torch_device,
+        )
+        # Labels-only path: no decoder_input_ids (the failing hub path).
+        outputs = model(input_ids=inputs_dict["input_ids"].to(torch_device), labels=labels)
+        self.assertIsNotNone(outputs.loss)
+
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             self.skipTest(reason="model_tester.is_training is set to False")
