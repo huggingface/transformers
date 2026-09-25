@@ -173,7 +173,7 @@ class NemotronHOmniVision2TextModelTester(VLMModelTester):
     def _prepare_modality_inputs(self, input_ids, config):
         grid_size = self.image_size // self.patch_size
         pixel_values = floats_tensor([self.batch_size * grid_size**2, self.num_channels * self.patch_size**2])
-        image_grid_hw = torch.tensor([[grid_size, grid_size]] * self.batch_size)
+        image_grid_hw = torch.tensor([[grid_size, grid_size]] * self.batch_size, device=torch_device)
         input_ids = self.place_image_tokens(input_ids, config)
         return input_ids, {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
 
@@ -213,8 +213,8 @@ class NemotronHOmniAudio2TextModelTester(ALMModelTester):
         # clips are right-padded; at least one uses every frame
         lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length).abs() + 1
         lengths[0] = self.feat_seq_length
-        positions = torch.arange(self.feat_seq_length)[None, :]
-        return (positions < lengths[:, None]).long().to(torch_device)
+        positions = torch.arange(self.feat_seq_length, device=torch_device)[None, :]
+        return (positions < lengths[:, None]).long()
 
     def _subsampled_length(self, length):
         for _ in range(self.subsampling_factor.bit_length() - 1):
@@ -251,7 +251,7 @@ class NemotronHOmniModelTestMixin:
         tester = self.model_tester
         grid_size = tester.image_size // tester.patch_size
         pixel_values = floats_tensor([tester.batch_size * grid_size**2, 3 * tester.patch_size**2])
-        image_grid_hw = torch.tensor([[grid_size, grid_size]] * tester.batch_size)
+        image_grid_hw = torch.tensor([[grid_size, grid_size]] * tester.batch_size, device=torch_device)
         return tester.get_config(), {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
 
     def _video_features_prepare_config_and_inputs(self):
@@ -262,7 +262,7 @@ class NemotronHOmniModelTestMixin:
     def _audio_features_prepare_config_and_inputs(self):
         tester = self.model_tester
         input_features = floats_tensor([tester.batch_size, tester.feat_seq_length, tester.num_mel_bins])
-        input_features_mask = torch.ones(tester.batch_size, tester.feat_seq_length, dtype=torch.long)
+        input_features_mask = torch.ones(tester.batch_size, tester.feat_seq_length, dtype=torch.long, device=torch_device)
         return tester.get_config(), {"input_features": input_features, "input_features_mask": input_features_mask}
 
     def _image_features_get_expected_num_attentions(self, model_tester=None):
