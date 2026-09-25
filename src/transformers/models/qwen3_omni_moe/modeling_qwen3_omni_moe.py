@@ -2114,6 +2114,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
 
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)

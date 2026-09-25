@@ -224,6 +224,9 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
         """
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )

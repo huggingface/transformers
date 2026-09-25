@@ -1264,6 +1264,9 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 

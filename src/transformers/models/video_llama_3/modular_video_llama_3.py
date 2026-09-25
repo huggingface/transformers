@@ -529,6 +529,10 @@ class VideoLlama3Model(Qwen2VLModel):
         video_compression_mask (`torch.BoolTensor` of shape `(num_video_features,)`, *optional*):
             The mask to indicate which video features are kept after token compression.
         """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

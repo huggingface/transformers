@@ -989,6 +989,10 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         moe_mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             The same as `mm_token_type_ids` while additionally considering start/end image/video tokens as respective vision tokens.
         """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

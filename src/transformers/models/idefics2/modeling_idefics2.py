@@ -898,16 +898,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         """
-
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        if self.training and self.text_model.gradient_checkpointing and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-            )
-            use_cache = False
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -927,6 +922,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
                 )
             image_hidden_states = mm_encoder_outputs["image"].pooler_output
         elif isinstance(mm_encoder_outputs, torch.Tensor):
+            logger.warning(
+                "Passing `mm_encoder_outputs` (prev `image_hidden_states`) as a single tensor for pooled outputs "
+                "is deprecated and will be removed in v5.20. Please pass the whole output dict as `mm_encoder_outputs`"
+            )
             image_hidden_states = mm_encoder_outputs
         else:
             image_hidden_states = None

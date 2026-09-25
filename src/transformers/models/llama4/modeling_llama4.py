@@ -1276,6 +1276,9 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 

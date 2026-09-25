@@ -165,6 +165,9 @@ class FuyuModel(FuyuPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if image_patches is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both `image_patches` and `mm_encoder_outputs` at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 

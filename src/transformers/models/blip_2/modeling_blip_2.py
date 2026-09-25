@@ -1674,6 +1674,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         >>> print(generated_text)
         two
         ```"""
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None:

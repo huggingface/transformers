@@ -2164,7 +2164,6 @@ class Gemma3nModel(PaliGemmaModel):
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -2172,10 +2171,6 @@ class Gemma3nModel(PaliGemmaModel):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Attention mask for `input_features` where non-zero values mark valid audio frames.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
 
         Example:
 
@@ -2203,6 +2198,9 @@ class Gemma3nModel(PaliGemmaModel):
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
         if input_ids is not None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
