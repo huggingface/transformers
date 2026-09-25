@@ -18,11 +18,11 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
@@ -79,16 +79,15 @@ class VideoMAEForPreTrainingOutput(ModelOutput):
 # https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Models.py#L31
 def get_sinusoid_encoding_table(n_position, d_hid):
     """Sinusoid position encoding table"""
+    positions = torch.arange(n_position, dtype=torch.float64).unsqueeze(1)
+    hid = torch.arange(d_hid)
+    div_term = torch.pow(10000.0, 2 * (hid // 2) / d_hid)
 
-    # TODO: make it with torch instead of numpy
-    def get_position_angle_vec(position):
-        return [position / np.power(10000, 2 * (hid_j // 2) / d_hid) for hid_j in range(d_hid)]
+    sinusoid_table = positions / div_term
+    sinusoid_table[:, 0::2] = torch.sin(sinusoid_table[:, 0::2])  # dim 2i
+    sinusoid_table[:, 1::2] = torch.cos(sinusoid_table[:, 1::2])  # dim 2i+1
 
-    sinusoid_table = np.array([get_position_angle_vec(pos_i) for pos_i in range(n_position)])
-    sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # dim 2i
-    sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # dim 2i+1
-
-    return torch.FloatTensor(sinusoid_table).unsqueeze(0)
+    return sinusoid_table.float().unsqueeze(0)
 
 
 class VideoMAEEmbeddings(nn.Module):
@@ -103,7 +102,15 @@ class VideoMAEEmbeddings(nn.Module):
         self.patch_embeddings = VideoMAEPatchEmbeddings(config)
         self.num_patches = self.patch_embeddings.num_patches
         # fixed sin-cos embedding
-        self.position_embeddings = get_sinusoid_encoding_table(self.num_patches, config.hidden_size)
+        position_embeddings = get_sinusoid_encoding_table(
+            self.num_patches,
+            config.hidden_size,
+        )
+        self.register_buffer(
+            "position_embeddings",
+            position_embeddings,
+            persistent=False,
+        )
         self.config = config
 
     def forward(self, pixel_values, bool_masked_pos):
@@ -393,6 +400,25 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
         "attentions": VideoMAESelfAttention,
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, VideoMAEEmbeddings):
+            init.copy_(
+                module.position_embeddings,
+                get_sinusoid_encoding_table(
+                    module.num_patches,
+                    module.config.hidden_size,
+                ),
+            )
+        elif isinstance(module, VideoMAEForPreTraining):
+            init.copy_(
+                module.position_embeddings,
+                get_sinusoid_encoding_table(
+                    module.videomae.embeddings.num_patches,
+                    module.config.decoder_hidden_size,
+                ),
+            )
+
 
 @auto_docstring
 class VideoMAEModel(VideoMAEPreTrainedModel):
@@ -517,8 +543,14 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=False)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
-        self.position_embeddings = get_sinusoid_encoding_table(
-            self.videomae.embeddings.num_patches, config.decoder_hidden_size
+        position_embeddings = get_sinusoid_encoding_table(
+            self.videomae.embeddings.num_patches,
+            config.decoder_hidden_size,
+        )
+        self.register_buffer(
+            "position_embeddings",
+            position_embeddings,
+            persistent=False,
         )
 
         self.decoder = VideoMAEDecoder(config)
