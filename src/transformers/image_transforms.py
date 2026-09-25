@@ -756,8 +756,7 @@ def pad(
 # TODO (Amy): Accept 1/3/4 channel numpy array as input and return np.array as default
 def convert_to_rgb(image: ImageInput) -> ImageInput:
     """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
+    Converts a PIL image to RGB, compositing transparency onto white. Other image types are returned as is.
     Args:
         image (Image):
             The image to convert.
@@ -767,11 +766,16 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     if not isinstance(image, PIL.Image.Image):
         return image
 
-    if image.mode == "RGB":
+    transparency = image.info.get("transparency")
+    if image.mode == "RGB" and transparency is None:
         return image
 
-    image = image.convert("RGB")
-    return image
+    if "A" in image.getbands() or transparency is not None:
+        image = image.convert("RGBA")
+        background = PIL.Image.new("RGBA", image.size, (255, 255, 255, 255))
+        return PIL.Image.alpha_composite(background, image).convert("RGB")
+
+    return image.convert("RGB")
 
 
 def flip_channel_order(
