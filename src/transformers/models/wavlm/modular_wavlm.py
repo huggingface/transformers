@@ -124,39 +124,51 @@ class WavLMAttention(nn.Module):
         gated_position_bias: torch.FloatTensor,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         """simple wrapper around torch's multi_head_attention_forward function"""
-        # self-attention assumes q = k = v
-        query = key = value = hidden_states.transpose(0, 1)
+
         key_padding_mask = attention_mask.ne(1) if attention_mask is not None else None
 
-        # disable bias and add_zero_attn
-        bias_k = bias_v = None
-        add_zero_attn = False
+        # CHANGED: the original F.multi_head_attention_forward call passed
+        # q_proj_weight=self.q_proj.weight, k_proj_weight=..., v_proj_weight=...
+        # which extracts raw .weight tensors, bypassing any wrapped .forward() method.
+        # PEFT LoRA replaces .forward() but leaves .weight pointing to the base weights,
+        # so all LoRA parameters received grad=None and never trained. Replaced with an
+        # explicit manual implementation that calls the projection submodules directly.
+        # The same class of issue is documented for TDNNLayer in WavLMForXVector.
+        
+        bsz, tgt_len = hidden_states.shape[:2]
 
-        # PyTorch 1.3.0 has F.multi_head_attention_forward defined
-        # so no problem with backwards compatibility
-        attn_output, attn_weights = F.multi_head_attention_forward(
-            query,
-            key,
-            value,
-            self.embed_dim,
-            self.num_heads,
-            torch.empty([0]),
-            torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
-            bias_k,
-            bias_v,
-            add_zero_attn,
-            self.dropout,
-            self.out_proj.weight,
-            self.out_proj.bias,
-            self.training,
-            key_padding_mask,
-            need_weights=True,  # eager attention always returns the attention weights
-            attn_mask=gated_position_bias,
-            use_separate_proj_weight=True,
-            q_proj_weight=self.q_proj.weight,
-            k_proj_weight=self.k_proj.weight,
-            v_proj_weight=self.v_proj.weight,
-        )
+        # ADDED: project via submodule .forward() so PEFT/LoRA hooks participate in the graph
+        q = self.q_proj(hidden_states)
+        k = self.k_proj(hidden_states)
+        v = self.v_proj(hidden_states)
+
+        # ADDED: reshape to [B*num_heads, T, head_dim] for batched matmul; scale q
+        q = q.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).reshape( bsz * self.num_heads, tgt_len, self.head_dim) * self.scaling
+        k = k.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).reshape( bsz * self.num_heads, tgt_len, self.head_dim)
+        v = v.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).reshape( bsz * self.num_heads, tgt_len, self.head_dim)
+
+        # ADDED: attention scores [B*num_heads, T, T] with gated relative position bias
+        attn_weights = torch.bmm(q, k.transpose(1, 2)) + gated_position_bias
+
+        # ADDED: apply padding mask (key_padding_mask is True where padded, same as .ne(1) above)
+        if key_padding_mask is not None:
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, tgt_len)
+            attn_weights = attn_weights.masked_fill(key_padding_mask.unsqueeze(1).unsqueeze(2), float("-inf"))
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, tgt_len)
+
+        # ADDED: softmax in fp32 (matches F.mha behavior), dropout, weighted sum of values
+        attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(q.dtype)
+        attn_weights = torch.dropout(attn_weights, p=self.dropout, train=self.training)
+        attn_output = torch.bmm(attn_weights, v)
+
+        # ADDED: merge heads [B*num_heads, T, head_dim] -> [B, T, E], apply output projection,
+        # then transpose to seq-first [T, B, E] to match F.mha's output format
+        # (transposed back to batch-first on the line below)
+        attn_output = self.out_proj(attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim).transpose(1, 2).reshape(bsz, tgt_len, self.embed_dim)).transpose(0, 1)
+
+        # ADDED: average attn_weights over heads -> [B, T, T] to match F.mha need_weights=True shape
+        attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, tgt_len).mean(dim=1)
+
 
         # [Seq_Len, Batch Size, ...] -> [Batch Size, Seq_Len, ...]
         attn_output = attn_output.transpose(0, 1)
