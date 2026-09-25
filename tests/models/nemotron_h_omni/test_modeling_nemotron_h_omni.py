@@ -445,6 +445,10 @@ class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip(reason="Audio tester isnt supported yet")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
 
 @slow
 @require_torch_gpu
