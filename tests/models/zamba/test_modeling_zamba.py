@@ -536,9 +536,9 @@ class ZambaModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
 
         # Opt-out: use_associative_scan=False → compiled sequential loop
-        model = ZambaForCausalLM.from_pretrained(
-            model_id, dtype=torch.bfloat16, use_associative_scan=False
-        ).to(torch_device)
+        model = ZambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, use_associative_scan=False).to(
+            torch_device
+        )
         model.eval()
         model.forward = torch.compile(model.forward)
         output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
@@ -548,9 +548,9 @@ class ZambaModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
         # Opt-in: use_associative_scan=True → compiled associative scan
-        model = ZambaForCausalLM.from_pretrained(
-            model_id, dtype=torch.bfloat16, use_associative_scan=True
-        ).to(torch_device)
+        model = ZambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, use_associative_scan=True).to(
+            torch_device
+        )
         model.eval()
         model.forward = torch.compile(model.forward)
         output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
