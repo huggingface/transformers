@@ -351,11 +351,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # primitive to lower it to, so those exports keep the sequential scan — which unrolls and pins the
     # merged decode to the traced step length. torch.export runs the scan natively; ONNX lowers it to a
     # dynamic-trip-count `Loop` (`_translate_associative_scan`).
-    "executorch.generate.multi_token": {
-        "MambaForCausalLM": "Sequential selective scan bakes the query length (no ExecuTorch associative_scan).",
-        "FalconMambaForCausalLM": "Same as `MambaForCausalLM`.",
-        "JambaForCausalLM": "Same as `MambaForCausalLM`.",
-    },
     # ONNX, every variant.
     "onnx": {
         "DFineModel": (
@@ -414,17 +409,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # ONNX, dynamic-shape only.
     "onnx.dynamic": {
-        "DPTModel": (
-            "onnxruntime-gpu 1.23.2 cannot open the session: `SaveInitializedTensors` fails on "
-            "`!utils::HasExternalDataInMemory(tensor_proto)` when one initializer is read by a node it places on "
-            "the CPU and another on CUDA. The test initialises `cls_token` and `position_embeddings` to the same "
-            "zeros, onnxscript's `DeduplicateInitializersPass` merges them, and in the dynamic graph the "
-            "position-embedding resize `Concat` runs on the host while the CLS `Expand` runs on the device. Giving "
-            "`cls_token` its own copy per consumer opens the session, and the CPU provider opens it as is. 1.23.2 "
-            "is the last onnxruntime built for Python 3.10; static folds the resize away."
-        ),
-        "DPTForDepthEstimation": "Same as `DPTModel`.",
-        "DPTForSemanticSegmentation": "Same as `DPTModel`.",
         "GroundingDinoModel": (
             "Same `detach_(alias(...))` retrace bug as CHMv2, but only triggered under dynamic "
             "shapes — `aot_autograd`'s decomposition pipeline emits the detach itself (verified "
@@ -1134,51 +1118,38 @@ _SELECTED_BY_TOPK = frozenset(
 )
 
 
-def _assert_values_close(case, actual: dict, expected: dict, compare, atol: float, rtol: float) -> None:
+def _assert_values_close(case, actual: dict, expected: dict, atol: float, rtol: float) -> None:
     """Compare the tensors a runtime produced against eager's, on eager's device and in eager's dtype.
 
-    A backend stores at the precision it computes in, which for a half model is `f16` where eager kept
+    Checked on top of the names, since a graph can answer with the right names and the wrong numbers. A
+    backend stores at the precision it computes in, which for a half model is `f16` where eager kept
     `bfloat16` — the same numbers to the tolerance, in a type the graph chose. Integers likewise: OpenVINO
-    keeps an `int64` counter in `int32` state, since its CPU plugin holds no `i64` variables. What the precisions are is
-    checked where the export declares them, not here. The device is eager's for the same reason: OpenVINO
-    answers on the host wherever the model was built, and moving its outputs over is what lets the model
-    stay on the GPU, where exporting from a GPU-resident model gets exercised too.
+    keeps an `int64` counter in `int32` state, since its CPU plugin holds no `i64` variables. What the
+    precisions are is checked where the export declares them, not here. The device is eager's for the same
+    reason: OpenVINO answers on the host wherever the model was built, and moving its outputs over is what
+    lets the model stay on the GPU, where exporting from a GPU-resident model gets exercised too.
     """
     shared = {
         name: actual[name].to(expected[name].device, expected[name].dtype) for name in expected if name in actual
     }
     case.assertTrue(shared, "the runtime produced none of the tensors eager did.")
-    compare(shared, {name: expected[name] for name in shared}, atol=atol, rtol=rtol)
+    case._check_outputs_close(shared, {name: expected[name] for name in shared}, atol=atol, rtol=rtol)
 
 
 def _assert_openvino_outputs_close(case, runtime, actual: dict, expected: dict, atol: float, rtol: float) -> None:
-    """Compare what the graph computed against eager, folded state included.
-
-    The cache a stateful export keeps is not among the outputs, so it is read back off the `Assign` sinks
-    and compared with the rest — which is what checks that the graph wrote the keys and values eager did,
-    rather than only that it named them.
-    """
-    runner = getattr(runtime, "runner", None)
-    folded = runner.state_tensors() if runner is not None and runner.owns_state else {}
-    produced = {**actual, **folded}
-    # In eager's dtype: OV stores a folded cache at the precision it computes in, which for a half model is
-    # `f16` where eager kept `bfloat16` — the same numbers to the tolerance below, in a type the graph chose.
-    # What is being checked here is the values, and the precisions are compared where the export declares
-    # them (`check_cache_geometry`, the metadata the artifacts carry).
-    _assert_values_close(case, produced, expected, case._check_outputs_close, atol, rtol)
-
-
-def _assert_openvino_output_names(case, runtime, actual: dict, expected: dict) -> None:
-    """Every leaf eager returns is accounted for — as an output, or as folded state.
+    """Every leaf eager returns is accounted for — as an output, or as folded state — and holds eager's values.
 
     An OpenVINO export turns each round-tripped cache tensor into an internal variable the plugin keeps
     between calls, so the graph returns logits and the cache stays behind its `Assign` sinks. Reading it
-    back off those sinks is what lets this compare the whole set rather than excusing what is missing.
+    back off those sinks is what checks that the graph wrote the keys and values eager did, rather than
+    excusing what is missing.
     """
     case.assertTrue(actual, "OpenVINO outputs are empty.")
     runner = getattr(runtime, "runner", None)
     folded = runner.state_tensors() if runner is not None and runner.owns_state else {}
-    case.assertEqual(set(actual) | set(folded), set(expected))
+    produced = {**actual, **folded}
+    case.assertEqual(set(produced), set(expected))
+    _assert_values_close(case, produced, expected, atol, rtol)
 
 
 class ExportTesterMixin:
@@ -1311,6 +1282,34 @@ class ExportTesterMixin:
                 eager_outputs[name] = get_leaf_tensors(model(**copy.deepcopy(inputs)))
                 assert eager_outputs[name], f"Eager outputs are empty for {name}."
         return eager_outputs
+
+    def _maybe_assert_generate_matches_eager(
+        self, model_class, components, exported, backend, generation_config, dynamic, multi_token_decode
+    ):
+        """End-to-end id-parity, wherever the exported graphs can serve `generate`'s loop.
+
+        Checking each component against the call it was captured from leaves the hand-offs between them
+        untested — a component is handed its cache, while the loop expects each graph to carry what the one
+        before it wrote. The loop runs via the dedicated `prefill` graph (always under dynamic shapes, under
+        static ones only with a static cache, whose frozen shapes reproduce every step), or via the
+        multi-token decode serving prefill and decode from one graph — and only once every component exported.
+        """
+        can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
+        if not (can_split_prefill or (dynamic and multi_token_decode)) or not components.keys() <= exported.keys():
+            return
+        if self._should_skip(
+            model_class,
+            generate=True,
+            dynamic=dynamic,
+            backend=backend,
+            multi_token=multi_token_decode,
+            generation_config=generation_config,
+            runtime=True,
+        ):
+            return
+        self._assert_generate_matches_eager(
+            components, exported, backend, generation_config, dynamic, multi_token_decode
+        )
 
     def _assert_generate_matches_eager(
         self, components, exported, backend, generation_config, dynamic, multi_token_decode
@@ -1664,11 +1663,7 @@ class ExportTesterMixin:
                     onnx_outputs = output.runtime()(**inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
-                    # And what they hold, not only what they are called: a graph can answer with the
-                    # right names and the wrong numbers.
-                    _assert_values_close(
-                        self, onnx_outputs, eager_outputs[name], self._check_outputs_close, atol, rtol
-                    )
+                    _assert_values_close(self, onnx_outputs, eager_outputs[name], atol, rtol)
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1714,9 +1709,7 @@ class ExportTesterMixin:
                         outputs = output.runtime()(**inputs)
                         tensors = {n: t for n, t in outputs.items() if isinstance(t, torch.Tensor)}
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
-                        # And what they hold, not only how many there are: a lowering can answer with
-                        # the right shapes and the wrong numbers.
-                        _assert_values_close(self, tensors, eager_outputs[name], self._check_outputs_close, atol, rtol)
+                        _assert_values_close(self, tensors, eager_outputs[name], atol, rtol)
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
@@ -1736,7 +1729,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     """
 
     def _prepare_export_generate_model_and_inputs(
-        self, model_class, backend, device=torch_device, generation_config=None, multi_token_decode=False
+        self,
+        model_class,
+        backend,
+        device=torch_device,
+        generation_config=None,
+        multi_token_decode=False,
+        decoder_writes_cross_cache=False,
     ):
         """Decompose a generative model into exportable components.
 
@@ -1775,7 +1774,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
         return decompose_for_generation(
-            model, inputs_dict, generation_config=generation_config, multi_token_decode=multi_token_decode
+            model,
+            inputs_dict,
+            generation_config=generation_config,
+            multi_token_decode=multi_token_decode,
+            decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
 
     # ──────────────────── torch.export tests ─────────────────────
@@ -1828,24 +1831,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
                     exported[name] = output
 
-            # End-to-end id-parity over both cache kinds, whenever the graphs can serve `generate`'s loop:
-            # via the dedicated `prefill` graph (always under dynamic shapes, under static ones only with
-            # a static cache, whose frozen shapes reproduce every step), or via the multi-token decode
-            # serving prefill and decode from one graph.
-            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
-            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                if not self._should_skip(
-                    model_class,
-                    generate=True,
-                    dynamic=dynamic,
-                    backend="dynamo",
-                    multi_token=multi_token_decode,
-                    generation_config=generation_config,
-                    runtime=True,
-                ):
-                    self._assert_generate_matches_eager(
-                        components, exported, "dynamo", generation_config, dynamic, multi_token_decode
-                    )
+            self._maybe_assert_generate_matches_eager(
+                model_class, components, exported, "dynamo", generation_config, dynamic, multi_token_decode
+            )
 
     # ────────────────────── AOTInductor tests ────────────────────
 
@@ -1898,21 +1886,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
                     exported[name] = output
 
-            # Same gate as the traced sweep: the loop runs wherever the exported graphs can serve it.
-            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
-            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                if not self._should_skip(
-                    model_class,
-                    generate=True,
-                    dynamic=dynamic,
-                    backend="aoti",
-                    multi_token=multi_token_decode,
-                    generation_config=generation_config,
-                    runtime=True,
-                ):
-                    self._assert_generate_matches_eager(
-                        components, exported, "aoti", generation_config, dynamic, multi_token_decode
-                    )
+            self._maybe_assert_generate_matches_eager(
+                model_class, components, exported, "aoti", generation_config, dynamic, multi_token_decode
+            )
 
     # ─────────────────────── TensorRT tests ──────────────────────
 
@@ -1965,21 +1941,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
                     exported[name] = output
 
-            # Same gate as the traced sweep: the loop runs wherever the exported graphs can serve it.
-            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
-            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                if not self._should_skip(
-                    model_class,
-                    generate=True,
-                    dynamic=dynamic,
-                    backend="tensorrt",
-                    multi_token=multi_token_decode,
-                    generation_config=generation_config,
-                    runtime=True,
-                ):
-                    self._assert_generate_matches_eager(
-                        components, exported, "tensorrt", generation_config, dynamic, multi_token_decode
-                    )
+            self._maybe_assert_generate_matches_eager(
+                model_class, components, exported, "tensorrt", generation_config, dynamic, multi_token_decode
+            )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -2023,28 +1987,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     onnx_outputs = output.runtime()(**inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
-                    # And what they hold, not only what they are called: a graph can answer with the
-                    # right names and the wrong numbers.
-                    _assert_values_close(
-                        self, onnx_outputs, eager_outputs[name], self._check_outputs_close, atol, rtol
-                    )
+                    _assert_values_close(self, onnx_outputs, eager_outputs[name], atol, rtol)
                     exported[name] = output
 
-            # End-to-end id-parity (text and VLM) — see the dynamo call site for the gate.
-            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
-            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                if not self._should_skip(
-                    model_class,
-                    generate=True,
-                    dynamic=dynamic,
-                    backend="onnx",
-                    multi_token=multi_token_decode,
-                    generation_config=generation_config,
-                    runtime=True,
-                ):
-                    self._assert_generate_matches_eager(
-                        components, exported, "onnx", generation_config, dynamic, multi_token_decode
-                    )
+            self._maybe_assert_generate_matches_eager(
+                model_class, components, exported, "onnx", generation_config, dynamic, multi_token_decode
+            )
 
     @DYNAMIC_EXPORT_PARAMS
     @slow
@@ -2073,10 +2021,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     output = exporter.export(model, inputs, config=config)
                     runtime = output.runtime()
                     ov_outputs = runtime(**inputs)
-                    _assert_openvino_output_names(self, runtime, ov_outputs, eager_outputs[name])
-                    # And what they hold, not only what they are called: every other backend's component
-                    # check compares values against eager, and a graph can answer with the right names and
-                    # the wrong numbers.
                     _assert_openvino_outputs_close(self, runtime, ov_outputs, eager_outputs[name], atol, rtol)
 
     @GENERATE_EXPORT_PARAMS
@@ -2109,6 +2053,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 "openvino",
                 generation_config=generation_config,
                 multi_token_decode=multi_token_decode,
+                decoder_writes_cross_cache=exporter.decoder_writes_cross_cache,
             )
             eager_outputs = self._collect_eager_outputs(components)
 
@@ -2119,30 +2064,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     output = exporter.export(model, inputs, config=config)
                     runtime = output.runtime()
                     ov_outputs = runtime(**inputs)
-                    _assert_openvino_output_names(self, runtime, ov_outputs, eager_outputs[name])
-                    # And what they hold, not only what they are called: every other backend's component
-                    # check compares values against eager, and a graph can answer with the right names and
-                    # the wrong numbers.
                     _assert_openvino_outputs_close(self, runtime, ov_outputs, eager_outputs[name], atol, rtol)
                     exported[name] = output
 
-            # And the loop those graphs are for. Checking each component against the call it was captured
-            # from leaves the hand-offs between them untested — a component is handed its cache, while the
-            # loop expects each graph to carry what the one before it wrote.
-            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
-            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                if not self._should_skip(
-                    model_class,
-                    generate=True,
-                    dynamic=dynamic,
-                    backend="openvino",
-                    multi_token=multi_token_decode,
-                    generation_config=generation_config,
-                    runtime=True,
-                ):
-                    self._assert_generate_matches_eager(
-                        components, exported, "openvino", generation_config, dynamic, multi_token_decode
-                    )
+            self._maybe_assert_generate_matches_eager(
+                model_class, components, exported, "openvino", generation_config, dynamic, multi_token_decode
+            )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -2197,27 +2124,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         outputs = output.runtime()(**inputs)
                         tensors = {n: t for n, t in outputs.items() if isinstance(t, torch.Tensor)}
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
-                        # And what they hold, not only how many there are: a lowering can answer with
-                        # the right shapes and the wrong numbers.
-                        _assert_values_close(self, tensors, eager_outputs[name], self._check_outputs_close, atol, rtol)
+                        _assert_values_close(self, tensors, eager_outputs[name], atol, rtol)
                         # Only a component that ran is handed to the generate drive below.
                         exported[name] = output
 
-            # End-to-end id-parity (text and VLM). Multi-token decode works on ExecuTorch because
-            # `_fix_range_constraints` bounds the otherwise-unbounded sequence dim (XNNPACK can't size a
-            # static tensor from an unbounded extent). Runs on CPU (device="cpu" above), matching the
-            # runner's device. See the dynamo call site for the gate.
-            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
-            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                if not self._should_skip(
-                    model_class,
-                    generate=True,
-                    dynamic=dynamic,
-                    backend="executorch",
-                    multi_token=multi_token_decode,
-                    generation_config=generation_config,
-                    runtime=True,
-                ):
-                    self._assert_generate_matches_eager(
-                        components, exported, "executorch", generation_config, dynamic, multi_token_decode
-                    )
+            self._maybe_assert_generate_matches_eager(
+                model_class, components, exported, "executorch", generation_config, dynamic, multi_token_decode
+            )

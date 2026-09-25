@@ -401,9 +401,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
         expected = model.generate(**copy.deepcopy(inputs), max_new_tokens=4, do_sample=False)
 
-        exported = AotiExporter().export_for_generation(
-            model, copy.deepcopy(inputs), config=AotiConfig(dynamic=True), multi_token_decode=True
-        )
+        exported = AotiExporter().export_for_generation(model, copy.deepcopy(inputs), config=AotiConfig(dynamic=True))
         # Bytes, not a path: a package is a self-contained archive, so an export that has not been saved
         # is the archive itself — which is what lets it be run and saved with no temporary file between.
         self.assertIsInstance(exported["decode"].artifact, bytes)

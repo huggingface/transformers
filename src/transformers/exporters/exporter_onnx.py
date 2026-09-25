@@ -412,14 +412,27 @@ def _patch_optimize_ir(original):
     return patch
 
 
-@contextmanager
-def _exact_identity_rewrites():
-    """Let onnxscript's identity rewrites (`x + 0`, `x * 1`, …) fire on an exact 0 or 1 only.
+@register_patch("onnx", "onnx_ir.passes.common.DeduplicateInitializersPass")
+def _patch_deduplicate_initializers(original):
+    """Keep distinct initializers distinct, even when they hold the same values.
 
-    A pattern constant matches within `math.isclose(rel_tol=1e-5, abs_tol=1e-8)`, so `x + 1e-10` counts as
-    `x + 0` and the epsilon a guarded division adds is deleted: patchtst's `loss.sum() / (mask.sum() +
-    1e-10)` turns into `0 / 0 = nan` whenever nothing is masked. Held only while the optimizer runs.
+    The optimizer merges equal initializers of up to 1024 elements, so two parameters that merely hold the
+    same values (DPT's zero-initialised `cls_token` and `position_embeddings`) become one initializer read by
+    nodes ORT places on different devices — which onnxruntime-gpu 1.23.2 refuses to open
+    (`SaveInitializedTensors`: `!utils::HasExternalDataInMemory`). Merging tensors that small saves nothing.
     """
+    from onnx_ir.passes import PassResult
+
+    class KeepInitializers(original):
+        def call(self, model):
+            return PassResult(model, modified=False)
+
+    return KeepInitializers
+
+
+@functools.cache
+def _identity_pattern_constants() -> tuple:
+    """The `0` / `1` constants in onnxscript's default rewrite rules — fixed for the process, so found once."""
     import onnxscript.rewriter as rewriter
     from onnxscript.rewriter import _pattern_ir
 
@@ -435,12 +448,26 @@ def _exact_identity_rewrites():
                 if hasattr(item, "__dict__") and type(item).__module__.startswith("onnxscript"):
                     yield from constants(item, seen)
 
-    seen, tightened = set(), []
-    for rule in rewriter._DEFAULT_REWRITE_RULES:
-        for constant in constants(rule, seen):
-            if isinstance(constant._value, (int, float)) and constant._value in (0, 1):
-                tightened.append((constant, constant._rel_tol, constant._abs_tol))
-                constant._rel_tol = constant._abs_tol = 0.0
+    seen = set()
+    return tuple(
+        constant
+        for rule in rewriter._DEFAULT_REWRITE_RULES
+        for constant in constants(rule, seen)
+        if isinstance(constant._value, (int, float)) and constant._value in (0, 1)
+    )
+
+
+@contextmanager
+def _exact_identity_rewrites():
+    """Let onnxscript's identity rewrites (`x + 0`, `x * 1`, …) fire on an exact 0 or 1 only.
+
+    A pattern constant matches within `math.isclose(rel_tol=1e-5, abs_tol=1e-8)`, so `x + 1e-10` counts as
+    `x + 0` and the epsilon a guarded division adds is deleted: patchtst's `loss.sum() / (mask.sum() +
+    1e-10)` turns into `0 / 0 = nan` whenever nothing is masked. Held only while the optimizer runs.
+    """
+    tightened = [(constant, constant._rel_tol, constant._abs_tol) for constant in _identity_pattern_constants()]
+    for constant, _, _ in tightened:
+        constant._rel_tol = constant._abs_tol = 0.0
     try:
         yield
     finally:

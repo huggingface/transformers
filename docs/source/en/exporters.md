@@ -523,13 +523,14 @@ for name, component in components.items():
 
 ### Multi-token decode
 
-By default the `decode` component is a **single-token** step — one query token against the KV cache —
-so `torch.export` specializes its query-sequence axis to 1. Pass `multi_token_decode=True` to capture
-`decode` as a **multi-token** decode instead: [`~exporters.utils.decompose_for_generation`] merges two
-consecutive decode steps (it captures with `max_new_tokens=3`) into one forward, so that axis stays
-symbolic. A single graph then serves every query length — one token (ordinary decoding), many tokens
-at once (continuation-from-past, e.g. accepting a chunk of speculative tokens), and a plain prefill
-when the cache is empty.
+A dynamic export (`dynamic=True`) captures `decode` as a **multi-token** decode:
+[`~exporters.utils.decompose_for_generation`] merges two consecutive decode steps (it captures with
+`max_new_tokens=3`) into one forward, so the query-sequence axis stays symbolic. A single graph then serves
+every query length — one token (ordinary decoding), many tokens at once (continuation-from-past, e.g.
+accepting a chunk of speculative tokens), and a plain prefill when the cache is empty — so the export ships
+one text stack instead of two. A prompt graph is kept only where the decode graph provably cannot stand in.
+Pass `multi_token_decode=False` to keep a single-token `decode` beside a separate `prefill` graph anyway — for
+a runtime that wants a fixed one-token decode shape.
 
 <hfoptions id="multi-token-decode">
 <hfoption id="Dynamo">
@@ -539,7 +540,7 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
@@ -551,7 +552,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
@@ -563,17 +564,17 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)
-exported_artifacts = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+exported_artifacts = exporter.export_for_generation(model, inputs, config=config)
 # components["decode"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
 </hfoptions>
 
-The query axis only stays symbolic under a dynamic-shape export (`dynamic=True`); a static export
-freezes it at the captured length, giving a fixed multi-token graph. It composes with the static KV
-cache below — the merged decode writes each step's tokens into the fixed-size cache in place, and the
-cache handles where they land internally.
+A static export cannot keep the query axis symbolic, so it captures a **single-token** `decode` step
+instead, with a separate `prefill` graph for the prompt (asking it for `multi_token_decode=True` is refused). The multi-token decode composes with the static KV
+cache below — the merged decode writes each step's tokens into the fixed-size cache in place, and the cache
+handles where they land internally.
 
 ### Static KV cache
 
@@ -583,7 +584,7 @@ the current position each step. Combined with a [multi-token decode](#multi-toke
 generation into a single exported graph: the `decode` graph takes a fixed-size cache and a *variable*
 number of query tokens, so one graph serves both the prompt (empty cache → prefill) and each generated
 token (populated cache → decode). Export it by forwarding a `GenerationConfig` with
-`cache_implementation="static"` (and a `max_cache_len`) alongside `multi_token_decode=True`:
+`cache_implementation="static"` (and a `max_cache_len`) with a dynamic export:
 
 <hfoptions id="static-cache">
 <hfoption id="Dynamo">
@@ -595,7 +596,7 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 exporter = DynamoExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
 components = exporter.export_for_generation(
-    model, inputs, config=DynamoConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
+    model, inputs, config=DynamoConfig(dynamic=True), generation_config=gen_config
 )
 ```
 
@@ -609,7 +610,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 exporter = OnnxExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
 components = exporter.export_for_generation(
-    model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
+    model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config
 )
 ```
 
@@ -623,7 +624,7 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 exporter = ExecutorchExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
 components = exporter.export_for_generation(
-    model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True), generation_config=gen_config, multi_token_decode=True
+    model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True), generation_config=gen_config
 )
 ```
 
@@ -676,7 +677,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
 exported_artifacts = OnnxExporter().export_for_generation(
-    model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
+    model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config
 )
 ```
 

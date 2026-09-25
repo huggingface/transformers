@@ -749,7 +749,7 @@ def decompose_multimodal(
     return components
 
 
-def _needs_prefill_graph(model, components: dict, *, cross_written_by_encoder=None) -> bool:
+def _needs_prefill_graph(model, components: dict, *, cross_written_without_prompt=None) -> bool:
     """Whether the prompt needs a graph of its own, beside a decode graph that could serve it.
 
     Asked wherever the decode graph might stand in for the prompt: a merged decode takes a symbolic query
@@ -763,9 +763,10 @@ def _needs_prefill_graph(model, components: dict, *, cross_written_by_encoder=No
     not bring it back. Cross-attention is the clearest case: at decode time `is_updated` is `True`, so the
     graph holds the cache *read* and the `k_proj`/`v_proj` that fill that cache were never traced.
 
-    `cross_written_by_encoder` asks the question hypothetically — whether the answer *would* be no if the
-    encoder wrote the cross cache — which is how `_fold_cross_cache_into_encoder` finds out whether moving
-    those writes there would buy anything.
+    `cross_written_without_prompt` asks the question hypothetically — whether the answer *would* be no if
+    something other than the prompt graph wrote the cross cache (the encoder, or the decode graph itself) —
+    which is how `_fold_cross_cache_into_encoder` finds out whether moving those writes there would buy
+    anything.
     """
     # An encoder-decoder's prefill is the one graph that *writes* the cross-attention cache; the decode
     # graph, captured after it, only reads it (`is_updated` bakes as trace-time context). Unless the encoder
@@ -774,8 +775,8 @@ def _needs_prefill_graph(model, components: dict, *, cross_written_by_encoder=No
     encoder = components.get("encoder")
     writes_cross_cache = (
         isinstance(encoder.module if encoder is not None else None, CrossAttentionEncoder)
-        if cross_written_by_encoder is None
-        else cross_written_by_encoder
+        if cross_written_without_prompt is None
+        else cross_written_without_prompt
     )
     if encoder is not None and not writes_cross_cache:
         return True
@@ -869,10 +870,37 @@ def _fold_cross_cache_into_encoder(model, components: dict, writers: dict) -> di
     encoder = components.get("encoder")
     if not writers or encoder is None:
         return components
-    if _needs_prefill_graph(model, components, cross_written_by_encoder=True):
+    if _needs_prefill_graph(model, components, cross_written_without_prompt=True):
         return components
     module = _cross_writing_encoder(encoder.module, writers, encoder.inputs, components)
     return components if module is None else {**components, "encoder": replace(encoder, module=module)}
+
+
+def _write_cross_cache_in_decoder(components: dict) -> tuple[dict, bool]:
+    """Let the decode graph write its own cross-attention cache, from the `encoder_outputs` it is fed.
+
+    The decode capture ran after the prompt wrote the cross half, so its graph holds the read. Handing it
+    that half empty and unwritten (`is_updated` off) traces the write instead — the projections of the
+    encoder's output. A backend that keeps its cache in variables then computes them on a sequence's first
+    step and reads them after (OpenVINO initializes the variable from them), so no graph carries the
+    projections twice. Only a growing cross half is emptied: a fixed-size one is written at positions, not
+    appended to. Returns the components and whether the cross cache is now written by the decode graph.
+    """
+    decode = components["decode"]
+    cache = decode.inputs.get("past_key_values")
+    # Cross-attention is attention over the encoder's output, which the decode call then takes: BLT keeps its
+    # local decoder's *self*-attention cache in an `EncoderDecoderCache`'s cross half, and takes none.
+    if not isinstance(cache, EncoderDecoderCache) or decode.inputs.get("encoder_outputs") is None:
+        return components, False
+    layers = cache.cross_attention_cache.layers
+    if not layers or any(getattr(layer, "is_compileable", False) for layer in layers):
+        return components, False
+    cache = copy.deepcopy(cache)
+    for index, layer in enumerate(cache.cross_attention_cache.layers):
+        if layer.keys is not None:
+            layer.keys, layer.values = layer.keys[..., :0, :], layer.values[..., :0, :]
+        cache.is_updated[index] = False
+    return {**components, "decode": replace(decode, inputs={**decode.inputs, "past_key_values": cache})}, True
 
 
 def _materialize_prefill_cache(model, prefill_inputs: dict, decode_inputs: dict) -> None:
@@ -995,7 +1023,11 @@ def _embedded_inputs(call_inputs: dict, components: dict) -> dict:
 
 
 def decompose_for_generation(
-    model: PreTrainedModel, inputs: dict[str, Any], generation_config: Any = None, multi_token_decode: bool = False
+    model: PreTrainedModel,
+    inputs: dict[str, Any],
+    generation_config: Any = None,
+    multi_token_decode: bool = False,
+    decoder_writes_cross_cache: bool = False,
 ) -> dict[str, Component]:
     """Decompose a generative model into independently exportable components.
 
@@ -1012,6 +1044,10 @@ def decompose_for_generation(
         multi_token_decode: When `True`, capture the `decode` component as a multi-token decode (dynamic
             query sequence axis: multiple tokens at once — continuation-from-past, or a plain prefill when
             the cache is empty); a single-token decode can't stay dynamic (see `decompose_prefill_decode`).
+        decoder_writes_cross_cache: With `multi_token_decode`, capture the decode component writing its own
+            cross-attention cache (`_write_cross_cache_in_decoder`) instead of having the encoder write it
+            (`_fold_cross_cache_into_encoder`) — for a backend that keeps the cache as state it initializes
+            once per sequence.
 
     Returns:
         `{component_name: Component}` — `"prefill"` / `"decode"` for a plain generative model,
@@ -1037,14 +1073,19 @@ def decompose_for_generation(
         if (embedder := _streaming_embedder(model, inputs)) is not None:
             components[embedder.name] = embedder
 
-    # Let the encoder write the decoder's cross-attention cache, where that is what frees the prompt graph.
-    if multi_token_decode:
+    # Let the encoder (or, for a backend that keeps its cache as state, the decode graph) write the decoder's
+    # cross-attention cache, where that is what frees the prompt graph.
+    cross_written_by_decoder = False
+    if multi_token_decode and decoder_writes_cross_cache:
+        components, cross_written_by_decoder = _write_cross_cache_in_decoder(components)
+    elif multi_token_decode:
         components = _fold_cross_cache_into_encoder(model, components, cross_writers)
 
     # Does the prompt need a graph of its own? A single-token decode bakes its query axis to 1 and cannot
     # take a prompt, so the captured prefill is kept outright. Only a merged decode can serve both, and
     # there the prefill is kept just where that graph provably cannot stand in (`_needs_prefill_graph`).
-    if not multi_token_decode or _needs_prefill_graph(model, components):
+    written = True if cross_written_by_decoder else None
+    if not multi_token_decode or _needs_prefill_graph(model, components, cross_written_without_prompt=written):
         _materialize_prefill_cache(model, components["prefill"].inputs, components["decode"].inputs)
     else:
         del components["prefill"]

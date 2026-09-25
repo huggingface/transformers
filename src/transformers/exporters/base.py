@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import copy
 import functools
 import json
 from abc import ABC, abstractmethod
@@ -313,6 +314,10 @@ class HfExporter(ABC):
     # Versions the exporter is validated against — a mismatch only warns.
     tested_versions: dict[str, str] = {}
 
+    # Whether a merged decode graph writes its own cross-attention cache (a backend that keeps the cache as
+    # state computes it once per sequence) rather than the encoder writing it — `export_for_generation`'s default.
+    decoder_writes_cross_cache: bool = False
+
     def __init__(self):
         self.validate_environment()
 
@@ -411,7 +416,8 @@ class HfExporter(ABC):
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, ExportConfigMixin],
         generation_config: GenerationConfig | None = None,
-        multi_token_decode: bool = False,
+        multi_token_decode: bool | None = None,
+        decoder_writes_cross_cache: bool | None = None,
     ) -> ExportArtifacts:
         """Decompose a generative model into the components a generation loop drives, and export each.
 
@@ -432,16 +438,28 @@ class HfExporter(ABC):
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The config the capture generates under, and so the cache the graphs are traced against.
                 Saved with the export, because a load without it would build a different cache.
-            multi_token_decode (`bool`, *optional*, defaults to `False`):
-                Whether the decode component takes several query tokens at once. That axis stays symbolic
-                only under a dynamic export, and when it does the decode graph serves the prompt too, so the
-                export ships one text stack instead of two.
+            multi_token_decode (`bool`, *optional*):
+                Whether the decode component takes several query tokens at once, so that the one decode graph serves
+                the prompt too and the export ships one text stack instead of two (a prompt graph is kept only where
+                the decode graph provably cannot stand in). Defaults to whether the decode component's config is
+                dynamic: a static export cannot keep that axis symbolic, and asking it to is refused. Pass `False`
+                to keep a single-token decode beside a prompt graph under a dynamic export.
+            decoder_writes_cross_cache (`bool`, *optional*):
+                For an encoder-decoder with a multi-token decode: whether the decode graph computes its own
+                cross-attention cache from the encoder's output, rather than the encoder graph computing it.
+                Defaults to the backend's choice (`decoder_writes_cross_cache` on the exporter class): OpenVINO keeps
+                the cache as a variable it initializes once per sequence, the others take it from the encoder.
         """
+        generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
+            model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
+        )
+
         parts = decompose_for_generation(
             model,
             sample_inputs,
             generation_config=generation_config,
             multi_token_decode=multi_token_decode,
+            decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
         if isinstance(config, dict):
             missing = set(parts) - set(config)
@@ -475,6 +493,42 @@ class HfExporter(ABC):
             generation_config=generation_config,
             export_config=config,
         )
+
+    def _resolve_generation_options(
+        self,
+        model,
+        config,
+        generation_config: GenerationConfig | None,
+        multi_token_decode: bool | None,
+        decoder_writes_cross_cache: bool | None,
+    ) -> tuple[GenerationConfig | None, bool, bool]:
+        """`export_for_generation`'s options, each `None` resolved to the best choice and each choice checked.
+
+        - `generation_config` gets whatever it leaves unset from the model's own (its token ids,
+          `forced_eos_token_id`, …) — `generate`'s own priority rule, which the capture's `generate` applies too. The
+          runtime is handed this, not the model, so without the merge it would generate without them: a beam search
+          then differs from eager at the step the model forces EOS.
+        - A multi-token decode defaults to whether the decode component's config is dynamic, and is refused on a
+          static one.
+        - The cross-attention writer defaults to this backend's (`decoder_writes_cross_cache`).
+        """
+        if generation_config is not None and getattr(model, "generation_config", None) is not None:
+            generation_config = copy.deepcopy(generation_config)
+            generation_config.update(
+                **model.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True
+            )
+        decode_config = config.get("decode") if isinstance(config, dict) else config
+        dynamic = bool(getattr(decode_config, "dynamic", False))
+        if multi_token_decode is None:
+            multi_token_decode = dynamic
+        elif multi_token_decode and not dynamic:
+            raise ValueError(
+                "`multi_token_decode=True` needs a dynamic export: a static one freezes the decode graph's query axis "
+                "at the captured length, which no decode step feeds."
+            )
+        if decoder_writes_cross_cache is None:
+            decoder_writes_cross_cache = self.decoder_writes_cross_cache
+        return generation_config, multi_token_decode, decoder_writes_cross_cache
 
     @classmethod
     @abstractmethod
@@ -587,8 +641,9 @@ class ModelRunner(ABC):
         # (`cache_params.rnn_state.0.2`, reformer's `past_buckets_states.states_cache.0`) name the kwarg they
         # came from instead. Without this the cache is not declared, never reaches the runner, and the graph
         # runs every step from its variables' initial values.
-        folded = tuple(dict.fromkeys(path.split(".", 1)[0] for path in sorted(self.state_paths) if "." in path))
-        return declared or folded
+        # A graph can do both (one cache folded, another taken as input), so it takes the union.
+        folded = tuple(path.split(".", 1)[0] for path in sorted(self.state_paths) if "." in path)
+        return tuple(dict.fromkeys(declared + folded))
 
     def declares(self, name: str, value=None) -> bool:
         """Whether this graph takes the feed entry `name` — directly, or as the pytree whose leaves it names.

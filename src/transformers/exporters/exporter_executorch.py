@@ -501,22 +501,37 @@ _BACKEND_PREPARE = {
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
 
 
-@register_patch(
-    "executorch",
-    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
-    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
-    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
-    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
-)
-def _patch_mamba_selective_scan(original):
-    """Keep the SSM scan sequential: the associative scan has no ExecuTorch lowering, and the runtime has no
-    loop primitive to run it as. Forced at the scan's own call site rather than through a mixer's
-    `use_associative_scan` attribute — every family passes it here as a keyword, whereas the attribute is a
-    per-instance copy of the config knob and would take the live model to reach. The sequential path
-    unrolls, pinning the traced step length — why the multi-token decode variants are skipped here."""
+@register_patch("executorch", "torch._higher_order_ops.associative_scan.associative_scan")
+def _patch_associative_scan(original):
+    """Run an associative scan as the sequential `scan` it computes, which ExecuTorch lowers at a symbolic length.
 
-    def patch(*args, **kwargs):
-        return original(*args, **{**kwargs, "use_associative_scan": False})
+    `associative_scan` has no ExecuTorch lowering, and the models that reach for it (the mamba family's selective
+    scan) otherwise fall back to a Python loop that unrolls over the traced length and pins the query axis — so a
+    merged decode graph could never take a single token. `scan` is its sequential form: the first element seeds
+    the carry, each step combines it with the next, and every carry is an output. The same values in the same
+    order; only the parallel evaluation is given up.
+    """
+    from torch._higher_order_ops.scan import scan
+    from torch.utils._pytree import tree_flatten, tree_unflatten
+
+    def patch(combine_fn, xs, dim, reverse=False, combine_mode="pointwise"):
+        leaves, spec = tree_flatten(xs)
+        leaves = [leaf.movedim(dim, 0) for leaf in leaves]
+        if reverse:
+            leaves = [leaf.flip(0) for leaf in leaves]
+        # `scan` checks the carry it returns against the one it was given, strides included: both contiguous.
+        first = [leaf[0].contiguous() for leaf in leaves]
+
+        def step(carry, element):
+            combined = tree_flatten(combine_fn(tree_unflatten(carry, spec), tree_unflatten(element, spec)))[0]
+            combined = [value.contiguous() for value in combined]
+            return combined, [value.clone() for value in combined]
+
+        _, rest = scan(step, first, [leaf[1:] for leaf in leaves])
+        outputs = [torch.cat([head.unsqueeze(0), tail], dim=0) for head, tail in zip(first, rest)]
+        if reverse:
+            outputs = [output.flip(0) for output in outputs]
+        return tree_unflatten([output.movedim(0, dim) for output in outputs], spec)
 
     return patch
 

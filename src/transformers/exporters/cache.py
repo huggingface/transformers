@@ -189,14 +189,7 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
     non-tensor state; a graph that already mutated the cache in place returns the same tensors, making the
     copy a no-op. A growing `DynamicCache` returns longer tensors (its seq axis grew), so rebuild the cache
     from the grown leaves through the registered cache pytree. The tensors themselves tell the two apart.
-
-    Sliding layers additionally keep their running length in a plain python int — `cumulative_length_int`
-    on static sliding layers, `cumulative_length` itself on growing ones. It's not a pytree tensor, so the
-    decode graph never updates it (the static graph bakes it as a trace-time constant; the growing-cache
-    rebuild resurrects the pre-step value from the pytree context). Advance it by the tokens just
-    processed, the way the eager `update` does — deliberately NOT read from the static layer's
-    `cumulative_length` tensor: `int(tensor)` is a device→host sync (which also blocks CUDA-graph
-    capture), and once a sliding layer is full the tensor stops advancing while the int keeps counting."""
+    The layers' length counters are then advanced (`advance_cache_length`)."""
     # a recurrent model's graph names its cache outputs after its own kwarg (`cache_params.…`)
     cache_updates = [
         (name, value) for name, value in outputs.items() if name.startswith(("past_key_values", "cache_params"))
@@ -204,9 +197,13 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
     # A dotted name is the leaf's path in the cache (`layers.0.conv_states.0`), the only alignment that
     # holds when the graph returns entries the cache has no leaf for: a recurrent layer keeps its states
     # `None` until a step produces them, so counting leaves would run off the end.
+    # The tensors this step wrote, so a counter the graph already advanced is not advanced again.
+    written = set()
     for name, new in cache_updates:
         if "." in name:
-            _assign_cache_entry(past_key_values, name.split(".")[1:], new)
+            path = name.split(".")[1:]
+            _assign_cache_entry(past_key_values, path, new)
+            written.add(id(_read_cache_entry(past_key_values, path)))
     by_index = [(name, new) for name, new in cache_updates if "." not in name]
     if by_index:
         # ExecuTorch names its cache inputs by flat leaf index (`past_key_values_<N>`) and may prune the
@@ -220,6 +217,7 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
             if not isinstance(new, torch.Tensor):
                 new = torch.tensor(new, dtype=cache_leaves[index].dtype, device=cache_leaves[index].device)
             updated[index] = new
+            written.update((id(cache_leaves[index]), id(new)))
         # A growing cache came back longer than it went in, so it is rebuilt through the registered pytree;
         # a fixed-size one kept its shapes and is copied in place, preserving the object and its non-tensor
         # state (and a graph that mutated it in place hands back the same tensors, making the copy a no-op).
@@ -231,8 +229,7 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
                 if old is not new:
                     old.copy_(new)
     _mark_existing_states(past_key_values)
-    counted_by_graph = any(name.endswith("cumulative_length") for name, _ in cache_updates)
-    advance_cache_length(past_key_values, num_new_tokens, counted_by_graph)
+    advance_cache_length(past_key_values, num_new_tokens, written)
     # An `EncoderDecoderCache` also keeps `is_updated` python flags (pytree context, so the graph never
     # flips them and the growing rebuild resurrects the pre-step values): every decoder step leaves the
     # cross cache written — the prefill graph writes it, decode graphs read it.
@@ -241,20 +238,25 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
     return past_key_values
 
 
-def advance_cache_length(past_key_values, num_new_tokens: int, counted_by_graph: bool = False) -> None:
-    """Advance each self-attention layer's length counter by `num_new_tokens`.
+def advance_cache_length(past_key_values, num_new_tokens: int, written=()) -> None:
+    """Advance each self-attention layer's length counter by `num_new_tokens`, the way the eager `update` does.
 
-    A fixed-size layer counts in a tensor rather than an int, and a graph that folded its cache into runtime
-    state hands no counter back — so the count stays where it started and `get_seq_length()` answers 0 for a
-    cache that is plainly full, which is also where `generate` anchors its 4D mask. `counted_by_graph` skips
-    the tensor counters a step's outputs already carried."""
+    Sliding layers count in a plain python int (`cumulative_length_int` on static ones, `cumulative_length`
+    on growing ones) that no graph updates: the static graph bakes it and the growing rebuild resurrects the
+    pre-step value from the pytree context. It is advanced here rather than read from the static layer's
+    tensor, which is a device→host sync and stops advancing once the window is full.
+
+    A fixed-size layer counts in a tensor, and a graph that folded its cache into runtime state hands no
+    counter back — so the count stays where it started and `get_seq_length()` answers 0 for a cache that is
+    plainly full, which is also where `generate` anchors its 4D mask. A tensor counter whose `id` is in
+    `written` came back from the graph already advanced, and is left alone."""
     for layer in _self_attention_layers(past_key_values):
         counter = getattr(layer, "cumulative_length", None)
         if hasattr(layer, "cumulative_length_int"):
             layer.cumulative_length_int += num_new_tokens
         elif isinstance(counter, int):
             layer.cumulative_length += num_new_tokens
-        elif torch.is_tensor(counter) and not counted_by_graph:
+        elif torch.is_tensor(counter) and id(counter) not in written:
             # In place, so a graph reading this buffer keeps reading the same one.
             counter.add_(num_new_tokens)
 

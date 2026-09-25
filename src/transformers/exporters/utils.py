@@ -651,6 +651,18 @@ def runner_feed(runner, kwargs: dict, *, warn_unused: bool = False) -> dict:
     return feed
 
 
+# The inputs whose leading axis is the batch, in the order they are trusted to say it.
+BATCH_INPUTS = ("input_ids", "inputs_embeds", "decoder_input_ids", "decoder_inputs_embeds", "attention_mask")
+
+
+def leaf_name(name: str) -> str:
+    """The kwarg-space name behind a graph port's name — `disambiguate_io_names` only ever prefixes."""
+    for prefix in ("input.", "output."):
+        if name.startswith(prefix):
+            return name[len(prefix) :]
+    return name
+
+
 def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
     """Recursively retrieve all leaf tensors from a potentially nested structure.
 

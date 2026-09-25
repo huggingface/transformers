@@ -232,8 +232,8 @@ class ExportedGenerator(GenerationMixin):
     graph) and `modalities` for a multi-modal model: prefill computes each modality's features and scatters
     them into `inputs_embeds` at its placeholder positions; decode steps are text-only. Pass `prefill=` to
     drive a fixed query=1 `decode` graph from a separate dynamic prefill graph (the shape CUDA-graph capture
-    / io-binding want); when omitted, `decode` serves both (it must then be a multi-token graph, i.e.
-    exported with `multi_token_decode=True`).
+    / io-binding want); when omitted, `decode` serves both (it must then be a multi-token graph, which a
+    dynamic export captures).
 
     `generation_config` must be the one the model was **exported with**: it declares the cache the decode
     graph was traced against (no `cache_implementation` → growing `DynamicCache`; `"static"` → fixed-size
@@ -242,8 +242,7 @@ class ExportedGenerator(GenerationMixin):
     Example:
         exported_artifacts = OnnxExporter().export_for_generation(model, inputs,
                                                         OnnxConfig(dynamic=True, external_data=False),
-                                                        generation_config=generation_config,
-                                                        multi_token_decode=True)
+                                                        generation_config=generation_config)
         runtime = exported_artifacts.runtime()
         # Called like a normal model — the runtime builds the cache the exported graph needs.
         ids = runtime.generate(input_ids=prompt, max_new_tokens=32)
@@ -564,6 +563,11 @@ class ExportedGenerator(GenerationMixin):
             cross.layers[index].keys, cross.layers[index].values = keys, values
             if hasattr(cache, "is_updated"):
                 cache.is_updated[index] = True
+        # A graph holding its cache in variables is never fed the loop's cache, so the seeded half goes into
+        # the variables of the graph that runs first.
+        runner = self._prefill_runner
+        if runner.owns_state:
+            runner.adopt_state(get_leaf_tensors({runner.cache_input: {"cross_attention_cache": cross}}), 0)
 
     # ── decode orchestration ──
     def create_masks_for_generate(self, config, inputs_embeds, attention_mask, **kwargs):
@@ -771,21 +775,11 @@ class ExportedGenerator(GenerationMixin):
         # A recurrent model (mamba, rwkv, …) carries its fixed-size state under `cache_params` instead;
         # it is the same thing to the graphs, so the loop below treats them alike.
         past_key_values = past_key_values if past_key_values is not None else cache_params
-        # How much the cache already holds decides which graph runs and, below, how wide the mask and the
-        # streamed-modality window are. One answer per step: every reader here means the same thing by it.
-        # How far along the sequence is, which decides which graph runs. A runtime that owns its cache
-        # keeps that count itself: the loop's cache never grows, so asking it would answer 0 at every step
-        # and send a decode token to the prompt graph.
+        # How far along the sequence is decides which graph runs and, below, how wide the mask and the
+        # streamed-modality window are.
         decode_runner = self._decode_runner
-        if decode_runner.owns_state:
-            past_len = decode_runner.state_length
-        else:
-            past_len = _cache_length(past_key_values) if past_key_values is not None else 0
+        past_len = self._past_length(past_key_values)
         runner = self._prefill_runner if past_len == 0 else decode_runner
-        # A backend that owns its state keeps the sequence inside the runtime, so the cache the loop holds
-        # never grows and cannot say how far along we are — the runner does.
-        if runner.owns_state:
-            past_len = runner.state_length
         text_ids = decoder_input_ids if decoder_input_ids is not None else input_ids
         feed = self._text_feed(runner, text_ids, kwargs, image_sizes)
         text = feed[text_input(runner)]
@@ -806,7 +800,8 @@ class ExportedGenerator(GenerationMixin):
         # a graph holding its own), so the mask spans its capacity; a growing one spans what it holds plus this
         # query. That is the layer's *kind*, not `get_max_length`: a `DynamicSlidingWindowLayer` grows yet
         # reports its whole window (4096 on gemma2), a width the graph never declared.
-        if runner.owns_state and not is_fixed_size(past_key_values):
+        fixed_size = is_fixed_size(past_key_values)
+        if runner.owns_state and not fixed_size:
             cache_len = past_len + text.shape[1]
         else:
             cache_len = mask_width(past_key_values, text.shape[1])
@@ -824,22 +819,6 @@ class ExportedGenerator(GenerationMixin):
         # back a cache the exported graph does not take (xlstm) would otherwise be fed an input it never had.
         if past_key_values is not None and runner.cache_input is not None and not runner.owns_state:
             feed[runner.cache_input] = past_key_values
-        # A prompt graph returns its cache and a decode graph keeps one in variables, so the two do not meet:
-        # the first step this graph runs takes over what the prompt left in the loop's cache. Only that step
-        # — afterwards the variables are ahead of it, and seeding again would drop every token since.
-        # With no prompt graph, what the loop's cache holds before the first step is the cross half the
-        # encoder seeded (`_seed_cross_cache`), which a decode graph traced after that write only reads.
-        if runner.owns_state and not runner.state_length and past_key_values is not None:
-            seeded = {
-                path: tensor
-                for path, tensor in get_leaf_tensors({runner.cache_input: past_key_values}).items()
-                if path in runner.state_paths
-                and ".cross_attention_cache." in path
-                and (tensor.dim() < 2 or tensor.shape[-2])
-            }
-            if seeded:
-                runner.adopt_state(seeded, 0)
-
         # Only what this graph declares: a model whose decode graph takes its text some other way
         # (higgs_audio_v2 embeds it upstream) would otherwise be handed an `input_ids` it never had. Pytree
         # kwargs are the exception — see `declares`, which knows a graph naming only their leaves still takes
@@ -849,15 +828,14 @@ class ExportedGenerator(GenerationMixin):
         # its own — and nothing carries the prompt's across. It moves here, once, on the way out of the step
         # that wrote it: from the prompt's outputs, or from its own variables where it kept them there.
         if decode_runner is not runner and decode_runner.owns_state and not decode_runner.state_length:
-            written = runner.state_tensors() if runner.owns_state else outputs
-            shared = {name: value for name, value in written.items() if name in decode_runner.state_paths}
-            if shared:
-                decode_runner.adopt_state(shared, text.shape[1])
+            written = runner.state_tensors(decode_runner.state_paths) if runner.owns_state else outputs
+            decode_runner.adopt_state(written, text.shape[1])
         # Nothing to advance when the runtime holds the cache: it wrote this step's keys and values into its
-        # own variables, and `state_length` is what the next step reads instead of a cache's shape.
-        if past_key_values is not None and not runner.owns_state:
+        # own variables, and `state_length` is what the next step reads instead of a cache's shape. That holds
+        # for a prompt graph's cache too once the decode graph has adopted it — a copy no graph reads again.
+        if past_key_values is not None and not runner.owns_state and not decode_runner.owns_state:
             past_key_values = _advance_cache(past_key_values, outputs, num_new_tokens=text.shape[1])
-        elif is_fixed_size(past_key_values):
+        elif fixed_size:
             # Still count what the runtime took in: `generate` builds a fixed-size cache's 4D mask from the
             # loop cache's length, and an unadvanced one masks each query off its own slot.
             advance_cache_length(past_key_values, text.shape[1])
@@ -865,6 +843,13 @@ class ExportedGenerator(GenerationMixin):
         # kind the graphs hold is `_is_recurrent`, read off the kwarg the decode graph takes it under.
         returned_cache = None if self._is_recurrent else past_key_values
         return CausalLMOutputWithPast(logits=outputs["logits"], past_key_values=returned_cache)
+
+    def _past_length(self, cache) -> int:
+        """How much of the sequence has been run. A runtime that owns its cache keeps that count itself: the
+        loop's cache is never fed to it and never grows, so asking the cache would answer 0 at every step."""
+        if self._decode_runner.owns_state:
+            return self._decode_runner.state_length
+        return _cache_length(cache) if cache is not None else 0
 
     def _merge_modalities(self, input_ids, kwargs) -> dict[str, torch.Tensor]:
         """Embed `input_ids` and scatter each present modality's features into its placeholder rows.
@@ -1032,20 +1017,12 @@ class ExportedGenerator(GenerationMixin):
         the model: the text row from `super()` (GenerationMixin), the modality rows from the model class's
         own `get_rope_index` (see `get_rope_index_from_config`), and the decode step advances the text row
         by the cached rope-delta. Models that lay out no modality spans (plain decoders, VLMs with 1D text
-        positions like Llava) keep the standard positions.
-
-        How many rows that is depends on the architecture, and the two conventions are not told apart by
-        the config: qwen2_vl's layout returns the 3 vision axes and its model puts the text row in front,
-        hunyuan_vl's returns every axis its `mrope_section` declares and puts nothing in front — and both
-        return as many rows as their config states sections. So the count comes from the graph about to be
-        fed (`ExportMetadata.position_axes`), which is the one place it was recorded."""
+        positions like Llava) keep the standard positions. How many rows the graph takes is per
+        architecture and only the trace records it (`ExportMetadata.position_axes`)."""
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
-        cache = model_kwargs.get("past_key_values")
-        past_length = _cache_length(cache)
-        # How many rows the graph about to be fed takes, which is the only place the per-architecture
-        # layout is stated — see `ExportMetadata.position_axes`. `None` for an artifact that recorded no
-        # shape, which leaves the qwen-style layout below as it was.
+        past_length = self._past_length(model_kwargs.get("past_key_values"))
+        # `None` for an artifact that recorded no shape, which leaves the qwen-style layout below as it was.
         runner = self._prefill_runner if past_length == 0 else self._decode_runner
         axes = runner.export_metadata.position_axes
         if past_length != 0 and getattr(self, "_rope_deltas", None) is not None:

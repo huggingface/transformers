@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import re
-
 from ..utils.import_utils import is_openvino_available, is_torch_available
 from .base import ModelRunner
-from .utils import get_leaf_tensors
+from .utils import BATCH_INPUTS, get_leaf_tensors, leaf_name
 
 
 if is_torch_available():
@@ -49,13 +47,12 @@ class OpenVINOModelRunner(ModelRunner):
         # The leaves those variables stand for, named once. A hand-off is the only reason to touch the
         # state, and asking the request for its variables on every decode step to find there is nothing to
         # hand over costs one round trip per layer per token.
-        self._state_paths = frozenset(_state_path(state) for state in states)
+        self.state_paths = frozenset(_state_path(state) for state in states)
+        infos = [variable.get_info() for variable in ov_model.get_variables()]
         # The CPU plugin hands a rank-0 variable (a static layer's `cumulative_length`) back as `[1]`.
-        self._scalar_states = frozenset(
-            variable.get_info().variable_id
-            for variable in ov_model.get_variables()
-            if variable.get_info().data_shape.rank.get_length() == 0
-        )
+        self._scalar_states = frozenset(info.variable_id for info in infos if info.data_shape.rank.get_length() == 0)
+        # What each variable holds, read here rather than off `state.state`, which copies the variable out.
+        self._state_types = {info.variable_id: info.data_type for info in infos}
         # How much of the sequence the variables hold. The loop asks for it rather than measuring a cache,
         # because there is no cache to measure — see `state_length`.
         self._state_length = 0
@@ -63,8 +60,14 @@ class OpenVINOModelRunner(ModelRunner):
         # metadata travels with the artifacts instead (`ExportArtifacts`, the saved `export_metadata.json`).
         self.export_metadata = self.resolve_metadata(export_metadata, lambda: None)
         self.input_names = tuple(
-            _leaf_name(name) for port in self._compiled.inputs for name in [_port_name(port)] if name != "beam_idx"
+            leaf_name(name) for port in self._compiled.inputs for name in [_port_name(port)] if name != "beam_idx"
         )
+        # Per input port, its names with the leaf each stands for and the type it declares — fixed once
+        # compiled, so the per-step feed does not ask the plugin again.
+        self._input_ports = [
+            ([(name, leaf_name(name)) for name in port.get_names()], port.get_element_type())
+            for port in self._compiled.inputs
+        ]
         # OpenVINO hands back host tensors whichever plugin ran the graph.
         self.device = torch.device("cpu")
 
@@ -87,12 +90,11 @@ class OpenVINOModelRunner(ModelRunner):
         batch = _feed_batch(leaves)
 
         feed = {}
-        for port in self._compiled.inputs:
+        for names, element_type in self._input_ports:
             # A passthrough tensor carries both an input and an output name, so every alias is tried.
-            for name in port.get_names():
-                leaf = _leaf_name(name)
+            for name, leaf in names:
                 if leaf in leaves:
-                    feed[name] = _as_ov(_as_element_type(leaves[leaf], port.get_element_type()))
+                    feed[name] = _as_ov(_as_element_type(leaves[leaf], element_type))
                 elif name == "beam_idx":
                     # Greedy decoding reorders nothing, and the fused `Gather` reads this every step.
                     feed[name] = np.arange(batch, dtype=np.int32)
@@ -126,7 +128,7 @@ class OpenVINOModelRunner(ModelRunner):
         recorded = self.export_metadata.output_names
         names = recorded if len(recorded) == len(self._compiled.outputs) else None
         outputs = {
-            (names[index] if names else _leaf_name(_port_name(port))): _as_torch(results[port])
+            (names[index] if names else leaf_name(_port_name(port))): _as_torch(results[port])
             for index, port in enumerate(self._compiled.outputs)
         }
         # The state is deliberately not among them. It stays in the plugin, which is what makes a stateful
@@ -136,22 +138,20 @@ class OpenVINOModelRunner(ModelRunner):
             self._state_length += query_length
         return outputs
 
-    def state_tensors(self) -> dict[str, torch.Tensor]:
-        """What the folded cache holds, read off the `Assign` sinks the transformation left.
+    def state_tensors(self, paths=None) -> dict[str, torch.Tensor]:
+        """What the folded cache holds, read off the `Assign` sinks the transformation left — every variable,
+        or only those standing for `paths`.
 
         The call path does not do this — keeping the cache in the plugin is the point — but it is how a
         caller inspects the state, and how a test checks that the graph writes the leaves eager returns.
         """
         tensors = {}
         for state in self._request.query_state():
+            if paths is not None and _state_path(state) not in paths:
+                continue
             tensor = _as_torch(state.state.data.copy())
             tensors[_state_path(state)] = tensor.reshape(()) if state.name in self._scalar_states else tensor
         return tensors
-
-    @property
-    def state_paths(self) -> frozenset[str]:
-        """The cache leaves this graph keeps in variables rather than taking as inputs."""
-        return self._state_paths
 
     def adopt_state(self, leaves: dict, length: int) -> None:
         """Seed the folded state from the cache another graph wrote, and say how far along it is.
@@ -159,20 +159,13 @@ class OpenVINOModelRunner(ModelRunner):
         A prompt graph hands its keys and values back as outputs; a decode graph keeps them in variables.
         Nothing carries them across on its own, so the loop moves them once — without it the decode graph
         attends to a sequence that starts at its own first token, which reads as a plausible continuation
-        of nothing.
+        of nothing. Only the leaves this graph keeps as variables are taken, which need not be all of them:
+        a decode graph can hold state the prompt never wrote (cross-attention keys the encoder wrote).
         """
-        # What the two graphs have in common, which need not be everything: a decode graph can hold state
-        # the prompt never wrote (an encoder-decoder's cross-attention keys, written once by the encoder).
-        # Nothing in common at all is the failure worth naming — the hand-off would silently seed nothing.
-        shared = self._state_paths & leaves.keys()
-        if not shared:
-            raise RuntimeError(
-                f"{type(self).__name__} was handed state naming none of its variables: "
-                f"{sorted(self._state_paths)[:3]} not among {sorted(leaves)[:3]}. Seeding nothing would "
-                "leave the graph attending to a sequence that starts at this step."
-            )
-        self._prime_state({path: leaves[path].cpu() for path in shared})
-        self._state_length = length
+        shared = {path: tensor.cpu() for path, tensor in leaves.items() if path in self.state_paths}
+        if shared:
+            self._prime_state(shared)
+            self._state_length = length
 
     @property
     def state_length(self) -> int:
@@ -186,34 +179,28 @@ class OpenVINOModelRunner(ModelRunner):
         self._state_length = 0
 
     def _prime_state(self, leaves: dict) -> None:
-        """Make the request's state match the sequence this call belongs to.
-
-        The cache the caller holds is the authority for now, so it is written into the variables on every
-        call and read back out after — which keeps `ExportedGenerator`'s loop identical to every other
-        backend's, at the cost of copying the cache in and out per step.
-
-        That cost is the whole point of a stateful export, so it should go: optimum-intel drives these
-        models by never passing a cache at all, calling `reset_state()` on the first step and tracking the
-        length itself. Doing the same here means teaching the generation loop that this backend owns its
-        state, which is a change to `ExportedGenerator` rather than to this runner.
-        """
-        if not self._state_paths & leaves.keys():
+        """Write the cache leaves a caller fed directly (a component call, `adopt_state`) into the variables
+        they stand for. The generation loop never feeds a cache to a graph that owns its state."""
+        # An empty cache is what the variable already holds: a prefill writes the state rather than reading
+        # it, and assigning a zero-length tensor over the shape the graph declares is refused. A counter has
+        # no sequence axis of its own and is handed over whatever it holds.
+        handed = {
+            path: tensor
+            for path, tensor in leaves.items()
+            if path in self.state_paths and (tensor.dim() < 2 or tensor.shape[-2])
+        }
+        if not handed:
             return
-        states = self._request.query_state()
-        handed = {path: leaves[path] for state in states if (path := _state_path(state)) in leaves}
-        for state in states:
+        for state in self._request.query_state():
             tensor = handed.get(_state_path(state))
-            # An empty cache is what the variable already holds: a prefill writes the state rather than
-            # reading it, and assigning a zero-length tensor over the shape the graph declares is refused.
-            # Only the keys and values can be empty in that sense — a counter rides in the cache beside them
-            # with no sequence axis of its own, and is handed over whatever it holds.
-            if tensor is not None and (tensor.dim() < 2 or tensor.shape[-2]):
-                tensor = _as_element_type(tensor, state.state.get_element_type())
+            if tensor is not None:
+                element_type = self._state_types[state.name]
+                tensor = _as_element_type(tensor, element_type)
                 state.state = (
                     _as_ov(tensor)
                     if tensor.dtype == torch.bfloat16
                     # The exporter retypes state the CPU plugin refuses to hold (i64 lengths become i32).
-                    else openvino.Tensor(tensor.numpy().astype(state.state.data.dtype, copy=False))
+                    else openvino.Tensor(tensor.numpy().astype(element_type.to_dtype(), copy=False))
                 )
 
 
@@ -237,7 +224,7 @@ def _feed_batch(leaves: dict) -> int:
     `[sections, batch, positions]`, so a glm4v step would answer 4 for a batch of 2 and the plugin then
     refuses the gather against its state ("beam idx batch: 4 is not equal to batch of state: 2").
     """
-    for name in ("input_ids", "inputs_embeds", "decoder_input_ids", "decoder_inputs_embeds", "attention_mask"):
+    for name in BATCH_INPUTS:
         tensor = leaves.get(name)
         if tensor is not None and tensor.dim():
             return tensor.shape[0]
@@ -303,11 +290,6 @@ def _port_name(port) -> str:
     names = sorted(port.get_names())
     given = [name for name in names if ":" not in name and not name.isdigit()]
     return given[0] if given else names[0]
-
-
-def _leaf_name(name: str) -> str:
-    """The kwarg-space name behind a port name — `disambiguate_io_names` only ever prefixes."""
-    return re.sub(r"^(input|output)\.", "", name)
 
 
 def _state_path(state) -> str:
