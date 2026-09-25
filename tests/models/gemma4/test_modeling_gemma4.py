@@ -513,6 +513,31 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
                     reason="The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4"
                 )
 
+    def test_tied_lm_head_in_tp_plan(self):
+        # The tied lm_head must be in the plan, else tp_plan="auto" leaves it unsharded -> mixed
+        # torch.Tensor/DTensor error at the first forward
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma4ForConditionalGeneration(config)
+        self.assertIn("lm_head", model.tp_plan)
+        self.assertEqual(model.tp_plan["lm_head"], "colwise_gather_output")
+
+    def test_per_layer_input_pad_embedding_lookup(self):
+        # The per-layer-input branch builds its pad embedding via a module lookup (TP-safe) rather
+        # than a raw embed_tokens.weight[...] index; check it runs and matches the weight row
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self.assertTrue(config.get_text_config().hidden_size_per_layer_input)  # branch is active
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+
+        pad_id = config.text_config.pad_token_id
+        embed = model.get_input_embeddings()
+        lookup = embed(torch.tensor([pad_id], device=torch_device)).view(-1)
+        torch.testing.assert_close(lookup, embed.weight[pad_id, :])
+
+        inputs = self._prepare_for_class(inputs_dict, Gemma4ForConditionalGeneration)
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        self.assertTrue(torch.isfinite(logits).all())
+
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

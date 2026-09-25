@@ -2309,7 +2309,12 @@ class Gemma4Model(Gemma4PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
-            pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
+            # Look up the pad embedding through the module, not a raw weight index, so it stays a
+            # plain tensor (a sharded `.weight` is a DTensor and breaks the `torch.where` below)
+            pad_token_id = self.config.text_config.pad_token_id
+            pad_embedding = self.get_input_embeddings()(
+                torch.tensor([pad_token_id], device=inputs_embeds.device)
+            ).view(-1)
             multimodal_mask = multimodal_mask.to(inputs_embeds.device)
             llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
@@ -2496,6 +2501,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     accepts_loss_kwargs = False
     base_model_prefix = "model"
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
