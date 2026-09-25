@@ -60,7 +60,7 @@ def flash_attention_forward(
         key, value = cache.update(
             key_states=key,
             value_states=value,
-            layer_idx=module.layer_idx,
+            layer_idx=module.layer_idx,  # this makes torch.compile recompile for each layer. Fine for now (cf. #49101)
             kwargs=kwargs,  # is updated in place
         )
 
