@@ -58,6 +58,7 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
         self.n_groups = config.n_groups
         self.head_dim = config.mamba_head_dim
         self.num_heads = config.mamba_num_heads
+        self.time_step_limit = config.time_step_limit
 
         self.conv1d = nn.Conv1d(
             in_channels=self.conv_dim,

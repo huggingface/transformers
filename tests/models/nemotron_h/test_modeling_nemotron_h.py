@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch NemotronH model."""
 
+import copy
 import tempfile
 import unittest
 
@@ -42,6 +43,7 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel, StaticCache
+    from transformers.models.nemotron_h.modeling_nemotron_h import NemotronHMamba2Mixer
 
 
 class NemotronHModelTester:
@@ -528,6 +530,48 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_mamba_time_step_min_only_affects_initialization(self):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        mixer = NemotronHMamba2Mixer(config, layer_idx=0).eval()
+        with torch.no_grad():
+            mixer.dt_bias.fill_(-12.0)
+            mixer.D.zero_()
+
+        other_config = copy.deepcopy(config)
+        other_config.time_step_min = 0.1
+        other_mixer = NemotronHMamba2Mixer(other_config, layer_idx=0).eval()
+        other_mixer.load_state_dict(mixer.state_dict())
+
+        hidden_states = torch.randn(2, 7, config.hidden_size, requires_grad=True)
+        output = mixer(hidden_states)
+        other_output = other_mixer(hidden_states)
+        torch.testing.assert_close(output, other_output)
+        gradient = torch.autograd.grad(output.square().sum(), hidden_states)[0]
+        other_gradient = torch.autograd.grad(other_output.square().sum(), hidden_states)[0]
+        torch.testing.assert_close(gradient, other_gradient)
+
+    def test_mamba_time_step_limit_bounds(self):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        config.time_step_limit = (0.01, 0.02)
+        mixer = NemotronHMamba2Mixer(config, layer_idx=0).eval()
+        with torch.no_grad():
+            mixer.in_proj.weight[-config.mamba_num_heads :].zero_()
+            mixer.D.zero_()
+        reference_config = copy.deepcopy(config)
+        reference_config.time_step_limit = (0.0, float("inf"))
+        reference = NemotronHMamba2Mixer(reference_config, layer_idx=0).eval()
+        reference.load_state_dict(mixer.state_dict())
+        hidden_states = torch.randn(2, 7, config.hidden_size)
+
+        for dt_bias, expected_dt in [(-12.0, 0.01), (12.0, 0.02)]:
+            with self.subTest(dt_bias=dt_bias), torch.no_grad():
+                mixer.dt_bias.fill_(dt_bias)
+                dt = torch.tensor(expected_dt)
+                reference.dt_bias.copy_((dt + torch.log(-torch.expm1(-dt))).expand_as(reference.dt_bias))
+                torch.testing.assert_close(mixer(hidden_states), reference(hidden_states))
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
