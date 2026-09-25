@@ -531,27 +531,29 @@ class ZambaModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         if torch_device == "cpu":
             self.skipTest("Associative scan compile test requires a torch accelerator.")
 
-        input_ids = self.tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
+        model_id = "hf-tiny-v2/tiny-random-ZambaForCausalLM"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
 
         # Opt-out: use_associative_scan=False → compiled sequential loop
         model = ZambaForCausalLM.from_pretrained(
-            "Zyphra/Zamba-7B-v1", dtype=torch.bfloat16, use_associative_scan=False
+            model_id, dtype=torch.bfloat16, use_associative_scan=False
         ).to(torch_device)
         model.eval()
         model.forward = torch.compile(model.forward)
         output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
-        expected_text = self.tokenizer.decode(output[0].tolist())
+        expected_text = tokenizer.decode(output[0].tolist())
 
         del model
         cleanup(torch_device, gc_collect=True)
 
         # Opt-in: use_associative_scan=True → compiled associative scan
         model = ZambaForCausalLM.from_pretrained(
-            "Zyphra/Zamba-7B-v1", dtype=torch.bfloat16, use_associative_scan=True
+            model_id, dtype=torch.bfloat16, use_associative_scan=True
         ).to(torch_device)
         model.eval()
         model.forward = torch.compile(model.forward)
         output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
-        output_text = self.tokenizer.decode(output[0].tolist())
+        output_text = tokenizer.decode(output[0].tolist())
 
         self.assertEqual(output_text, expected_text)
