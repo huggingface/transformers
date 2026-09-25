@@ -25,6 +25,8 @@
 - sections:
   - isExpanded: false
     sections:
+    - local: tasks/token_classification
+      title: Clasificación de tokens
     - local: tasks/question_answering
       title: Respuesta a preguntas
     - local: tasks/language_modeling
