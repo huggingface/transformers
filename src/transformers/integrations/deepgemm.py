@@ -36,7 +36,6 @@ from dataclasses import dataclass
 
 import torch
 
-from ..utils import logging
 from ..utils.import_utils import (
     is_kernels_available,
     maybe_import_error,
@@ -44,8 +43,6 @@ from ..utils.import_utils import (
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 
-
-logger = logging.get_logger(__name__)
 
 # ── Kernel loading ─────────────────────────────────────────────────────────────
 
@@ -611,11 +608,11 @@ def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> Non
         )
 
 
-def _assert_no_gradient(hidden_states: torch.Tensor, backend: str) -> None:
+def _assert_no_gradient(hidden_states: torch.Tensor) -> None:
     """DeepGEMM has no backward pass, so a call that needs a gradient fails rather than drop it."""
     if torch.is_grad_enabled() and hidden_states.requires_grad:
         raise NotImplementedError(
-            f"{backend} has no backward pass; train through the Triton kernels "
+            "DeepGEMM does not support training; train through the Triton kernels "
             "(for experts, `experts_implementation='grouped_mm'` or 'batched_mm')."
         )
 
@@ -678,7 +675,7 @@ def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
     """Mega MoE fuses the routing-weighted reduce into its kernel, so a model's per-expert output
     norm has nowhere to go — it would be dropped silently, so refuse instead. The other DeepGEMM
     arms reduce in `_combine_routed_output` and apply the norm on the rows just before it."""
-    if getattr(self, "has_post_expert_norm", False):
+    if self.has_post_expert_norm:
         raise NotImplementedError(
             "DeepGEMM Mega MoE cannot apply this model's per-expert output norm; use "
             "`experts_implementation='deepgemm'`, 'grouped_mm' or 'batched_mm'."
@@ -686,19 +683,14 @@ def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
 
 
 def deepgemm_linear_guards(forward=None):
-    """State a linear's requirements on its operands, checked before any kernel work.
-
-    Usable bare (`@deepgemm_linear_guards`), like `deepgemm_experts_guards`.
-
-    A static ``activation_scale`` is refused — DeepGEMM needs per-row SFs, so callers route it
-    through the Triton fallback — and the SM100 check fails before the hub download + JIT when the
-    device cannot serve these dtypes."""
+    """State a linear's requirements on its operands, checked before any kernel work; each assert
+    documents its own condition. Usable bare (`@deepgemm_linear_guards`), like `deepgemm_experts_guards`."""
 
     def decorate(forward):
         @functools.wraps(forward)
         def guarded(input, weight, weight_scale_inv, *args, activation_scale=None, **kwargs):
+            _assert_no_gradient(input)
             _assert_half_precision_input(input)
-            _assert_no_gradient(input, "DeepGEMM linear")
             _assert_dynamic_activation_scale(activation_scale)
             _assert_sm100_requirements(weight, weight_scale_inv)
             return forward(input, weight, weight_scale_inv, *args, **kwargs)
@@ -716,22 +708,17 @@ def deepgemm_experts_guards(
     supports_post_expert_norm: bool = True,
     stacked_gate_up: bool = False,
 ):
-    """State an experts forward's requirements on the module, checked before any kernel work.
-
-    Usable bare (`@deepgemm_experts_guards`) for an arm that only needs the common checks.
-
-    ``supports_post_expert_norm=False`` refuses a model that declares a per-expert output norm —
-    Mega MoE only, whose fused reduce has no seam for it. ``affine_scales`` refuses the SWIZZLE_32_4_4
-    scales a module loaded for a triton backend holds, ``stacked_gate_up`` refuses the interleaved
-    rows that same load produces, and ``sm100`` fails before the hub download + JIT when the device
-    cannot serve these dtypes."""
+    """State an experts forward's requirements on the module, checked before any kernel work; each
+    assert documents its own condition, and each flag enables one (``supports_post_expert_norm=False``
+    the post-expert-norm refusal). Usable bare (`@deepgemm_experts_guards`) for an arm that only needs
+    the common checks."""
 
     def decorate(forward):
         @functools.wraps(forward)
         def guarded(self, hidden_states, *args, **kwargs):
-            _assert_bf16_hidden_states(hidden_states)
-            _assert_no_gradient(hidden_states, "DeepGEMM experts")
             _assert_dynamic_activations(self)
+            _assert_no_gradient(hidden_states)
+            _assert_bf16_hidden_states(hidden_states)
             if not supports_post_expert_norm:
                 _assert_no_post_expert_norm(self)
             if affine_scales:
@@ -832,7 +819,7 @@ def deepgemm_bf16_experts_forward(
     if self.has_bias:
         out.index_add_(0, sorted_to_padded, down_bias[expert_ids_g])
 
-    if getattr(self, "has_post_expert_norm", False):
+    if self.has_post_expert_norm:
         out = self.post_expert_norm(out)
 
     return _combine_routed_output(
@@ -926,7 +913,7 @@ def deepgemm_fp8_fp4_experts_forward(
         use_psum_layout=is_sm100(),
     )
 
-    if getattr(self, "has_post_expert_norm", False):
+    if self.has_post_expert_norm:
         out = self.post_expert_norm(out)
 
     return _combine_routed_output(

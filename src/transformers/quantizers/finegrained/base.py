@@ -59,11 +59,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     quantization_config: "FineGrainedConfig"
-
-    def _default_activation_format(self) -> str | None:
-        """What to quantize activations to when the config leaves it open. `None` keeps the
-        kernels' weight-native choice; the MXFP4 arm overrides this to run weight-only."""
-        return None
+    default_activation_format: str | None = None
 
     @property
     def supports_dequantize(self) -> bool:
@@ -74,7 +70,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
     def _assert_dequantize_supported(self) -> None:
         if not self.supports_dequantize:
             raise NotImplementedError(
-                f"`dequantize=True` is not supported for {self._quant_method()} checkpoints. Load them "
+                f"`dequantize=True` is not supported for {self.quant_method} checkpoints. Load them "
                 "quantized on a GPU that serves the format, or start from a bf16 checkpoint."
             )
 
@@ -184,7 +180,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         expert_dtype = getattr(model.config.get_text_config(), "expert_dtype", None)
         self.quantization_config.groups = groups_with_expert_dtype(self.quantization_config.groups, expert_dtype)
         if self.quantization_config.activation_format is None:
-            self.quantization_config.activation_format = self._default_activation_format()
+            self.quantization_config.activation_format = self.default_activation_format
         if self.quantization_config.activation_format == "bf16":
             # Weight-only holds no activation global, so a calibrated checkpoint's `input_scale`
             # has no slot to load into. Not an unexpected key — one this run has no use for, which
@@ -197,9 +193,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
         )
 
         if self.pre_quantized and self.quantization_config.modules_to_convert:
-            if self._quant_method() != "fp8":
+            if self.quant_method != "fp8":
                 logger.warning_once(
-                    f"Embedding tables are quantized to FP8; {self._quant_method()} has no embedding path. "
+                    f"Embedding tables are quantized to FP8; {self.quant_method} has no embedding path. "
                     f"{self.quantization_config.modules_to_convert} will hold FP8 rows with one per-tensor scale."
                 )
             replace_with_finegrained_embedding(
@@ -293,7 +289,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
         return FineGrainedQuantize(self)
 
-    def _quant_method(self) -> str:
+    @property
+    def quant_method(self) -> str:
         method = self.quantization_config.quant_method
         return getattr(method, "value", method)  # a QuantizationMethod enum, or already its str
 

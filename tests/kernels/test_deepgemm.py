@@ -597,6 +597,7 @@ class DeepGemmForwardTest(unittest.TestCase):
                 requires_grad=False,
             ),
             config=types.SimpleNamespace(swiglu_limit=swiglu_limit),
+            has_post_expert_norm=False,
         )
 
     @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7

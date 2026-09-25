@@ -15,11 +15,7 @@
 that the other formats do not. Everything else is inherited.
 """
 
-from ...utils import logging
 from .base import FineGrainedHfQuantizer
-
-
-logger = logging.get_logger(__name__)
 
 
 class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
@@ -81,43 +77,47 @@ class FineGrainedNvfp4HfQuantizer(FineGrainedHfQuantizer):
         from ...core_model_loading import Concatenate, MergeModulelist, WeightConverter
         from ...integrations.finegrained.conversions import FineGrainedInputScales, FineGrainedWeightGlobals
 
-        merge = [MergeModulelist(dim=0)]
-        expert = r"mlp\.experts\..*\."
         converters = [
             WeightConverter(
-                source_patterns=[rf"{expert}gate_proj\.weight_scale$", rf"{expert}up_proj\.weight_scale$"],
+                source_patterns=[
+                    r"mlp\.experts\..*\.gate_proj\.weight_scale$",
+                    r"mlp\.experts\..*\.up_proj\.weight_scale$",
+                ],
                 target_patterns="mlp.experts.gate_up_proj_scale_inv",
-                operations=[*merge, Concatenate(dim=1)],
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns=rf"{expert}down_proj\.weight_scale$",
+                source_patterns=r"mlp\.experts\..*\.down_proj\.weight_scale$",
                 target_patterns="mlp.experts.down_proj_scale_inv",
-                operations=merge,
+                operations=[MergeModulelist(dim=0)],
             ),
             # every second-level global of a layer in ONE converter: folding the gate|up stack's
             # two halves into one moves the up half's onto the down projection, so they decide
             # together (`FineGrainedWeightGlobals`)
             WeightConverter(
                 source_patterns=[
-                    rf"{expert}gate_proj\.weight_scale_2",
-                    rf"{expert}up_proj\.weight_scale_2",
-                    rf"{expert}down_proj\.weight_scale_2",
-                    *([rf"{expert}down_proj\.input_scale"] if calibrated else []),
+                    r"mlp\.experts\..*\.gate_proj\.weight_scale_2",
+                    r"mlp\.experts\..*\.up_proj\.weight_scale_2",
+                    r"mlp\.experts\..*\.down_proj\.weight_scale_2",
+                    *([r"mlp\.experts\..*\.down_proj\.input_scale"] if calibrated else []),
                 ],
                 target_patterns=[
                     "mlp.experts.gate_up_proj_weight_global_scale",
                     "mlp.experts.down_proj_weight_global_scale",
                     *(["mlp.experts.down_proj_input_global_scale"] if calibrated else []),
                 ],
-                operations=[*merge, FineGrainedWeightGlobals(self)],
+                operations=[MergeModulelist(dim=0), FineGrainedWeightGlobals(self)],
             ),
         ]
         if calibrated:
             converters.append(
                 WeightConverter(
-                    source_patterns=[rf"{expert}gate_proj\.input_scale", rf"{expert}up_proj\.input_scale"],
+                    source_patterns=[
+                        r"mlp\.experts\..*\.gate_proj\.input_scale",
+                        r"mlp\.experts\..*\.up_proj\.input_scale",
+                    ],
                     target_patterns="mlp.experts.gate_up_proj_input_global_scale",
-                    operations=[*merge, FineGrainedInputScales(self)],
+                    operations=[MergeModulelist(dim=0), FineGrainedInputScales(self)],
                 )
             )
         return converters

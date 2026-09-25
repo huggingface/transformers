@@ -30,8 +30,7 @@ class FineGrainedMxfp4HfQuantizer(FineGrainedHfQuantizer):
     W4A16; an explicit `activation_format="mxfp4"` still gets W4A4.
     """
 
-    def _default_activation_format(self) -> str:
-        return "bf16"
+    default_activation_format = "bf16"
 
     def get_weight_conversions(self):
         if not self.pre_quantized:

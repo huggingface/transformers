@@ -19,9 +19,6 @@ moved onto these modules by `finegrained_conversions`.
 from __future__ import annotations
 
 import functools
-import importlib
-import os
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -114,26 +111,6 @@ class FineGrained:
 _FINEGRAINED: FineGrained | None = None
 
 
-def _import_local_finegrained():
-    """A locally importable `finegrained_kernels` package takes precedence over the hub build:
-    `FINEGRAINED_KERNELS_PATH` (a checkout's `torch-ext` directory, or any directory containing
-    the package) is prepended to `sys.path`, then a plain import is attempted either way — an
-    installed / already-on-path package also wins. Returns the module, or `None` to fall back
-    to the `kernels` hub load."""
-    path = os.environ.get("FINEGRAINED_KERNELS_PATH")
-    if path:
-        if not os.path.isdir(path):
-            raise ImportError(f"FINEGRAINED_KERNELS_PATH does not exist: {path}")
-        if path not in sys.path:
-            sys.path.insert(0, path)
-    try:
-        return importlib.import_module("finegrained_kernels")
-    except ImportError:
-        if path:
-            raise  # an explicit local path that fails to import is a setup error, not a fallback
-        return None
-
-
 @torch._dynamo.allow_in_graph
 def _load_finegrained_kernel() -> None:
     """
@@ -154,11 +131,10 @@ def _load_finegrained_kernel() -> None:
     if _FINEGRAINED is not None:
         return
 
-    kernel = _import_local_finegrained()
-    if kernel is None:
-        if not is_kernels_available():
-            raise ImportError(f"finegrained-fp8 kernel unavailable: {_MISSING_KERNELS_MESSAGE}")
-        kernel = lazy_load_kernel("finegrained-kernels")
+    if not is_kernels_available():
+        raise ImportError(f"finegrained-fp8 kernel unavailable: {_MISSING_KERNELS_MESSAGE}")
+
+    kernel = lazy_load_kernel("finegrained-kernels")
     if kernel is None:
         raise ImportError(
             "Failed to load the finegrained-kernels kernel — check that `kernels-community/finegrained-kernels` "
