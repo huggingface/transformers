@@ -59,7 +59,7 @@ also every global token like in the case of standard global attention (*transien
 are constructed dynamically within each attention operation).  As a consequence, *TGlobal* attention introduces
 a few new parameters -- global relative position biases and a layer normalization for global token's embedding.
 The complexity of this mechanism is `O(l(r + l/k))`.
-- An example showing how to evaluate a fine-tuned LongT5 model on the [pubmed dataset](https://huggingface.co/datasets/scientific_papers) is below.
+- An example showing how to evaluate a fine-tuned LongT5 model on the [pubmed dataset](https://huggingface.co/datasets/armanc/scientific_papers) is below.
 
 ```python
 import evaluate
@@ -68,7 +68,7 @@ from datasets import load_dataset
 from transformers import AutoTokenizer, LongT5ForConditionalGeneration
 
 
-dataset = load_dataset("scientific_papers", "pubmed", split="validation")
+dataset = load_dataset("armanc/scientific_papers", "pubmed", split="validation")
 model = (
     LongT5ForConditionalGeneration.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps", device_map="auto")
     .to("auto")

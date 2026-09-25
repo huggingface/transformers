@@ -128,6 +128,7 @@ from .utils import (
     is_onnxruntime_available,
     is_onnxscript_available,
     is_openai_available,
+    is_openvino_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -640,6 +641,10 @@ def require_onnxruntime(test_case):
 
 def require_executorch(test_case):
     return unittest.skipUnless(is_executorch_available(), "test requires ExecuTorch")(test_case)
+
+
+def require_openvino(test_case):
+    return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
 
 
 def require_timm(test_case):
@@ -4203,12 +4208,9 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
         # (This part is very unlikely what a user would be interest to know)
         call_argument_expressions["positional_args"] = ["self"] + call_argument_expressions["positional_args"]
 
-    # The expressions are parsed from the *source line of the call site*, so they only describe this
-    # call if the counts line up. They do not when a patched method is reached by delegation from
-    # another one: `assertListEqual(a, b)` calls `assertSequenceEqual(a, b, msg, seq_type=list)`, so
-    # `args` gains entries the caller's source line never mentioned. Indexing anyway raised
-    # `IndexError` and took the test down with it; indexing "safely" would be worse, silently
-    # attributing the wrong expression to a value. Report nothing instead.
+    # Source expressions only match direct calls. Delegation can add args (e.g. assertListEqual ->
+    # assertSequenceEqual), so counts may differ; indexing would misattribute expressions or crash.
+    # Report nothing instead.
     if len(args) != len(call_argument_expressions["positional_args"]):
         return ""
 
