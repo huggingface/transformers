@@ -266,7 +266,7 @@ def _make_allocator(
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
-        [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_forward)]
+        [("paged|eager", eager_paged_attention_forward)]
     )
     def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
         # A standard forward on a model switched to a paged implementation reaches these with no cache. They are

@@ -281,8 +281,11 @@ def lazy_import_flash_attention(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
 
-        # Paged flash attention is not compatible with torch.compile, so we decorate it here
-        _flash_paged_fn = torch.compiler.disable(_flash_paged_fn_not_decorated)
+        # Paged flash attention is not compatible with torch.compile, so we decorate it here (unless it doesnt exist)
+        if _flash_paged_fn_not_decorated is not None:
+            _flash_paged_fn = torch.compiler.disable(_flash_paged_fn_not_decorated)
+        else:
+            _flash_paged_fn = None
 
         # Some kernels, like the MSA kernel from minimax, have no varlen function. In this case, the varlen path
         # can never be used, so no need to build a processing function for it, just return a dict builder.
@@ -792,10 +795,10 @@ def _flash_attention_forward(
     # There is a block table: we use the paged flash function to compute attention and update the cache and return early
     if is_fa_with_paged_kwargs:
         flash_kwargs = flash_kwargs_fn(
-            query_length, max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
+            max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, **kwargs
         )
         out = _flash_attention_forward_paged(
-            flash_paged_fn, query_states, key_states, value_states, k_cache, v_cache, cu_seq_lens_k, **flash_kwargs
+            flash_paged_fn, query_states, key_states, value_states, cu_seq_lens_k, k_cache, v_cache, **flash_kwargs
         )
         return out.view(batch_size, -1, *out.shape[-2:])
 

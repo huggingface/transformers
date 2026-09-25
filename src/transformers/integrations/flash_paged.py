@@ -1,7 +1,7 @@
 import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
-from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ..modeling_flash_attention_utils import lazy_import_flash_attention
 
 
 # Compile is disabled because the cache update mutates in place aliased views of the cache tensor, which compile's
@@ -51,9 +51,9 @@ def paged_attention_forward(
         v = torch.nn.functional.pad(v, [0, head_dim - v_head_dim])
 
     # Retrieve the flash attention functions
-    flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
+    _, flash_attn_varlen_func, flash_attn_with_kvcache, _, _ = lazy_import_flash_attention(
         module.config._attn_implementation
-    )
+    )[0]
 
     # The cache.update expects these in the kwargs  # NOTE: temporay, this whole function is going to be removed
     kwargs["cu_seq_lens_k"], kwargs["max_length_k"], kwargs["block_table"] = cu_seq_lens_k, max_length_k, block_table
