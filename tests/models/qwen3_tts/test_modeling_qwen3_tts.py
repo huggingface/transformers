@@ -400,6 +400,7 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
                 )
                 for codes, reference in zip(output.sequences, expected[non_streaming_mode]):
                     torch.testing.assert_close(codes, codes.new_tensor(reference))
+                self.assertIsNone(output.hidden_states)
 
     def test_generation_prepares_residual_codes_before_forward(self):
         model = self.get_model()
@@ -420,6 +421,7 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
                 expected = expected + embedding(codes[:, index + 1 : index + 2])
             model.code_predictor.generation_config.output_hidden_states = True
             for step in (0, 2):
+                codec_frames = []
                 with patch.object(model.code_predictor, "generate", wraps=model.code_predictor.generate) as generate:
                     prepared = model.prepare_inputs_for_generation(
                         primary_codes,
@@ -431,16 +433,40 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
                         subtalker_dosample=False,
                         attention_mask=torch.ones(2, 1, device=torch_device, dtype=torch.long),
                         use_cache=True,
+                        codec_frames=codec_frames,
                     )
                 self.assertFalse(generate.call_args.kwargs["output_hidden_states"])
                 text = trailing_text[:, :1] if step == 0 else pad_embed
                 torch.testing.assert_close(prepared["inputs_embeds"], expected + text)
-                torch.testing.assert_close(prepared["codec_ids"], codes)
+                self.assertEqual(len(codec_frames), 1)
+                torch.testing.assert_close(codec_frames[0], codes)
                 with patch.object(
                     model.code_predictor, "generate", side_effect=AssertionError("forward must not sample")
                 ):
-                    output = model(**prepared)
+                    output = model(**prepared, output_hidden_states=True)
                 self.assertEqual(output.logits.shape, (2, 1, 2048))
+                self.assertEqual(len(output.hidden_states), model.config.talker_config.num_hidden_layers + 1)
+                self.assertTrue(all(isinstance(hidden, torch.Tensor) for hidden in output.hidden_states))
+
+    def test_generation_codec_collection_is_independent_of_hidden_states(self):
+        model = self.get_model()
+        inputs = {
+            "input_ids": [torch.arange(11, device=torch_device)[None]],
+            "languages": ["Auto"],
+            "max_new_tokens": 4,
+            "do_sample": False,
+            "subtalker_dosample": False,
+        }
+        without_hidden = model.generate(**inputs, output_hidden_states=False)
+        with_hidden = model.generate(**inputs, output_hidden_states=True)
+        torch.testing.assert_close(without_hidden.sequences[0], with_hidden.sequences[0])
+        self.assertEqual(with_hidden.sequences[0].shape, (3, 4))
+        self.assertIsNone(without_hidden.hidden_states)
+        for step in with_hidden.hidden_states:
+            self.assertEqual(len(step), model.config.talker_config.num_hidden_layers + 1)
+            self.assertTrue(all(isinstance(hidden, torch.Tensor) for hidden in step))
+        empty = model.generate(**{**inputs, "max_new_tokens": 1})
+        self.assertEqual(empty.sequences[0].shape, (0, 4))
 
     def test_generation_requires_cache(self):
         model = self.get_model()
