@@ -123,6 +123,10 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_audio_3(self):
         pass
 
+    @unittest.skip(reason="Qwen3TTS chat templates format synthesis text and do not process audio inputs")
+    def test_chat_template_audio_sampling_rate(self):
+        pass
+
     @unittest.skip(reason="Qwen3TTS chat template returns a list, not a plain string")
     def test_chat_template_jinja_kwargs(self):
         pass
@@ -585,6 +589,9 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "audio_tokenizer_name_or_path": "Qwen/Qwen3-TTS-Tokenizer-12Hz",
             },
         )
+        # All variants reference the same codec, so exercise its round-trip only once.
+        if checkpoint != "shahvandit/qwen3-tts-base-hf":
+            return
         sampling_rate = processor.audio_tokenizer.config.input_sampling_rate
         input_values = torch.sin(torch.arange(sampling_rate) * (2 * torch.pi * 440 / sampling_rate))[None]
         with torch.no_grad():
