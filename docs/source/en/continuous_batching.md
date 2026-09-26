@@ -332,7 +332,7 @@ The level ranges from `0` to `3`. Level `0` is the default and skips compilation
 cb_config = ContinuousBatchingConfig(default_compile_level=1)
 ```
 
-The level supplies a default [`CompileConfig`] to the varlen and decode execution paths. It only applies to a path that has no explicit config, so `varlen_compile_config` and `decode_compile_config` take precedence when set. Under FlashAttention, the varlen path skips compilation because `max_seqlen_k` triggers frequent recompilation, so the level affects only the decode path in that case.
+The level supplies a default [`CompileConfig`] to the varlen and decode execution paths. It only applies to a path that has no explicit config, so `varlen_compile_config` and `decode_compile_config` take precedence when set. Under FlashAttention, the varlen path skips compilation because `max_length_k` triggers frequent recompilation, so the level affects only the decode path in that case.
 
 ### Decode fast path
 
