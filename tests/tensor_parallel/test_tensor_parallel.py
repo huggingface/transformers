@@ -31,7 +31,7 @@ from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test, re
 
 
 # Qwen3 MoE's predefined plans, as resolved on `Qwen3MoeModel` (no `model.` prefix).
-DENSE_TP_PLAN = {
+TP_DENSE_PLAN = {
     "layers.*.self_attn.q_proj": "colwise",
     "layers.*.self_attn.k_proj": "colwise",
     "layers.*.self_attn.v_proj": "colwise",
@@ -42,17 +42,17 @@ DENSE_TP_PLAN = {
     "layers.*.mlp.up_proj": "colwise",
     "layers.*.mlp.down_proj": "rowwise",
 }
-EXPERT_TP_PLAN = {
+TP_EXPERT_PLAN = {
     "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
     "layers.*.mlp.experts.down_proj": "rowwise",
     "layers.*.mlp.experts": "moe_tp_experts",
 }
 EP_PLAN = {
-    "layers.*.mlp.gate": "ep_router",
     "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
     "layers.*.mlp.experts.down_proj": "grouped_gemm",
-    "layers.*.mlp.experts": "moe_tp_experts",
+    "layers.*.mlp.experts": "ep_dispatch_experts",
 }
+EP_PLAN_MASKED = EP_PLAN | {"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}
 
 
 @require_torch
@@ -74,6 +74,10 @@ class TestParallelPlanResolution(TestCasePlus):
         with torch.device("meta"):
             self.model = Qwen3MoeModel(self.config)
 
+    def _reset_plans(self):
+        self.model.tp_plan = TP_DENSE_PLAN | TP_EXPERT_PLAN
+        self.model.ep_plan = EP_PLAN.copy()
+
     def test_ep_plan_setter(self):
         self.model.ep_plan = None
         self.assertEqual(self.model.ep_plan, {})
@@ -91,7 +95,7 @@ class TestParallelPlanResolution(TestCasePlus):
 
     def test_tp_only_keeps_experts_in_tp_plan(self):
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
-        self.assertEqual(tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN)
+        self.assertEqual(tp_plan, TP_DENSE_PLAN | TP_EXPERT_PLAN)
         self.assertEqual(ep_plan, {})
 
     def test_ep_takes_experts_and_router_out_of_tp_plan(self):
@@ -101,7 +105,7 @@ class TestParallelPlanResolution(TestCasePlus):
         ):
             with self.subTest(config=config):
                 tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-                self.assertEqual(tp_plan, DENSE_TP_PLAN)
+                self.assertEqual(tp_plan, TP_DENSE_PLAN)
                 self.assertEqual(ep_plan, EP_PLAN)
 
     def test_legacy_flag_is_an_alias_for_ep_size(self):
@@ -125,8 +129,8 @@ class TestParallelPlanResolution(TestCasePlus):
     def test_ep_plan_is_a_dict_and_round_trips(self):
         with self.assertRaisesRegex(ValueError, "`ep_plan` must be a dictionary or None"):
             DistributedConfig(tp_size=4, ep_size=4, ep_plan="auto")
-        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.gate": "ep_router"})
-        self.assertEqual(config.to_dict()["ep_plan"], {"layers.*.mlp.gate": "ep_router"})
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN_MASKED)
+        self.assertEqual(config.to_dict()["ep_plan"], EP_PLAN_MASKED)
         self.assertEqual(DistributedConfig.from_dict(config.to_dict()), config)
 
     def test_overrides_merge_into_the_predefined_plans(self):
@@ -137,7 +141,7 @@ class TestParallelPlanResolution(TestCasePlus):
             ep_plan={"layers.*.mlp.experts.down_proj": "rowwise"},
         )
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        self.assertEqual(tp_plan, DENSE_TP_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
+        self.assertEqual(tp_plan, TP_DENSE_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
         self.assertEqual(ep_plan, EP_PLAN | {"layers.*.mlp.experts.down_proj": "rowwise"})
         # The merged plans are stored on the model, the config defaults are untouched.
         self.assertEqual(self.model.tp_plan["layers.*.self_attn.q_proj"], "colwise_rep")
@@ -149,7 +153,7 @@ class TestParallelPlanResolution(TestCasePlus):
         self.assertEqual(config.ep_plan, {"layers.*.mlp.experts.down_proj": "rowwise"})
         # The merged EP plan stays on the model but is not applied while EP is disabled.
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
-        self.assertEqual(tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
+        self.assertEqual(tp_plan, TP_DENSE_PLAN | TP_EXPERT_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
         self.assertEqual(ep_plan, {})
         self.assertEqual(self.model.ep_plan["layers.*.mlp.experts.down_proj"], "rowwise")
 
@@ -158,10 +162,11 @@ class TestParallelPlanResolution(TestCasePlus):
             tp_size=4,
             ep_size=4,
             tp_plan={"layers.*.mlp.experts.gate_up_proj": "packed_rowwise", "layers.*.mlp.gate": "colwise"},
+            ep_plan=EP_PLAN_MASKED,
         )
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        self.assertEqual(tp_plan, DENSE_TP_PLAN)
-        self.assertEqual(ep_plan, EP_PLAN)
+        self.assertEqual(tp_plan, TP_DENSE_PLAN)
+        self.assertEqual(ep_plan, EP_PLAN_MASKED)
         # The custom TP rules are kept on the model and apply as soon as EP is disabled.
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
         self.assertEqual(tp_plan["layers.*.mlp.experts.gate_up_proj"], "packed_rowwise")
@@ -173,7 +178,7 @@ class TestParallelPlanResolution(TestCasePlus):
         with self.assertRaisesRegex(ValueError, "does not define an expert-parallel plan"):
             tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
         config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN)
-        self.assertEqual(tensor_parallel.resolve_parallel_plans(self.model, config), (DENSE_TP_PLAN, EP_PLAN))
+        self.assertEqual(tensor_parallel.resolve_parallel_plans(self.model, config), (TP_DENSE_PLAN, EP_PLAN))
 
     def test_unmatched_override_keys_raise_without_changing_plans(self):
         original_tp_plan, original_ep_plan = self.model.tp_plan.copy(), self.model.ep_plan.copy()
@@ -204,7 +209,7 @@ class TestParallelPlanResolution(TestCasePlus):
     def test_head_model_overrides_need_the_model_prefix(self):
         with torch.device("meta"):
             model = Qwen3MoeForCausalLM(self.config)
-        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.gate": "ep_router"})
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN_MASKED)
         with self.assertRaisesRegex(ValueError, "including any 'model.' prefix"):
             tensor_parallel.resolve_parallel_plans(model, config)
 
@@ -212,16 +217,17 @@ class TestParallelPlanResolution(TestCasePlus):
             tp_size=4,
             ep_size=4,
             tp_plan={"model.layers.*.self_attn.q_proj": "colwise_rep"},
-            ep_plan={"model.layers.*.mlp.gate": "ep_router"},
+            ep_plan={f"model.{k}": v for k, v in EP_PLAN_MASKED.items()},
         )
         tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(model, config)
-        expected_tp_plan = {f"model.{k}": v for k, v in DENSE_TP_PLAN.items()} | {"lm_head": "colwise_gather_output"}
+        expected_tp_plan = {f"model.{k}": v for k, v in TP_DENSE_PLAN.items()} | {"lm_head": "colwise_gather_output"}
         self.assertEqual(tp_plan, expected_tp_plan | config.tp_plan)
-        self.assertEqual(ep_plan, {f"model.{k}": v for k, v in EP_PLAN.items()})
+        self.assertEqual(ep_plan, {f"model.{k}": v for k, v in EP_PLAN_MASKED.items()})
 
     def test_masked_ep_shards_and_installs_hooks_on_the_tp_mesh(self):
         tp_mesh = object()
-        _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN_MASKED)
+        _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
         experts, router = self.model.layers[0].mlp.experts, self.model.layers[0].mlp.gate
         with (
             patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "validate_param") as validate,
