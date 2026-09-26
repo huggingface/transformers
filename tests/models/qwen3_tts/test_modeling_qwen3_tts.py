@@ -466,6 +466,79 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
         config.talker_config.codec_eos_token_id = 2047
         return Qwen3TTSForConditionalGeneration(config).to(torch_device).eval()
 
+    @parameterized.expand(
+        [
+            (mode, streaming)
+            for mode in ("x_vector", "icl", "custom_voice", "voice_design")
+            for streaming in (False, True)
+        ]
+    )
+    def test_conditioned_generation_matches_individual_samples(self, mode, non_streaming_mode):
+        model = self.get_model()
+        input_ids = [torch.arange(length, device=torch_device)[None] for length in (11, 9)]
+        prompts = {"input_ids": input_ids, "languages": ["Auto", "Auto"]}
+        speakers = [torch.randn(32, device=torch_device) for _ in range(2)]
+        if mode in ("x_vector", "icl"):
+            prompts["voice_clone_prompt"] = {
+                "ref_spk_embedding": speakers,
+                "x_vector_only_mode": [mode == "x_vector"] * 2,
+                "icl_mode": [mode == "icl"] * 2,
+                "ref_code": [ids_tensor([length, 4], 64) for length in (2, 7)] if mode == "icl" else None,
+            }
+            if mode == "icl":
+                prompts["ref_ids"] = [torch.arange(8, device=torch_device)[None] for _ in range(2)]
+        elif mode == "custom_voice":
+            model.config.talker_config.spk_id = {"speaker_a": 10, "speaker_b": 11}
+            model.config.talker_config.spk_is_dialect = {"speaker_a": False, "speaker_b": "dialect"}
+            model.config.talker_config.codec_language_id = {"english": 12, "dialect": 13}
+            prompts["speakers"] = ["speaker_a", "speaker_b"]
+            prompts["languages"] = ["English", "Auto"]
+        else:
+            prompts["instruct_ids"] = [torch.arange(length, device=torch_device)[None] for length in (4, 6)]
+
+        generation_kwargs = {
+            "non_streaming_mode": non_streaming_mode,
+            "max_new_tokens": 4,
+            "do_sample": False,
+            "subtalker_dosample": False,
+        }
+        prefills = []
+
+        def record_prefill(module, args, kwargs):
+            if kwargs["inputs_embeds"].shape[1] > 1:
+                embeddings = kwargs["inputs_embeds"]
+                mask = kwargs["attention_mask"]
+                if mask is None:
+                    mask = torch.ones(embeddings.shape[:2], dtype=torch.long, device=embeddings.device)
+                prefills.append((embeddings.detach().clone(), mask.clone()))
+
+        handle = model.model.register_forward_pre_hook(record_prefill, with_kwargs=True)
+        try:
+            batched = model.generate(**prompts, **generation_kwargs)
+            for index in range(2):
+                single_prompts = {}
+                for name, value in prompts.items():
+                    if name == "voice_clone_prompt":
+                        single_prompts[name] = {
+                            key: [items[index]] if items is not None else None for key, items in value.items()
+                        }
+                    else:
+                        single_prompts[name] = [value[index]]
+                single = model.generate(**single_prompts, **generation_kwargs)
+                torch.testing.assert_close(batched.sequences[index], single.sequences[0])
+        finally:
+            handle.remove()
+        self.assertEqual(len(prefills), 3)
+        batch_embeddings, batch_mask = prefills[0]
+        for index in range(2):
+            single_embeddings, single_mask = prefills[index + 1]
+            torch.testing.assert_close(
+                batch_embeddings[index, batch_mask[index].bool()], single_embeddings[0, single_mask[0].bool()]
+            )
+            if mode in ("x_vector", "icl"):
+                pad = model.text_projection(model.get_text_embeddings()(input_ids[index].new_tensor([0])))
+                torch.testing.assert_close(single_embeddings[0, 6], speakers[index] + pad[0])
+
     def test_generation_preserves_codec_frames(self):
         model = self.get_model()
         expected = {
