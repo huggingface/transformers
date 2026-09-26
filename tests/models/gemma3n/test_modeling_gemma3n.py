@@ -15,6 +15,7 @@
 
 import copy
 import inspect
+import os
 import unittest
 
 import numpy as np
@@ -866,6 +867,14 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 @slow
 @require_torch_accelerator
 class Gemma3nIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import shutil
+
+        stale_ds_dir = "/mnt/cache/hub/datasets--etechgrid--28.5k_wavfiles_dataset"
+        if os.path.isdir(stale_ds_dir):
+            shutil.rmtree(stale_ds_dir)
+
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Google/gemma-3n-E4B-it", padding_side="left")
 
