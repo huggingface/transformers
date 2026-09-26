@@ -23,7 +23,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -286,6 +286,8 @@ class Qwen3TTSConfig(PreTrainedConfig):
         The beginning-of-sequence token ID for TTS generation.
     tts_eos_token_id (`int`, *optional*, defaults to 151673):
         The end-of-sequence token ID for TTS generation.
+    code_predictor_loss_weight (`float`, *optional*, defaults to 0.3):
+        Weight of the residual-codebook loss in the combined training objective.
     """
 
     model_type = "qwen3_tts"
@@ -303,6 +305,7 @@ class Qwen3TTSConfig(PreTrainedConfig):
     tts_pad_token_id: int | None = 151671
     tts_bos_token_id: int | None = 151672
     tts_eos_token_id: int | None = 151673
+    code_predictor_loss_weight: float = 0.3
 
     def __post_init__(self, **kwargs):
         if self.talker_config is None:
@@ -414,12 +417,24 @@ class Qwen3TTSTalkerCodePredictorOutputWithPast(CausalLMOutputWithPast):
 
 @auto_docstring
 @dataclass
-class Qwen3TTSTalkerOutputWithPast(ModelOutput):
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+class Qwen3TTSTalkerOutputWithPast(CausalLMOutputWithPast):
+    r"""
+    talker_loss (`torch.FloatTensor`, *optional*):
+        Causal first-codebook loss, including codec EOS for supervised examples.
+    code_predictor_loss (`torch.FloatTensor`, *optional*):
+        Teacher-forced residual-codebook loss.
+    past_hidden (`torch.FloatTensor`, *optional*):
+        Last talker hidden state used to condition the next generation step.
+    generation_step (`int`, *optional*):
+        Index of the next codec generation step.
+    trailing_text_hidden (`torch.FloatTensor`, *optional*):
+        Remaining text embeddings used during streaming generation.
+    tts_pad_embed (`torch.FloatTensor`, *optional*):
+        Text padding embedding added after streaming text is consumed.
+    """
+
+    talker_loss: torch.FloatTensor | None = None
+    code_predictor_loss: torch.FloatTensor | None = None
     past_hidden: torch.FloatTensor | None = None
     generation_step: int | None = None
     trailing_text_hidden: torch.FloatTensor | None = None
@@ -656,7 +671,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
             loss = self.loss_function(
                 logits=logits,
                 labels=None,
-                shift_labels=labels,
+                shift_labels=labels.contiguous(),
                 vocab_size=self.vocab_size,
                 num_items_in_batch=(labels != -100).sum().clamp_min(1),
             )
@@ -684,6 +699,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
 
     config_class = Qwen3TTSConfig
     main_input_name = "input_ids"
+    accepts_loss_kwargs = False
 
     def __init__(self, config: Qwen3TTSConfig):
         super().__init__(config)
@@ -923,6 +939,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         position_ids = position_ids.add(delta)
         return position_ids.unsqueeze(0).expand(3, -1, -1)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -941,9 +958,24 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         subtalker_top_p: float | None = None,
         subtalker_top_k: int | None = None,
         subtalker_temperature: float | None = None,
-        **kwargs,
+        audio_codes: torch.LongTensor | None = None,
+        audio_attention_mask: torch.Tensor | None = None,
+        speaker_embeddings: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, text_length)`, *optional*):
+            Formatted text prompts, including the three-token role prefix and five-token suffix, when `audio_codes`
+            is supplied. During cached generation, contains the latest primary codec token instead.
+        audio_codes (`torch.LongTensor` of shape `(batch_size, audio_length, num_code_groups)`, *optional*):
+            Ground-truth codec frames for Base/Auto non-streaming teacher forcing.
+        audio_attention_mask (`torch.Tensor` of shape `(batch_size, audio_length)`, *optional*):
+            Mask with 1 for valid audio frames and 0 for padding.
+        speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+            Precomputed speaker conditioning required for teacher forcing.
+        labels (`torch.LongTensor` of shape `(batch_size, audio_length, num_code_groups)`, *optional*):
+            Unshifted audio targets. Values of `-100` are ignored. Codec EOS is supervised only for examples with
+            at least one supervised primary target. Returned primary logits follow the packed text/audio sequence.
         past_hidden (`torch.FloatTensor`, *optional*):
             Hidden state from the previous talker decoding step, used as context for the code predictor.
         trailing_text_hidden (`torch.FloatTensor`, *optional*):
@@ -961,8 +993,19 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         subtalker_temperature (`float`, *optional*):
             Sampling temperature passed to the code predictor.
         """
+        teacher_forcing = audio_codes is not None
+        if teacher_forcing:
+            if input_ids is None or speaker_embeddings is None:
+                raise ValueError("Teacher forcing requires `input_ids` and `speaker_embeddings`.")
+            if inputs_embeds is not None or past_key_values is not None:
+                raise ValueError("Teacher forcing cannot be combined with `inputs_embeds` or a generation cache.")
+            inputs_embeds, attention_mask, audio_positions, eos_positions = self._prepare_teacher_forcing_inputs(
+                input_ids, attention_mask, audio_codes, audio_attention_mask, speaker_embeddings
+            )
+            position_ids, _ = self.get_rope_index(attention_mask)
+            use_cache = False if use_cache is None else use_cache
         # Prefill stage
-        if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
+        elif inputs_embeds is not None and inputs_embeds.shape[1] > 1:
             generation_step = -1
             codec_ids = None
         # Generation stage
@@ -994,7 +1037,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             else:
                 inputs_embeds = inputs_embeds + tts_pad_embed
 
-        if attention_mask is not None:
+        if attention_mask is not None and not teacher_forcing:
             position_ids = self.compute_3d_position_ids(input_ids, inputs_embeds, attention_mask, past_key_values)
 
         outputs: BaseModelOutputWithPast = self.model(
@@ -1009,6 +1052,64 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
 
         hidden_states = outputs.last_hidden_state
         logits = self.codec_head(hidden_states)
+
+        if teacher_forcing:
+            loss = talker_loss = code_predictor_loss = None
+            if labels is not None:
+                if labels.shape != audio_codes.shape:
+                    raise ValueError("`labels` must match the shape of `audio_codes`.")
+                if audio_attention_mask is None:
+                    audio_attention_mask = torch.ones_like(audio_codes[..., 0], dtype=torch.bool)
+                labels = labels.masked_fill(~audio_attention_mask.bool()[..., None], -100)
+                torch_compilable_check(
+                    (labels[..., 0] == -100) | ((labels[..., 0] >= 0) & (labels[..., 0] < self.vocab_size)),
+                    "Primary labels must be vocabulary IDs or -100.",
+                )
+                torch_compilable_check(
+                    (labels[..., 1:] == -100)
+                    | ((labels[..., 1:] >= 0) & (labels[..., 1:] < self.code_predictor.vocab_size)),
+                    "Residual labels must be vocabulary IDs or -100.",
+                )
+                primary_labels = labels.new_full(logits.shape[:2], -100)
+                # Padded frames write only to the ignored role prefix, never over a valid target or EOS.
+                frame_positions = audio_positions.masked_fill(~audio_attention_mask.bool(), 0)
+                primary_labels.scatter_(1, frame_positions, labels[..., 0])
+                eos_labels = labels.new_full((labels.shape[0], 1), self.config.talker_config.codec_eos_token_id)
+                eos_labels = eos_labels.masked_fill(~(labels[..., 0] != -100).any(-1, keepdim=True), -100)
+                primary_labels.scatter_(1, eos_positions[:, None], eos_labels)
+                talker_loss = self.loss_function(
+                    logits=logits,
+                    labels=primary_labels,
+                    vocab_size=self.vocab_size,
+                    num_items_in_batch=(primary_labels != -100).sum().clamp_min(1),
+                )
+
+                safe_codes = audio_codes.masked_fill(~audio_attention_mask.bool()[..., None], 0)
+                previous_hidden = hidden_states.gather(
+                    1, (audio_positions - 1)[..., None].expand(-1, -1, hidden_states.shape[-1])
+                )
+                predictor_inputs = [previous_hidden, self.get_input_embeddings()(safe_codes[..., 0])]
+                for index in range(self.config.talker_config.num_code_groups - 2):
+                    predictor_inputs.append(
+                        self.code_predictor.get_input_embeddings()[index](safe_codes[..., index + 1])
+                    )
+                predictor_inputs = torch.stack(predictor_inputs, dim=2).flatten(0, 1)
+                predictor_output = self.code_predictor(
+                    inputs_embeds=predictor_inputs,
+                    labels=labels[..., 1:].flatten(0, 1),
+                    use_cache=False,
+                )
+                code_predictor_loss = predictor_output.loss
+                loss = talker_loss + self.config.code_predictor_loss_weight * code_predictor_loss
+            return Qwen3TTSTalkerOutputWithPast(
+                loss=loss,
+                logits=logits,
+                past_key_values=outputs.past_key_values,
+                hidden_states=outputs.hidden_states,
+                attentions=outputs.attentions,
+                talker_loss=talker_loss,
+                code_predictor_loss=code_predictor_loss,
+            )
 
         loss = None
         if labels is not None:

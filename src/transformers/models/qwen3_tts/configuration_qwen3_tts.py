@@ -244,6 +244,8 @@ class Qwen3TTSConfig(PreTrainedConfig):
         The beginning-of-sequence token ID for TTS generation.
     tts_eos_token_id (`int`, *optional*, defaults to 151673):
         The end-of-sequence token ID for TTS generation.
+    code_predictor_loss_weight (`float`, *optional*, defaults to 0.3):
+        Weight of the residual-codebook loss in the combined training objective.
     """
 
     model_type = "qwen3_tts"
@@ -261,6 +263,7 @@ class Qwen3TTSConfig(PreTrainedConfig):
     tts_pad_token_id: int | None = 151671
     tts_bos_token_id: int | None = 151672
     tts_eos_token_id: int | None = 151673
+    code_predictor_loss_weight: float = 0.3
 
     def __post_init__(self, **kwargs):
         if self.talker_config is None:
