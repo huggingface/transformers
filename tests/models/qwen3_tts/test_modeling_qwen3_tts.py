@@ -430,7 +430,7 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
                         generation_step=step,
                         subtalker_dosample=False,
                         attention_mask=torch.ones(2, 1, device=torch_device, dtype=torch.long),
-                        use_cache=False,
+                        use_cache=True,
                     )
                 self.assertFalse(generate.call_args.kwargs["output_hidden_states"])
                 text = trailing_text[:, :1] if step == 0 else pad_embed
@@ -441,6 +441,36 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
                 ):
                     output = model(**prepared)
                 self.assertEqual(output.logits.shape, (2, 1, 2048))
+
+    def test_generation_requires_cache(self):
+        model = self.get_model()
+        inputs = {
+            "input_ids": [torch.arange(11, device=torch_device)[None]],
+            "languages": ["Auto"],
+            "max_new_tokens": 4,
+            "do_sample": False,
+            "subtalker_dosample": False,
+        }
+        for config_use_cache, kwargs in ((True, {"use_cache": False}), (False, {})):
+            with self.subTest(config_use_cache=config_use_cache, kwargs=kwargs):
+                model.generation_config.use_cache = config_use_cache
+                with self.assertRaisesRegex(ValueError, "Qwen3-TTS generation requires `use_cache=True`"):
+                    model.generate(**inputs, **kwargs)
+
+        output = model.generate(**inputs, use_cache=True)
+        self.assertEqual(output.sequences[0].shape, (3, 4))
+
+    def test_generation_preparation_rejects_disabled_cache(self):
+        model = self.get_model()
+        input_ids = torch.tensor([[5]], device=torch_device)
+        with patch.object(model.code_predictor, "generate") as generate:
+            for is_first_iteration in (True, False):
+                with self.subTest(is_first_iteration=is_first_iteration):
+                    with self.assertRaisesRegex(ValueError, "Qwen3-TTS generation requires `use_cache=True`"):
+                        model.prepare_inputs_for_generation(
+                            input_ids, is_first_iteration=is_first_iteration, use_cache=False
+                        )
+            generate.assert_not_called()
 
 
 class Qwen3TTSModelTester:
