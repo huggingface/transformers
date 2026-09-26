@@ -82,6 +82,15 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
   | `True` ([`Atlas-Inference/gdn`](https://huggingface.co/kernels/Atlas-Inference/gdn)) | 1.11 s (1.49x faster) | 4.14 tok/s |
 
   Decode is unchanged because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel currently requires `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
+- On AMD Strix Halo (Ryzen AI Max, Radeon 8060S, `gfx1151`) `fla` and `causal_conv1d` have no ROCm build either, so `use_kernels=True` maps the Gated DeltaNet cores to the ROCm build of [`Atlas-Inference/gdn`](https://huggingface.co/kernels/Atlas-Inference/gdn), gated to that GPU (ROCm capability 11.5). These are the conv1d, q/k L2-norm and delta-rule kernels the Atlas engine serves Qwen3.6/3.8-27B with on Strix Halo, and greedy output is identical to the fallback. Measured on `Qwen/Qwen3.5-9B` (bf16, gfx1151, torch 2.14 + ROCm 7.2, 1024-token prompt, greedy decode of 256 tokens):
+
+  | `use_kernels` | TTFT (prefill) | Decode |
+  | --- | --- | --- |
+  | `False` (PyTorch fallback) | 1.33 s | 5.77 tok/s |
+  | `True` ([`Atlas-Inference/gdn`](https://huggingface.co/kernels/Atlas-Inference/gdn)) | 1.16 s (1.15x faster) | 6.23 tok/s |
+
+  Most of this prefill is the dense projection GEMMs, which the kernel does not touch; per Gated DeltaNet layer of `Qwen/Qwen3.8-27B` the kernel is 1.65x faster on a 1024-token prefill and 1.26x faster per decode step. The published build targets torch 2.14 with ROCm 7.2.
+
 - Multimodal RoPE splits the head dimension into three components (temporal, height, width) via `mrope_section` on the text config. If you replace the rotary module, preserve this split or position encodings for image and video tokens will be misaligned.
 - Use [`Qwen3_5ForCausalLM`] for text-only generation with [`Qwen3_5TextConfig`]; use [`Qwen3_5ForConditionalGeneration`] with the full [`Qwen3_5Config`] and a processor ([`~AutoProcessor.from_pretrained`]) to feed interleaved image/video + text via [`~ProcessorMixin.apply_chat_template`].
 
