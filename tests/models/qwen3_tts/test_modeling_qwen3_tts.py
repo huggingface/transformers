@@ -28,6 +28,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
+    require_torch_large_gpu,
     slow,
     torch_device,
 )
@@ -892,6 +893,54 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
         from transformers.testing_utils import cleanup
 
         cleanup(torch_device, gc_collect=True)
+
+    @parameterized.expand(["float32", "float16", "bfloat16"])
+    @slow
+    @require_torch_large_gpu
+    def test_teacher_forcing_backward(self, dtype_name):
+        dtype = getattr(torch, dtype_name)
+        if dtype == torch.bfloat16 and not torch.cuda.is_bf16_supported():
+            self.skipTest("CUDA device does not support bfloat16")
+        set_seed(42)
+        model, loading_info = Qwen3TTSForConditionalGeneration.from_pretrained(
+            self.checkpoint, device_map=torch_device, dtype=torch.float32, output_loading_info=True
+        )
+        for key in ("missing_keys", "unexpected_keys", "mismatched_keys", "error_msgs"):
+            self.assertFalse(loading_info[key], key)
+        model.train()
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        path = Path(__file__).parent.parent.parent / "fixtures/qwen3_tts/expected_results_single.json"
+        with open(path, encoding="utf-8") as file:
+            input_ids = torch.tensor(json.load(file)["input_ids"], device=torch_device).expand(2, -1)
+        config = model.config.talker_config
+        codes = ids_tensor([2, 3, config.num_code_groups], config.code_predictor_config.vocab_size)
+        audio_mask = torch.tensor([[1, 1, 1], [1, 0, 0]], device=torch_device)
+        labels = codes.masked_fill(~audio_mask.bool()[..., None], -100)
+        with torch.autocast("cuda", dtype=dtype, enabled=dtype != torch.float32):
+            output = model(
+                input_ids=input_ids,
+                attention_mask=torch.ones_like(input_ids),
+                audio_codes=codes,
+                audio_attention_mask=audio_mask,
+                speaker_embeddings=torch.randn(2, config.hidden_size, device=torch_device),
+                labels=labels,
+            )
+        self.assertTrue(torch.isfinite(output.loss))
+        self.assertTrue(torch.isfinite(output.talker_loss))
+        self.assertTrue(torch.isfinite(output.code_predictor_loss))
+        output.loss.backward()
+        for parameter in (
+            model.text_projection.linear_1.weight,
+            model.model.layers[0].self_attn.q_proj.weight,
+            model.codec_head.weight,
+            model.code_predictor.model.layers[0].self_attn.q_proj.weight,
+            model.code_predictor.lm_head.weight,
+        ):
+            self.assertIsNotNone(parameter.grad)
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+            self.assertGreater(parameter.grad.abs().sum().item(), 0)
+        if model.speaker_encoder is not None:
+            self.assertTrue(all(parameter.grad is None for parameter in model.speaker_encoder.parameters()))
 
     @slow
     def test_single(self):
