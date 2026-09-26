@@ -30,9 +30,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        Qwen3TTSForConditionalGeneration,
         Qwen3TTSTokenizerConfig,
         Qwen3TTSTokenizerModel,
     )
+
+    from .test_modeling_qwen3_tts import Qwen3TTSModelTester
 
 
 def _build_tiny_audio_tokenizer(num_quantizers=4):
@@ -226,10 +229,13 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ):
             with self.subTest(input_type=type(codes).__name__):
                 inputs = processor(text=text, audio_codes=codes, speaker_embeddings=embeddings, return_tensors="pt")
-                self.assertEqual(set(inputs), set(expected_text) | {"audio_codes", "speaker_embeddings"})
+                self.assertEqual(
+                    set(inputs), set(expected_text) | {"audio_codes", "audio_attention_mask", "speaker_embeddings"}
+                )
                 for name, value in expected_text.items():
                     torch.testing.assert_close(inputs[name], value)
                 torch.testing.assert_close(inputs.audio_codes, audio_codes)
+                torch.testing.assert_close(inputs.audio_attention_mask, torch.ones(2, 3, dtype=torch.long))
                 torch.testing.assert_close(inputs.speaker_embeddings, speaker_embeddings)
 
         single = processor(text=text[0], audio_codes=audio_codes[0], speaker_embeddings=speaker_embeddings[0])
@@ -256,10 +262,87 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ({"audio_codes": torch.zeros(2, 3, 4, dtype=torch.long)}, "per text prompt"),
             ({"speaker_embeddings": torch.zeros(2, 32)}, "per text prompt"),
             ({"truncation": True}, "cannot be truncated"),
+            (
+                {
+                    "text": ["Hello.", "Hello."],
+                    "audio_codes": [torch.zeros(3, 4, dtype=torch.long), torch.zeros(3, 2, dtype=torch.long)],
+                },
+                "same number of codebooks",
+            ),
         ):
             with self.subTest(overrides=list(overrides)):
                 with self.assertRaisesRegex(ValueError, message):
                     processor(**{**inputs, **overrides})
+
+    def test_call_cached_training_padding_and_labels(self):
+        processor = self.get_processor()
+        text = ["Hi.", "This sentence contains more words."]
+        audio_codes = [torch.arange(12, dtype=torch.int32).reshape(3, 4) % 8, np.arange(20).reshape(5, 4) % 8]
+        speaker_embeddings = torch.randn(2, 32)
+        expected_audio_mask = torch.tensor([[1, 1, 1, 0, 0], [1, 1, 1, 1, 1]])
+        for padding_side in ("left", "right"):
+            with self.subTest(padding_side=padding_side):
+                kwargs = {
+                    "text_kwargs": {"padding_side": padding_side, "pad_to_multiple_of": 8, "return_tensors": "pt"}
+                }
+                inputs = processor(
+                    text=text,
+                    audio_codes=audio_codes,
+                    speaker_embeddings=speaker_embeddings,
+                    output_labels=True,
+                    **kwargs,
+                )
+                expected_text = processor.tokenizer(
+                    [processor._build_synthesis_text(value) for value in text],
+                    padding=True,
+                    padding_side=padding_side,
+                    pad_to_multiple_of=8,
+                    return_tensors="pt",
+                )
+                for name, value in expected_text.items():
+                    torch.testing.assert_close(inputs[name], value)
+                torch.testing.assert_close(inputs.audio_attention_mask, expected_audio_mask)
+                self.assertEqual(inputs.audio_codes.shape, (2, 5, 4))
+                self.assertEqual(inputs.labels.dtype, torch.long)
+                for index, codes in enumerate(audio_codes):
+                    length = len(codes)
+                    expected_codes = torch.as_tensor(codes).long()
+                    torch.testing.assert_close(inputs.audio_codes[index, :length], expected_codes)
+                    torch.testing.assert_close(inputs.labels[index, :length], expected_codes)
+                    self.assertTrue((inputs.audio_codes[index, length:] == 0).all())
+                    self.assertTrue((inputs.labels[index, length:] == -100).all())
+                self.assertEqual(inputs.labels[0, 0, 0].item(), 0)
+                inputs.labels[0, 0, 0] = -100
+                self.assertEqual(inputs.audio_codes[0, 0, 0].item(), 0)
+                self.assertEqual(audio_codes[0][0, 0].item(), 0)
+
+        without_labels = processor(text=text, audio_codes=audio_codes, speaker_embeddings=speaker_embeddings)
+        self.assertNotIn("labels", without_labels)
+        self.assertIn("audio_attention_mask", processor.model_input_names)
+        with self.assertRaisesRegex(ValueError, "requires cached training inputs"):
+            processor(text=text, output_labels=True)
+
+    def test_cached_training_batch_forward_backward(self):
+        processor = self.get_processor()
+        config = Qwen3TTSModelTester(self).get_config()
+        config.talker_config.text_vocab_size = len(processor.tokenizer)
+        model = Qwen3TTSForConditionalGeneration(config).train()
+        inputs = processor(
+            text=["Hi.", "This is a longer training example."],
+            audio_codes=[torch.randint(0, 64, (1, 2)), torch.randint(0, 64, (3, 2))],
+            speaker_embeddings=torch.randn(2, 32),
+            output_labels=True,
+        )
+        output = model(**inputs)
+        self.assertTrue(torch.isfinite(output.loss))
+        output.loss.backward()
+        for parameter in (
+            model.text_projection.linear_1.weight,
+            model.codec_head.weight,
+            model.code_predictor.lm_head.weight,
+        ):
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+            self.assertGreater(parameter.grad.abs().sum().item(), 0)
 
     def test_apply_chat_template_basic(self):
         processor = self.get_processor()
