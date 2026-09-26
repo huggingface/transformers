@@ -536,10 +536,10 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
         model = AutoModelForCausalLM.from_pretrained(
             init_model_dir,
             torch_dtype=dtype,
-            distributed_config=DistributedConfig(tp_size=2, fsdp_size=dp, enable_expert_parallel=True),
+            distributed_config=DistributedConfig(tp_size=2, fsdp_size=dp, ep_size=2),
         )
         assert model.tp_size == 2 and model.fsdp_size == dp
-        assert model._device_mesh.mesh_dim_names == ("fsdp", "tp")
+        assert model._device_mesh.mesh_dim_names == ("pp", "fsdp", "tp")
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)
         dp_rank = model._device_mesh["fsdp"].get_local_rank()
