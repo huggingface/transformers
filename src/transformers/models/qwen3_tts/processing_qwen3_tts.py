@@ -18,7 +18,7 @@ from pathlib import Path
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging, requires_backends
 
 
 if is_torch_available():
@@ -69,7 +69,14 @@ class Qwen3TTSProcessor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, chat_template=chat_template)
 
     @auto_docstring
-    def __call__(self, text=None, audio=None, **kwargs) -> BatchFeature:
+    def __call__(
+        self,
+        text=None,
+        audio=None,
+        audio_codes: "torch.Tensor | list[torch.Tensor] | None" = None,
+        speaker_embeddings: "torch.Tensor | list[torch.Tensor] | None" = None,
+        **kwargs: Unpack[Qwen3TTSProcessorKwargs],
+    ) -> BatchFeature:
         """
         Prepare inputs for the Qwen3-TTS model.
 
@@ -78,13 +85,30 @@ class Qwen3TTSProcessor(ProcessorMixin):
                 The text string or batch of text strings to be encoded.
             audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, *optional*):
                 The audio input to extract features from. Used for speaker embedding extraction.
+            audio_codes (`torch.Tensor` or `list[torch.Tensor]`, *optional*):
+                Precomputed audio codes of shape `(audio_length, num_code_groups)` for one example, or a batch of
+                shape `(batch_size, audio_length, num_code_groups)`. A list contains one code sequence per example.
+                Requires `text` and `speaker_embeddings`; text is formatted as a non-streaming synthesis prompt.
+            speaker_embeddings (`torch.Tensor` or `list[torch.Tensor]`, *optional*):
+                Precomputed speaker embeddings of shape `(hidden_size,)` for one example, or
+                `(batch_size, hidden_size)` for a batch. Cached training inputs require PyTorch tensor outputs.
             **kwargs:
                 Additional keyword arguments passed to the tokenizer or feature extractor.
 
         Returns:
             BatchFeature: Dictionary containing tokenized text and/or audio features.
         """
-        if text is None and audio is None:
+        cached_inputs = audio_codes is not None or speaker_embeddings is not None
+        if cached_inputs:
+            requires_backends(self, ["torch"])
+            if text is None or audio_codes is None or speaker_embeddings is None:
+                raise ValueError("Cached training inputs require `text`, `audio_codes`, and `speaker_embeddings`.")
+            if audio is not None:
+                raise ValueError("Provide either cached training inputs or raw `audio`, not both.")
+            if kwargs.get("return_tensors", "pt") != "pt":
+                raise ValueError("Cached training inputs require `return_tensors='pt'`.")
+            kwargs["return_tensors"] = "pt"
+        elif text is None and audio is None:
             raise ValueError("You need to specify at least one of `text` or `audio` input to process.")
 
         output_kwargs = self._merge_kwargs(
@@ -98,6 +122,34 @@ class Qwen3TTSProcessor(ProcessorMixin):
         if text is not None:
             if not isinstance(text, list):
                 text = [text]
+            if cached_inputs:
+                if getattr(audio_codes, "ndim", None) == 2:
+                    audio_codes = [audio_codes]
+                audio_codes = [torch.as_tensor(codes) for codes in audio_codes]
+                if len(audio_codes) != len(text) or not audio_codes:
+                    raise ValueError("Provide one audio code sequence per text prompt.")
+                for codes in audio_codes:
+                    if codes.ndim != 2 or codes.shape[0] == 0 or codes.shape[1] == 0:
+                        raise ValueError("Each audio code sequence must have shape (audio_length, num_code_groups).")
+                    if codes.dtype not in (torch.int32, torch.int64):
+                        raise ValueError("Audio codes must contain integer token IDs.")
+                if len({codes.shape[1] for codes in audio_codes}) != 1:
+                    raise ValueError("All audio code sequences must use the same number of codebooks.")
+                if isinstance(speaker_embeddings, (list, tuple)):
+                    speaker_embeddings = torch.stack([torch.as_tensor(embedding) for embedding in speaker_embeddings])
+                else:
+                    speaker_embeddings = torch.as_tensor(speaker_embeddings)
+                if speaker_embeddings.ndim == 1:
+                    speaker_embeddings = speaker_embeddings.unsqueeze(0)
+                if speaker_embeddings.ndim != 2 or speaker_embeddings.shape[0] != len(text):
+                    raise ValueError("Provide one speaker embedding per text prompt.")
+                if not speaker_embeddings.is_floating_point():
+                    raise ValueError("Speaker embeddings must contain floating-point values.")
+                if output_kwargs["text_kwargs"].get("truncation") not in (None, False, "do_not_truncate"):
+                    raise ValueError("Cached training text cannot be truncated because its prompt suffix is required.")
+                text = [self._build_synthesis_text(value) for value in text]
+                data["audio_codes"] = audio_codes
+                data["speaker_embeddings"] = speaker_embeddings
             text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
             data.update(text_inputs)
 
@@ -240,7 +292,11 @@ class Qwen3TTSProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        return list(
+            dict.fromkeys(
+                tokenizer_input_names + feature_extractor_input_names + ["audio_codes", "speaker_embeddings"]
+            )
+        )
 
 
 __all__ = ["Qwen3TTSProcessor"]
