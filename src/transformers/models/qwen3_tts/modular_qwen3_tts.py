@@ -929,9 +929,11 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             Mask with 1 for valid audio frames and 0 for padding.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
             Precomputed speaker conditioning required for teacher forcing.
-        labels (`torch.LongTensor` of shape `(batch_size, audio_length, num_code_groups)`, *optional*):
-            Unshifted audio targets. Values of `-100` are ignored. Codec EOS is supervised only for examples with
-            at least one supervised primary target. Returned primary logits follow the packed text/audio sequence.
+        labels (`torch.LongTensor`, *optional*):
+            Unshifted targets with `-100` for ignored values. With `audio_codes`, has shape
+            `(batch_size, audio_length, num_code_groups)`; codec EOS is supervised only for examples with at least
+            one supervised primary target, and primary logits follow the packed text/audio sequence. Otherwise,
+            has shape `(batch_size, sequence_length)` for causal primary-code prediction.
         """
         teacher_forcing = audio_codes is not None
         if teacher_forcing:
@@ -1025,9 +1027,12 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
 
         loss = None
         if labels is not None:
-            # Use standard loss computation for now
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.talker_config.vocab_size), labels.view(-1))
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.vocab_size,
+                num_items_in_batch=(labels[..., 1:] != -100).sum().clamp_min(1),
+            )
 
         return Qwen3TTSTalkerOutputWithPast(
             loss=loss,
