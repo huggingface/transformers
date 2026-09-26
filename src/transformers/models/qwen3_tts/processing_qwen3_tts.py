@@ -75,6 +75,7 @@ class Qwen3TTSProcessor(ProcessorMixin):
         audio=None,
         audio_codes: "torch.Tensor | list[torch.Tensor] | None" = None,
         speaker_embeddings: "torch.Tensor | list[torch.Tensor] | None" = None,
+        output_labels: bool = False,
         **kwargs: Unpack[Qwen3TTSProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -92,6 +93,9 @@ class Qwen3TTSProcessor(ProcessorMixin):
             speaker_embeddings (`torch.Tensor` or `list[torch.Tensor]`, *optional*):
                 Precomputed speaker embeddings of shape `(hidden_size,)` for one example, or
                 `(batch_size, hidden_size)` for a batch. Cached training inputs require PyTorch tensor outputs.
+            output_labels (`bool`, *optional*, defaults to `False`):
+                Whether to return unshifted audio-code labels for cached training inputs. Padded audio frames are
+                masked with `-100`. Text and audio are padded independently, with their respective attention masks.
             **kwargs:
                 Additional keyword arguments passed to the tokenizer or feature extractor.
 
@@ -99,15 +103,14 @@ class Qwen3TTSProcessor(ProcessorMixin):
             BatchFeature: Dictionary containing tokenized text and/or audio features.
         """
         cached_inputs = audio_codes is not None or speaker_embeddings is not None
+        if output_labels and not cached_inputs:
+            raise ValueError("`output_labels=True` requires cached training inputs.")
         if cached_inputs:
             requires_backends(self, ["torch"])
             if text is None or audio_codes is None or speaker_embeddings is None:
                 raise ValueError("Cached training inputs require `text`, `audio_codes`, and `speaker_embeddings`.")
             if audio is not None:
                 raise ValueError("Provide either cached training inputs or raw `audio`, not both.")
-            if kwargs.get("return_tensors", "pt") != "pt":
-                raise ValueError("Cached training inputs require `return_tensors='pt'`.")
-            kwargs["return_tensors"] = "pt"
         elif text is None and audio is None:
             raise ValueError("You need to specify at least one of `text` or `audio` input to process.")
 
@@ -118,6 +121,13 @@ class Qwen3TTSProcessor(ProcessorMixin):
         )
 
         data = {}
+        if cached_inputs:
+            text_kwargs = output_kwargs["text_kwargs"]
+            if text_kwargs.get("return_tensors") not in (None, "pt"):
+                raise ValueError("Cached training inputs require `return_tensors='pt'`.")
+            text_kwargs["return_tensors"] = "pt"
+            text_kwargs.setdefault("padding", True)
+            text_kwargs["return_attention_mask"] = True
 
         if text is not None:
             if not isinstance(text, list):
@@ -148,8 +158,20 @@ class Qwen3TTSProcessor(ProcessorMixin):
                 if output_kwargs["text_kwargs"].get("truncation") not in (None, False, "do_not_truncate"):
                     raise ValueError("Cached training text cannot be truncated because its prompt suffix is required.")
                 text = [self._build_synthesis_text(value) for value in text]
-                data["audio_codes"] = audio_codes
+                data["audio_codes"] = torch.nn.utils.rnn.pad_sequence(
+                    [codes.long() for codes in audio_codes], batch_first=True, padding_value=0
+                )
+                audio_lengths = torch.tensor(
+                    [codes.shape[0] for codes in audio_codes], device=data["audio_codes"].device
+                )
+                data["audio_attention_mask"] = (
+                    torch.arange(data["audio_codes"].shape[1], device=audio_lengths.device)[None, :]
+                    < audio_lengths[:, None]
+                ).long()
                 data["speaker_embeddings"] = speaker_embeddings
+                if output_labels:
+                    data["labels"] = data["audio_codes"].clone()
+                    data["labels"].masked_fill_(~data["audio_attention_mask"].bool()[..., None], -100)
             text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
             data.update(text_inputs)
 
@@ -159,7 +181,7 @@ class Qwen3TTSProcessor(ProcessorMixin):
 
         return BatchFeature(
             data=data,
-            tensor_type=kwargs.get("return_tensors"),
+            tensor_type="pt" if cached_inputs else kwargs.get("return_tensors"),
         )
 
     @staticmethod
@@ -294,7 +316,9 @@ class Qwen3TTSProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(
             dict.fromkeys(
-                tokenizer_input_names + feature_extractor_input_names + ["audio_codes", "speaker_embeddings"]
+                tokenizer_input_names
+                + feature_extractor_input_names
+                + ["audio_codes", "audio_attention_mask", "speaker_embeddings"]
             )
         )
 
