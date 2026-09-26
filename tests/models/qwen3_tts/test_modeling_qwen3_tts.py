@@ -16,6 +16,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from transformers import (
     Qwen3TTSConfig,
@@ -357,6 +358,86 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
                 output = model(**single)
                 length = text_length + audio_length + 3
                 torch.testing.assert_close(batched.logits[index, :length], output.logits[0], atol=1e-6, rtol=1e-5)
+
+
+@require_torch
+class Qwen3TTSGenerationTest(unittest.TestCase):
+    def get_model(self):
+        set_seed(42)
+        config = Qwen3TTSModelTester(self).get_config()
+        config.talker_config.vocab_size = 2048
+        config.talker_config.code_predictor_config.vocab_size = 2048
+        config.talker_config.num_code_groups = 4
+        config.talker_config.code_predictor_config.num_code_groups = 4
+        config.talker_config.codec_eos_token_id = 2047
+        return Qwen3TTSForConditionalGeneration(config).to(torch_device).eval()
+
+    def test_generation_preserves_codec_frames(self):
+        model = self.get_model()
+        expected = {
+            False: [
+                [[730, 27, 1960, 1134], [869, 905, 1892, 371], [49, 1802, 1516, 352]],
+                [[730, 27, 1960, 1134], [869, 905, 1892, 371], [49, 1802, 1516, 352]],
+            ],
+            True: [
+                [[730, 27, 423, 1625], [602, 719, 1042, 115], [518, 719, 1230, 1107]],
+                [[730, 27, 1960, 971], [368, 1563, 1516, 57], [871, 45, 158, 104]],
+            ],
+        }
+        # Recorded before moving residual sampling out of forward, with these exact weights and prompts.
+        for non_streaming_mode in (False, True):
+            with self.subTest(non_streaming_mode=non_streaming_mode):
+                output = model.generate(
+                    input_ids=[
+                        torch.arange(11, device=torch_device)[None],
+                        torch.arange(9, device=torch_device)[None],
+                    ],
+                    languages=["Auto", "Auto"],
+                    non_streaming_mode=non_streaming_mode,
+                    max_new_tokens=4,
+                    do_sample=False,
+                    subtalker_dosample=False,
+                )
+                for codes, reference in zip(output.sequences, expected[non_streaming_mode]):
+                    torch.testing.assert_close(codes, codes.new_tensor(reference))
+
+    def test_generation_prepares_residual_codes_before_forward(self):
+        model = self.get_model()
+        primary_codes = torch.tensor([[5], [9]], device=torch_device)
+        past_hidden = torch.randn(2, 1, 32, device=torch_device)
+        trailing_text = torch.randn(2, 2, 32, device=torch_device)
+        pad_embed = torch.randn(1, 1, 32, device=torch_device)
+        with torch.no_grad():
+            predictor = model.code_predictor.generate(
+                inputs_embeds=torch.cat([past_hidden, model.get_input_embeddings()(primary_codes)], dim=1),
+                max_new_tokens=3,
+                do_sample=False,
+                return_dict_in_generate=True,
+            )
+            codes = torch.cat([primary_codes, predictor.sequences], dim=-1)
+            expected = model.get_input_embeddings()(primary_codes)
+            for index, embedding in enumerate(model.code_predictor.get_input_embeddings()):
+                expected = expected + embedding(codes[:, index + 1 : index + 2])
+            for step in (0, 2):
+                prepared = model.prepare_inputs_for_generation(
+                    primary_codes,
+                    next_sequence_length=1,
+                    past_hidden=past_hidden,
+                    trailing_text_hidden=trailing_text,
+                    tts_pad_embed=pad_embed,
+                    generation_step=step,
+                    subtalker_dosample=False,
+                    attention_mask=torch.ones(2, 1, device=torch_device, dtype=torch.long),
+                    use_cache=False,
+                )
+                text = trailing_text[:, :1] if step == 0 else pad_embed
+                torch.testing.assert_close(prepared["inputs_embeds"], expected + text)
+                torch.testing.assert_close(prepared["codec_ids"], codes)
+                with patch.object(
+                    model.code_predictor, "generate", side_effect=AssertionError("forward must not sample")
+                ):
+                    output = model(**prepared)
+                self.assertEqual(output.logits.shape, (2, 1, 2048))
 
 
 class Qwen3TTSModelTester:

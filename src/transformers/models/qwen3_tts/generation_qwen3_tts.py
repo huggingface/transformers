@@ -44,6 +44,70 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
     in-context learning prompt generation, and the main generate method.
     """
 
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        next_sequence_length=None,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        is_first_iteration=False,
+        past_hidden=None,
+        trailing_text_hidden=None,
+        tts_pad_embed=None,
+        generation_step=None,
+        subtalker_dosample=None,
+        subtalker_top_p=None,
+        subtalker_top_k=None,
+        subtalker_temperature=None,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            next_sequence_length=next_sequence_length,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+        codec_ids = None
+        if not is_first_iteration:
+            primary_codes = input_ids[:, -1:]
+            primary_embed = self.get_input_embeddings()(primary_codes)
+            predictor_result = self.code_predictor.generate(
+                inputs_embeds=torch.cat((past_hidden, primary_embed), dim=1),
+                max_new_tokens=self.config.talker_config.num_code_groups - 1,
+                do_sample=subtalker_dosample,
+                top_p=subtalker_top_p,
+                top_k=subtalker_top_k,
+                temperature=subtalker_temperature,
+                output_hidden_states=True,
+                return_dict_in_generate=True,
+            )
+            codec_ids = torch.cat((primary_codes, predictor_result.sequences), dim=-1)
+            codec_embeds = torch.cat(
+                [primary_embed]
+                + [
+                    embedding(predictor_result.sequences[:, index : index + 1])
+                    for index, embedding in enumerate(self.code_predictor.get_input_embeddings())
+                ],
+                dim=1,
+            ).sum(1, keepdim=True)
+            if generation_step < trailing_text_hidden.shape[1]:
+                codec_embeds = codec_embeds + trailing_text_hidden[:, generation_step : generation_step + 1]
+            else:
+                codec_embeds = codec_embeds + tts_pad_embed
+            model_inputs["input_ids"] = None
+            model_inputs["inputs_embeds"] = codec_embeds
+        model_inputs.update(
+            codec_ids=codec_ids,
+            generation_step=generation_step,
+            trailing_text_hidden=trailing_text_hidden,
+            tts_pad_embed=tts_pad_embed,
+        )
+        return model_inputs
+
     @torch.inference_mode()
     def extract_speaker_embedding(self, audio, sr, feature_extractor=None):
         if sr != 24000:
