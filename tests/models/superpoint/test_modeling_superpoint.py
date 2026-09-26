@@ -48,7 +48,7 @@ class SuperPointModelTester:
         keypoint_decoder_dim: int = 65,
         descriptor_decoder_dim: int = 128,
         keypoint_threshold: float = 0.005,
-        max_keypoints: int = -1,
+        max_keypoints: int = 64,
         nms_radius: int = 4,
         border_removal_distance: int = 4,
     ):
@@ -117,7 +117,6 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     has_attentions = False
     from_pretrained_id = "magic-leap-community/superpoint"
-    test_torch_exportable = False  # data-dependent top-k / non-max suppression in keypoint detection
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)
