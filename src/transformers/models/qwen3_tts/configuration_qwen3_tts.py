@@ -147,8 +147,8 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         The beginning-of-sequence token ID for codec tokens.
     spk_id (`dict[str, int]`, *optional*):
         Mapping from speaker names to IDs for built-in voice presets.
-    spk_is_dialect (`dict[str, bool]`, *optional*):
-        Mapping from speaker names to whether they use a dialect variant.
+    spk_is_dialect (`dict[str, bool | str]`, *optional*):
+        Mapping from speaker names to dialect names, or `False` for speakers without a dialect variant.
     codec_language_id (`dict[str, int]`, *optional*):
         Mapping from language names to codec generation IDs.
     text_vocab_size (`int`, *optional*, defaults to 152064):
@@ -192,7 +192,7 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
     codec_pad_id: int | None = 2148
     codec_bos_id: int | None = 2149
     spk_id: dict[str, int] | None = None
-    spk_is_dialect: dict[str, bool] | None = None
+    spk_is_dialect: dict[str, bool | str] | None = None
     codec_language_id: dict[str, int] | None = None
     text_vocab_size: int | None = 152064
     pad_token_id: int | None = None
