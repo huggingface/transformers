@@ -68,6 +68,21 @@ def test_parse_generate_flags_invalid_json_error_message():
         parse_generate_flags(["stop_strings=[a]"])
 
 
+def test_parse_generate_flags_backslash_escaping():
+    # Backslashes in flag values should be preserved literally, not interpreted as JSON escapes
+    # See: https://github.com/huggingface/transformers/issues/48626
+    parsed = parse_generate_flags([r"stop_strings=a\b"])
+    assert parsed["stop_strings"] == r"a\b"
+
+    # \uXXXX should not be interpreted as a unicode escape
+    parsed = parse_generate_flags([r"stop_strings=a\u0041"])
+    assert parsed["stop_strings"] == r"a\u0041"
+
+    # Windows-style paths should be preserved
+    parsed = parse_generate_flags([r"stop_strings=C:\temp"])
+    assert parsed["stop_strings"] == r"C:\temp"
+
+
 def test_get_service_root_url():
     assert get_service_root_url("http://localhost:8000/v1") == "http://localhost:8000"
     assert get_service_root_url("http://localhost:8000/v1/") == "http://localhost:8000"
