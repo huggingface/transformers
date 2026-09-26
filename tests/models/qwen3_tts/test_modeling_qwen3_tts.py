@@ -105,23 +105,28 @@ class Qwen3TTSCodePredictorTrainingTest(unittest.TestCase):
 
 @require_torch
 class Qwen3TTSTeacherForcingTest(unittest.TestCase):
-    def get_model(self):
+    def get_model(self, num_code_groups=2, predictor_hidden_size=32):
         config = Qwen3TTSModelTester(self).get_config()
+        config.talker_config.num_code_groups = num_code_groups
+        config.talker_config.code_predictor_config.num_code_groups = num_code_groups
+        config.talker_config.code_predictor_config.hidden_size = predictor_hidden_size
         return Qwen3TTSForConditionalGeneration(config).to(torch_device).eval()
 
-    def prepare_inputs(self):
+    def prepare_inputs(self, num_code_groups=2):
         return {
             "input_ids": ids_tensor([2, 11], 64),
             "attention_mask": torch.tensor([[1] * 11, [1] * 9 + [0] * 2], device=torch_device),
-            "audio_codes": ids_tensor([2, 3, 2], 64),
+            "audio_codes": ids_tensor([2, 3, num_code_groups], 64),
             "audio_attention_mask": torch.tensor([[1, 1, 1], [1, 0, 0]], device=torch_device),
             "speaker_embeddings": torch.randn(2, 32, device=torch_device),
         }
 
     def reference_sequence(self, model, text_ids, codes, speaker):
         config = model.config.talker_config
+
         def text_embedding(ids):
             return model.text_projection(model.get_text_embeddings()(ids))
+
         codec_embedding = model.get_input_embeddings()
         pad, bos, eos = text_embedding(text_ids.new_tensor([0, 1, 2])).split(1)
         codec_ids = text_ids.new_tensor(
@@ -198,6 +203,160 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
                 inputs[name] = value
                 with self.assertRaisesRegex(ValueError, message):
                     model._prepare_teacher_forcing_inputs(**inputs)
+
+    def test_primary_and_residual_loss_alignment(self):
+        for codebooks, hidden_size in ((2, 32), (4, 16)):
+            with self.subTest(codebooks=codebooks, predictor_hidden_size=hidden_size):
+                model = self.get_model(codebooks, hidden_size)
+                inputs = self.prepare_inputs(codebooks)
+                labels = inputs["audio_codes"].clone()
+                labels[0, 1, 0] = -100
+                labels[0, 0, 1] = -100
+                labels[1, :, 0] = -100
+                captured = {}
+
+                def capture_talker(module, args, output):
+                    captured["hidden"] = output.last_hidden_state
+
+                def capture_predictor(module, args, kwargs, output):
+                    captured["predictor_inputs"] = kwargs["inputs_embeds"]
+                    captured["predictor_output"] = output
+
+                talker_hook = model.model.register_forward_hook(capture_talker)
+                predictor_hook = model.code_predictor.register_forward_hook(capture_predictor, with_kwargs=True)
+                try:
+                    with torch.no_grad():
+                        output = model(**inputs, labels=labels, output_hidden_states=True)
+                finally:
+                    talker_hook.remove()
+                    predictor_hook.remove()
+
+                primary_logits, primary_targets = [], []
+                for batch_index in range(2):
+                    start = inputs["attention_mask"][batch_index].sum().item() + 2
+                    frames = inputs["audio_attention_mask"][batch_index].sum().item()
+                    primary_logits.append(output.logits[batch_index, start - 1 : start + frames])
+                    eos_target = 3 if (labels[batch_index, :frames, 0] != -100).any() else -100
+                    primary_targets.append(
+                        torch.cat([labels[batch_index, :frames, 0], labels.new_tensor([eos_target])])
+                    )
+                    for frame in range(frames):
+                        predictor_input = captured["predictor_inputs"][batch_index * 3 + frame]
+                        torch.testing.assert_close(
+                            predictor_input[0], captured["hidden"][batch_index, start + frame - 1]
+                        )
+                        torch.testing.assert_close(
+                            predictor_input[1],
+                            model.get_input_embeddings()(inputs["audio_codes"][batch_index, frame, 0]),
+                        )
+                        for codebook in range(codebooks - 2):
+                            torch.testing.assert_close(
+                                predictor_input[codebook + 2],
+                                model.code_predictor.get_input_embeddings()[codebook](
+                                    inputs["audio_codes"][batch_index, frame, codebook + 1]
+                                ),
+                            )
+                expected_primary = torch.nn.functional.cross_entropy(
+                    torch.cat(primary_logits).float(), torch.cat(primary_targets)
+                )
+                residual_targets = labels[..., 1:].masked_fill(~inputs["audio_attention_mask"].bool()[..., None], -100)
+                expected_residual = torch.nn.functional.cross_entropy(
+                    captured["predictor_output"].logits.float().reshape(-1, 64), residual_targets.reshape(-1)
+                )
+                torch.testing.assert_close(output.talker_loss, expected_primary)
+                torch.testing.assert_close(output.code_predictor_loss, expected_residual)
+                torch.testing.assert_close(output.loss, expected_primary + 0.3 * expected_residual)
+                self.assertEqual(len(output.hidden_states), model.config.talker_config.num_hidden_layers + 1)
+
+    def test_future_frame_does_not_leak_into_predictions(self):
+        model = self.get_model(4)
+        inputs = self.prepare_inputs(4)
+        predictor_outputs = []
+
+        def capture(module, args, output):
+            predictor_outputs.append(output.logits)
+
+        hook = model.code_predictor.register_forward_hook(capture)
+        try:
+            with torch.no_grad():
+                before = model(**inputs, labels=inputs["audio_codes"])
+                inputs["audio_codes"][0, 2, -1] = (inputs["audio_codes"][0, 2, -1] + 1) % 64
+                after = model(**inputs, labels=inputs["audio_codes"])
+        finally:
+            hook.remove()
+        last_frame_position = inputs["attention_mask"][0].sum().item() + 4
+        torch.testing.assert_close(before.logits[0, :last_frame_position], after.logits[0, :last_frame_position])
+        torch.testing.assert_close(predictor_outputs[0], predictor_outputs[1])
+
+    def test_training_backward_optimizer_and_reload(self):
+        model = self.get_model(4, 16).train()
+        inputs = self.prepare_inputs(4)
+        parameters = [
+            model.text_projection.linear_1.weight,
+            model.model.text_embedding.weight,
+            model.model.layers[0].self_attn.q_proj.weight,
+            model.codec_head.weight,
+            model.model.embed_tokens.weight,
+            model.code_predictor.lm_head.weight,
+            model.code_predictor.small_to_mtp_projection.weight,
+            model.code_predictor.model.layers[0].self_attn.q_proj.weight,
+        ]
+        parameters += [embedding.weight for embedding in model.code_predictor.get_input_embeddings()]
+        before = [parameter.detach().clone() for parameter in parameters]
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+        output = model(**inputs, labels=inputs["audio_codes"])
+        output.loss.backward()
+        for parameter in parameters:
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+            self.assertGreater(parameter.grad.abs().sum().item(), 0)
+        optimizer.step()
+        for original, parameter in zip(before, parameters):
+            self.assertFalse(torch.equal(original, parameter))
+        model.eval()
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            restored = Qwen3TTSForConditionalGeneration.from_pretrained(directory).to(torch_device).eval()
+        with torch.no_grad():
+            expected = model(**inputs, labels=inputs["audio_codes"])
+            actual = restored(**inputs, labels=inputs["audio_codes"])
+        torch.testing.assert_close(actual.loss, expected.loss)
+        torch.testing.assert_close(actual.logits, expected.logits)
+
+    def test_ignored_targets_and_label_free_forward(self):
+        model = self.get_model().train()
+        inputs = self.prepare_inputs()
+        labels = torch.full_like(inputs["audio_codes"], -100)
+        output = model(**inputs, labels=labels)
+        self.assertEqual(output.talker_loss.item(), 0)
+        self.assertEqual(output.code_predictor_loss.item(), 0)
+        output.loss.backward()
+        for parameter in (model.codec_head.weight, model.code_predictor.lm_head.weight):
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+            self.assertEqual(parameter.grad.abs().sum().item(), 0)
+        model.eval()
+        with torch.no_grad():
+            output = model(**inputs)
+            as_tuple = model(**inputs, return_dict=False)
+        self.assertIsNone(output.loss)
+        self.assertIsNone(output.code_predictor_loss)
+        torch.testing.assert_close(output.logits, as_tuple[0])
+
+    def test_teacher_forcing_batching_and_padding_invariance(self):
+        model = self.get_model()
+        inputs = self.prepare_inputs()
+        with torch.no_grad():
+            batched = model(**inputs)
+            for index in range(2):
+                single = {name: value[index : index + 1] for name, value in inputs.items()}
+                text_length = single["attention_mask"].sum().item()
+                audio_length = single["audio_attention_mask"].sum().item()
+                single["input_ids"] = single["input_ids"][:, :text_length]
+                single["attention_mask"] = single["attention_mask"][:, :text_length]
+                single["audio_codes"] = single["audio_codes"][:, :audio_length]
+                single["audio_attention_mask"] = single["audio_attention_mask"][:, :audio_length]
+                output = model(**single)
+                length = text_length + audio_length + 3
+                torch.testing.assert_close(batched.logits[index, :length], output.logits[0], atol=1e-6, rtol=1e-5)
 
 
 class Qwen3TTSModelTester:
