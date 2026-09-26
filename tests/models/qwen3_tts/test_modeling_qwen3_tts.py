@@ -499,6 +499,42 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
             generate.assert_not_called()
 
 
+@require_torch
+class Qwen3TTSForwardTest(unittest.TestCase):
+    def get_model(self):
+        config = Qwen3TTSModelTester(self).get_config()
+        return Qwen3TTSForConditionalGeneration(config).to(torch_device).eval()
+
+    def test_explicit_position_ids_are_honored(self):
+        model = self.get_model()
+        input_ids = torch.tensor([[4, 5, 6, 7]], device=torch_device)
+        mask = torch.ones_like(input_ids)
+        positions = torch.tensor([[0, 2, 5, 9]], device=torch_device)
+        with torch.no_grad():
+            reference = model.model(input_ids=input_ids, attention_mask=mask, position_ids=positions, use_cache=False)
+            for position_ids in (positions, positions[None].expand(3, -1, -1)):
+                with self.subTest(ndim=position_ids.ndim):
+                    output = model(
+                        input_ids=input_ids, attention_mask=mask, position_ids=position_ids, use_cache=False
+                    )
+                    torch.testing.assert_close(output.logits, model.codec_head(reference.last_hidden_state))
+
+    def test_cached_positions_match_full_sequence_after_another_forward(self):
+        model = self.get_model()
+        input_ids = torch.tensor([[0, 0, 4, 5, 6], [7, 8, 9, 10, 11]], device=torch_device)
+        mask = torch.tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1]], device=torch_device)
+        next_ids = torch.tensor([[12], [13]], device=torch_device)
+        full_mask = torch.cat([mask, torch.ones_like(next_ids)], dim=1)
+        with torch.no_grad():
+            prefill = model(input_ids=input_ids, attention_mask=mask, use_cache=True)
+            model(input_ids=next_ids, attention_mask=torch.ones_like(next_ids), use_cache=False)
+            cached = model(
+                input_ids=next_ids, attention_mask=full_mask, past_key_values=prefill.past_key_values, use_cache=True
+            )
+            full = model(input_ids=torch.cat([input_ids, next_ids], dim=1), attention_mask=full_mask, use_cache=False)
+        torch.testing.assert_close(cached.logits[:, -1], full.logits[:, -1], atol=1e-6, rtol=1e-5)
+
+
 class Qwen3TTSModelTester:
     """
     Builds a tiny Qwen3TTS config and synthetic inputs for unit testing.
