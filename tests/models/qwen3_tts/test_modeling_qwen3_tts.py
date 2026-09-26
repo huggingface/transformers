@@ -383,6 +383,40 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
         torch.testing.assert_close(actual.loss, expected.loss)
         torch.testing.assert_close(actual.logits, expected.logits)
 
+    @parameterized.expand([False, True])
+    def test_teacher_forcing_gradient_checkpointing(self, use_reentrant):
+        model = self.get_model(4, 16).train()
+        inputs = self.prepare_inputs(4)
+        reference = model(**inputs, labels=inputs["audio_codes"])
+        reference.loss.backward()
+        gradients = {
+            name: parameter.grad.detach().clone()
+            for name, parameter in model.named_parameters()
+            if parameter.grad is not None
+        }
+        model.zero_grad(set_to_none=True)
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": use_reentrant})
+        talker_layer = model.model.layers[0]
+        predictor_layer = model.code_predictor.model.layers[0]
+        self.assertTrue(talker_layer.gradient_checkpointing)
+        self.assertTrue(predictor_layer.gradient_checkpointing)
+        with (
+            patch.object(talker_layer, "forward", wraps=talker_layer.forward) as talker_forward,
+            patch.object(predictor_layer, "forward", wraps=predictor_layer.forward) as predictor_forward,
+        ):
+            actual = model(**inputs, labels=inputs["audio_codes"])
+            actual.loss.backward()
+        self.assertGreater(talker_forward.call_count, 1)
+        self.assertGreater(predictor_forward.call_count, 1)
+        self.assertIsNone(actual.past_key_values)
+        torch.testing.assert_close(actual.loss, reference.loss)
+        for name, parameter in model.named_parameters():
+            if name in gradients:
+                self.assertIsNotNone(parameter.grad, name)
+                torch.testing.assert_close(parameter.grad, gradients[name], atol=1e-6, rtol=1e-5, msg=name)
+            else:
+                self.assertIsNone(parameter.grad, name)
+
     def test_ignored_targets_and_label_free_forward(self):
         model = self.get_model().train()
         inputs = self.prepare_inputs()
