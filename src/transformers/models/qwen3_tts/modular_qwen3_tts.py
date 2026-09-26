@@ -26,7 +26,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniDiTConfig
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     ECAPA_TimeDelayNet,
@@ -774,6 +774,129 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
 
     def get_decoder(self):
         return self.model
+
+    def _prepare_teacher_forcing_inputs(
+        self,
+        input_ids,
+        attention_mask,
+        audio_codes,
+        audio_attention_mask,
+        speaker_embeddings,
+    ):
+        """Pack the Base/Auto non-streaming prompt and ground-truth audio without padding gaps."""
+        config = self.config.talker_config
+        if input_ids.ndim != 2 or input_ids.shape[1] < 8:
+            raise ValueError("`input_ids` must include the three-token role prefix and five-token text suffix.")
+        batch_size, text_length = input_ids.shape
+        if (
+            audio_codes.ndim != 3
+            or audio_codes.shape[0] != batch_size
+            or audio_codes.shape[2] != config.num_code_groups
+        ):
+            raise ValueError("`audio_codes` must have shape (batch_size, audio_length, num_code_groups).")
+        if config.num_code_groups != self.code_predictor.config.num_code_groups:
+            raise ValueError("Talker and code predictor must use the same number of codebooks.")
+        if speaker_embeddings.shape != (batch_size, config.hidden_size):
+            raise ValueError("`speaker_embeddings` must have shape (batch_size, talker_hidden_size).")
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
+        if audio_attention_mask is None:
+            audio_attention_mask = torch.ones_like(audio_codes[..., 0], dtype=torch.bool)
+        if attention_mask.shape != input_ids.shape or audio_attention_mask.shape != audio_codes.shape[:2]:
+            raise ValueError("Text and audio attention masks must match their respective input sequence shapes.")
+        attention_mask = attention_mask.bool()
+        audio_attention_mask = audio_attention_mask.bool()
+        text_lengths = attention_mask.sum(-1)
+        audio_lengths = audio_attention_mask.sum(-1)
+        torch_compilable_check(text_lengths >= 8, "Each text prompt must contain its role prefix and text suffix.")
+        torch_compilable_check(audio_lengths > 0, "Each example must contain at least one audio frame.")
+
+        # Ignore padded IDs before embedding and compact either left- or right-padded text.
+        input_ids = input_ids.masked_fill(~attention_mask, 0)
+        torch_compilable_check(
+            (input_ids >= 0) & (input_ids < config.text_vocab_size), "Text IDs must be in the text vocabulary."
+        )
+        text_order = (~attention_mask).int().argsort(dim=1, stable=True)
+        input_ids = input_ids.gather(1, text_order)
+        text_embeds = self.text_projection(self.get_text_embeddings()(input_ids))
+        text_mask = torch.arange(text_length - 8, device=input_ids.device)[None, :] < (text_lengths - 8)[:, None]
+        text_embeds = text_embeds[:, 3:-5]
+
+        special_text = self.text_projection(
+            self.get_text_embeddings()(
+                input_ids.new_tensor(
+                    [[self.config.tts_pad_token_id, self.config.tts_bos_token_id, self.config.tts_eos_token_id]]
+                )
+            )
+        )
+        text_pad, text_bos, text_eos = special_text.chunk(3, dim=1)
+        codec_special = self.get_input_embeddings()(
+            input_ids.new_tensor(
+                [
+                    [
+                        config.codec_nothink_id,
+                        config.codec_think_bos_id,
+                        config.codec_think_eos_id,
+                        config.codec_pad_id,
+                        config.codec_bos_id,
+                        config.codec_eos_token_id,
+                    ]
+                ]
+            )
+        )
+        codec_pad, codec_bos, codec_eos = codec_special[:, 3:].chunk(3, dim=1)
+        codec_prefix = torch.cat(
+            [
+                codec_special[:, :3].expand(batch_size, -1, -1),
+                speaker_embeddings[:, None],
+                codec_pad.expand(batch_size, -1, -1),
+            ],
+            dim=1,
+        )
+        prefix = codec_prefix + torch.cat([text_pad.expand(1, 4, -1), text_bos], dim=1)
+
+        audio_codes = audio_codes.masked_fill(~audio_attention_mask[..., None], 0)
+        torch_compilable_check(
+            (audio_codes[..., 0] >= 0) & (audio_codes[..., 0] < config.vocab_size),
+            "Primary audio codes must be in the talker vocabulary.",
+        )
+        torch_compilable_check(
+            (audio_codes[..., 1:] >= 0) & (audio_codes[..., 1:] < self.code_predictor.vocab_size),
+            "Residual audio codes must be in the code predictor vocabulary.",
+        )
+        audio_embeds = self.get_input_embeddings()(audio_codes[..., 0])
+        for index, embedding in enumerate(self.code_predictor.get_input_embeddings()):
+            audio_embeds = audio_embeds + embedding(audio_codes[..., index + 1])
+
+        inputs_embeds = torch.cat(
+            [
+                self.text_projection(self.get_text_embeddings()(input_ids[:, :3])),
+                prefix,
+                text_embeds + codec_pad,
+                (text_eos + codec_pad).expand(batch_size, -1, -1),
+                (text_pad + codec_bos).expand(batch_size, -1, -1),
+                audio_embeds + text_pad,
+                (text_pad + codec_eos).expand(batch_size, -1, -1),
+            ],
+            dim=1,
+        )
+        packed_mask = torch.cat(
+            [
+                attention_mask.new_ones(batch_size, 8),
+                text_mask,
+                attention_mask.new_ones(batch_size, 2),
+                audio_attention_mask,
+                attention_mask.new_ones(batch_size, 1),
+            ],
+            dim=1,
+        )
+        order = (~packed_mask).int().argsort(dim=1, stable=True)
+        inputs_embeds = inputs_embeds.gather(1, order[..., None].expand_as(inputs_embeds))
+        packed_mask = packed_mask.gather(1, order)
+        inputs_embeds = inputs_embeds.masked_fill(~packed_mask[..., None], 0)
+        audio_positions = text_lengths[:, None] + 2 + audio_attention_mask.long().cumsum(-1) - 1
+        eos_positions = text_lengths + 2 + audio_lengths
+        return inputs_embeds, packed_mask, audio_positions, eos_positions
 
     def compute_3d_position_ids(
         self,
