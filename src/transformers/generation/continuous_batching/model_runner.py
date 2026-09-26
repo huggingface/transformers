@@ -13,7 +13,6 @@
 # limitations under the License.
 import time
 from collections.abc import Callable
-from contextlib import nullcontext
 
 import torch
 from torch import nn
@@ -23,7 +22,14 @@ from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import RequestStatus, logger
-from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pad_to_interval, pad_to_pow2
+from .utils import (
+    create_warmup_future_states,
+    get_cuda_pools,
+    mem_pool_ctx,
+    pad_to_interval,
+    pad_to_pow2,
+    stream_context,
+)
 
 
 class ModelRunner:
@@ -116,7 +122,7 @@ class ModelRunner:
 
         # If we are not using CUDA graphs, we perform the generation step and return
         if not use_cuda_graph:
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
+            maybe_stream = stream_context(compute_stream)
             with maybe_stream:
                 forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
 

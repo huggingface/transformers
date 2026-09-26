@@ -13,7 +13,7 @@
 # limitations under the License.
 import queue
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
 from typing import Any
@@ -218,6 +218,20 @@ def mem_pool_ctx(mem_pool):
     """A context manager to use a CUDA mem pool."""
     with torch.cuda.use_mem_pool(mem_pool):
         yield
+
+
+def stream_context(stream):
+    """Context manager that runs the enclosed ops on ``stream``, on whichever accelerator it lives.
+
+    ``torch.cuda.stream`` is CUDA-only: it raises on a torch build without CUDA support, so it cannot be used for a
+    stream that belongs to another accelerator. ``torch.Stream`` and the per-accelerator stream classes are themselves
+    context managers, so for those we simply return the stream.
+    """
+    if stream is None:
+        return nullcontext()
+    if stream.device.type == "cuda":
+        return torch.cuda.stream(stream)
+    return stream
 
 
 class ThreadLocalCounter(threading.local):

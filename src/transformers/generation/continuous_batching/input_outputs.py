@@ -117,10 +117,13 @@ class ContinuousBatchingIOs:
         # Setup static tensors and compute stream
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
-        self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
-        if hasattr(torch, "npu") and device.type == "npu":
-            self.compute_stream = torch.npu.Stream(device=self.device)
-        elif hasattr(torch, "xpu") and device.type == "xpu":
+        # Only the accelerators that support a compute stream get one; everything else keeps the previous no-op
+        # behaviour (note that torch.Stream(device=...) raises for device types the build has no support for, e.g.
+        # MPS, so this cannot be a blanket "anything but cpu" check).
+        self.compute_stream = None
+        if device.type == "cuda":
+            self.compute_stream = torch.cuda.Stream(device=self.device)
+        elif device.type in ("npu", "xpu"):
             self.compute_stream = torch.Stream(device=self.device)
 
     def _setup_static_tensors(self, logit_processor: ContinuousBatchingLogitsProcessorList) -> None:
