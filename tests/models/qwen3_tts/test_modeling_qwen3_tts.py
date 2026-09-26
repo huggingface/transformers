@@ -18,6 +18,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from parameterized import parameterized
+
 from transformers import (
     Qwen3TTSConfig,
     Qwen3TTSForConditionalGeneration,
@@ -534,6 +536,22 @@ class Qwen3TTSForwardTest(unittest.TestCase):
             full = model(input_ids=torch.cat([input_ids, next_ids], dim=1), attention_mask=full_mask, use_cache=False)
         torch.testing.assert_close(cached.logits[:, -1], full.logits[:, -1], atol=1e-6, rtol=1e-5)
 
+    def test_primary_loss_is_causal_and_handles_ignored_targets(self):
+        model = self.get_model()
+        input_ids = torch.tensor([[4, 5, 6, 7], [8, 9, 10, 11]], device=torch_device)
+        labels = input_ids.clone()
+        labels[0, 2] = -100
+        output = model(input_ids=input_ids, labels=labels, use_cache=False)
+        reference = torch.nn.functional.cross_entropy(
+            output.logits[:, :-1].float().reshape(-1, model.vocab_size), labels[:, 1:].reshape(-1)
+        )
+        torch.testing.assert_close(output.loss, reference)
+        ignored = model(input_ids=input_ids, labels=torch.full_like(labels, -100), use_cache=False)
+        self.assertEqual(ignored.loss.item(), 0)
+        ignored.loss.backward()
+        self.assertTrue(torch.isfinite(model.codec_head.weight.grad).all())
+        self.assertEqual(model.codec_head.weight.grad.abs().sum().item(), 0)
+
 
 class Qwen3TTSModelTester:
     """
@@ -562,6 +580,7 @@ class Qwen3TTSModelTester:
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "text_vocab_size": 64,
+            "max_position_embeddings": 512,
             "text_hidden_size": 32,
             "num_code_groups": 2,
             "codec_eos_token_id": 3,
@@ -584,6 +603,9 @@ class Qwen3TTSModelTester:
                 "num_code_groups": 2,
             },
         }
+        self.hidden_size = self.talker_config["hidden_size"]
+        self.num_hidden_layers = self.talker_config["num_hidden_layers"]
+        self.num_attention_heads = self.talker_config["num_attention_heads"]
 
     def get_config(self):
         return Qwen3TTSConfig(
@@ -626,21 +648,6 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     def setUp(self):
         self.model_tester = Qwen3TTSModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen3TTSConfig, has_text_modality=False)
-        _no_forward_tests = (
-            "test_eager_matches_sdpa_inference",
-            "test_attention_outputs",
-            "test_feed_forward_chunking",
-            "test_hidden_states_output",
-            "test_model_forward_default_config_values",
-            "test_retain_grad_hidden_states_attentions",
-            "test_inputs_embeds",
-            "test_capture_outputs_decorator",
-        )
-        if any(name in self._testMethodName for name in _no_forward_tests):
-            self.skipTest(
-                "`forward` requires `past_hidden` from the preceding generation step, which the common "
-                "tester does not provide"
-            )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -678,34 +685,16 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
                     f"Mismatch in key: {key}",
                 )
 
-    # `forward` runs one step of the talker loop and expects `past_hidden` from the previous step, which
-    # only the generation loop produces; the common testers call it with standard inputs, so it raises on
-    # `torch.cat((past_hidden, last_id_hidden))` with `past_hidden=None`.
-    _forward_needs_generation_state = (
-        "`forward` requires `past_hidden` from the preceding generation step, which the common tester does not provide"
-    )
-
-    @unittest.skip(reason=_forward_needs_generation_state)
-    def test_all_tensors_are_parameter_or_buffer(self):
-        pass
-
-    @unittest.skip(reason=_forward_needs_generation_state)
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason=_forward_needs_generation_state)
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason=_forward_needs_generation_state)
-    def test_model_outputs_equivalence(self):
-        pass
-
     @unittest.skip(
         reason="`attn_implementation` set on Qwen3TTSConfig is not propagated to `talker_config`, so the "
         "sub-config reports None instead of the requested value"
     )
     def test_config_attn_implementation_setter(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(reason="The conditional-generation wrapper returns logits, not base-model last_hidden_state.")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 
