@@ -900,7 +900,8 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         cleanup(torch_device, gc_collect=True)
 
-    @parameterized.expand(["float32", "float16", "bfloat16"])
+    # The checkpoint's residual MLP activations overflow FP16, so training uses FP32 or BF16.
+    @parameterized.expand(["float32", "bfloat16"])
     @slow
     @require_torch_large_gpu
     def test_teacher_forcing_backward(self, dtype_name):
