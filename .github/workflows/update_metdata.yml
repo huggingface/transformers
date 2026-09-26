@@ -6,11 +6,13 @@ on:
       - main
       - update_transformers_metadata*
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   build_and_package:
+    permissions:
+      contents: read
     runs-on: ubuntu-22.04
     defaults:
       run:

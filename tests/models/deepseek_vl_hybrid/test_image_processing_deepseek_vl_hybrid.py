@@ -16,6 +16,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import IMAGENET_STANDARD_MEAN
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -34,51 +35,15 @@ if is_vision_available():
 
 
 class DeepseekVLHybridImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        high_res_size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        high_res_image_mean=[0.5, 0.5, 0.5],
-        high_res_image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        high_res_size = high_res_size if high_res_size is not None else {"height": 36, "width": 36}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.high_res_size = high_res_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.high_res_image_mean = high_res_image_mean
-        self.high_res_image_std = high_res_image_std
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        # Pass the mean explicitly to keep padding colors stable across backends and save/load.
+        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN.copy())
+        kwargs.setdefault("high_res_image_mean", IMAGENET_STANDARD_MEAN.copy())
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("high_res_size", {"height": 36, "width": 36})
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "high_res_image_mean": self.high_res_image_mean,
-            "high_res_image_std": self.high_res_image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "high_res_size": self.high_res_size,
-        }
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         max_size = max(self.size["height"], self.size["width"])
@@ -92,33 +57,7 @@ class DeepseekVLHybridImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = DeepseekVLHybridImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "high_res_image_mean"))
-            self.assertTrue(hasattr(image_processing, "high_res_image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "high_res_size"))
+    image_processor_tester_class = DeepseekVLHybridImageProcessingTester
 
     def test_call_pil_high_res(self):
         for image_processing_class in self.image_processing_classes.values():

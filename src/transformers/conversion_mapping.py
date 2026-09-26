@@ -312,6 +312,15 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
+        "NemotronH_Omni_Reasoning_V3": [
+            WeightRenaming(r"^mlp1\.0\.", r"multi_modal_projector\.layer_norm\."),
+            WeightRenaming(r"^mlp1\.1\.", r"multi_modal_projector\.linear_1\."),
+            WeightRenaming(r"^mlp1\.3\.", r"multi_modal_projector\.linear_2\."),
+            WeightRenaming(r"^sound_encoder\.encoder\.", r"audio_tower\."),
+            WeightRenaming(r"^sound_projection\.norm\.", r"embed_audio\.layer_norm\."),
+            WeightRenaming(r"^sound_projection\.linear1\.", r"embed_audio\.linear_1\."),
+            WeightRenaming(r"^sound_projection\.linear2\.", r"embed_audio\.linear_2\."),
+        ],
         "hrm_text": [
             WeightConverter(
                 source_patterns="mlp.gate_up_proj.weight",
@@ -723,6 +732,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
         ],
         # Legacy MoE weight names → standard ``@use_experts_implementation`` interface.
+        "aria_text": [
+            WeightRenaming(
+                source_patterns=r"mlp\.experts\.fc1\.weight",
+                target_patterns="mlp.experts.gate_up_proj",
+            ),
+            WeightRenaming(
+                source_patterns=r"mlp\.experts\.fc2\.weight",
+                target_patterns="mlp.experts.down_proj",
+            ),
+        ],
         "granitemoe": [
             WeightRenaming(
                 source_patterns=r"block_sparse_moe\.input_linear\.weight",
