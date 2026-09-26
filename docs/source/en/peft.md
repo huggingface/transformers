@@ -112,6 +112,8 @@ For ZeRO-3, [`Trainer`] passes `exclude_frozen_parameters=True` when saving chec
 
 For FSDP, [`Trainer`] updates the FSDP auto-wrap policy to correctly handle LoRA layers. For QLoRA (quantized base model + LoRA), [`Trainer`] also adjusts the mixed precision policy to match the quantization storage dtype.
 
+You can load PEFT adapters onto a tensor parallel base model and let PEFT handle sharding the adapter weights. Loading an adapter requires `peft >= 0.21.0`. See [Tensor parallelism](./tensor_parallelism) for training with TP.
+
 ## Loading an adapter
 
 To load an adapter, the Hub repository or local directory must contain an `adapter_config.json` file and the adapter weights.
