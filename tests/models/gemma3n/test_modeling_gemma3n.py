@@ -19,6 +19,8 @@ import logging
 import os
 import unittest
 
+from huggingface_hub import hf_hub_download
+
 logger = logging.getLogger(__name__)
 
 import numpy as np
@@ -907,10 +909,11 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             },
         ]
 
-        audio_ds = load_dataset(
-            "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
+        self.audio_file_path = hf_hub_download(
+            repo_id="etechgrid/28.5k_wavfiles_dataset",
+            filename="wav_dataset/103-1240-0000.wav",
+            repo_type="dataset",
         )
-        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
