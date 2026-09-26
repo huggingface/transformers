@@ -463,6 +463,53 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 for name, parameter in model.named_parameters():
                     torch.testing.assert_close(parameter, reference_parameters[name], atol=1e-6, rtol=1e-5, msg=name)
 
+    @require_accelerate
+    def test_trainer_evaluation_loss_matches_manual_batches(self):
+        model, processor, examples, collate = self.prepare_trainer_inputs()
+        model.eval()
+        with torch.no_grad():
+            losses = [model(**collate(examples[index : index + 2])).loss for index in range(0, len(examples), 2)]
+        with tempfile.TemporaryDirectory() as directory:
+            trainer = Trainer(
+                model=model,
+                args=self.get_training_args(directory),
+                eval_dataset=examples,
+                data_collator=collate,
+                processing_class=processor,
+            )
+            metrics = trainer.evaluate()
+        self.assertTrue(np.isfinite(metrics["eval_loss"]))
+        self.assertGreater(metrics["eval_loss"], 0)
+        self.assertAlmostEqual(metrics["eval_loss"], torch.stack(losses).mean().item(), places=5)
+
+    @require_accelerate
+    def test_trainer_fully_ignored_targets(self):
+        model, processor, examples, collate = self.prepare_trainer_inputs()
+        before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+
+        def ignored_collator(examples):
+            batch = collate(examples)
+            batch["labels"].fill_(-100)
+            return batch
+
+        with tempfile.TemporaryDirectory() as directory:
+            trainer = Trainer(
+                model=model,
+                args=self.get_training_args(directory),
+                train_dataset=examples,
+                eval_dataset=examples,
+                data_collator=ignored_collator,
+                processing_class=processor,
+            )
+            metrics = trainer.evaluate()
+            result = trainer.train()
+        self.assertEqual(metrics["eval_loss"], 0)
+        self.assertEqual(result.global_step, 1)
+        self.assertEqual(result.training_loss, 0)
+        for name, parameter in model.named_parameters():
+            self.assertTrue(torch.isfinite(parameter).all(), name)
+            torch.testing.assert_close(parameter, before[name], atol=0, rtol=0, msg=name)
+
     def test_apply_chat_template_basic(self):
         processor = self.get_processor()
         conversation = [
