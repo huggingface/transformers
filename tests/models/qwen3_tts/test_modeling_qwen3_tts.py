@@ -103,6 +103,103 @@ class Qwen3TTSCodePredictorTrainingTest(unittest.TestCase):
         self.assertEqual(model.lm_head.weight.grad.abs().sum().item(), 0)
 
 
+@require_torch
+class Qwen3TTSTeacherForcingTest(unittest.TestCase):
+    def get_model(self):
+        config = Qwen3TTSModelTester(self).get_config()
+        return Qwen3TTSForConditionalGeneration(config).to(torch_device).eval()
+
+    def prepare_inputs(self):
+        return {
+            "input_ids": ids_tensor([2, 11], 64),
+            "attention_mask": torch.tensor([[1] * 11, [1] * 9 + [0] * 2], device=torch_device),
+            "audio_codes": ids_tensor([2, 3, 2], 64),
+            "audio_attention_mask": torch.tensor([[1, 1, 1], [1, 0, 0]], device=torch_device),
+            "speaker_embeddings": torch.randn(2, 32, device=torch_device),
+        }
+
+    def reference_sequence(self, model, text_ids, codes, speaker):
+        config = model.config.talker_config
+        def text_embedding(ids):
+            return model.text_projection(model.get_text_embeddings()(ids))
+        codec_embedding = model.get_input_embeddings()
+        pad, bos, eos = text_embedding(text_ids.new_tensor([0, 1, 2])).split(1)
+        codec_ids = text_ids.new_tensor(
+            [
+                config.codec_nothink_id,
+                config.codec_think_bos_id,
+                config.codec_think_eos_id,
+                config.codec_pad_id,
+                config.codec_bos_id,
+                config.codec_eos_token_id,
+            ]
+        )
+        special = codec_embedding(codec_ids)
+        prefix = torch.cat([special[:3], speaker[None], special[3:4]])
+        prefix = prefix + torch.cat([pad.expand(4, -1), bos])
+        audio = codec_embedding(codes[:, 0])
+        for index, embedding in enumerate(model.code_predictor.get_input_embeddings()):
+            audio = audio + embedding(codes[:, index + 1])
+        return torch.cat(
+            [
+                text_embedding(text_ids[:3]),
+                prefix,
+                text_embedding(text_ids[3:-5]) + special[3],
+                eos + special[3],
+                pad + special[4],
+                audio + pad,
+                pad + special[5],
+            ]
+        )
+
+    def test_sequence_matches_non_streaming_layout(self):
+        model = self.get_model()
+        inputs = self.prepare_inputs()
+        with torch.no_grad():
+            embeddings, mask, audio_positions, eos_positions = model._prepare_teacher_forcing_inputs(**inputs)
+            for index in range(2):
+                text = inputs["input_ids"][index][inputs["attention_mask"][index].bool()]
+                codes = inputs["audio_codes"][index][inputs["audio_attention_mask"][index].bool()]
+                reference = self.reference_sequence(model, text, codes, inputs["speaker_embeddings"][index])
+                length = reference.shape[0]
+                torch.testing.assert_close(embeddings[index, :length], reference)
+                self.assertEqual(mask[index].sum().item(), length)
+                self.assertEqual(embeddings[index, length:].abs().sum().item(), 0)
+                torch.testing.assert_close(
+                    audio_positions[index, : codes.shape[0]],
+                    torch.arange(text.shape[0] + 2, text.shape[0] + 2 + codes.shape[0], device=torch_device),
+                )
+                self.assertEqual(eos_positions[index].item(), length - 1)
+
+    def test_padding_side_and_padded_ids_do_not_change_sequence(self):
+        model = self.get_model()
+        inputs = self.prepare_inputs()
+        with torch.no_grad():
+            reference = model._prepare_teacher_forcing_inputs(**inputs)
+            inputs["input_ids"][1] = inputs["input_ids"][1].roll(2)
+            inputs["attention_mask"][1] = inputs["attention_mask"][1].roll(2)
+            inputs["input_ids"].masked_fill_(~inputs["attention_mask"].bool(), -100)
+            inputs["audio_codes"].masked_fill_(~inputs["audio_attention_mask"].bool()[..., None], -100)
+            actual = model._prepare_teacher_forcing_inputs(**inputs)
+        for expected, result in zip(reference, actual):
+            torch.testing.assert_close(expected, result)
+
+    def test_rejects_invalid_teacher_forcing_inputs(self):
+        model = self.get_model()
+        for name, value, message in (
+            ("audio_codes", torch.zeros(2, 3, 3, dtype=torch.long, device=torch_device), "num_code_groups"),
+            ("speaker_embeddings", torch.zeros(2, 16, device=torch_device), "talker_hidden_size"),
+            ("audio_attention_mask", torch.zeros(2, 3, device=torch_device), "at least one audio frame"),
+            ("attention_mask", torch.zeros(2, 11, device=torch_device), "role prefix"),
+            ("audio_codes", torch.full((2, 3, 2), 64, device=torch_device), "talker vocabulary"),
+        ):
+            with self.subTest(input=name, message=message):
+                inputs = self.prepare_inputs()
+                inputs[name] = value
+                with self.assertRaisesRegex(ValueError, message):
+                    model._prepare_teacher_forcing_inputs(**inputs)
+
+
 class Qwen3TTSModelTester:
     """
     Builds a tiny Qwen3TTS config and synthetic inputs for unit testing.
@@ -132,6 +229,13 @@ class Qwen3TTSModelTester:
             "text_vocab_size": 64,
             "text_hidden_size": 32,
             "num_code_groups": 2,
+            "codec_eos_token_id": 3,
+            "codec_think_id": 4,
+            "codec_nothink_id": 5,
+            "codec_think_bos_id": 6,
+            "codec_think_eos_id": 7,
+            "codec_pad_id": 8,
+            "codec_bos_id": 9,
             # the talker always applies mRoPE, so the tiny config declares its sections too; they sum to
             # `head_dim // 2`, as `apply_multimodal_rotary_pos_emb` doubles them
             "rope_parameters": {"rope_type": "default", "rope_theta": 500000.0, "mrope_section": [4, 2, 2]},
@@ -142,6 +246,7 @@ class Qwen3TTSModelTester:
                 "num_hidden_layers": 2,
                 "num_attention_heads": 2,
                 "num_key_value_heads": 2,
+                "num_code_groups": 2,
             },
         }
 
