@@ -384,7 +384,7 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     """
 
     config: PPOCRV5ServerDetConfig
-    base_model_prefix = "pp_ocrv5_server_det"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True

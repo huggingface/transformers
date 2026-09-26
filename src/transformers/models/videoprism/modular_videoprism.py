@@ -556,7 +556,7 @@ class VideoPrismPreTrainedModel(VivitPreTrainedModel):
 class VideoPrismVisionModel(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
     input_modalities = ("video",)
-    base_model_prefix = "model"
+    base_model_prefix = "vision_model"
 
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
@@ -670,7 +670,7 @@ class VideoPrismMultiheadAttentionPoolingHead(VivitAttention):
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
     config: VideoPrismTextConfig
     input_modalities = ("text",)
-    base_model_prefix = "model"
+    base_model_prefix = "text_model"
     main_input_name = "input_ids"
     _no_split_modules = ["VideoPrismTextEmbeddings", "VideoPrismLayer"]
     _input_embed_layer = "token_embedding"
@@ -728,6 +728,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
 )
 class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
+    base_model_prefix = "vision_model"
 
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
@@ -909,7 +910,7 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
 class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
     input_modalities = ("video",)
-    base_model_prefix = "model"
+    base_model_prefix = "vision_model"
 
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
