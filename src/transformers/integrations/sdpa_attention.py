@@ -29,10 +29,17 @@ def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, valu
     # 1.cuda or Ascend NPU
     #   - attention_mask is None (otherwise it will fall back to the math kernel)
     #   - key head_dim == value head_dim <= 256 (otherwise it will fall back to the math kernel)
+    #   - On CUDA: GPU must be sm80+ (FlashAttention). On pre-sm80 GPUs
+    #     (e.g. sm75/T4), enabling GQA removes the EFFICIENT_ATTENTION candidate,
+    #     leaving only the slow MATH backend (up to 28% slower decode).
     # 2.xpu
     #   - torch version >= 2.8
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
+    if torch.cuda.is_available():
+        major, _ = torch.cuda.get_device_capability()
+        if major < 8:
+            return False
     return attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 
