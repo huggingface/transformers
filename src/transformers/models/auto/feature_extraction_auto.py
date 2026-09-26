@@ -64,6 +64,8 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("nemotron3_5_asr", "NemotronAsrStreamingFeatureExtractor"),
         ("nemotron3_diarization", "NemotronAsrStreamingFeatureExtractor"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingFeatureExtractor"),
+        ("omniasr", "OmniASRFeatureExtractor"),
+        ("omniasr_ctc", "OmniASRFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("parakeet_rnnt", "ParakeetFeatureExtractor"),
