@@ -724,6 +724,9 @@ class QuantizedLayer(DynamicLayer):
     is set as a maximum capacity for the original precision cache. When the length goes beyond maximum capacity, the original
     precision cache is discarded and moved into the quantized cache. The quantization is done per-channel with a set `q_group_size`
     for both Keys and Values, in contrast to what was described in the paper.
+
+    Note that a beam reordering is only applied to the quantized states on the next `update`, so they may be left in a
+    stale batch order in between, see `reorder_cache`.
     """
 
     def __init__(
@@ -741,6 +744,8 @@ class QuantizedLayer(DynamicLayer):
         self.q_group_size = q_group_size
         self.residual_length = residual_length
         self.cumulative_length = 0
+        # Beam reordering of the quantized states is deferred until the next `update`, see `reorder_cache`
+        self._pending_beam_idx = None
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -766,6 +771,9 @@ class QuantizedLayer(DynamicLayer):
 
         dequant_keys = self._dequantize(self._quantized_keys)
         dequant_values = self._dequantize(self._quantized_values)
+        # Beam idx reordering is deferred to here, to avoid a lossy round trip around quantization
+        dequant_keys, dequant_values = self._apply_pending_reorder(dequant_keys, dequant_values)
+
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
         values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
         if self.keys.dim() == 4 and self.keys.shape[-2] + 1 >= self.residual_length:
@@ -773,6 +781,8 @@ class QuantizedLayer(DynamicLayer):
             self._quantized_values = self._quantize(values_to_return.contiguous(), axis=self.axis_value)
             self.keys = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
             self.values = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
+            # The reordering is now baked into the quantized states
+            self._pending_beam_idx = None
         else:
             self.keys = torch.cat([self.keys, key_states], dim=-2)
             self.values = torch.cat([self.values, value_states], dim=-2)
@@ -784,6 +794,37 @@ class QuantizedLayer(DynamicLayer):
 
     @abstractmethod
     def _dequantize(self, q_tensor): ...
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        """Reorders this layer's cache for beam search."""
+        if not self.is_initialized:
+            return
+
+        # Deferred to the next `update`, which dequantizes the states anyway. It is cloned as `beam_idx` belongs to
+        # the caller, and composed with any pending one to cover several reorders in a row.
+        beam_idx = beam_idx.to(self.device)
+        self._pending_beam_idx = (
+            beam_idx.clone() if self._pending_beam_idx is None else self._pending_beam_idx.index_select(0, beam_idx)
+        )
+
+        # Optional, as the residual cache is emptied whenever it is flushed into the quantized states
+        if self.keys.numel() > 0:
+            self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
+            self.values = self.values.index_select(0, beam_idx.to(self.values.device))
+
+    def _apply_pending_reorder(self, keys: torch.Tensor, values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Applies the reordering deferred by `reorder_cache` to freshly dequantized states."""
+        if self._pending_beam_idx is None:
+            return keys, values
+        beam_idx = self._pending_beam_idx.to(keys.device)
+        return keys.index_select(0, beam_idx), values.index_select(0, beam_idx)
+
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        super().reset()
+        # The quantized states are dropped instead of zeroed, so that the next `update` quantizes from scratch
+        self._quantized_keys = self._quantized_values = None
+        self._pending_beam_idx = None
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
