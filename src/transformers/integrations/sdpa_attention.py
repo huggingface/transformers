@@ -1,5 +1,6 @@
 import torch
 
+from ..generation.continuous_batching.cache import PagedAttentionCache
 from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
@@ -86,6 +87,7 @@ def sdpa_attention_forward(
     scaling: float | None = None,
     is_causal: bool | None = None,
     position_bias: torch.Tensor | None = None,
+    cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -93,13 +95,23 @@ def sdpa_attention_forward(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
+
+    # If there is a paged cache, it is updated before the KV heads are repeated.
+    if isinstance(cache, PagedAttentionCache):
+        key, value = cache.update(
+            key_states=key,
+            value_states=value,
+            layer_idx=module.layer_idx,
+            kwargs=kwargs,
+        )
+
     sdpa_kwargs = {}
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
         if not use_gqa_in_sdpa(attention_mask, key, value):
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
         else:
-            sdpa_kwargs = {"enable_gqa": True}
+            sdpa_kwargs["enable_gqa"] = True
 
     q_length = query.shape[2]
     kv_length = key.shape[2]
