@@ -62,6 +62,10 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         subtalker_temperature=None,
         **kwargs,
     ):
+        if kwargs.get("use_cache", True) is False:
+            raise ValueError(
+                "Qwen3-TTS generation requires `use_cache=True` to retain previous audio frame embeddings."
+            )
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             next_sequence_length=next_sequence_length,
@@ -205,7 +209,13 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         repetition_penalty: float = 1.05,
         **kwargs,
     ):
+        use_cache = kwargs.get("use_cache", self.generation_config.use_cache)
+        if use_cache is False:
+            raise ValueError(
+                "Qwen3-TTS generation requires `use_cache=True` to retain previous audio frame embeddings."
+            )
         talker_kwargs = {
+            "use_cache": use_cache,
             "max_new_tokens": max_new_tokens,
             "min_new_tokens": 2,
             "do_sample": do_sample,
