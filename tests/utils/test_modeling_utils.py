@@ -4032,3 +4032,165 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
             del output, model
 
         self.assertEqual(resident[0] - resident[1], saved_bytes)
+
+
+class _FakeHandle:
+    """Mimics a `safe_open` handle: header queries, and `prefetch(plan, device=...)` returning a loader that hands
+    each planned tensor out once."""
+
+    class Meta:
+        def __init__(self, tensor):
+            self.shape = list(tensor.shape)
+
+    def __init__(self, tensors, refuse: bool = False):
+        self.tensors, self.refuse = tensors, refuse
+        self.plans, self.loaders = [], []
+
+    def get_tensor_meta(self, name):
+        return self.Meta(self.tensors[name])
+
+    def prefetch(self, plan, *, device):
+        from safetensors import SafetensorError
+
+        if self.refuse:
+            raise SafetensorError("no CUDA runtime is loaded in this process")
+        loader = _FakeLoader(self.tensors, dict(plan))
+        self.plans.append((device, loader.plan))
+        self.loaders.append(loader)
+        return loader
+
+
+class _FakeLoader:
+    def __init__(self, tensors, plan):
+        self.tensors, self.plan, self.taken, self.closed = tensors, plan, [], False
+
+    def take(self, name):
+        from safetensors import SafetensorError
+
+        if name not in self.plan or name in self.taken:
+            raise SafetensorError(f"{name}: not planned or already delivered")
+        self.taken.append(name)
+        rows = self.plan[name]
+        return self.tensors[name] if rows is None else self.tensors[name][rows]
+
+    def close(self):
+        self.closed = True
+
+
+class SafetensorsPrefetchLoadingTest(unittest.TestCase):
+    """`from_pretrained` with safetensors' prefetch loader, on by default for CUDA targets."""
+
+    tensors = {
+        "a": torch.arange(12.0).reshape(4, 3),
+        "b": torch.arange(12.0).reshape(4, 3) + 100,
+        "c": torch.arange(6.0).reshape(2, 3),
+    }
+
+    def _loads(self, *specs):
+        from transformers.core_model_loading import TensorLoad
+
+        return [
+            TensorLoad(None, name, name, name, self.tensors[name], device, None, intervals)
+            for name, device, intervals in specs
+        ]
+
+    def _read(self, load):
+        from transformers.core_model_loading import spawn_materialize
+
+        return spawn_materialize(None, load)()
+
+    def test_cuda_target_gate(self):
+        from transformers.integrations.safetensors_prefetch import cuda_device, has_cuda_target
+
+        self.assertFalse(has_cuda_target(None))
+        self.assertFalse(has_cuda_target({"": "cpu"}))
+        self.assertFalse(has_cuda_target({"a": "cpu", "b": "disk"}))
+        self.assertTrue(has_cuda_target({"a": "cpu", "b": 1}))  # one CUDA target is enough
+        for value in (1, "cuda:1", torch.device("cuda:1")):
+            self.assertEqual(cuda_device(value), torch.device("cuda:1"))
+        self.assertIsNone(cuda_device("disk"))
+
+    def test_loads_are_planned_per_device_and_taken_once(self):
+        from transformers.integrations.safetensors_prefetch import attach_prefetch
+
+        handle = _FakeHandle(self.tensors)
+        a, b, c = self._loads(
+            ("a", "cuda:0", None),
+            ("b", 0, [[(2, 4)], [(0, 3)]]),  # rank keeps rows 2:4
+            ("c", "cpu", [[(0, 2)], [(1, 3)]]),
+        )
+        (prefetch,) = attach_prefetch([a, b, c], dict.fromkeys(self.tensors, handle), copy_full=False)
+        self.assertIsNone(c.reader)
+        self.assertEqual(handle.plans, [])
+
+        whole = self._read(a)
+        self.assertEqual(handle.plans, [("cuda:0", {"a": None, "b": slice(2, 4)})])
+        self.assertEqual(whole.data_ptr(), self.tensors["a"].data_ptr())
+        rows = self._read(b)
+        torch.testing.assert_close(rows, self.tensors["b"][2:4])
+        self.assertEqual(rows.data_ptr(), self.tensors["b"][2:4].data_ptr())
+        torch.testing.assert_close(self._read(c), self.tensors["c"][:, 1:3])
+        self.assertEqual(handle.loaders[0].taken, ["a", "b"])
+        prefetch.close()
+        self.assertTrue(handle.loaders[0].closed)
+
+    def test_partial_and_copy_full_takes_are_copies(self):
+        from transformers.integrations.safetensors_prefetch import attach_prefetch
+
+        storage = self.tensors["a"].untyped_storage().data_ptr()
+        (columns,) = self._loads(("a", "cuda:0", [[(0, 4)], [(1, 3)]]))  # full dim 0: no row plan
+        attach_prefetch([columns], {"a": _FakeHandle(self.tensors)}, copy_full=False)
+        part = self._read(columns)
+        torch.testing.assert_close(part, self.tensors["a"][:, 1:3])
+        self.assertNotEqual(part.untyped_storage().data_ptr(), storage)
+
+        (replicated,) = self._loads(("a", "cuda:0", None))
+        attach_prefetch([replicated], {"a": _FakeHandle(self.tensors)}, copy_full=True)
+        full = self._read(replicated)
+        torch.testing.assert_close(full, self.tensors["a"])
+        self.assertNotEqual(full.untyped_storage().data_ptr(), storage)
+
+    def test_prefetch_failure_falls_back_to_the_default_read(self):
+        from transformers.integrations.safetensors_prefetch import attach_prefetch
+
+        (load,) = self._loads(("a", "cuda:0", None))
+        attach_prefetch([load], {"a": _FakeHandle(self.tensors, refuse=True)}, copy_full=False)
+        with self.assertLogs("transformers.integrations.safetensors_prefetch", level="WARNING") as logs:
+            load.device = "cpu"  # the fallback reads the slice as the default loader would; keep it off CUDA here
+            tensor = self._read(load)
+        torch.testing.assert_close(tensor, self.tensors["a"])
+        self.assertIn("default loader", logs.output[0])
+
+    def test_explicit_prefetch_warns_when_it_does_not_apply(self):
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        config = LlamaConfig(
+            hidden_size=32, intermediate_size=64, num_hidden_layers=2, num_attention_heads=4, vocab_size=128
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            LlamaForCausalLM(config).save_pretrained(tmp)
+            with self.assertLogs("transformers.integrations.safetensors_prefetch", level="WARNING") as logs:
+                model = LlamaForCausalLM.from_pretrained(tmp, device_map="cpu", prefetch=True)
+        self.assertIn("default loader", logs.output[0])
+        self.assertEqual(next(model.parameters()).device.type, "cpu")
+
+    @require_torch_gpu
+    def test_prefetch_loads_the_same_weights(self):
+        from transformers import LlamaConfig, LlamaForCausalLM
+        from transformers.integrations.safetensors_prefetch import is_prefetch_available
+
+        if not is_prefetch_available():
+            self.skipTest("safetensors without the prefetch engine")
+        config = LlamaConfig(
+            hidden_size=32, intermediate_size=64, num_hidden_layers=2, num_attention_heads=4, vocab_size=128
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            LlamaForCausalLM(config).save_pretrained(tmp, max_shard_size="20KB")
+            # prefetch=False pins the default loader, which the None default no longer uses
+            reference = LlamaForCausalLM.from_pretrained(tmp, device_map="cuda:0", prefetch=False)
+            with self.assertLogs("transformers.integrations.safetensors_prefetch", level="INFO") as logs:
+                loaded = LlamaForCausalLM.from_pretrained(tmp, device_map="cuda:0")
+        for (name, expected), (_, got) in zip(reference.state_dict().items(), loaded.state_dict().items()):
+            self.assertEqual(got.device.type, "cuda", name)
+            torch.testing.assert_close(got, expected, msg=name)
+        self.assertTrue(any("safetensors prefetch" in line for line in logs.output))
