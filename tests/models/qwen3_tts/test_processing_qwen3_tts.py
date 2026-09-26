@@ -20,7 +20,8 @@ import unittest
 import numpy as np
 
 from transformers import Qwen2TokenizerFast, Qwen3TTSFeatureExtractor, Qwen3TTSProcessor, is_torch_available
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_accelerate, require_torch, slow
+from transformers.trainer_utils import set_seed
 from transformers.utils import is_soundfile_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -33,6 +34,8 @@ if is_torch_available():
         Qwen3TTSForConditionalGeneration,
         Qwen3TTSTokenizerConfig,
         Qwen3TTSTokenizerModel,
+        Trainer,
+        TrainingArguments,
     )
 
     from .test_modeling_qwen3_tts import Qwen3TTSModelTester
@@ -343,6 +346,79 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ):
             self.assertTrue(torch.isfinite(parameter.grad).all())
             self.assertGreater(parameter.grad.abs().sum().item(), 0)
+
+    def prepare_trainer_inputs(self):
+        set_seed(42)
+        processor = self.get_processor()
+        config = Qwen3TTSModelTester(self).get_config()
+        config.talker_config.text_vocab_size = len(processor.tokenizer)
+        model = Qwen3TTSForConditionalGeneration(config)
+        texts = ["Hi.", "A longer sentence.", "Hello.", "This example has the longest audio sequence."]
+        examples = [
+            {
+                "text": text,
+                "audio_codes": (torch.arange(length * 2).reshape(length, 2) + index) % 64,
+                "speaker_embeddings": torch.linspace(-1, 1, 32) + index / 10,
+            }
+            for index, (text, length) in enumerate(zip(texts, (1, 2, 4, 8)))
+        ]
+
+        def collate(examples):
+            return processor(
+                text=[example["text"] for example in examples],
+                audio_codes=[example["audio_codes"] for example in examples],
+                speaker_embeddings=[example["speaker_embeddings"] for example in examples],
+                output_labels=True,
+            )
+
+        return model, processor, examples, collate
+
+    def get_training_args(self, output_dir, **kwargs):
+        return TrainingArguments(
+            output_dir=output_dir,
+            use_cpu=True,
+            max_steps=1,
+            per_device_train_batch_size=2,
+            per_device_eval_batch_size=2,
+            learning_rate=0.05,
+            optim="sgd",
+            lr_scheduler_type="constant",
+            max_grad_norm=0,
+            remove_unused_columns=False,
+            label_smoothing_factor=0,
+            prediction_loss_only=True,
+            save_strategy="no",
+            logging_strategy="no",
+            report_to=[],
+            disable_tqdm=True,
+            **kwargs,
+        )
+
+    @require_accelerate
+    def test_trainer_with_processor_collator(self):
+        model, processor, examples, collate = self.prepare_trainer_inputs()
+        parameters = [
+            model.text_projection.linear_1.weight,
+            model.codec_head.weight,
+            model.code_predictor.lm_head.weight,
+        ]
+        before = [parameter.detach().clone() for parameter in parameters]
+        with tempfile.TemporaryDirectory() as directory:
+            trainer = Trainer(
+                model=model,
+                args=self.get_training_args(directory),
+                train_dataset=examples,
+                data_collator=collate,
+                processing_class=processor,
+            )
+            self.assertFalse(trainer.model_accepts_loss_kwargs)
+            result = trainer.train()
+        self.assertEqual(result.global_step, 1)
+        self.assertTrue(np.isfinite(result.training_loss))
+        self.assertGreater(result.training_loss, 0)
+        for original, parameter in zip(before, parameters):
+            self.assertTrue(torch.isfinite(parameter).all())
+            self.assertFalse(torch.equal(original, parameter))
 
     def test_apply_chat_template_basic(self):
         processor = self.get_processor()
