@@ -152,7 +152,7 @@ _flash_api_alternative_names = {"s_aux": "learnable_sink"}
 
 def _lazy_imports(
     implementation: str | None, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
-):
+) -> tuple[Callable, Callable, Callable, Callable, Callable]:
     """
     Lazy loads the respective flash attention implementations.
 
@@ -160,73 +160,76 @@ def _lazy_imports(
         flash_attn_func: The base flash attention function.
         flash_attn_varlen_func: The flash attention function supporting variable sequence lengths,
                                 e.g. for padding-free training.
+        flash_attn_with_kvcache: The flash attention function supporting block tables, for inference with paged cache
         pad_input: The function to pad inputs into one sequence and returning the respective kwargs.
         unpad_input: The function to unpad outputs based on the kwargs (from pad_input).
     """
     is_fa2 = is_flash_attn_2_available()
     is_fa3 = is_flash_attn_3_available()
     is_fa4 = is_flash_attn_4_available()
+    fa_fallback_version = 0 if implementation is not None else max(2 * int(is_fa2), 3 * int(is_fa3), 4 * int(is_fa4))
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
     is_paged, implementation = split_attention_implementation(implementation)
 
-    if (implementation == "flash_attention_2" and is_fa2) or (
-        implementation is None and is_fa2 and not is_fa3 and not is_fa4
-    ):
-        from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
-        from flash_attn.bert_padding import pad_input, unpad_input
-    elif is_torch_npu_available():
+    # If we are on NPU, use the NPU-specific flash functions. No need to check other branches, is_fa is False on NPU
+    if is_torch_npu_available():
         # Package `flash-attn` is unavailable on Ascend NPU, which will cause ImportError
         # Flash-Attention2 related apis for Ascend NPU must be imported from `.integrations.npu_flash_attention` module
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
         from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
         from .integrations.npu_flash_attention import npu_flash_attn_with_kvcache as flash_attn_with_kvcache
+
+    # Then try the flash attention packages, with fallback if the user did not request a specific implementation
+    elif (implementation == "flash_attention_2" and is_fa2) or fa_fallback_version == 2:
+        from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+        from flash_attn.bert_padding import pad_input, unpad_input
+
+    elif implementation == "flash_attention_3" or fa_fallback_version == 3:
+        from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+
+    elif implementation == "flash_attention_4" or fa_fallback_version == 4:
+        from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
+
+        flash_attn_with_kvcache = None  # not supported yet
+
+    # Otherwise, use the `kernels` package as a fallback
     else:
-        if implementation == "flash_attention_3" or (implementation is None and is_fa3 and not is_fa4):
-            from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
-        elif implementation == "flash_attention_4" or (implementation is None and is_fa4):
-            from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
+        from .integrations.hub_kernels import load_and_register_attn_kernel
 
-            flash_attn_with_kvcache = None  # not supported yet
-        # Kernels fallback
-        else:
-            from .integrations.hub_kernels import load_and_register_attn_kernel
+        # Map standard attention names to hub kernel repos
+        kernel_repo = FLASH_ATTN_KERNEL_FALLBACK.get(implementation, implementation)
+        # We want to explicitly register the name with `paged|` if found
+        kernel_implementation = f"paged|{implementation}" if is_paged else kernel_repo
+        kernel = load_and_register_attn_kernel(kernel_implementation, attention_wrapper, allow_all_kernels)
 
-            # Map standard attention names to hub kernel repos
-            kernel_repo = FLASH_ATTN_KERNEL_FALLBACK.get(implementation, implementation)
-            # We want to explicitly register the name with `paged|` if found
-            kernel_implementation = f"paged|{implementation}" if is_paged else kernel_repo
-            kernel = load_and_register_attn_kernel(
-                kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
+        flash_attn_func = getattr(kernel, "flash_attn_func", None)
+        flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
+        flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
+        # Some kernels, like the MSA kernel from minimax, ships their own attention entry point rather than a varlen
+        # function, so no need to scheck if it is None
+        if flash_attn_varlen_func is None and (
+            hasattr(kernel, "sparse_atten_func") or hasattr(kernel, "flash_attn_forward")
+        ):
+            return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
+        if flash_attn_varlen_func is None:
+            raise ValueError(
+                f"Could not find the currently requested flash attention implementation at `{implementation}`."
+                "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
             )
-
-            flash_attn_func = getattr(kernel, "flash_attn_func", None)
-            flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
-            flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
-            # Some kernels ship their own attention entry point rather than a varlen function, already
-            # registered into ``ALL_ATTENTION_FUNCTIONS``, so preloading them here is a no-op.
-            if flash_attn_varlen_func is None and (
-                hasattr(kernel, "sparse_atten_func") or hasattr(kernel, "flash_attn_forward")
-            ):
-                return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
-            if flash_attn_varlen_func is None:
-                raise ValueError(
-                    f"Could not find the currently requested flash attention implementation at `{implementation}`."
-                    "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
-                )
-            if flash_attn_func is None:
-                logger.warning(
-                    f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
-                    "it can only be used with continuous batching and does not support the full functionality for "
-                    "the base transformers generation methods."
-                )
-            if flash_attn_with_kvcache is None:
-                logger.warning(
-                    f"The loaded flash attention implementation at `{implementation}` does not support block tables, so"
-                    " the full performances of continuous batching will not be achieved, only the varlen path will be "
-                    "used."
-                )
+        if flash_attn_func is None:
+            logger.warning(
+                f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
+                "it can only be used with continuous batching and does not support the full functionality for "
+                "the base transformers generation methods."
+            )
+        if flash_attn_with_kvcache is None:
+            logger.warning(
+                f"The loaded flash attention implementation at `{implementation}` does not support block tables, so"
+                " the full performances of continuous batching will not be achieved, only the varlen path will be "
+                "used."
+            )
 
     return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
 
@@ -752,7 +755,7 @@ def _flash_attention_forward(
     )
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
-    flash_kwargs = partial(
+    flash_kwargs_fn = partial(
         process_flash_kwargs_fn,
         query_length=query_length,
         key_length=key_states.size(1),
@@ -768,73 +771,41 @@ def _flash_attention_forward(
 
     # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
     # Case 1. If position ids is provided and the position ids indicate packed sequences, see `_is_packed_sequence`.
-    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
-    # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
-    #
-    # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
-    # See #39121 for more information.
-    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
-    is_fa_with_varlen_kwargs = all(
-        kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
-    )
+    # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is
+    # safe to use `flash_varlen_fn` knowing we already have all necessary the kwargs.
+    is_fa_with_varlen_kwargs = all(x is not None for x in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k))
 
-    # Contains at least one padding token in the sequence
+    # Contains at least one padding token in the sequence: unpad compute cu_seqlen and max_length from attention mask
     if attention_mask is not None:
         q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
-
-        # TODO for now this is required to work with
-        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-        if "mps" in str(q.device):
-            cu_seq_lens_k = cu_seq_lens_k.clone()
-
-        out_unpad = flash_varlen_fn(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
+    # Padding free (i.e. sequences flattened into one total sequence) and cu_seqlen and max_length are provided
+    elif is_fa_with_varlen_kwargs:
+        q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
+        k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
+        v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
+    # Padding free, but cu_seqlens or max_seqlen are not provided: infer them from position_ids if sequence lengths vary
+    elif _is_packed_sequence(position_ids, query_states.size(0)):  # this check is expensive so not precomputed
+        # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
+        # See #39121 for more information.
+        q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
+            query_states, key_states, value_states, position_ids
         )
-        if isinstance(out_unpad, tuple):
-            out_unpad = out_unpad[0]
-
-        out = pad_fn(out_unpad, indices_q, query_states.size(0), query_length)
-
-    # Padding free, i.e. sequences flattened into one total sequence
-    elif is_fa_with_varlen_kwargs or is_fa_with_position_ids:
-        if cu_seq_lens_q is None or cu_seq_lens_k is None:
-            q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
-                query_states, key_states, value_states, position_ids
-            )
-        else:
-            q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
-            k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
-            v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
-
-        # TODO for now this is required to work with
-        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-        if "mps" in str(q.device):
-            cu_seq_lens_k = cu_seq_lens_k.clone()
-
-        out = flash_varlen_fn(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
-        )
-        if isinstance(out, tuple):
-            out = out[0]
-
-        out = out.view(query_states.size(0), -1, out.size(-2), out.size(-1))
-
-    # No padding
+    # Padding free and same sequence lengths: we can run flash (no varlen) and return early
     else:
-        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
-        if isinstance(out, tuple):
-            out = out[0]
+        out = flash_fn(query_states, key_states, value_states, **flash_kwargs_fn())
+        return out[0] if isinstance(out, tuple) else out
 
-    return out
+    # TODO for now this is required to work with
+    # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
+    cu_seq_lens_k = cu_seq_lens_k.clone() if "mps" in str(q.device) else cu_seq_lens_k
+
+    flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+    out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
+    out = out[0] if isinstance(out, tuple) else out
+
+    if attention_mask is not None:
+        return pad_fn(out, indices_q, query_states.size(0), query_length)
+
+    return out.view(query_states.size(0), -1, out.size(-2), out.size(-1))
