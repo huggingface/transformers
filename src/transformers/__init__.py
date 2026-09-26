@@ -821,6 +821,9 @@ else:
         extra_objects={"__version__": __version__},
     )
 
+    def _is_dunder(name: str) -> bool:
+        return name.startswith("__") and name.endswith("__")
+
     def _create_module_alias(alias: str, target: str) -> None:
         """
         Lazily redirect legacy module paths to their replacements without importing heavy deps.
@@ -834,7 +837,13 @@ else:
         def _get_target():
             return importlib.import_module(target, __name__)
 
-        module.__getattr__ = lambda name: getattr(_get_target(), name)
+        def _getattr(name):
+            # Stdlib probes (e.g. unittest clearing __warningregistry__) must not import the target.
+            if _is_dunder(name):
+                raise AttributeError(f"module {alias!r} has no attribute {name!r}")
+            return getattr(_get_target(), name)
+
+        module.__getattr__ = _getattr
         module.__dir__ = lambda: dir(_get_target())
 
         sys.modules[alias] = module
@@ -853,6 +862,9 @@ else:
         # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
         def getattr_factory(target):
             def _getattr(name):
+                # Stdlib probes (e.g. unittest clearing __warningregistry__) must not import the target.
+                if _is_dunder(name):
+                    raise AttributeError(f"module has no attribute {name!r}")
                 if name.endswith("Fast"):
                     new_name = name.removesuffix("Fast")
                     logger.warning_once(
