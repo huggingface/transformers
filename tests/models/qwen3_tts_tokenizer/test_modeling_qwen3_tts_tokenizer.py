@@ -137,9 +137,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Qwen3TTSTokenizerModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Qwen3TTSTokenizerConfig, has_text_modality=False
-        )
+        self.config_tester = ConfigTester(self, config_class=Qwen3TTSTokenizerConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -203,6 +201,10 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="The codec forward method does not expose submodel capture outputs.")
     def test_capture_outputs_decorator(self):
+        pass
+
+    @unittest.skip(reason="The codec forward method does not expose submodel hidden states.")
+    def test_can_capture_specific_layers_hidden_states(self):
         pass
 
     @unittest.skip(reason="Qwen3TTSTokenizerModel does not have `inputs_embeds` logic")
