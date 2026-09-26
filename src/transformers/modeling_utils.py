@@ -1987,8 +1987,11 @@ class PreTrainedModel(
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
 
-        # Apply it to all submodels as well
-        for submodule in self.modules():
+        # Apply it to all submodels as well. Keep track of what was resolved for each submodel, so that submodels nested
+        # inside another submodel (e.g. the encoder/decoder halves of an audio codec, which hold their own derived
+        # config) follow their parent submodel's implementation instead of the top-level requested one
+        resolved_implementations: dict[str, str] = {}
+        for submodule_name, submodule in self.named_modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
             # e.g. ForCausalLM has a Model inside, but no need to check it again)
             if (
@@ -2008,6 +2011,10 @@ class PreTrainedModel(
                 # Set the attn on the submodule
                 else:
                     sub_implementation = requested_implementation
+                    # Nested inside an already resolved submodel -> inherit from it (closest ancestor wins)
+                    for ancestor_name, ancestor_implementation in resolved_implementations.items():
+                        if submodule_name.startswith(f"{ancestor_name}."):
+                            sub_implementation = ancestor_implementation
                     if isinstance(attn_implementation, dict):
                         for subconfig_key in self.config.sub_configs:
                             # We need to check for exact object match here, with `is`
@@ -2019,6 +2026,7 @@ class PreTrainedModel(
                     # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
                     submodule.config._attn_implementation_internal = sub_implementation
+                    resolved_implementations[submodule_name] = sub_implementation
 
                 # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
                 # We need to set it on the config itself, to differentiate 2 subconfigs of the same __class__ potentially
@@ -2548,8 +2556,8 @@ class PreTrainedModel(
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
-                    source_param = self.get_parameter(source_param_name)
-                    target_param = self.get_parameter(target_param_name)
+                    source_param = self.get_parameter_or_buffer(source_param_name)
+                    target_param = self.get_parameter_or_buffer(target_param_name)
 
                     # Skip check if both are disk offloaded. Tied tensors always
                     # share the same offload device as per `infer_auto_device_map`
@@ -4845,7 +4853,7 @@ class PreTrainedModel(
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
         for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
-            param = self.get_parameter(tied_param)
+            param = self.get_parameter_or_buffer(tied_param)
             setattr(param, "_is_hf_initialized", True)
 
         # Some custom code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
