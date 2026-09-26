@@ -39,6 +39,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from .configuration_qwen3_tts import (
     Qwen3TTSConfig,
@@ -1601,19 +1602,28 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
                     num_items_in_batch=(primary_labels != -100).sum().clamp_min(1),
                 )
 
-                safe_codes = audio_codes.masked_fill(~audio_attention_mask.bool()[..., None], 0)
+                safe_codes = audio_codes.masked_fill(~audio_attention_mask.bool()[..., None], 0).flatten(0, 1)
                 previous_hidden = hidden_states.gather(
                     1, (audio_positions - 1)[..., None].expand(-1, -1, hidden_states.shape[-1])
-                )
-                predictor_inputs = [previous_hidden, self.get_input_embeddings()(safe_codes[..., 0])]
+                ).flatten(0, 1)
+                predictor_labels = labels[..., 1:].flatten(0, 1)
+                # Keep fixed frame dimensions under compilation; eager training drops ignored frames.
+                if not is_torchdynamo_compiling():
+                    train_mask = (predictor_labels != -100).any(-1)
+                    # Retain one ignored frame for an autograd-connected zero loss when all targets are ignored.
+                    train_mask[0] |= ~train_mask.any()
+                    safe_codes = safe_codes[train_mask]
+                    previous_hidden = previous_hidden[train_mask]
+                    predictor_labels = predictor_labels[train_mask]
+                predictor_inputs = [previous_hidden, self.get_input_embeddings()(safe_codes[:, 0])]
                 for index in range(self.config.talker_config.num_code_groups - 2):
                     predictor_inputs.append(
-                        self.code_predictor.get_input_embeddings()[index](safe_codes[..., index + 1])
+                        self.code_predictor.get_input_embeddings()[index](safe_codes[:, index + 1])
                     )
-                predictor_inputs = torch.stack(predictor_inputs, dim=2).flatten(0, 1)
+                predictor_inputs = torch.stack(predictor_inputs, dim=1)
                 predictor_output = self.code_predictor(
                     inputs_embeds=predictor_inputs,
-                    labels=labels[..., 1:].flatten(0, 1),
+                    labels=predictor_labels,
                     use_cache=False,
                 )
                 code_predictor_loss = predictor_output.loss
