@@ -41,17 +41,13 @@ def sdpa_attention_paged_forward(
         key_states=key,
         value_states=value,
         layer_idx=module.layer_idx,
-        read_index=kwargs["read_index"],
-        write_index=kwargs["write_index"],
+        kwargs=kwargs,
     )
 
     # Repeat the key and value tensors for each group of key-value heads
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
-
-    # Get the right causal mask for the current layer
-    causal_mask = attention_mask
 
     # Run the actual attention
     query = query.contiguous()
@@ -61,7 +57,7 @@ def sdpa_attention_paged_forward(
         query,
         key,
         value,
-        attn_mask=causal_mask,
+        attn_mask=attention_mask,
         dropout_p=dropout,
         scale=scaling,
         # Packed sequence format is used for input, so that it can never be causal.

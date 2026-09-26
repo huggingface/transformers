@@ -41,8 +41,7 @@ def eager_paged_attention_forward(
         key_states=key,
         value_states=value,
         layer_idx=module.layer_idx,
-        read_index=kwargs["read_index"],
-        write_index=kwargs["write_index"],
+        kwargs=kwargs,
     )
 
     # Repeat the key and value tensors for each group of key-value heads
@@ -50,17 +49,9 @@ def eager_paged_attention_forward(
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
 
-    # Get the right causal mask for the current layer
-    if isinstance(attention_mask, dict):
-        sliding_window = getattr(module, "sliding_window", 1)
-        layer_type = "full_attention" if sliding_window == 1 or sliding_window is None else "sliding_attention"
-        causal_mask = attention_mask[layer_type]
-    else:
-        causal_mask = attention_mask
-
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if causal_mask is not None:
-        attn_weights = attn_weights + causal_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     # Handle attention sinks if the model has them
     if hasattr(module, "sinks"):
