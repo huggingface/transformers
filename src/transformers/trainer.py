@@ -3852,7 +3852,11 @@ class Trainer:
                     # We use the CPU when training on one GPU to avoid OOM for GPU RAM when training big models.
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
-                    map_location = self.args.device if self.args.world_size > 1 else "cpu"
+                    # An indexed CPU device (e.g. "cpu:0") can't be restored by torch - use plain "cpu".
+                    if self.args.world_size > 1 and self.args.device.type != "cpu":
+                        map_location = self.args.device
+                    else:
+                        map_location = "cpu"
                     if self.is_fsdp_enabled:
                         load_fsdp_optimizer(
                             self.accelerator.state.fsdp_plugin,
