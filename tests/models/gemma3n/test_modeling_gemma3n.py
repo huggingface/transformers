@@ -15,8 +15,11 @@
 
 import copy
 import inspect
+import logging
 import os
 import unittest
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 import pytest
@@ -872,8 +875,22 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         import shutil
 
         stale_ds_dir = "/mnt/cache/hub/datasets--etechgrid--28.5k_wavfiles_dataset"
+        logger.warning(f"[setUpClass] Checking dataset dir: {stale_ds_dir}")
         if os.path.isdir(stale_ds_dir):
+            logger.warning(f"[setUpClass] Dir exists. Contents:")
+            for root, dirs, files in os.walk(stale_ds_dir):
+                rel = os.path.relpath(root, stale_ds_dir)
+                for d in dirs:
+                    logger.warning(f"[setUpClass]   DIR  {os.path.join(rel, d)}")
+                for f in files:
+                    fpath = os.path.join(root, f)
+                    size = os.path.getsize(fpath)
+                    logger.warning(f"[setUpClass]   FILE {os.path.join(rel, f)} ({size} bytes)")
+            logger.warning(f"[setUpClass] Deleting {stale_ds_dir} ...")
             shutil.rmtree(stale_ds_dir)
+            logger.warning(f"[setUpClass] Deleted.")
+        else:
+            logger.warning(f"[setUpClass] Dir does NOT exist, nothing to delete.")
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Google/gemma-3n-E4B-it", padding_side="left")
