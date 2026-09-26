@@ -82,7 +82,7 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
                 top_p=subtalker_top_p,
                 top_k=subtalker_top_k,
                 temperature=subtalker_temperature,
-                output_hidden_states=True,
+                output_hidden_states=False,
                 return_dict_in_generate=True,
             )
             codec_ids = torch.cat((primary_codes, predictor_result.sequences), dim=-1)
