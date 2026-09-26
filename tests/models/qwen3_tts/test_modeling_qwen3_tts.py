@@ -839,24 +839,6 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
         self.assertEqual(config.talker_config.spk_is_dialect, {})
         self.assertEqual(config.talker_config.codec_language_id, {})
 
-    def test_model_instantiation(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Qwen3TTSForConditionalGeneration(config)
-        self.assertIsNotNone(model)
-
-    def test_save_load(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).eval().to(torch_device)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                loaded = model_class.from_pretrained(tmpdirname).eval().to(torch_device)
-            for key in model.state_dict():
-                self.assertTrue(
-                    torch.allclose(model.state_dict()[key], loaded.state_dict()[key]),
-                    f"Mismatch in key: {key}",
-                )
-
     @unittest.skip(
         reason="`attn_implementation` set on Qwen3TTSConfig is not propagated to `talker_config`, so the "
         "sub-config reports None instead of the requested value"
