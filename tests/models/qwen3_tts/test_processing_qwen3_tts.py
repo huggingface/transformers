@@ -212,6 +212,55 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor()
 
+    def test_call_cached_training_inputs(self):
+        processor = self.get_processor()
+        text = ["Hello there.", "Hello there."]
+        audio_codes = torch.randint(0, 8, (2, 3, 4))
+        speaker_embeddings = torch.randn(2, 32)
+        expected_text = processor.tokenizer(
+            [processor._build_synthesis_text(value) for value in text], return_tensors="pt"
+        )
+        for codes, embeddings in (
+            (audio_codes, speaker_embeddings),
+            (list(audio_codes), list(speaker_embeddings)),
+        ):
+            with self.subTest(input_type=type(codes).__name__):
+                inputs = processor(text=text, audio_codes=codes, speaker_embeddings=embeddings, return_tensors="pt")
+                self.assertEqual(set(inputs), set(expected_text) | {"audio_codes", "speaker_embeddings"})
+                for name, value in expected_text.items():
+                    torch.testing.assert_close(inputs[name], value)
+                torch.testing.assert_close(inputs.audio_codes, audio_codes)
+                torch.testing.assert_close(inputs.speaker_embeddings, speaker_embeddings)
+
+        single = processor(text=text[0], audio_codes=audio_codes[0], speaker_embeddings=speaker_embeddings[0])
+        generation = processor.apply_chat_template([{"role": "user", "content": text[0]}])
+        torch.testing.assert_close(single.input_ids, generation.input_ids[0])
+        torch.testing.assert_close(single.audio_codes, audio_codes[:1])
+        torch.testing.assert_close(single.speaker_embeddings, speaker_embeddings[:1])
+
+    def test_call_cached_training_input_validation(self):
+        processor = self.get_processor()
+        inputs = {
+            "text": "Hello there.",
+            "audio_codes": torch.zeros(3, 4, dtype=torch.long),
+            "speaker_embeddings": torch.zeros(32),
+        }
+        for overrides, message in (
+            ({"text": None}, "require `text`"),
+            ({"audio_codes": None}, "require `text`"),
+            ({"speaker_embeddings": None}, "require `text`"),
+            ({"audio": np.zeros(2048, dtype=np.float32)}, "not both"),
+            ({"return_tensors": "np"}, "return_tensors='pt'"),
+            ({"audio_codes": torch.zeros(3, 4)}, "integer token IDs"),
+            ({"audio_codes": torch.zeros(0, 4, dtype=torch.long)}, "audio_length"),
+            ({"audio_codes": torch.zeros(2, 3, 4, dtype=torch.long)}, "per text prompt"),
+            ({"speaker_embeddings": torch.zeros(2, 32)}, "per text prompt"),
+            ({"truncation": True}, "cannot be truncated"),
+        ):
+            with self.subTest(overrides=list(overrides)):
+                with self.assertRaisesRegex(ValueError, message):
+                    processor(**{**inputs, **overrides})
+
     def test_apply_chat_template_basic(self):
         processor = self.get_processor()
         conversation = [
