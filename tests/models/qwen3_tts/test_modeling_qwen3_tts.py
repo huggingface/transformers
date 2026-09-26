@@ -124,6 +124,58 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
             "speaker_embeddings": torch.randn(2, 32, device=torch_device),
         }
 
+    def test_residual_training_drops_ignored_frames(self):
+        model = self.get_model(num_code_groups=4)
+        inputs = self.prepare_inputs(num_code_groups=4)
+        labels = inputs["audio_codes"].clone()
+        labels[0, 1, 1:] = -100
+        frame_counts = []
+
+        def record_frames(module, args, kwargs):
+            frame_counts.append(kwargs["inputs_embeds"].shape[0])
+
+        handle = model.code_predictor.register_forward_pre_hook(record_frames, with_kwargs=True)
+        try:
+            output = model(**inputs, labels=labels)
+            ignored = model(**inputs, labels=torch.full_like(labels, -100))
+        finally:
+            handle.remove()
+        self.assertEqual(frame_counts, [3, 1])
+        self.assertTrue(torch.isfinite(output.loss))
+        self.assertEqual(ignored.loss.item(), 0)
+        ignored.loss.backward()
+        self.assertTrue(torch.isfinite(model.code_predictor.lm_head.weight.grad).all())
+        self.assertEqual(model.code_predictor.lm_head.weight.grad.abs().sum().item(), 0)
+
+    def test_filtered_residual_loss_and_gradients_match_dense_path(self):
+        for num_code_groups, predictor_hidden_size in ((2, 32), (4, 64)):
+            with self.subTest(num_code_groups=num_code_groups, predictor_hidden_size=predictor_hidden_size):
+                model = self.get_model(num_code_groups, predictor_hidden_size)
+                inputs = self.prepare_inputs(num_code_groups)
+                labels = inputs["audio_codes"].clone()
+                labels[0, 1, 1:] = -100
+                with patch(
+                    "transformers.models.qwen3_tts.modeling_qwen3_tts.is_torchdynamo_compiling", return_value=True
+                ):
+                    dense = model(**inputs, labels=labels)
+                dense.loss.backward()
+                gradients = {
+                    name: parameter.grad.detach().clone()
+                    for name, parameter in model.named_parameters()
+                    if parameter.grad is not None
+                }
+                model.zero_grad(set_to_none=True)
+                filtered = model(**inputs, labels=labels)
+                filtered.loss.backward()
+                torch.testing.assert_close(filtered.loss, dense.loss)
+                torch.testing.assert_close(filtered.code_predictor_loss, dense.code_predictor_loss)
+                for name, parameter in model.named_parameters():
+                    if name in gradients:
+                        self.assertIsNotNone(parameter.grad, name)
+                        torch.testing.assert_close(parameter.grad, gradients[name], atol=1e-6, rtol=1e-5, msg=name)
+                    else:
+                        self.assertIsNone(parameter.grad, name)
+
     def reference_sequence(self, model, text_ids, codes, speaker):
         config = model.config.talker_config
 
@@ -234,7 +286,8 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
                     talker_hook.remove()
                     predictor_hook.remove()
 
-                primary_logits, primary_targets = [], []
+                primary_logits, primary_targets, residual_targets = [], [], []
+                predictor_index = 0
                 for batch_index in range(2):
                     start = inputs["attention_mask"][batch_index].sum().item() + 2
                     frames = inputs["audio_attention_mask"][batch_index].sum().item()
@@ -244,7 +297,11 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
                         torch.cat([labels[batch_index, :frames, 0], labels.new_tensor([eos_target])])
                     )
                     for frame in range(frames):
-                        predictor_input = captured["predictor_inputs"][batch_index * 3 + frame]
+                        if (labels[batch_index, frame, 1:] == -100).all():
+                            continue
+                        residual_targets.append(labels[batch_index, frame, 1:])
+                        predictor_input = captured["predictor_inputs"][predictor_index]
+                        predictor_index += 1
                         torch.testing.assert_close(
                             predictor_input[0], captured["hidden"][batch_index, start + frame - 1]
                         )
@@ -262,9 +319,10 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
                 expected_primary = torch.nn.functional.cross_entropy(
                     torch.cat(primary_logits).float(), torch.cat(primary_targets)
                 )
-                residual_targets = labels[..., 1:].masked_fill(~inputs["audio_attention_mask"].bool()[..., None], -100)
+                self.assertEqual(predictor_index, captured["predictor_inputs"].shape[0])
                 expected_residual = torch.nn.functional.cross_entropy(
-                    captured["predictor_output"].logits.float().reshape(-1, 64), residual_targets.reshape(-1)
+                    captured["predictor_output"].logits.float().reshape(-1, 64),
+                    torch.stack(residual_targets).reshape(-1),
                 )
                 torch.testing.assert_close(output.talker_loss, expected_primary)
                 torch.testing.assert_close(output.code_predictor_loss, expected_residual)
