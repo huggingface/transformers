@@ -217,12 +217,17 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["nargs"] = "?"
                 # This is the value that will get picked if we do --{field.name} (without value)
                 kwargs["const"] = True
-        elif isclass(origin_type) and issubclass(origin_type, list):
-            kwargs["type"] = field.type.__args__[0]
-            kwargs["nargs"] = "+"
+        elif isclass(origin_type) and issubclass(origin_type, (list, tuple, set)):
+            kwargs["type"] = field.type.__args__[0] if getattr(field.type, "__args__", None) else str
+            if issubclass(origin_type, tuple) and getattr(field.type, "__args__", None) and Ellipsis not in field.type.__args__:
+                kwargs["nargs"] = len(field.type.__args__)
+            else:
+                kwargs["nargs"] = "+"
             if field.default_factory is not dataclasses.MISSING:
                 kwargs["default"] = field.default_factory()
-            elif field.default is dataclasses.MISSING:
+            elif field.default is not dataclasses.MISSING:
+                kwargs["default"] = field.default
+            else:
                 kwargs["required"] = True
         else:
             kwargs["type"] = field.type
@@ -340,6 +345,16 @@ class HfArgumentParser(ArgumentParser):
         for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in vars(namespace).items() if k in keys}
+            for f in dataclasses.fields(dtype):
+                if not f.init or f.name not in inputs:
+                    continue
+                v = inputs[f.name]
+                orig = getattr(f.type, "__origin__", f.type)
+                if isclass(orig):
+                    if issubclass(orig, tuple) and isinstance(v, list):
+                        inputs[f.name] = tuple(v)
+                    elif issubclass(orig, set) and isinstance(v, list):
+                        inputs[f.name] = set(v)
             for k in keys:
                 delattr(namespace, k)
             obj = dtype(**inputs)
@@ -376,6 +391,16 @@ class HfArgumentParser(ArgumentParser):
         for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in args.items() if k in keys}
+            for f in dataclasses.fields(dtype):
+                if not f.init or f.name not in inputs:
+                    continue
+                v = inputs[f.name]
+                orig = getattr(f.type, "__origin__", f.type)
+                if isclass(orig):
+                    if issubclass(orig, tuple) and isinstance(v, list):
+                        inputs[f.name] = tuple(v)
+                    elif issubclass(orig, set) and isinstance(v, list):
+                        inputs[f.name] = set(v)
             unused_keys.difference_update(inputs.keys())
             obj = dtype(**inputs)
             outputs.append(obj)
