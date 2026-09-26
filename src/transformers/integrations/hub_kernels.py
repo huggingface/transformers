@@ -522,6 +522,24 @@ if is_kernels_available():
                     ),
                 },
             },
+            "TopKRouter": {
+                "cuda": {
+                    # `trl-lib` does not carry the Hub's trusted-kernel-publisher flag, so the trust check
+                    # has to be waived here for the layer to load at all.
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="trl-lib/moe-triton",
+                        layer_name="TopKRouter",
+                        version=1,
+                        trust_remote_code=True,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="trl-lib/moe-triton",
+                        layer_name="TopKRouter",
+                        version=1,
+                        trust_remote_code=True,
+                    ),
+                },
+            },
             "MegaBlocksMoeMLP": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
