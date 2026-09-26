@@ -208,6 +208,10 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
         if self.rope_parameters is None:
             self.rope_parameters = {"rope_type": "default", "rope_theta": 500000.0}
+        half_dim = (getattr(self, "head_dim", None) or self.hidden_size // self.num_attention_heads) // 2
+        self.rope_parameters.setdefault(
+            "mrope_section", [half_dim // 3, half_dim // 3, half_dim - 2 * (half_dim // 3)]
+        )
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"

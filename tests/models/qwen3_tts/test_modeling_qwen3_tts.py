@@ -20,6 +20,7 @@ from pathlib import Path
 from transformers import (
     Qwen3TTSConfig,
     Qwen3TTSForConditionalGeneration,
+    Qwen3TTSTalkerCodePredictorModelForConditionalGeneration,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -35,6 +36,71 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+
+
+@require_torch
+class Qwen3TTSCodePredictorTrainingTest(unittest.TestCase):
+    def get_model(self, predictor_hidden_size=32):
+        config = Qwen3TTSModelTester(self).get_config().talker_config
+        config.num_code_groups = 4
+        config.code_predictor_config.num_code_groups = 4
+        config.code_predictor_config.hidden_size = predictor_hidden_size
+        return Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(config.code_predictor_config, config).to(
+            torch_device
+        )
+
+    def prepare_inputs(self, model):
+        codes = ids_tensor([2, 3], model.vocab_size)
+        conditioning = torch.randn(2, 2, 32, device=torch_device, requires_grad=True)
+        embeddings = torch.cat(
+            [conditioning] + [model.get_input_embeddings()[index](codes[:, index : index + 1]) for index in range(2)],
+            dim=1,
+        )
+        return codes, conditioning, embeddings
+
+    def test_parallel_matches_cached_teacher_forcing(self):
+        for hidden_size in (16, 32):
+            with self.subTest(predictor_hidden_size=hidden_size):
+                model = self.get_model(hidden_size).eval()
+                codes, _, embeddings = self.prepare_inputs(model)
+                with torch.no_grad():
+                    parallel = model(inputs_embeds=embeddings, labels=codes, use_cache=False)
+                    output = model(inputs_embeds=embeddings[:, :2], use_cache=True)
+                    sequential_logits = [output.logits[:, -1]]
+                    for index in range(2):
+                        output = model(
+                            input_ids=codes[:, index : index + 1],
+                            past_key_values=output.past_key_values,
+                            generation_steps=output.generation_steps,
+                            use_cache=True,
+                        )
+                        sequential_logits.append(output.logits[:, -1])
+                torch.testing.assert_close(parallel.logits, torch.stack(sequential_logits, dim=1))
+                expected_loss = torch.nn.functional.cross_entropy(
+                    parallel.logits.float().reshape(-1, model.vocab_size), codes.reshape(-1)
+                )
+                torch.testing.assert_close(parallel.loss, expected_loss)
+
+    def test_loss_masking_and_backward(self):
+        model = self.get_model().train()
+        codes, conditioning, embeddings = self.prepare_inputs(model)
+        codes = codes.clone()
+        codes[0, 1] = -100
+        output = model(inputs_embeds=embeddings, labels=codes, use_cache=False)
+        output.loss.backward()
+        self.assertTrue(torch.isfinite(output.loss))
+        self.assertGreater(conditioning.grad.abs().sum().item(), 0)
+        for gradient in model.lm_head.weight.grad.chunk(3):
+            self.assertGreater(gradient.abs().sum().item(), 0)
+        self.assertGreater(model.get_input_embeddings()[0].weight.grad.abs().sum().item(), 0)
+
+        model.zero_grad()
+        _, _, embeddings = self.prepare_inputs(model)
+        ignored = model(inputs_embeds=embeddings, labels=torch.full_like(codes, -100), use_cache=False)
+        ignored.loss.backward()
+        self.assertEqual(ignored.loss.item(), 0)
+        self.assertTrue(torch.isfinite(model.lm_head.weight.grad).all())
+        self.assertEqual(model.lm_head.weight.grad.abs().sum().item(), 0)
 
 
 class Qwen3TTSModelTester:
@@ -75,6 +141,7 @@ class Qwen3TTSModelTester:
                 "intermediate_size": 64,
                 "num_hidden_layers": 2,
                 "num_attention_heads": 2,
+                "num_key_value_heads": 2,
             },
         }
 

@@ -36,7 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -157,13 +157,8 @@ class Qwen3TTSRotaryEmbedding(nn.Module):
 
 
 class Qwen3TTSTalkerRotaryEmbedding(nn.Module):
-    """3D multimodal rotary embedding (temporal / height / width) for Talker.
-
-    position_ids expected shape: (3, batch, seq).
-    """
-
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Qwen3TTSConfig, device=None):
+    def __init__(self, config: Qwen3TTSTalkerConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -178,10 +173,13 @@ class Qwen3TTSTalkerRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+        self.mrope_section = config.rope_parameters.get("mrope_section", [16, 24, 24])
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: Qwen3TTSConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(
+        config: Qwen3TTSTalkerConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -202,20 +200,27 @@ class Qwen3TTSTalkerRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
-        # position_ids: (3, batch, seq) for temporal, height, width
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()
+        # In contrast to other models, Qwen3TTSTalker has different position ids for the grids
+        # So we expand the inv_freq to shape (3, ...)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
+        return torch.cat((freq, freq), dim=-1)
 
 
 def rotate_half(x):
@@ -288,63 +293,11 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
-
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 @use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3TTSTalkerAttention(nn.Module):
-    """Talker attention with 3D multimodal RoPE.
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    Reuses [`Qwen3Attention`] (projections + per-head q/k norm) and only swaps the 1D RoPE for the multimodal
-    [`~models.qwen2_vl.modeling_qwen2_vl.apply_multimodal_rotary_pos_emb`]. The original checkpoints use an
-    interleaved mRoPE layout; since the talker always feeds identical position ids to the temporal/height/width
-    sections, the interleaved and non-interleaved layouts are numerically equivalent, so we use the standard
-    (non-interleaved) implementation and the conversion script writes `interleaved=False` to the config.
-    """
-
-    def __init__(self, config: Qwen3TTSTalkerConfig, layer_idx: int):
+    def __init__(self, config: Qwen3TTSConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
@@ -369,15 +322,7 @@ class Qwen3TTSTalkerAttention(nn.Module):
         )
         self.q_norm = Qwen3TTSRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3TTSRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = getattr(config, "sliding_window", None)
-
-        rope_params = config.rope_parameters if config.rope_parameters is not None else {}
-        # mrope_section describes half-dimension splits (will be repeated *2 in apply function)
-        half_dim = self.head_dim // 2
-        self.mrope_section = rope_params.get(
-            "mrope_section",
-            [half_dim // 3, half_dim // 3, half_dim - 2 * (half_dim // 3)],
-        )
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     def forward(
         self,
@@ -395,9 +340,7 @@ class Qwen3TTSTalkerAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.mrope_section
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -414,7 +357,7 @@ class Qwen3TTSTalkerAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,
+            sliding_window=self.sliding_window,  # diff with Llama
             **kwargs,
         )
 
@@ -899,12 +842,12 @@ class Qwen3TTSTalkerResizeMLP(nn.Module):
 
 @auto_docstring
 @dataclass
-class Qwen3TTSTalkerCodePredictorOutputWithPast(ModelOutput):
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+class Qwen3TTSTalkerCodePredictorOutputWithPast(CausalLMOutputWithPast):
+    r"""
+    generation_steps (`int`, *optional*):
+        Index of the next residual codebook to predict during generation.
+    """
+
     generation_steps: int | None = None
 
 
@@ -1251,6 +1194,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1262,17 +1206,18 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         generation_steps: int | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         generation_steps (`int`, *optional*):
-            Current code group generation step used to select the step-specific code predictor embedding and logits.
+            Residual codebook index for cached decoding. When omitted, `inputs_embeds` contains the talker
+            conditioning state followed by ground-truth codebook embeddings, and each position uses its matching head.
+        labels (`torch.LongTensor` of shape `(batch_size, num_residual_codebooks)`, *optional*):
+            Residual codebook targets aligned with the returned logits. Values of `-100` are ignored.
         """
-        # Prefill stage: derive generation_steps from sequence length
-        if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
-            generation_steps = inputs_embeds.shape[1] - 2
-        # Generation stage: look up step-specific embedding
-        else:
+        if inputs_embeds is None:
+            if generation_steps is None:
+                raise ValueError("`generation_steps` is required when providing code predictor `input_ids`.")
             inputs_embeds = self.model.get_input_embeddings()[generation_steps - 1](input_ids)
 
         inputs_embeds = self.small_to_mtp_projection(inputs_embeds)
@@ -1288,15 +1233,39 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         )
 
         hidden_states = outputs.last_hidden_state
-        logits = self.lm_head(hidden_states).view(
-            *hidden_states.shape[:-1], self.config.num_code_groups - 1, self.config.vocab_size
-        )
-        logits = logits[..., generation_steps, :]
+        if generation_steps is None:
+            num_predictions = hidden_states.shape[1] - 1
+            if not 1 <= num_predictions <= self.config.num_code_groups - 1:
+                raise ValueError("Code predictor inputs must contain a conditioning state and at least one codebook.")
+            logits = torch.stack(
+                [
+                    nn.functional.linear(
+                        hidden_states[:, index + 1],
+                        self.lm_head.weight[index * self.vocab_size : (index + 1) * self.vocab_size],
+                    )
+                    for index in range(num_predictions)
+                ],
+                dim=1,
+            )
+            next_generation_step = num_predictions
+        else:
+            logits = nn.functional.linear(
+                hidden_states,
+                self.lm_head.weight[generation_steps * self.vocab_size : (generation_steps + 1) * self.vocab_size],
+            )
+            next_generation_step = generation_steps + 1
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.config.vocab_size), labels.reshape(-1))
+            if labels.shape != logits.shape[:-1]:
+                raise ValueError("Code predictor labels must match the batch and codebook dimensions of the logits.")
+            loss = self.loss_function(
+                logits=logits,
+                labels=None,
+                shift_labels=labels,
+                vocab_size=self.vocab_size,
+                num_items_in_batch=(labels != -100).sum().clamp_min(1),
+            )
 
         return Qwen3TTSTalkerCodePredictorOutputWithPast(
             loss=loss,
@@ -1304,7 +1273,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            generation_steps=generation_steps + 1,
+            generation_steps=next_generation_step,
         )
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
