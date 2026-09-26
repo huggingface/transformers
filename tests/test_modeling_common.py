@@ -99,6 +99,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_flash_attn_4,
+    require_flash_attn_torch,
     require_kernels,
     require_non_hpu,
     require_torch,
@@ -122,10 +123,11 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
+from transformers.utils.generic import is_flash_attention_requested
 from transformers.utils.output_capturing import CompileableContextVar, OutputRecorder
 
 from .exporters.test_export import ExportTesterMixin
-from .generation.test_utils import GenerationTesterMixin
+from .generation.test_utils import GenerationTesterMixin, _prepare_config_headdim
 
 
 if is_torch_available():
@@ -742,6 +744,9 @@ class ModelTesterMixin(ExportTesterMixin):
     has_attentions = True
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
+
+    # Workaround to make it static within each mixin (model, generate) -> one override for both
+    _prepare_config_headdim = staticmethod(_prepare_config_headdim)
 
     # Note: for all mixins that utilize the Hub in some way, we should ensure that
     # they contain the `hub_retry` decorator in case of failures.
@@ -3552,6 +3557,9 @@ class ModelTesterMixin(ExportTesterMixin):
             valid_fa_implementations = model._compatible_flash_implementations
             if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
                 continue
+            invalid_fa_implementations = model._incompatible_flash_implementations
+            if invalid_fa_implementations is not None and attn_implementation in invalid_fa_implementations:
+                continue
 
             # If we end up here, at least one model class was not skipped
             _has_run_at_least_one_model = True
@@ -3731,6 +3739,22 @@ class ModelTesterMixin(ExportTesterMixin):
     @is_flaky()
     def test_flash_attn_4_inference_equivalence_right_padding(self):
         self.flash_attn_inference_equivalence(attn_implementation="flash_attention_4", padding_side="right")
+
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @mark.flash_attn_torch_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_torch_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_torch", padding_side="left")
+
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @mark.flash_attn_torch_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_torch_inference_equivalence_right_padding(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_torch", padding_side="right")
 
     def test_attn_implementation_composite_models(self):
         """
@@ -4158,6 +4182,12 @@ class ModelTesterMixin(ExportTesterMixin):
     def test_flash_attn_4_can_dispatch_composite_models(self):
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_4")
 
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @mark.flash_attn_torch_test
+    def test_flash_attn_torch_can_dispatch_composite_models(self):
+        self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_torch")
+
     @require_flash_attn
     @require_torch_accelerator
     @require_bitsandbytes
@@ -4270,11 +4300,23 @@ class ModelTesterMixin(ExportTesterMixin):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            # Some FA implementations need specific multiples at least
+            config = self._prepare_config_headdim(config, 16)
+
             model = model_class(config)  # let's construct it here to see if any submodels can't support flash attn
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
             ):
                 self.skipTest(reason=f"At least some parts of this model do not support {attn_implementation}")
+
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+                # Check for validity of the FA implementation, some are not compatible
+                valid_fa_implementations = model._compatible_flash_implementations
+                if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                    continue
+                invalid_fa_implementations = model._incompatible_flash_implementations
+                if invalid_fa_implementations is not None and attn_implementation in invalid_fa_implementations:
+                    continue
 
             # TODO: to change it in the future with other relevant auto classes
             fa_model = model_class._from_config(
@@ -4331,6 +4373,13 @@ class ModelTesterMixin(ExportTesterMixin):
     @slow
     def test_flash_attn_4_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_4")
+
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @mark.flash_attn_torch_test
+    @slow
+    def test_flash_attn_torch_from_config(self):
+        self.flash_attn_from_config(attn_implementation="flash_attention_torch")
 
     def test_sliding_window_mask(self):
         """Tests that we can control the sliding window attention behavior of a model."""

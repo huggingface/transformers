@@ -267,7 +267,9 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None, requested_attention_implementation: str | None = None, version: int | list[int] | None = None
+    config=None,
+    requested_attention_implementation: str | None = None,
+    version: int | list[int] | None = None,
 ) -> bool:
     """
     Checks whether some flavor of flash attention is requested or not. Optionally, checks for specific versions of
@@ -301,7 +303,7 @@ def is_flash_attention_requested(
             version = [version]
         return any(re.match(r".*flash.*" + str(v), checked_attention_implementation) is not None for v in version)
 
-    # Otherwise, just check "flash" is in the attention implementation
+    # Otherwise, just check whether "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
 
 
@@ -838,9 +840,9 @@ class TransformersKwargs(TypedDict, total=False):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
-        cu_seq_lens_q (`torch.LongTensor`, *optional*)
+        cu_seq_lens_q (`torch.IntTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cu_seq_lens_k (`torch.LongTensor`, *optional*)
+        cu_seq_lens_k (`torch.IntTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -858,8 +860,8 @@ class TransformersKwargs(TypedDict, total=False):
     output_hidden_states: bool | None
     output_attentions: bool | None
     output_router_logits: bool | None
-    cu_seq_lens_q: torch.LongTensor | None
-    cu_seq_lens_k: torch.LongTensor | None
+    cu_seq_lens_q: torch.IntTensor | None
+    cu_seq_lens_k: torch.IntTensor | None
     max_length_q: int | None
     max_length_k: int | None
     position_ids: torch.LongTensor | None

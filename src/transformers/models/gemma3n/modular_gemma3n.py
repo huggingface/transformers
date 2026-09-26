@@ -1645,6 +1645,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
         "hidden_states": Gemma3nTextDecoderLayer,
         "attentions": Gemma3nTextAttention,
     }
+    _incompatible_flash_implementations = AttributeError()  # no softcap
 
     @torch.no_grad()
     def _init_weights(self, module):

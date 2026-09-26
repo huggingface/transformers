@@ -444,6 +444,7 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
+    _incompatible_flash_implementations = AttributeError()  # no softcap
 
     @torch.no_grad()
     def _init_weights(self, module):

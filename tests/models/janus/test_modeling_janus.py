@@ -41,7 +41,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, _prepare_config_headdim
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -53,6 +53,14 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
+
+def _prepare_janus_config_headdim(config, requested_dim):
+    config = _prepare_config_headdim(config, requested_dim)
+    # Sync projection_dim with text hidden_size since aligner output must match text embeddings
+    if hasattr(config, "vision_config") and hasattr(config, "text_config"):
+        config.vision_config.projection_dim = config.text_config.hidden_size
+    return config
 
 
 class JanusVisionText2TextModelTester:
@@ -206,13 +214,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
         Override to ensure vision_config.projection_dim stays in sync with text_config.hidden_size.
         The aligner projects vision features to text embedding dimension, so they must match.
         """
-        from tests.test_modeling_common import ModelTesterMixin
-
-        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
-        # Sync projection_dim with text hidden_size since aligner output must match text embeddings
-        if hasattr(config, "vision_config") and hasattr(config, "text_config"):
-            config.vision_config.projection_dim = config.text_config.hidden_size
-        return config
+        return _prepare_janus_config_headdim(config, requested_dim)
 
     def setUp(self):
         self.model_tester = JanusVisionText2TextModelTester(self)
