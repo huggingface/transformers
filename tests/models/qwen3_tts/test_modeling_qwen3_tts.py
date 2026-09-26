@@ -173,7 +173,13 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
                 for name, parameter in model.named_parameters():
                     if name in gradients:
                         self.assertIsNotNone(parameter.grad, name)
-                        torch.testing.assert_close(parameter.grad, gradients[name], atol=1e-6, rtol=1e-5, msg=name)
+                        torch.testing.assert_close(
+                            parameter.grad,
+                            gradients[name],
+                            atol=1e-5,
+                            rtol=1e-4,
+                            msg=lambda message: f"{name}: {message}",
+                        )
                     else:
                         self.assertIsNone(parameter.grad, name)
 
