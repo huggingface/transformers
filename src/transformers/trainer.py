@@ -1712,7 +1712,18 @@ class Trainer:
         use_accelerator_prepare = model is self.model
 
         # prepare using `accelerator` prepare
-        if use_accelerator_prepare:
+        if (
+            getattr(model, "_is_fsdp_managed_module", False)
+            and not self.is_fsdp_enabled
+            and not self.is_deepspeed_enabled
+        ):
+            # Sharded at load time (`DistributedConfig` with FSDP2 or expert-parallel token dispatch): the model
+            # already owns placement and gradient reduction. Prepare autocast and compilation only, without
+            # asking Accelerate to wrap the DTensor parameters in DDP or to shard them again.
+            model = self.accelerator.prepare_model(model, device_placement=False, evaluation_mode=True)
+            self.optimizer = self.accelerator.prepare(self.optimizer)
+            self._sync_replicated_trainable_parameters(model)
+        elif use_accelerator_prepare:
             if delay_optimizer_creation:
                 # TODO: check if we can move this somewhere else
                 if self.is_fsdp_enabled and _is_peft_model(self.model):
@@ -2154,11 +2165,9 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
-            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
-            loss_scale = self.accelerator.num_processes
-            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
-                loss_scale //= pc.tp_size
+            # TP ranks (and the expert-parallel ranks sharing their batch) see replicated batches; `num_processes`
+            # over-counts them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes // self.get_tp_size()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
@@ -2307,8 +2316,9 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                if pc := getattr(self.accelerator, "parallelism_config", None):
-                    num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
+                num_items_in_batch = num_items_in_batch // (
+                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
+                )
 
         return num_items_in_batch
 
@@ -2553,8 +2563,42 @@ class Trainer:
         if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
             return deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
 
-        # 3. Default fallback
+        # 3. Fall back to accelerate, for tensor parallelism configured outside `DistributedConfig`
+        if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+            return pc.tp_size
+
+        # 4. Default fallback
         return 1
+
+    def _sync_replicated_trainable_parameters(self, model: nn.Module) -> None:
+        """
+        Keep the trainable parameters that FSDP2 does not manage identical across ranks.
+
+        A parameter added after `fully_shard` (a PEFT adapter attached to a model sharded at load time) stays a plain
+        replicated tensor next to the DTensor base weights. FSDP2 reduce-scatters only what it sharded and the DDP
+        wrap is skipped for such a model, so each rank would init its own copy and train it on its own batch.
+        Broadcast these parameters from rank 0, then average their gradient over all ranks at the end of each
+        accumulation window.
+        """
+        if not dist.is_available() or not dist.is_initialized() or dist.get_world_size() == 1:
+            return
+
+        from torch.distributed.tensor import DTensor
+
+        def average_gradient(param):
+            # Averaging the accumulated micro-batch gradients once gives the same result as after every backward.
+            if self.accelerator.sync_gradients:
+                dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
+
+        for param in model.parameters():
+            if not param.requires_grad or isinstance(param.data, DTensor):
+                continue
+            with torch.no_grad():
+                dist.broadcast(param.data, src=0)
+            # `train()` can run more than once on the same model: register the hook only once.
+            if not getattr(param, "_replicated_grad_hook_registered", False):
+                param.register_post_accumulate_grad_hook(average_gradient)
+                param._replicated_grad_hook_registered = True
 
     def _wrap_model(self, model: nn.Module, training: bool = True, dataloader: DataLoader | None = None) -> nn.Module:
         """Wrap `model` for distributed training if needed (DDP, FSDP, SageMaker, etc.)."""
