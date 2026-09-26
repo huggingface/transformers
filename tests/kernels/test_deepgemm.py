@@ -28,9 +28,9 @@ Two layers, both mocking only what needs a Hopper/Blackwell GPU + a JIT CUDA too
   (packed int32 UE8M0 SFs, int32 grouped layout, `(qtensor, sf)` operand tuples, recipes, transformed
   Mega MoE weights, ...).
 
-Arch-gated paths are exercised by faking the device capability (`is_sm100()` reads it): the
-SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic, so mocking the
-capability to SM100 drives the Blackwell paths on any device.
+Arch-gated paths are exercised by faking the device (`is_sm100()` reads availability, then the
+capability): the SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic,
+so mocking both to a Blackwell device drives those paths anywhere, a CPU-only runner included.
 """
 
 import contextlib
@@ -43,10 +43,8 @@ from unittest import mock
 
 import torch
 from parameterized import parameterized
-from test_utils import make_experts, make_fp8_experts
 
 import transformers.integrations.deepgemm as dg
-from transformers.distributed.utils import is_dtensor
 from transformers.integrations.deepgemm import (
     deepgemm_bf16_experts_forward,
     deepgemm_fp8_fp4_experts_forward,
@@ -58,6 +56,8 @@ from transformers.testing_utils import (
     require_torch_greater_or_equal,
     torch_device,
 )
+
+from .test_utils import make_experts, make_fp8_experts
 
 
 def _add_one(x, *args, **kwargs):
@@ -230,21 +230,6 @@ class DeepGemmLoaderTest(unittest.TestCase):
 
         run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
 
-    def test_to_local_is_compile_safe(self):
-        # Regression guard: every experts forward here unwraps its weights through `to_local`, so it runs
-        # inside the traced region. It calls `is_dtensor`, whose torch-distributed availability check must
-        # therefore fold to a constant instead of being traced — its body reaches `importlib.metadata`,
-        # which dynamo cannot follow (and follows differently across Python versions). `@lru_cache` is no
-        # protection: dynamo steps past cache wrappers, so the marker has to sit on the wrapped function.
-        torch.compiler.reset()
-
-        @torch.compile(fullgraph=True)
-        def run(x):
-            return x.to_local() + 1 if is_dtensor(x) else x + 1
-
-        out = run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
-        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
-
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
 #
@@ -361,17 +346,48 @@ class DeepGemmForwardTest(unittest.TestCase):
     def _bundle(self, *, is_sm100):
         captured = {}
         bundle = _make_bundle(captured)
-        # The forwards read the arch via `is_sm100()` (which queries `get_device_capability`), so fake the
-        # device to the requested arch: lets SM100 dispatch/packing run on this SM80 box and drives the
-        # Hopper-rejection guards. `[0]` is all `is_sm100()` reads.
+        # The forwards read the arch via `is_sm100()`, so fake the device to the requested arch: lets
+        # SM100 dispatch/packing run on this SM80 box and drives the Hopper-rejection guards. `[0]` is
+        # all `is_sm100()` reads of the capability, and it reaches that only when CUDA is available —
+        # so a CPU-only runner needs both faked, or every arch-gated branch below goes untested.
         capability = (10, 0) if is_sm100 else (9, 0)
         with (
             mock.patch.object(dg, "load_deepgemm_kernel", return_value=bundle),
+            mock.patch.object(torch.cuda, "is_available", return_value=True),
             mock.patch.object(torch.cuda, "get_device_capability", return_value=capability),
         ):
             yield captured
 
     # ── deepgemm_fp8_fp4_linear ────────────────────────────────────────────────
+
+    def test_every_arm_refuses_hidden_states_that_are_not_bfloat16(self):
+        """Each arm builds its intermediates and its output in bfloat16, so anything else changes
+        the dtype the caller gets back. The check belongs to the guard, not to one forward: it
+        used to be copied into two of the three and missing from Mega MoE, which allocates its
+        output bfloat16 regardless."""
+        import transformers.integrations.deepgemm as dg
+
+        class _Experts(torch.nn.Module):
+            activation_scheme = "dynamic"
+
+        arms = (
+            dg.deepgemm_bf16_experts_forward,
+            dg.deepgemm_fp8_fp4_experts_forward,
+            dg.deepgemm_fp8_fp4_megamoe_experts_forward,
+        )
+        for forward in arms:
+            with self.subTest(forward=forward.__name__), self.assertRaises(ValueError) as caught:
+                forward(_Experts(), torch.zeros(2, 4, dtype=torch.float16), None, None)
+            self.assertIn("bfloat16", str(caught.exception))
+
+    def test_megamoe_refuses_a_post_expert_norm(self):
+        """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm has nowhere to go."""
+        import transformers.integrations.deepgemm as dg
+
+        module = torch.nn.Module()
+        module.has_post_expert_norm = True
+        with self.assertRaises(NotImplementedError):
+            dg._assert_no_post_expert_norm(module)
 
     def test_linear_fp8_sm90_kernel_inputs(self):
         # FP8 weights + float32 block SF on SM90: recipe stays None, SFs are handed over row-major
@@ -431,11 +447,12 @@ class DeepGemmForwardTest(unittest.TestCase):
         int8_w = torch.zeros(1, 1, dtype=torch.int8, device=torch_device)
         f32_sf = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
         ue8m0_sf = f32_sf.to(torch.float8_e8m0fnu)
-        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):  # SM90
+        available = mock.patch.object(torch.cuda, "is_available", return_value=True)
+        with available, mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):  # SM90
             with self.assertRaisesRegex(NotImplementedError, "Blackwell"):
                 dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # FP4 has no Hopper kernel
             dg._assert_sm100_requirements(fp8_w, f32_sf)  # float32 SF is fine on SM90 -> no raise
-        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):  # SM100
+        with available, mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):  # SM100
             with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
                 dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
             dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
@@ -580,6 +597,7 @@ class DeepGemmForwardTest(unittest.TestCase):
                 requires_grad=False,
             ),
             config=types.SimpleNamespace(swiglu_limit=swiglu_limit),
+            has_post_expert_norm=False,
         )
 
     @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7

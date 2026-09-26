@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
@@ -29,6 +30,15 @@ from ..utils import (
 )
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 from .quantizers_utils import get_module_from_name
+
+
+warnings.warn(
+    "`transformers.quantizers.quantizer_mxfp4` is frozen and receives no new recipes. `FineGrainedConfig` supersedes it "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only); this module will be removed in a future "
+    "release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 if is_torch_available():

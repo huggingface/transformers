@@ -87,9 +87,9 @@ class DtensorShardOperation:
         self.param_ndim = param.ndim
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
-        # [_axis0_offset, _axis0_offset + _axis0_local_size)
-        self._axis0_offset = offsets[0]
-        self._axis0_local_size = local_shape[0]
+        # [_axis0_offset, _axis0_offset + _axis0_local_size); a 0-dim parameter has no axis 0
+        self._axis0_offset = offsets[0] if offsets else 0
+        self._axis0_local_size = local_shape[0] if local_shape else 1
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -112,7 +112,9 @@ class DtensorShardOperation:
 
         # Dense path
         if tensor_idx is None:
-            if not dim_placements:
+            # nothing to slice: a 0-dim tensor has no axis, and no placement names one
+            # (`source[...]`, since a lazy safetensors slice rejects `source[()]`)
+            if not source_shape or not dim_placements:
                 return source[...].to(device=device, dtype=dtype)
 
             # Determine for each tensor dimension, which type of sharding operations to apply (_StridedShard or Shard) and which rank to apply it to.
@@ -138,7 +140,6 @@ class DtensorShardOperation:
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
             # finally fetch from the disk only the slices
-            # finally fetch from the disk only the slices
             if has_strided_shard:
                 # Multi-interval dim: read each piece separately, then concatenate.
                 return self._slice_and_cat(source, intervals_by_dim, device, dtype)
@@ -161,6 +162,10 @@ class DtensorShardOperation:
         owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
         if has_axis0_shard and not owns_tensor_idx:
             return None
+
+        # a 0-dim per-expert value has no axis to slice, so this rank takes it whole
+        if not source_shape:
+            return source[...].to(device=device, dtype=dtype)
 
         # `param_dim` indexes the full parameter layout [N, in, out] (expert axis first).
         # In per-expert loading, leading axis is absent ([in, out]).

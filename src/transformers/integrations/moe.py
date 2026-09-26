@@ -164,6 +164,10 @@ def batched_mm_experts_forward(
         proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
+    # Normalize each expert application, where such a norm is defined, before it is weighted.
+    if self.has_post_expert_norm:
+        proj_out = self.post_expert_norm(proj_out)  # (S, hidden_dim)
+
     # Apply routing weights
     if sentinel_mask is not None:
         # Zero weights already drop these from the output; the mask keeps them out of the router gradient.
@@ -480,6 +484,10 @@ def grouped_mm_experts_forward(
     if sentinel_mask is not None:
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
+    # Normalize each expert application, where such a norm is defined, before it is weighted.
+    if self.has_post_expert_norm:
+        proj_out = self.post_expert_norm(proj_out)  # (S, hidden_dim)
+
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
@@ -547,6 +555,7 @@ def use_experts_implementation(
     is_transposed: bool = False,
     has_bias: bool = False,
     has_gate: bool = True,
+    has_post_expert_norm: bool = False,
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
@@ -565,6 +574,9 @@ def use_experts_implementation(
         has_gate (`bool`, *optional*, defaults to `True`):
             Whether the experts use a gating mechanism or not.
             Whether it has gate_up_proj weights or just up_proj weights.
+        has_post_expert_norm (`bool`, *optional*, defaults to `False`):
+            Whether the experts normalize the down output before the routing weights. The norm
+            itself is the module under `post_expert_norm`, which every backend calls directly.
 
     Returns:
         `type[torch.nn.Module]`: The modified experts class.
@@ -582,6 +594,7 @@ def use_experts_implementation(
             self.has_bias = has_bias
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
+            self.has_post_expert_norm = has_post_expert_norm
             self._is_expert_parallel = False
 
         @wraps(original_forward)

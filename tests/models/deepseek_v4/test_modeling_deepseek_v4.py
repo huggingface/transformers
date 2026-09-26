@@ -38,7 +38,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         DeepseekV4Model,
-        FineGrainedFP8Config,
+        FineGrainedConfig,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -185,22 +185,9 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(keys.shape[3], head_dim)
             self.assertEqual(keys.shape, values.shape)
 
-    @unittest.skip(
-        reason=(
-            "V4's conversion mapping is two-pass: a structural prefix rename "
-            "(``layers.X.attn.`` → ``model.layers.X.self_attn.``) runs first, then specific in-prefix "
-            "renames operate on the already-prefixed HF-form keys (``model.layers.X.self_attn.compressor.norm.`` "
-            "→ ``...compressor.kv_norm.``). This split is load-bearing for save / load round-tripping — "
-            "any single-pass ordering loses information in either direction (the general prefix rule "
-            "and a specific in-prefix rule both want to match the same upstream key, and one of the "
-            "two directions ends up with the general rule stealing the match). The base "
-            "``test_reverse_loading_mapping`` checks every source pattern against the *upstream-form* "
-            "serialized keys, so the Pass 2 patterns (written in HF form) inherently can't satisfy "
-            "that invariant. The actual round-trip is exercised by ``test_save_load``."
-        )
-    )
     def test_reverse_loading_mapping(self):
-        pass
+        # the base model has no `model.` prefix for the checkpoint's prefix renames to reverse onto
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(
         reason=(
@@ -239,7 +226,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
     """End-to-end check on the published DeepSeek-V4-Flash checkpoint.
 
     Loads the real 43-layer FP8 weights, dequantizes on the fly via
-    :class:`FineGrainedFP8Config`, and greedy-generates a continuation of a fixed
+    :class:`FineGrainedConfig`, and greedy-generates a continuation of a fixed
     prompt. The forward path that this test covers is everything past the typical
     tiny-config tests can reach: the per-layer FP8 dequant in
     ``update_weight_conversions``, the ``compress_ratios → layer_types`` config
@@ -270,7 +257,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         )
     )
     def test_v4_flash_dequantized_generation(self):
-        quantization_config = FineGrainedFP8Config(dequantize=True)
+        quantization_config = FineGrainedConfig(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -388,7 +375,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             ),
         ]
 
-        quantization_config = FineGrainedFP8Config(dequantize=True)
+        quantization_config = FineGrainedConfig(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -432,7 +419,7 @@ import torch.distributed as dist
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
-from transformers.utils.quantization_config import FineGrainedFP8Config
+from transformers.utils.quantization_config import FineGrainedConfig
 
 
 LOADTIME_DISPATCH = {loadtime_dispatch!r}
