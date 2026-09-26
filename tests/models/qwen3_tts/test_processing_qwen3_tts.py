@@ -14,13 +14,14 @@
 """Tests for Qwen3TTSProcessor."""
 
 import copy
+import json
 import os
 import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import Qwen2TokenizerFast, Qwen3TTSFeatureExtractor, Qwen3TTSProcessor, is_torch_available
+from transformers import AutoProcessor, Qwen2TokenizerFast, Qwen3TTSFeatureExtractor, Qwen3TTSProcessor, is_torch_available
 from transformers.testing_utils import require_accelerate, require_torch, slow
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_soundfile_available
@@ -599,6 +600,30 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio = processor.decode(codes)
 
         self.assertIsInstance(audio, torch.Tensor)
+
+    def test_save_load_audio_tokenizer_reference(self):
+        processor = self.get_processor()
+        with tempfile.TemporaryDirectory() as directory:
+            audio_directory = os.path.join(directory, "audio_tokenizer")
+            processor_directory = os.path.join(directory, "processor")
+            _build_tiny_audio_tokenizer().save_pretrained(audio_directory)
+            processor.audio_tokenizer = Qwen3TTSTokenizerModel.from_pretrained(audio_directory)
+            processor.save_pretrained(processor_directory)
+            with open(os.path.join(processor_directory, "processor_config.json"), encoding="utf-8") as file:
+                metadata = json.load(file)
+            self.assertEqual(
+                metadata["audio_tokenizer"],
+                {
+                    "audio_tokenizer_class": "Qwen3TTSTokenizerModel",
+                    "audio_tokenizer_name_or_path": audio_directory,
+                },
+            )
+            self.assertFalse(os.path.exists(os.path.join(processor_directory, "model.safetensors")))
+            restored = AutoProcessor.from_pretrained(processor_directory)
+            self.assertIsInstance(restored, Qwen3TTSProcessor)
+            self.assertIsInstance(restored.audio_tokenizer, Qwen3TTSTokenizerModel)
+            codes = torch.randint(0, 8, (6, 4))
+            torch.testing.assert_close(restored.decode(codes), processor.decode(codes))
 
     @slow
     def test_can_load_processor_from_pretrained(self):
