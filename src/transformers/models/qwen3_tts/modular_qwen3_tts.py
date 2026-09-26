@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Qwen3TTS model."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -24,20 +23,16 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
-from ...utils.generic import maybe_autocast
-from ..qwen2.modeling_qwen2 import eager_attention_forward
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniDiTConfig
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     ECAPA_TimeDelayNet,
     Qwen2_5OmniTalkerModel,
 )
-from ..qwen2_vl.modeling_qwen2_vl import apply_multimodal_rotary_pos_emb
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
     Qwen3DecoderLayer,
@@ -255,6 +250,10 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
         if self.rope_parameters is None:
             self.rope_parameters = {"rope_type": "default", "rope_theta": 500000.0}
+        half_dim = (getattr(self, "head_dim", None) or self.hidden_size // self.num_attention_heads) // 2
+        self.rope_parameters.setdefault(
+            "mrope_section", [half_dim // 3, half_dim // 3, half_dim - 2 * (half_dim // 3)]
+        )
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
@@ -343,95 +342,12 @@ class Qwen3TTSRotaryEmbedding(Qwen3OmniMoeRotaryEmbedding):
     pass
 
 
-class Qwen3TTSTalkerRotaryEmbedding(Qwen3OmniMoeRotaryEmbedding):
-    """3D multimodal rotary embedding (temporal / height / width) for Talker.
-
-    position_ids expected shape: (3, batch, seq).
-    """
-
-    @torch.no_grad()
-    @dynamic_rope_update
-    def forward(self, x, position_ids):
-        # position_ids: (3, batch, seq) for temporal, height, width
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class Qwen3TTSTalkerRotaryEmbedding(Qwen2VLRotaryEmbedding):
+    pass
 
 
 class Qwen3TTSTalkerAttention(Qwen3Attention):
-    """Talker attention with 3D multimodal RoPE.
-
-    Reuses [`Qwen3Attention`] (projections + per-head q/k norm) and only swaps the 1D RoPE for the multimodal
-    [`~models.qwen2_vl.modeling_qwen2_vl.apply_multimodal_rotary_pos_emb`]. The original checkpoints use an
-    interleaved mRoPE layout; since the talker always feeds identical position ids to the temporal/height/width
-    sections, the interleaved and non-interleaved layouts are numerically equivalent, so we use the standard
-    (non-interleaved) implementation and the conversion script writes `interleaved=False` to the config.
-    """
-
-    def __init__(self, config: Qwen3TTSTalkerConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.sliding_window = getattr(config, "sliding_window", None)
-
-        rope_params = config.rope_parameters if config.rope_parameters is not None else {}
-        # mrope_section describes half-dimension splits (will be repeated *2 in apply function)
-        half_dim = self.head_dim // 2
-        self.mrope_section = rope_params.get(
-            "mrope_section",
-            [half_dim // 3, half_dim // 3, half_dim - 2 * (half_dim // 3)],
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.mrope_section
-        )
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+    pass
 
 
 class Qwen3TTSCodePredictorAttention(Qwen3Attention):
@@ -487,12 +403,12 @@ class Qwen3TTSTalkerResizeMLP(VoxtralMultiModalProjector):
 
 @auto_docstring
 @dataclass
-class Qwen3TTSTalkerCodePredictorOutputWithPast(ModelOutput):
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+class Qwen3TTSTalkerCodePredictorOutputWithPast(CausalLMOutputWithPast):
+    r"""
+    generation_steps (`int`, *optional*):
+        Index of the next residual codebook to predict during generation.
+    """
+
     generation_steps: int | None = None
 
 
@@ -672,6 +588,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -683,17 +600,18 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         generation_steps: int | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         generation_steps (`int`, *optional*):
-            Current code group generation step used to select the step-specific code predictor embedding and logits.
+            Residual codebook index for cached decoding. When omitted, `inputs_embeds` contains the talker
+            conditioning state followed by ground-truth codebook embeddings, and each position uses its matching head.
+        labels (`torch.LongTensor` of shape `(batch_size, num_residual_codebooks)`, *optional*):
+            Residual codebook targets aligned with the returned logits. Values of `-100` are ignored.
         """
-        # Prefill stage: derive generation_steps from sequence length
-        if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
-            generation_steps = inputs_embeds.shape[1] - 2
-        # Generation stage: look up step-specific embedding
-        else:
+        if inputs_embeds is None:
+            if generation_steps is None:
+                raise ValueError("`generation_steps` is required when providing code predictor `input_ids`.")
             inputs_embeds = self.model.get_input_embeddings()[generation_steps - 1](input_ids)
 
         inputs_embeds = self.small_to_mtp_projection(inputs_embeds)
@@ -709,15 +627,39 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         )
 
         hidden_states = outputs.last_hidden_state
-        logits = self.lm_head(hidden_states).view(
-            *hidden_states.shape[:-1], self.config.num_code_groups - 1, self.config.vocab_size
-        )
-        logits = logits[..., generation_steps, :]
+        if generation_steps is None:
+            num_predictions = hidden_states.shape[1] - 1
+            if not 1 <= num_predictions <= self.config.num_code_groups - 1:
+                raise ValueError("Code predictor inputs must contain a conditioning state and at least one codebook.")
+            logits = torch.stack(
+                [
+                    nn.functional.linear(
+                        hidden_states[:, index + 1],
+                        self.lm_head.weight[index * self.vocab_size : (index + 1) * self.vocab_size],
+                    )
+                    for index in range(num_predictions)
+                ],
+                dim=1,
+            )
+            next_generation_step = num_predictions
+        else:
+            logits = nn.functional.linear(
+                hidden_states,
+                self.lm_head.weight[generation_steps * self.vocab_size : (generation_steps + 1) * self.vocab_size],
+            )
+            next_generation_step = generation_steps + 1
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.config.vocab_size), labels.reshape(-1))
+            if labels.shape != logits.shape[:-1]:
+                raise ValueError("Code predictor labels must match the batch and codebook dimensions of the logits.")
+            loss = self.loss_function(
+                logits=logits,
+                labels=None,
+                shift_labels=labels,
+                vocab_size=self.vocab_size,
+                num_items_in_batch=(labels != -100).sum().clamp_min(1),
+            )
 
         return Qwen3TTSTalkerCodePredictorOutputWithPast(
             loss=loss,
@@ -725,7 +667,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            generation_steps=generation_steps + 1,
+            generation_steps=next_generation_step,
         )
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
