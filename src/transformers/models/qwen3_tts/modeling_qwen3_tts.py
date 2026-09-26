@@ -1535,9 +1535,9 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             # attention_mask covers all past tokens but inputs_embeds is 1 token)
             return position_ids[:, :, -inputs_embeds.shape[1] :]
 
-        batch_size, seq_length = input_ids.shape
+        batch_size, seq_length = inputs_embeds.shape[:2]
         delta = past_key_values_length + self.rope_deltas
-        position_ids = torch.arange(seq_length, device=input_ids.device)
+        position_ids = torch.arange(seq_length, device=inputs_embeds.device)
         position_ids = position_ids.view(1, -1).expand(batch_size, -1)
         position_ids = position_ids.add(delta)
         return position_ids.unsqueeze(0).expand(3, -1, -1)
@@ -1561,6 +1561,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         subtalker_top_p: float | None = None,
         subtalker_top_k: int | None = None,
         subtalker_temperature: float | None = None,
+        codec_ids: torch.LongTensor | None = None,
         audio_codes: torch.LongTensor | None = None,
         audio_attention_mask: torch.Tensor | None = None,
         speaker_embeddings: torch.FloatTensor | None = None,
@@ -1595,6 +1596,8 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             Top-k sampling value passed to the code predictor.
         subtalker_temperature (`float`, *optional*):
             Sampling temperature passed to the code predictor.
+        codec_ids (`torch.LongTensor` of shape `(batch_size, num_code_groups)`, *optional*):
+            Codec frame prepared by the generation mixin for the current decoding step.
         """
         teacher_forcing = audio_codes is not None
         if teacher_forcing:
@@ -1607,38 +1610,10 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             )
             position_ids, _ = self.get_rope_index(attention_mask)
             use_cache = False if use_cache is None else use_cache
-        # Prefill stage
-        elif inputs_embeds is not None and inputs_embeds.shape[1] > 1:
-            generation_step = -1
-            codec_ids = None
-        # Generation stage
         else:
-            last_id_hidden = self.get_input_embeddings()(input_ids)
-            predictor_result = self.code_predictor.generate(
-                inputs_embeds=torch.cat((past_hidden, last_id_hidden), dim=1),
-                max_new_tokens=self.config.talker_config.num_code_groups - 1,
-                do_sample=subtalker_dosample,
-                top_p=subtalker_top_p,
-                top_k=subtalker_top_k,
-                temperature=subtalker_temperature,
-                output_hidden_states=True,
-                return_dict_in_generate=True,
-            )
-            codec_ids = torch.cat((input_ids, predictor_result.sequences), dim=-1)
-            codec_hiddens = torch.cat(
-                [last_id_hidden]
-                + [
-                    self.code_predictor.get_input_embeddings()[i](predictor_result.sequences[..., i : i + 1])
-                    for i in range(self.config.talker_config.num_code_groups - 1)
-                ],
-                dim=1,
-            )
-            inputs_embeds = codec_hiddens.sum(1, keepdim=True)
-
-            if generation_step < trailing_text_hidden.shape[1]:
-                inputs_embeds = inputs_embeds + trailing_text_hidden[:, generation_step].unsqueeze(1)
-            else:
-                inputs_embeds = inputs_embeds + tts_pad_embed
+            generation_step = -1 if generation_step is None else generation_step
+            if inputs_embeds is None:
+                inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if attention_mask is not None and not teacher_forcing:
             position_ids = self.compute_3d_position_ids(input_ids, inputs_embeds, attention_mask, past_key_values)
