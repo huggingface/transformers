@@ -16,8 +16,9 @@ from unittest.mock import patch
 
 import torch
 
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, Qwen3MoeConfig, Qwen3MoeForCausalLM, Qwen3MoeModel
 from transformers.distributed import tensor_parallel
+from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -26,7 +27,216 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
 )
-from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test, require_torch
+
+
+# Qwen3 MoE's predefined plans, as resolved on `Qwen3MoeModel` (no `model.` prefix).
+DENSE_TP_PLAN = {
+    "layers.*.self_attn.q_proj": "colwise",
+    "layers.*.self_attn.k_proj": "colwise",
+    "layers.*.self_attn.v_proj": "colwise",
+    "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+    "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+    "layers.*.self_attn.o_proj": "rowwise",
+    "layers.*.mlp.gate_proj": "colwise",
+    "layers.*.mlp.up_proj": "colwise",
+    "layers.*.mlp.down_proj": "rowwise",
+}
+EXPERT_TP_PLAN = {
+    "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+    "layers.*.mlp.experts.down_proj": "rowwise",
+    "layers.*.mlp.experts": "moe_tp_experts",
+}
+EP_PLAN = {
+    "layers.*.mlp.gate": "ep_router",
+    "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+    "layers.*.mlp.experts.down_proj": "grouped_gemm",
+    "layers.*.mlp.experts": "moe_tp_experts",
+}
+
+
+@require_torch
+class TestParallelPlanResolution(TestCasePlus):
+    def setUp(self):
+        super().setUp()
+        self.config = Qwen3MoeConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=32,
+            moe_intermediate_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            head_dim=4,
+            num_experts=4,
+            num_experts_per_tok=2,
+        )
+        with torch.device("meta"):
+            self.model = Qwen3MoeModel(self.config)
+
+    def test_ep_plan_setter(self):
+        self.model.ep_plan = None
+        self.assertEqual(self.model.ep_plan, {})
+        with self.assertRaisesRegex(ValueError, "Can only set a dictionary"):
+            self.model.ep_plan = "auto"
+        with self.assertRaisesRegex(ValueError, "Unsupported parallel styles"):
+            self.model.ep_plan = {"layers.*.mlp.experts": "invalid_style"}
+        self.model.ep_plan = EP_PLAN
+        self.assertEqual(self.model.ep_plan, EP_PLAN)
+
+    def test_disabled_parallelism_has_no_plans(self):
+        for config in (DistributedConfig(), DistributedConfig(fsdp_size=8), DistributedConfig(pp_size=2)):
+            with self.subTest(config=config):
+                self.assertEqual(tensor_parallel.resolve_parallel_plans(self.model, config), ({}, {}))
+
+    def test_tp_only_keeps_experts_in_tp_plan(self):
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
+        self.assertEqual(tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN)
+        self.assertEqual(ep_plan, {})
+
+    def test_ep_takes_experts_and_router_out_of_tp_plan(self):
+        for config in (
+            DistributedConfig(tp_size=4, ep_size=4),
+            DistributedConfig(tp_size=2, fsdp_size=2, ep_size=2),
+        ):
+            with self.subTest(config=config):
+                tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+                self.assertEqual(tp_plan, DENSE_TP_PLAN)
+                self.assertEqual(ep_plan, EP_PLAN)
+
+    def test_legacy_flag_is_an_alias_for_ep_size(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            legacy = DistributedConfig(tp_size=4, enable_expert_parallel=True)
+        self.assertEqual([w.category for w in caught], [FutureWarning])
+        self.assertIn("Use ep_size=4 instead", str(caught[0].message))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            explicit = DistributedConfig(tp_size=4, ep_size=4)
+            disabled = DistributedConfig(tp_size=4, ep_size=1, enable_expert_parallel=True)
+        self.assertEqual(caught, [])
+        self.assertEqual(legacy, explicit)
+        self.assertFalse(disabled.enable_expert_parallel)
+        self.assertEqual(
+            tensor_parallel.resolve_parallel_plans(self.model, legacy),
+            tensor_parallel.resolve_parallel_plans(self.model, explicit),
+        )
+
+    def test_ep_plan_is_a_dict_and_round_trips(self):
+        with self.assertRaisesRegex(ValueError, "`ep_plan` must be a dictionary or None"):
+            DistributedConfig(tp_size=4, ep_size=4, ep_plan="auto")
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.gate": "ep_router"})
+        self.assertEqual(config.to_dict()["ep_plan"], {"layers.*.mlp.gate": "ep_router"})
+        self.assertEqual(DistributedConfig.from_dict(config.to_dict()), config)
+
+    def test_overrides_merge_into_the_predefined_plans(self):
+        config = DistributedConfig(
+            tp_size=4,
+            ep_size=4,
+            tp_plan={"layers.*.self_attn.q_proj": "colwise_rep"},
+            ep_plan={"layers.*.mlp.experts.down_proj": "rowwise"},
+        )
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, DENSE_TP_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
+        self.assertEqual(ep_plan, EP_PLAN | {"layers.*.mlp.experts.down_proj": "rowwise"})
+        # The merged plans are stored on the model, the config defaults are untouched.
+        self.assertEqual(self.model.tp_plan["layers.*.self_attn.q_proj"], "colwise_rep")
+        self.assertEqual(self.model.ep_plan["layers.*.mlp.experts.down_proj"], "rowwise")
+        self.assertEqual(self.model.config.base_model_tp_plan["layers.*.self_attn.q_proj"], "colwise")
+        self.assertEqual(self.model.config.base_model_ep_plan["layers.*.mlp.experts.down_proj"], "grouped_gemm")
+        # The overrides are not rewritten with the merged plans.
+        self.assertEqual(config.tp_plan, {"layers.*.self_attn.q_proj": "colwise_rep"})
+        self.assertEqual(config.ep_plan, {"layers.*.mlp.experts.down_proj": "rowwise"})
+        # The merged EP plan stays on the model but is not applied while EP is disabled.
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
+        self.assertEqual(tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
+        self.assertEqual(ep_plan, {})
+        self.assertEqual(self.model.ep_plan["layers.*.mlp.experts.down_proj"], "rowwise")
+
+    def test_ep_rules_take_precedence_over_tp_rules_for_the_same_modules(self):
+        config = DistributedConfig(
+            tp_size=4,
+            ep_size=4,
+            tp_plan={"layers.*.mlp.experts.gate_up_proj": "packed_rowwise", "layers.*.mlp.gate": "colwise"},
+        )
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        self.assertEqual(tp_plan, DENSE_TP_PLAN)
+        self.assertEqual(ep_plan, EP_PLAN)
+        # The custom TP rules are kept on the model and apply as soon as EP is disabled.
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
+        self.assertEqual(tp_plan["layers.*.mlp.experts.gate_up_proj"], "packed_rowwise")
+        self.assertEqual(tp_plan["layers.*.mlp.gate"], "colwise")
+        self.assertEqual(ep_plan, {})
+
+    def test_ep_requires_an_expert_plan(self):
+        self.model.ep_plan = None
+        with self.assertRaisesRegex(ValueError, "does not define an expert-parallel plan"):
+            tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan=EP_PLAN)
+        self.assertEqual(tensor_parallel.resolve_parallel_plans(self.model, config), (DENSE_TP_PLAN, EP_PLAN))
+
+    def test_unmatched_override_keys_raise_without_changing_plans(self):
+        original_tp_plan, original_ep_plan = self.model.tp_plan.copy(), self.model.ep_plan.copy()
+        for plan_name in ("tp_plan", "ep_plan"):
+            for key in ("layers.*.mlp.experst", "layers.*.mlp.experts.missing_weight", "model.layers.*.mlp.experts"):
+                with self.subTest(plan_name=plan_name, key=key):
+                    config = DistributedConfig(tp_size=4, ep_size=4, **{plan_name: {key: "grouped_gemm"}})
+                    with self.assertRaisesRegex(ValueError, f"The `{plan_name}` pattern .* does not match") as error:
+                        tensor_parallel.resolve_parallel_plans(self.model, config)
+                    self.assertIn(key, str(error.exception))
+                    self.assertIn("Qwen3MoeModel", str(error.exception))
+                    self.assertEqual(self.model.tp_plan, original_tp_plan)
+                    self.assertEqual(self.model.ep_plan, original_ep_plan)
+
+    def test_override_keys_can_match_modules_parameters_or_existing_plan_keys(self):
+        for plan_name in ("tp_plan", "ep_plan"):
+            # `gate_proj` is in the predefined TP plan even though this MoE model has no such module.
+            for key in ("layers.*.mlp", "layers.0.self_attn.q_proj.weight", "layers.*.mlp.gate_proj"):
+                with self.subTest(plan_name=plan_name, key=key):
+                    original = getattr(self.model, plan_name).copy()
+                    if plan_name == "ep_plan":
+                        self.model.ep_plan = original | {"layers.*.mlp.gate_proj": "colwise"}
+                    config = DistributedConfig(tp_size=4, **{plan_name: {key: "colwise_rep"}})
+                    tensor_parallel.resolve_parallel_plans(self.model, config)
+                    self.assertEqual(getattr(self.model, plan_name)[key], "colwise_rep")
+                    setattr(self.model, plan_name, original)
+
+    def test_head_model_overrides_need_the_model_prefix(self):
+        with torch.device("meta"):
+            model = Qwen3MoeForCausalLM(self.config)
+        config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.gate": "ep_router"})
+        with self.assertRaisesRegex(ValueError, "including any 'model.' prefix"):
+            tensor_parallel.resolve_parallel_plans(model, config)
+
+        config = DistributedConfig(
+            tp_size=4,
+            ep_size=4,
+            tp_plan={"model.layers.*.self_attn.q_proj": "colwise_rep"},
+            ep_plan={"model.layers.*.mlp.gate": "ep_router"},
+        )
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(model, config)
+        expected_tp_plan = {f"model.{k}": v for k, v in DENSE_TP_PLAN.items()} | {"lm_head": "colwise_gather_output"}
+        self.assertEqual(tp_plan, expected_tp_plan | config.tp_plan)
+        self.assertEqual(ep_plan, {f"model.{k}": v for k, v in EP_PLAN.items()})
+
+    def test_masked_ep_shards_and_installs_hooks_on_the_tp_mesh(self):
+        tp_mesh = object()
+        _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
+        experts, router = self.model.layers[0].mlp.experts, self.model.layers[0].mlp.gate
+        with (
+            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "validate_param") as validate,
+            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "shard_param") as shard,
+            patch.object(ALL_PARALLEL_STYLES["moe_tp_experts"], "install_forward") as install_experts,
+            patch.object(ALL_PARALLEL_STYLES["ep_router"], "install_forward") as install_router,
+        ):
+            result = tensor_parallel.apply_tensor_parallelism(self.model, tp_mesh, ep_plan)
+        self.assertIs(result, self.model)
+        self.assertEqual(shard.call_count, 2)
+        for name in ("gate_up_proj", "down_proj"):
+            validate.assert_any_call(experts, name, tp_mesh, parameter_name=f"layers.0.mlp.experts.{name}")
+            shard.assert_any_call(experts, name, tp_mesh)
+        install_experts.assert_called_once_with(experts, tp_mesh)
+        install_router.assert_called_once_with(router, tp_mesh)
 
 
 @is_tensor_parallel_test

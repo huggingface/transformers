@@ -57,7 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
-from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
+from .distributed.tensor_parallel import _get_parameter_plan, verify_tp_plan
 from .distributed.utils import (
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
@@ -5006,7 +5006,7 @@ def get_total_byte_count(
         param_byte_count = param.numel() * dtype_size
 
         if len(tp_plan) > 0:
-            is_part_of_plan = _get_parameter_tp_plan(param_name, tp_plan, is_weight=True) is not None
+            is_part_of_plan = _get_parameter_plan(param_name, tp_plan, is_weight=True) is not None
             param_byte_count //= _get_torch_distributed_world_size() if is_part_of_plan else 1
 
         total_byte_count[device] += param_byte_count
