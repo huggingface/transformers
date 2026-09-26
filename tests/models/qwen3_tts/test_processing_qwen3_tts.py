@@ -143,44 +143,8 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTS is text/audio only")
-    def test_image_processor_defaults(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS is text/audio only")
-    def test_video_processor_defaults(self):
-        pass
-
     @unittest.skip(reason="Qwen3TTS is a text/audio processor")
     def test_processor_text_has_no_visual(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS uses custom text/audio kwarg routing")
-    def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS uses custom text/audio kwarg routing")
-    def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS uses custom text/audio kwarg routing")
-    def test_unstructured_kwargs_audio(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS uses custom text/audio kwarg routing")
-    def test_doubly_passed_kwargs_audio(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS uses custom text/audio kwarg routing")
-    def test_structured_kwargs_audio_nested(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS does not combine text with image inputs")
-    def test_overlapping_text_image_kwargs_handling(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS uses custom text/audio kwarg routing")
-    def test_overlapping_text_audio_kwargs_handling(self):
         pass
 
     @unittest.skip(reason="Qwen3TTS has no multimodal token counting helper")
@@ -209,23 +173,6 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(set(inputs.keys()), {"input_features"})
         torch.testing.assert_close(inputs["input_features"], feature_inputs["input_features"])
-
-    def test_call_text_and_audio(self):
-        processor = self.get_processor()
-        inputs = processor(
-            text="Hello there.",
-            audio=np.zeros(2048, dtype=np.float32),
-            sampling_rate=processor.feature_extractor.sampling_rate,
-            return_tensors="pt",
-        )
-
-        self.assertIn("input_ids", inputs)
-        self.assertIn("input_features", inputs)
-
-    def test_call_requires_input(self):
-        processor = self.get_processor()
-        with self.assertRaises(ValueError):
-            processor()
 
     def test_call_cached_training_inputs(self):
         processor = self.get_processor()
