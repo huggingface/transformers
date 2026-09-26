@@ -20,8 +20,15 @@ import tempfile
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
-from transformers import AutoProcessor, Qwen2TokenizerFast, Qwen3TTSFeatureExtractor, Qwen3TTSProcessor, is_torch_available
+from transformers import (
+    AutoProcessor,
+    Qwen2TokenizerFast,
+    Qwen3TTSFeatureExtractor,
+    Qwen3TTSProcessor,
+    is_torch_available,
+)
 from transformers.testing_utils import require_accelerate, require_torch, slow
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_soundfile_available
@@ -625,8 +632,29 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             codes = torch.randint(0, 8, (6, 4))
             torch.testing.assert_close(restored.decode(codes), processor.decode(codes))
 
+    @parameterized.expand(
+        ["shahvandit/qwen3-tts-base-hf", "shahvandit/qwen3-tts-customvoice-hf", "shahvandit/qwen3-tts-voicedesign-hf"]
+    )
     @slow
-    def test_can_load_processor_from_pretrained(self):
-        processor = Qwen3TTSProcessor.from_pretrained("qwen3_tts_converted")
+    def test_can_load_processor_from_pretrained(self, checkpoint):
+        processor = AutoProcessor.from_pretrained(checkpoint)
+        self.assertIsInstance(processor, Qwen3TTSProcessor)
         self.assertIsNotNone(processor.tokenizer)
         self.assertIsNotNone(processor.feature_extractor)
+        self.assertIsInstance(processor.audio_tokenizer, Qwen3TTSTokenizerModel)
+        self.assertEqual(
+            processor.to_dict()["audio_tokenizer"],
+            {
+                "audio_tokenizer_class": "Qwen3TTSTokenizerModel",
+                "audio_tokenizer_name_or_path": "Qwen/Qwen3-TTS-Tokenizer-12Hz",
+            },
+        )
+        sampling_rate = processor.audio_tokenizer.config.input_sampling_rate
+        input_values = torch.sin(torch.arange(sampling_rate) * (2 * torch.pi * 440 / sampling_rate))[None]
+        with torch.no_grad():
+            codes = processor.audio_tokenizer.encode(input_values).audio_codes[0]
+            audio = processor.decode(codes)
+        self.assertEqual(codes.shape[-1], processor.audio_tokenizer.config.encoder_config.valid_num_quantizers)
+        self.assertEqual(audio.ndim, 1)
+        self.assertGreaterEqual(audio.numel(), sampling_rate)
+        self.assertTrue(torch.isfinite(audio).all())
