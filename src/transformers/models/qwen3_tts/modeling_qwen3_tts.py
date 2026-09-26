@@ -1308,7 +1308,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             config=talker_config.code_predictor_config,
             talker_config=talker_config,
         )
-        self.rope_deltas = None
 
         # CODEPATH: base checkpoints only; CustomVoice and VoiceDesign ship no speaker encoder
         if config.speaker_encoder_config is not None:
@@ -1507,31 +1506,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         eos_positions = text_lengths + 2 + audio_lengths
         return inputs_embeds, packed_mask, audio_positions, eos_positions
 
-    def compute_3d_position_ids(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor | None,
-        attention_mask: torch.Tensor,
-        past_key_values: Cache | None = None,
-    ) -> torch.Tensor:
-        """Position ids for the talker's mRoPE. The padding offset is computed once and cached on the module,
-        so later decoding steps only shift an arange by it."""
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        if past_key_values_length == 0 or self.rope_deltas is None:
-            delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-            position_ids, rope_deltas = self.get_rope_index(attention_mask)
-            self.rope_deltas = rope_deltas - delta0
-            # Trim to match actual input length (avoids broadcast during decode when
-            # attention_mask covers all past tokens but inputs_embeds is 1 token)
-            return position_ids[:, :, -inputs_embeds.shape[1] :]
-
-        batch_size, seq_length = inputs_embeds.shape[:2]
-        delta = past_key_values_length + self.rope_deltas
-        position_ids = torch.arange(seq_length, device=inputs_embeds.device)
-        position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-        position_ids = position_ids.add(delta)
-        return position_ids.unsqueeze(0).expand(3, -1, -1)
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1571,14 +1545,15 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             inputs_embeds, attention_mask, audio_positions, eos_positions = self._prepare_teacher_forcing_inputs(
                 input_ids, attention_mask, audio_codes, audio_attention_mask, speaker_embeddings
             )
-            position_ids, _ = self.get_rope_index(attention_mask)
             use_cache = False if use_cache is None else use_cache
         else:
             if inputs_embeds is None:
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if attention_mask is not None and not teacher_forcing:
-            position_ids = self.compute_3d_position_ids(input_ids, inputs_embeds, attention_mask, past_key_values)
+        if position_ids is None and isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids[:, -inputs_embeds.shape[1] :]
 
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=None,
@@ -1665,18 +1640,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             attentions=outputs.attentions,
             past_hidden=hidden_states[:, -1:, :],
         )
-
-    def get_rope_index(
-        self,
-        attention_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calculate the 3D rope index based on temporal, height and width."""
-        position_ids = attention_mask.float().cumsum(-1) - 1
-        position_ids.masked_fill_(attention_mask == 0, 1)
-        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-        max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-        mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
-        return position_ids, mrope_position_deltas
 
 
 __all__ = [
