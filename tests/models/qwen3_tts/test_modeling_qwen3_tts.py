@@ -418,18 +418,21 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
             expected = model.get_input_embeddings()(primary_codes)
             for index, embedding in enumerate(model.code_predictor.get_input_embeddings()):
                 expected = expected + embedding(codes[:, index + 1 : index + 2])
+            model.code_predictor.generation_config.output_hidden_states = True
             for step in (0, 2):
-                prepared = model.prepare_inputs_for_generation(
-                    primary_codes,
-                    next_sequence_length=1,
-                    past_hidden=past_hidden,
-                    trailing_text_hidden=trailing_text,
-                    tts_pad_embed=pad_embed,
-                    generation_step=step,
-                    subtalker_dosample=False,
-                    attention_mask=torch.ones(2, 1, device=torch_device, dtype=torch.long),
-                    use_cache=False,
-                )
+                with patch.object(model.code_predictor, "generate", wraps=model.code_predictor.generate) as generate:
+                    prepared = model.prepare_inputs_for_generation(
+                        primary_codes,
+                        next_sequence_length=1,
+                        past_hidden=past_hidden,
+                        trailing_text_hidden=trailing_text,
+                        tts_pad_embed=pad_embed,
+                        generation_step=step,
+                        subtalker_dosample=False,
+                        attention_mask=torch.ones(2, 1, device=torch_device, dtype=torch.long),
+                        use_cache=False,
+                    )
+                self.assertFalse(generate.call_args.kwargs["output_hidden_states"])
                 text = trailing_text[:, :1] if step == 0 else pad_embed
                 torch.testing.assert_close(prepared["inputs_embeds"], expected + text)
                 torch.testing.assert_close(prepared["codec_ids"], codes)
