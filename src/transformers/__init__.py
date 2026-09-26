@@ -20,9 +20,8 @@
 
 __version__ = "5.18.0.dev0"
 
-import importlib
+import re
 import sys
-import types
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -54,7 +53,7 @@ from .utils import is_torchaudio_available as is_torchaudio_available
 from .utils import is_torchvision_available as is_torchvision_available
 from .utils import is_vision_available as is_vision_available
 from .utils import logging as logging
-from .utils.import_utils import define_import_structure
+from .utils.import_utils import _LegacyModuleAliasFinder, define_import_structure
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -808,7 +807,16 @@ if TYPE_CHECKING:
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
 else:
+    # Deprecated top-level module paths -> replacements. Declared here so the legacy names are also part of the lazy
+    # import structure, keeping `transformers.tokenization_utils_fast` attribute access working.
+    _LEGACY_MODULE_ALIASES = {
+        "tokenization_utils_fast": "tokenization_utils_tokenizers",
+        "tokenization_utils": "tokenization_utils_sentencepiece",
+        "image_processing_utils_fast": "image_processing_backends",
+    }
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
+    for _alias in _LEGACY_MODULE_ALIASES:
+        _import_structure.setdefault(_alias, set())
 
     import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
     import_structure[frozenset({})].update(_import_structure)
@@ -821,54 +829,22 @@ else:
         extra_objects={"__version__": __version__},
     )
 
-    def _create_module_alias(alias: str, target: str) -> None:
-        """
-        Lazily redirect legacy module paths to their replacements without importing heavy deps.
-        """
-        module = types.ModuleType(alias)
-        module.__doc__ = f"Alias module for backward compatibility with `{target}`."
-        # Set __file__ explicitly so that inspect.py's hasattr(module, '__file__') check
-        # never falls through to __getattr__ and triggers a premature (possibly circular) import.
-        module.__file__ = None
+    # Deprecated module paths, served on demand by `_LegacyModuleAliasFinder`. `models/x/image_processing_x_fast.py`
+    # became `models/x/image_processing_x.py` when torchvision became the default backend (PIL: `image_processing_pil_x.py`).
+    _LEGACY_FAST_IMAGE_PROCESSOR_MODULE = re.compile(
+        rf"{re.escape(__name__)}\.models\.(\w+)\.image_processing_(?!pil_)(\w+)_fast"
+    )
 
-        def _get_target():
-            return importlib.import_module(target, __name__)
+    def _resolve_legacy_module_alias(fullname: str) -> str | None:
+        if (match := _LEGACY_FAST_IMAGE_PROCESSOR_MODULE.fullmatch(fullname)) is not None:
+            return f"{__name__}.models.{match[1]}.image_processing_{match[2]}"
+        package, _, name = fullname.rpartition(".")
+        if package == __name__ and name in _LEGACY_MODULE_ALIASES:
+            return f"{__name__}.{_LEGACY_MODULE_ALIASES[name]}"
+        return None
 
-        module.__getattr__ = lambda name: getattr(_get_target(), name)
-        module.__dir__ = lambda: dir(_get_target())
-
-        sys.modules[alias] = module
-        setattr(sys.modules[__name__], alias.rsplit(".", 1)[-1], module)
-
-    _create_module_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
-    _create_module_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
-    _create_module_alias(f"{__name__}.image_processing_utils_fast", ".image_processing_backends")
-
-    for _proc_file in sorted((Path(__file__).parent / "models").rglob("image_processing_*.py")):
-        _model = _proc_file.parent.name
-        _module = _proc_file.stem
-        _target = f".models.{_model}.{_module}"
-        _create_module_alias(f"{__name__}.models.{_model}.{_module}_fast", _target)
-
-        # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
-        def getattr_factory(target):
-            def _getattr(name):
-                if name.endswith("Fast"):
-                    new_name = name.removesuffix("Fast")
-                    logger.warning_once(
-                        "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
-                        "different and this alias will be removed in future versions.",
-                        name,
-                        target,
-                        new_name,
-                    )
-                    return getattr(importlib.import_module(target, __name__), new_name)
-                # Silently forward non-Fast names to target (transparent alias behavior)
-                return getattr(importlib.import_module(target, __name__), name)
-
-            return _getattr
-
-        sys.modules[f"{__name__}.models.{_model}.{_module}_fast"].__getattr__ = getattr_factory(_target)
+    if not any(isinstance(finder, _LegacyModuleAliasFinder) for finder in sys.meta_path):  # this init can run twice
+        sys.meta_path.append(_LegacyModuleAliasFinder(_resolve_legacy_module_alias))
 
 if not is_torch_available():
     logger.warning_advice(
