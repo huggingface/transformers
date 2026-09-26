@@ -32,7 +32,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import safetensors
 import torch
@@ -613,6 +613,40 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         state1 = dataclasses.asdict(trainer.state)
         self.assertEqual(parameters, parameters1)
         self.check_trainer_state_are_the_same(state, state1)
+
+    def test_resume_checkpoint_optimizer_map_location_cpu_multiprocess(self):
+        """A multi-process CPU device (e.g. torchrun + gloo backend) reports
+        as an indexed device like "cpu:0", which torch's CPU deserializer
+        cannot restore ("don't know how to restore data location of
+        torch.storage.UntypedStorage (tagged with cpu:0)"). Resuming from a
+        checkpoint on CPU with world_size > 1 must fall back to plain "cpu"
+        as the optimizer's map_location, just like the single-process case
+        already does.
+        """
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(output_dir=tmp_dir, train_len=32, save_steps=5, learning_rate=0.1)
+        trainer.train()
+        checkpoint = os.path.join(tmp_dir, "checkpoint-5")
+
+        trainer = get_regression_trainer(output_dir=tmp_dir, train_len=32, save_steps=5, learning_rate=0.1)
+        trainer.create_optimizer_and_scheduler(num_training_steps=12)
+
+        real_torch_load = torch.load
+        captured_map_locations = []
+
+        def spy_torch_load(*args, **kwargs):
+            captured_map_locations.append(kwargs.get("map_location"))
+            return real_torch_load(*args, **kwargs)
+
+        with (
+            patch.object(type(trainer.args), "world_size", new=PropertyMock(return_value=2)),
+            patch.object(type(trainer.args), "device", new=PropertyMock(return_value=torch.device("cpu:0"))),
+            patch("transformers.trainer.torch.load", side_effect=spy_torch_load),
+        ):
+            trainer._load_optimizer_and_scheduler(checkpoint)
+
+        optimizer_map_location = captured_map_locations[0]
+        self.assertEqual(optimizer_map_location, "cpu")
 
 
 # ---------------------------------------------------------------------------
