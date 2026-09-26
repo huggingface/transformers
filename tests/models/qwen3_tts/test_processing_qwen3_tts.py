@@ -351,36 +351,17 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     @require_accelerate
-    def test_trainer_with_processor_collator(self):
-        model, processor, examples, collate = self.prepare_trainer_inputs()
-        parameters = [
-            model.text_projection.linear_1.weight,
-            model.codec_head.weight,
-            model.code_predictor.lm_head.weight,
-        ]
-        before = [parameter.detach().clone() for parameter in parameters]
-        with tempfile.TemporaryDirectory() as directory:
-            trainer = Trainer(
-                model=model,
-                args=self.get_training_args(directory),
-                train_dataset=examples,
-                data_collator=collate,
-                processing_class=processor,
-            )
-            self.assertFalse(trainer.model_accepts_loss_kwargs)
-            result = trainer.train()
-        self.assertEqual(result.global_step, 1)
-        self.assertTrue(np.isfinite(result.training_loss))
-        self.assertGreater(result.training_loss, 0)
-        for original, parameter in zip(before, parameters):
-            self.assertTrue(torch.isfinite(parameter).all())
-            self.assertFalse(torch.equal(original, parameter))
-
-    @require_accelerate
     def test_trainer_gradient_accumulation_matches_manual_microbatches(self):
-        for accumulation_steps in (2, 3):
+        for accumulation_steps in (1, 2, 3):
             with self.subTest(gradient_accumulation_steps=accumulation_steps):
                 model, processor, examples, collate = self.prepare_trainer_inputs()
+                examples = examples[: 2 * accumulation_steps]
+                parameters = [
+                    model.text_projection.linear_1.weight,
+                    model.codec_head.weight,
+                    model.code_predictor.lm_head.weight,
+                ]
+                before = [parameter.detach().clone() for parameter in parameters]
                 reference_model = copy.deepcopy(model).train()
                 batches = []
 
@@ -397,13 +378,21 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         data_collator=recording_collator,
                         processing_class=processor,
                     )
+                    self.assertFalse(trainer.model_accepts_loss_kwargs)
                     result = trainer.train()
 
                 self.assertEqual(result.global_step, 1)
-                self.assertEqual(len(batches), 2)
-                self.assertNotEqual(
-                    batches[0]["audio_attention_mask"].sum().item(), batches[1]["audio_attention_mask"].sum().item()
-                )
+                self.assertTrue(np.isfinite(result.training_loss))
+                self.assertGreater(result.training_loss, 0)
+                for original, parameter in zip(before, parameters):
+                    self.assertTrue(torch.isfinite(parameter).all())
+                    self.assertFalse(torch.equal(original, parameter))
+                self.assertEqual(len(batches), 1 if accumulation_steps == 1 else 2)
+                if accumulation_steps > 1:
+                    self.assertNotEqual(
+                        batches[0]["audio_attention_mask"].sum().item(),
+                        batches[1]["audio_attention_mask"].sum().item(),
+                    )
                 optimizer = torch.optim.SGD(reference_model.parameters(), lr=trainer.args.learning_rate)
                 losses = []
                 # Each stage is independently mean-reduced, so accumulation averages microbatch losses.
