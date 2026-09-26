@@ -18,7 +18,7 @@ import queue
 import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from datetime import timedelta
 from time import perf_counter
 from typing import Any
@@ -45,7 +45,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import ThreadLocalCounter, WorkloadHints, drain_queue
+from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, stream_context
 
 
 """
@@ -601,7 +601,7 @@ class ContinuousBatchProcessor:
 
             # Actually perform the block copies
             compute_stream = self.inputs_and_outputs.compute_stream
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
+            maybe_stream = stream_context(compute_stream)
             with maybe_stream:
                 self.cache.perform_cache_copy(fork_src_and_dst)
 

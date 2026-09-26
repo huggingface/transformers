@@ -13,7 +13,7 @@
 # limitations under the License.
 import queue
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
 from typing import Any
@@ -49,6 +49,20 @@ class WorkloadHints:
     max_prompt_length: int = 0
     max_generated_length: int = 0
     num_requests: int = 0
+
+
+def stream_context(stream):
+    """Context manager that runs the enclosed ops on ``stream``, on whichever accelerator it lives.
+
+    ``torch.cuda.stream`` is CUDA-only: it raises on a torch build without CUDA support, so it cannot be used for a
+    stream that belongs to another accelerator. ``torch.Stream`` and the per-accelerator stream classes are themselves
+    context managers, so for those we simply return the stream.
+    """
+    if stream is None:
+        return nullcontext()
+    if stream.device.type == "cuda":
+        return torch.cuda.stream(stream)
+    return stream
 
 
 class ThreadLocalCounter(threading.local):
