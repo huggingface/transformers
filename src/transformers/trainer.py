@@ -3452,9 +3452,12 @@ class Trainer:
             save_fsdp_optimizer(
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
             )
+        elif self.get_tp_size() > 1:
+            os.makedirs(output_dir, exist_ok=True)
+            torch.save(self.optimizer.state_dict(), self._get_optimizer_file(output_dir))
         elif self.args.should_save:
             # deepspeed.save_checkpoint above saves model/optim/sched
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            torch.save(self.optimizer.state_dict(), self._get_optimizer_file(output_dir))
 
         # Save SCHEDULER & SCALER
         is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
@@ -3582,6 +3585,12 @@ class Trainer:
                 else:
                     check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
+
+                # A checkpoint holds whole tensors while a tensor-parallel model holds a shard of each
+                if self.get_tp_size() > 1:
+                    from .distributed.tensor_parallel import shard_state_dict_for_load
+
+                    state_dict = shard_state_dict_for_load(state_dict, model)
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
@@ -3772,6 +3781,19 @@ class Trainer:
         if is_torch_musa_available():
             set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)
 
+    def _get_optimizer_file(self, checkpoint: str) -> str:
+        """Path of the optimizer state to write or read.
+
+        Under tensor parallelism each rank holds a different shard of every parameter, so its optimizer
+        state is its own and cannot be read from another rank's file. The shapes match across ranks, so
+        a single shared file loads without error and silently gives every rank rank 0's moments.
+        """
+        if self.get_tp_size() > 1:
+            return os.path.join(
+                checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
+            )
+        return os.path.join(checkpoint, OPTIMIZER_NAME)
+
     def _load_optimizer_and_scheduler(self, checkpoint: str | None) -> None:
         """If optimizer and scheduler states exist, load them."""
         if checkpoint is None:
@@ -3806,7 +3828,7 @@ class Trainer:
         )
         checkpoint_file_exists = (
             glob.glob(os.path.join(checkpoint, f"rank*-of-{self.args.world_size}-{OPTIMIZER_NAME}"))
-            if self.is_fsdp_xla_v1_enabled
+            if self.is_fsdp_xla_v1_enabled or self.get_tp_size() > 1
             else checkpoint_file_exists
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
@@ -3866,7 +3888,7 @@ class Trainer:
                         check_torch_load_is_safe()
                         self.optimizer.load_state_dict(
                             torch.load(
-                                os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location, weights_only=True
+                                self._get_optimizer_file(checkpoint), map_location=map_location, weights_only=True
                             )
                         )
                 with warnings.catch_warnings(record=True) as caught_warnings:
