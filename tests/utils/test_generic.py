@@ -34,7 +34,7 @@ from transformers.utils import (
     to_py_obj,
     transpose,
 )
-from transformers.utils.generic import retry, split_attention_implementation
+from transformers.utils.generic import retry
 
 
 if is_torch_available():
@@ -129,15 +129,6 @@ class GenericTester(unittest.TestCase):
         self.assertTrue(to_py_obj(t2) == x2)
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
-
-    def test_split_attention_implementation(self):
-        self.assertEqual(split_attention_implementation(None), (False, None))
-        self.assertEqual(split_attention_implementation("sdpa"), (False, "sdpa"))
-        self.assertEqual(split_attention_implementation("paged|flash_attention_2"), (True, "flash_attention_2"))
-        self.assertEqual(
-            split_attention_implementation("paged|kernels-community/flash-attn3"),
-            (True, "kernels-community/flash-attn3"),
-        )
 
     @require_torch
     def test_to_py_obj_torch(self):

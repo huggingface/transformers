@@ -737,14 +737,14 @@ class ContinuousBatchingManager:
 
     def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
         """Switch the attn implementation to one that is CB friendly: try to find a flash implementation if flash is
-        requested and, in any cases, switch to a paged implementation."""
+        requested and avoid "eager" which is not supported by continuous batching."""
         # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
         original_attn_impl = model.config._attn_implementation
         target_implem = original_attn_impl
 
         # Check if flash attention is supported and available
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
-        is_paged = "paged|" in target_implem
+        is_paged = target_implem == "paged|eager"
         if not is_flash and not is_paged and model._supports_flash_attn:
             # Try to use FA3, then FA2, then give up. Both regular package or kernels is fine.
             if is_flash_attn_3_available(kernels_fallback_ok=True):
@@ -756,17 +756,21 @@ class ContinuousBatchingManager:
             # Change and warn
             msg = "Continuous batching is much better when using flash attention."
             if version is not None:
-                target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
+                target_implem = f"flash_attention_{version}"
                 logger.warning(
                     f"{msg} Switching from {original_attn_impl} to {target_implem}. "
-                    "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
+                    "If you need to use eager or sdpa, set `model._supports_flash_attn = False`."
                 )
             else:
                 logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
+        # If the implementation is eager, switch to paged|eager to avoid a crash
+        if target_implem == "eager":
+            target_implem = "paged|eager"
+
         # Switch to a paged implementation (always entered if conversion to flash happened)
-        if "paged|" not in target_implem:
-            model.set_attn_implementation(f"paged|{target_implem}")
+        if target_implem != original_attn_impl:
+            model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:

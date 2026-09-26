@@ -397,7 +397,7 @@ cb_config = ContinuousBatchingConfig(
 
 ## Paged attention
 
-Continuous batching requires a paged attention backend. Set `attn_implementation` when loading the model. If you load a model with a non-paged backend (`"flash_attention_2"`), the `"paged|"` prefix is added automatically when continuous batching starts.
+Continuous batching requires a paged-compatible attention backend: we support any flavour of flash attention (official flash attention package, flash attention kernel loaded with `kernels`), `sdpa` and `paged|eager`. Set `attn_implementation` when loading the model.
 
 | Backend | `attn_implementation` | Requirements |
 |---|---|---|
@@ -408,18 +408,17 @@ Continuous batching requires a paged attention backend. Set `attn_implementation
 ```py
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
-    attn_implementation="paged|flash_attention_2",
+    attn_implementation="flash_attention_2",
     device_map="auto",
     dtype=torch.bfloat16,
 )
 ```
 
-Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because Flash does not require an attention mask.
+Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because flash does not require an attention mask.
 Hence, when flash attention is available, if a model uses `attn_implementation="eager"` or `attn_implementation="sdpa"`, the attention implementation will be replaced by flash.
 This works if flash is accessible through the `flash_attn` package or the `kernels` package.  
-To avoid this, you may set `attn_implementation="paged|eager"` or `attn_implementation="paged|sdpa"`, and continuous batching will interpret this as the user 
-specifically requesting those implementations. This can be useful in the context of testing or in a setting where flash attention is hard to enable (although, thanks
-to the `kernels` package, this is becoming rare).
+To avoid this, you may set `model._supports_flash_attn = False`, and continuous batching will not be able to switch to flash. This can be useful in the context of testing or
+in a setting where flash attention is hard to enable (although, thanks to the `kernels` package, this is becoming rare).
 
 
 ## Tensor parallelism
@@ -434,7 +433,7 @@ from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 distributed_config = DistributedConfig(tp_size=4)
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-32B",
-    attn_implementation="paged|flash_attention_2",
+    attn_implementation="flash_attention_2",
     distributed_config=distributed_config,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
@@ -469,7 +468,7 @@ config.sliding_window = 4096
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-2b",
     config=config,
-    attn_implementation="paged|sdpa",
+    attn_implementation="sdpa",
     device_map="auto",
     dtype=torch.bfloat16,
 )
