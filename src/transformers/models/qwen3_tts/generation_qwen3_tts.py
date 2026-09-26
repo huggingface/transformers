@@ -60,6 +60,7 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         subtalker_top_p=None,
         subtalker_top_k=None,
         subtalker_temperature=None,
+        codec_frames=None,
         **kwargs,
     ):
         if kwargs.get("use_cache", True) is False:
@@ -75,7 +76,6 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
-        codec_ids = None
         if not is_first_iteration:
             primary_codes = input_ids[:, -1:]
             primary_embed = self.get_input_embeddings()(primary_codes)
@@ -90,6 +90,8 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
                 return_dict_in_generate=True,
             )
             codec_ids = torch.cat((primary_codes, predictor_result.sequences), dim=-1)
+            if codec_frames is not None:
+                codec_frames.append(codec_ids)
             codec_embeds = torch.cat(
                 [primary_embed]
                 + [
@@ -104,13 +106,16 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
                 codec_embeds = codec_embeds + tts_pad_embed
             model_inputs["input_ids"] = None
             model_inputs["inputs_embeds"] = codec_embeds
-        model_inputs.update(
-            codec_ids=codec_ids,
-            generation_step=generation_step,
-            trailing_text_hidden=trailing_text_hidden,
-            tts_pad_embed=tts_pad_embed,
-        )
         return model_inputs
+
+    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
+        model_kwargs["past_hidden"] = outputs.past_hidden
+        generation_step = model_kwargs.get("generation_step")
+        model_kwargs["generation_step"] = 0 if generation_step is None else generation_step + 1
+        return model_kwargs
 
     @torch.inference_mode()
     def extract_speaker_embedding(self, audio, sr, feature_extractor=None):
@@ -233,8 +238,8 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
                 for i in range(self.config.talker_config.vocab_size - 1024, self.config.talker_config.vocab_size)
                 if i != self.config.talker_config.codec_eos_token_id
             ],
-            "output_hidden_states": getattr(kwargs, "output_hidden_states", True),
-            "return_dict_in_generate": getattr(kwargs, "return_dict_in_generate", True),
+            "output_hidden_states": kwargs.get("output_hidden_states", False),
+            "return_dict_in_generate": True,
         }
 
         input_ids = [ids.to(self.device) for ids in input_ids]
@@ -450,16 +455,25 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         padded_hiddens[padding_mask] = pad_embedding_vector
         trailing_text_hiddens = padded_hiddens
 
-        # forward
+        codec_frames = []
         talker_result = super().generate(
             inputs_embeds=talker_input_embeds,
             attention_mask=talker_attention_mask,
             trailing_text_hidden=trailing_text_hiddens,
             tts_pad_embed=tts_pad_embed,
+            codec_frames=codec_frames,
             **talker_kwargs,
         )
 
-        talker_codes = torch.stack([hid[-1] for hid in talker_result.hidden_states if hid[-1] is not None], dim=1)
+        if not codec_frames:
+            return Qwen3TTSGenerateOutput(
+                sequences=[
+                    torch.empty((0, self.config.talker_config.num_code_groups), dtype=torch.long, device=self.device)
+                    for _ in range(batch_size)
+                ],
+                hidden_states=talker_result.hidden_states,
+            )
+        talker_codes = torch.stack(codec_frames, dim=1)
 
         first_codebook = talker_codes[:, :, 0]
         is_stop_token = first_codebook == self.config.talker_config.codec_eos_token_id
@@ -469,4 +483,4 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
 
         talker_codes_list = [talker_codes[i, :length] for i, length in enumerate(effective_lengths)]
 
-        return Qwen3TTSGenerateOutput(sequences=talker_codes_list)
+        return Qwen3TTSGenerateOutput(sequences=talker_codes_list, hidden_states=talker_result.hidden_states)

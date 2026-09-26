@@ -425,20 +425,11 @@ class Qwen3TTSTalkerOutputWithPast(CausalLMOutputWithPast):
         Teacher-forced residual-codebook loss.
     past_hidden (`torch.FloatTensor`, *optional*):
         Last talker hidden state used to condition the next generation step.
-    generation_step (`int`, *optional*):
-        Index of the next codec generation step.
-    trailing_text_hidden (`torch.FloatTensor`, *optional*):
-        Remaining text embeddings used during streaming generation.
-    tts_pad_embed (`torch.FloatTensor`, *optional*):
-        Text padding embedding added after streaming text is consumed.
     """
 
     talker_loss: torch.FloatTensor | None = None
     code_predictor_loss: torch.FloatTensor | None = None
     past_hidden: torch.FloatTensor | None = None
-    generation_step: int | None = None
-    trailing_text_hidden: torch.FloatTensor | None = None
-    tts_pad_embed: torch.FloatTensor | None = None
 
 
 class Qwen3TTSBasePreTrainedModel(Qwen3PreTrainedModel):
@@ -477,8 +468,7 @@ class Qwen3TTSTalkerModel(Qwen2_5OmniTalkerModel):
     config_class = Qwen3TTSTalkerConfig
     base_model_prefix = "talker.model"
     input_modalities = ("text",)
-    # `generate` consumes the per-layer hidden states (the last entry, tied to `last_hidden_state`, feeds the
-    # code predictor), so record them from the Talker-specific layer/attention classes.
+    # Record only talker outputs, not those of the nested code predictor.
     _can_record_outputs = {
         "hidden_states": Qwen3TTSTalkerDecoderLayer,
         "attentions": Qwen3TTSTalkerAttention,
@@ -950,15 +940,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        past_hidden: torch.FloatTensor | None = None,
-        trailing_text_hidden: torch.FloatTensor | None = None,
-        tts_pad_embed: torch.FloatTensor | None = None,
-        generation_step: int | None = None,
-        subtalker_dosample: bool | None = None,
-        subtalker_top_p: float | None = None,
-        subtalker_top_k: int | None = None,
-        subtalker_temperature: float | None = None,
-        codec_ids: torch.LongTensor | None = None,
         audio_codes: torch.LongTensor | None = None,
         audio_attention_mask: torch.Tensor | None = None,
         speaker_embeddings: torch.FloatTensor | None = None,
@@ -977,24 +958,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         labels (`torch.LongTensor` of shape `(batch_size, audio_length, num_code_groups)`, *optional*):
             Unshifted audio targets. Values of `-100` are ignored. Codec EOS is supervised only for examples with
             at least one supervised primary target. Returned primary logits follow the packed text/audio sequence.
-        past_hidden (`torch.FloatTensor`, *optional*):
-            Hidden state from the previous talker decoding step, used as context for the code predictor.
-        trailing_text_hidden (`torch.FloatTensor`, *optional*):
-            Text-conditioned hidden states added to generated codec embeddings while text context remains.
-        tts_pad_embed (`torch.FloatTensor`, *optional*):
-            Padding embedding added after the trailing text hidden states have been consumed.
-        generation_step (`int`, *optional*):
-            Current codec generation step used to index `trailing_text_hidden`.
-        subtalker_dosample (`bool`, *optional*):
-            Whether the code predictor should sample non-primary codebooks.
-        subtalker_top_p (`float`, *optional*):
-            Top-p sampling value passed to the code predictor.
-        subtalker_top_k (`int`, *optional*):
-            Top-k sampling value passed to the code predictor.
-        subtalker_temperature (`float`, *optional*):
-            Sampling temperature passed to the code predictor.
-        codec_ids (`torch.LongTensor` of shape `(batch_size, num_code_groups)`, *optional*):
-            Codec frame prepared by the generation mixin for the current decoding step.
         """
         teacher_forcing = audio_codes is not None
         if teacher_forcing:
@@ -1008,7 +971,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             position_ids, _ = self.get_rope_index(attention_mask)
             use_cache = False if use_cache is None else use_cache
         else:
-            generation_step = -1 if generation_step is None else generation_step
             if inputs_embeds is None:
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1096,12 +1058,9 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=(outputs.hidden_states, codec_ids),
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             past_hidden=hidden_states[:, -1:, :],
-            generation_step=generation_step + 1,
-            trailing_text_hidden=trailing_text_hidden,
-            tts_pad_embed=tts_pad_embed,
         )
 
     def get_rope_index(
@@ -1115,16 +1074,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
         mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
         return position_ids, mrope_position_deltas
-
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
-        model_kwargs = super()._update_model_kwargs_for_generation(
-            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
-        )
-        model_kwargs["past_hidden"] = outputs.past_hidden
-        model_kwargs["generation_step"] = outputs.generation_step
-        model_kwargs["trailing_text_hidden"] = outputs.trailing_text_hidden
-        model_kwargs["tts_pad_embed"] = outputs.tts_pad_embed
-        return model_kwargs
 
 
 __all__ = [
