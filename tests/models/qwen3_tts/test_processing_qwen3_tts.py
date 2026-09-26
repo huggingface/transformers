@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for Qwen3TTSProcessor."""
 
+import copy
 import os
 import tempfile
 import unittest
@@ -419,6 +420,48 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for original, parameter in zip(before, parameters):
             self.assertTrue(torch.isfinite(parameter).all())
             self.assertFalse(torch.equal(original, parameter))
+
+    @require_accelerate
+    def test_trainer_gradient_accumulation_matches_manual_microbatches(self):
+        for accumulation_steps in (2, 3):
+            with self.subTest(gradient_accumulation_steps=accumulation_steps):
+                model, processor, examples, collate = self.prepare_trainer_inputs()
+                reference_model = copy.deepcopy(model).train()
+                batches = []
+
+                def recording_collator(examples):
+                    batch = collate(examples)
+                    batches.append({name: value.detach().clone() for name, value in batch.items()})
+                    return batch
+
+                with tempfile.TemporaryDirectory() as directory:
+                    trainer = Trainer(
+                        model=model,
+                        args=self.get_training_args(directory, gradient_accumulation_steps=accumulation_steps),
+                        train_dataset=examples,
+                        data_collator=recording_collator,
+                        processing_class=processor,
+                    )
+                    result = trainer.train()
+
+                self.assertEqual(result.global_step, 1)
+                self.assertEqual(len(batches), 2)
+                self.assertNotEqual(
+                    batches[0]["audio_attention_mask"].sum().item(), batches[1]["audio_attention_mask"].sum().item()
+                )
+                optimizer = torch.optim.SGD(reference_model.parameters(), lr=trainer.args.learning_rate)
+                losses = []
+                # Each stage is independently mean-reduced, so accumulation averages microbatch losses.
+                for batch in batches:
+                    loss = reference_model(**batch).loss
+                    losses.append(loss.detach())
+                    (loss / len(batches)).backward()
+                optimizer.step()
+
+                self.assertAlmostEqual(result.training_loss, torch.stack(losses).mean().item(), places=5)
+                reference_parameters = dict(reference_model.named_parameters())
+                for name, parameter in model.named_parameters():
+                    torch.testing.assert_close(parameter, reference_parameters[name], atol=1e-6, rtol=1e-5, msg=name)
 
     def test_apply_chat_template_basic(self):
         processor = self.get_processor()
