@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import tempfile
 import unittest
@@ -735,7 +736,7 @@ class Qwen3TTSModelTester:
         parent,
         batch_size=2,
         seq_length=10,
-        is_training=False,
+        is_training=True,
         talker_config=None,
     ):
         self.parent = parent
@@ -820,6 +821,24 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     def setUp(self):
         self.model_tester = Qwen3TTSModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen3TTSConfig, has_text_modality=False)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if return_labels:
+            config = self.model_tester.get_config().talker_config
+            batch_size = inputs_dict["input_ids"].shape[0]
+            inputs_dict["audio_codes"] = (
+                torch.arange(batch_size * 3 * config.num_code_groups, device=torch_device)
+                .reshape(batch_size, 3, config.num_code_groups)
+                .remainder(config.vocab_size)
+            )
+            inputs_dict["audio_attention_mask"] = torch.ones(batch_size, 3, dtype=torch.long, device=torch_device)
+            inputs_dict["audio_attention_mask"][-1, 1:] = 0
+            inputs_dict["speaker_embeddings"] = torch.zeros(batch_size, config.hidden_size, device=torch_device)
+            inputs_dict["labels"] = inputs_dict["audio_codes"].masked_fill(
+                ~inputs_dict["audio_attention_mask"].bool()[..., None], -100
+            )
+        return inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()
