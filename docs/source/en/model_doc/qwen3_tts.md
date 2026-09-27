@@ -237,8 +237,8 @@ device = "cuda"
 processor = AutoProcessor.from_pretrained(model_id)
 audio_tokenizer = processor.audio_tokenizer.to(device).eval()
 sample = {
-    "text": "This is a short fine-tuning example.",
-    "audio": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+    "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker conversational audio.",
+    "audio": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
     "ref_audio": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
 }
 
