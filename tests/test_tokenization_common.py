@@ -1573,14 +1573,18 @@ Hey how are you doing"""  # noqa: W293
                 # Test that save_jinja_files is ignored when there's a dict of multiple templates
                 tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=save_jinja_files)
                 if save_jinja_files:
-                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                    config_dict = json.load(
+                        open(os.path.join(tmp_dir_name, "tokenizer_config.json"), encoding="utf-8")
+                    )
                     self.assertNotIn("chat_template", config_dict)
                     self.assertTrue(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
                     self.assertTrue(
                         os.path.exists(os.path.join(tmp_dir_name, "additional_chat_templates/template2.jinja"))
                     )
                 else:
-                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                    config_dict = json.load(
+                        open(os.path.join(tmp_dir_name, "tokenizer_config.json"), encoding="utf-8")
+                    )
                     # Assert that chat templates are correctly serialized as lists of dictionaries
                     self.assertEqual(
                         config_dict["chat_template"],
@@ -1618,7 +1622,7 @@ Hey how are you doing"""  # noqa: W293
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             tokenizer.chat_template = dummy_template1
             tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=False)
-            with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
+            with Path(tmp_dir_name, "chat_template.jinja").open("w", encoding="utf-8") as f:
                 f.write(dummy_template2)
             new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
         # Assert the file template clobbers any template in the config

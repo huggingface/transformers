@@ -29,7 +29,9 @@ import torch
 from torch import nn
 
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     BartConfig,
@@ -71,6 +73,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import align_special_tokens
 
 from .trainer_test_utils import (
     ATOL,
@@ -1334,6 +1337,84 @@ class TrainerIntegrationTest(TestCasePlus):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_special_token_alignment_composite_config(self):
+        """
+        Tests that a composite model whose special tokens live on its text sub-config is left alone. The top-level
+        config does not forward attribute lookups to the sub-config, so reading it there reports a mismatch on
+        every run and rewrites the ids the model already agrees with.
+        """
+        model = AutoModelForImageTextToText.from_config(
+            AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # The ids the model already agrees with, on the text sub-config only.
+        text_config = model.config.get_text_config()
+        text_config.eos_token_id = tokenizer.eos_token_id
+        text_config.bos_token_id = tokenizer.bos_token_id
+        text_config.pad_token_id = tokenizer.pad_token_id
+        model.generation_config.eos_token_id = tokenizer.eos_token_id
+        model.generation_config.bos_token_id = tokenizer.bos_token_id
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(text_config.eos_token_id, tokenizer.eos_token_id)
+        self.assertEqual(text_config.bos_token_id, tokenizer.bos_token_id)
+        self.assertEqual(text_config.pad_token_id, tokenizer.pad_token_id)
+
+    def test_special_token_alignment_keeps_the_eos_ids_the_config_declares(self):
+        """
+        Tests that a config declaring several eos ids keeps them. The tokenizer holds a single id, so comparing it
+        against the list always reports a mismatch, and overwriting the list with it would drop the other stop
+        tokens the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # This checkpoint ships a bos and a pad the tokenizer disagrees with; align them so only eos is under test.
+        for config in (model.config, model.generation_config):
+            config.bos_token_id = tokenizer.bos_token_id
+            config.pad_token_id = tokenizer.pad_token_id
+
+        eos_token_ids = [tokenizer.eos_token_id, tokenizer.eos_token_id + 1]
+        model.config.eos_token_id = list(eos_token_ids)
+        model.generation_config.eos_token_id = list(eos_token_ids)
+
+        # The tokenizer's eos is already one of them, so there is nothing to align and nothing to report.
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, eos_token_ids)
+        self.assertEqual(model.generation_config.eos_token_id, eos_token_ids)
+
+        # A tokenizer eos the config does not declare is added to the list rather than replacing it.
+        tokenizer.eos_token = tokenizer.convert_ids_to_tokens(tokenizer.eos_token_id + 2)
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, [tokenizer.eos_token_id, *eos_token_ids])
+        self.assertEqual(model.generation_config.eos_token_id, [tokenizer.eos_token_id, *eos_token_ids])
+
+    def test_special_token_alignment_keeps_tokens_the_tokenizer_does_not_define(self):
+        """
+        Tests that a special token the tokenizer does not define is left untouched on the model configs, rather than
+        being removed from them. `_special_tokens_map` is initialized with `None` for every special token, so a
+        tokenizer that never declared one is indistinguishable from a tokenizer whose token was deliberately cleared.
+        Dropping the value in that case would silently remove an id the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        model.config.bos_token_id = 1
+        model.generation_config.bos_token_id = 1
+        tokenizer.bos_token = None
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.bos_token_id, 1)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
     def test_trainer_works_without_model_config(self):
         """

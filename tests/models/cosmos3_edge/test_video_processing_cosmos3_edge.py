@@ -156,6 +156,20 @@ class Cosmos3EdgeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         )
         self.assertEqual(video_processor.size, {"shortest_edge": 64 * 64, "longest_edge": 8 * 96 * 96})
 
+    def test_get_num_patches_without_videos(self):
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
+        num_patches = video_processing.get_num_of_video_patches(num_frames=8, height=100, width=100, videos_kwargs={})
+        self.assertEqual(num_patches, 32)
+
+        num_patches = video_processing.get_num_of_video_patches(num_frames=7, height=200, width=50, videos_kwargs={})
+        self.assertEqual(num_patches, 84)
+
+        size = {"shortest_edge": 12544, "longest_edge": 47040000}
+        num_patches = video_processing.get_num_of_video_patches(
+            num_frames=8, height=480, width=640, videos_kwargs={"size": size}
+        )
+        self.assertEqual(num_patches, 9600)
+
     def test_call_pil(self):
         """Adapt the shared PIL test to Edge's packed frame-patch layout."""
         for video_processing_class in self.video_processor_list:

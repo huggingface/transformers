@@ -1563,6 +1563,9 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
                 mask[batch_id * self._num_beams + beam_id, prefix_allowed_tokens] = 0
 
         scores_processed = scores + mask
+        # If the allowed tokens of every beam are already `-inf`, force them with a score of 0 so the constraint holds
+        unsatisfiable = scores_processed.amax(dim=-1).isneginf().view(batch_size, -1).all(dim=-1, keepdim=True)
+        scores_processed = torch.where(unsatisfiable.repeat_interleave(self._num_beams, dim=0), mask, scores_processed)
         return scores_processed
 
 

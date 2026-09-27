@@ -115,8 +115,13 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch
 class PhimoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model = None
-    offload_dir = None
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Assigned here rather than in the class body: `MemoryCleanupMixin` snapshots the class body and
+        # protects it from teardown, so a checkpoint parked on a class-body `model` is never released.
+        cls.model = None
+        cls.offload_dir = None
 
     @classmethod
     def get_model(cls):

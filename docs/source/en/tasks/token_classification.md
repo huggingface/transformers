@@ -24,7 +24,7 @@ Token classification assigns a label to individual tokens in a sentence. One of 
 
 This guide will show you how to:
 
-1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [WNUT 17](https://huggingface.co/datasets/wnut_17) dataset to detect new entities.
+1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [WNUT 17](https://huggingface.co/datasets/leondz/wnut_17) dataset to detect new entities.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -54,7 +54,7 @@ Start by loading the WNUT 17 dataset from the 🤗 Datasets library:
 ```py
 >>> from datasets import load_dataset
 
->>> wnut = load_dataset("wnut_17")
+>>> wnut = load_dataset("leondz/wnut_17")
 ```
 
 Then take a look at an example:

@@ -80,7 +80,8 @@ Pass `use_optimized_inference=True` to keep an FP8 compressed-tensors model in F
 |--------|--------|-------|
 | Intel XPU | `torch.nn.functional.scaled_mm` | All XPU devices with FP8 support |
 | NVIDIA CUDA (SM89+) | `torch.nn.functional.scaled_mm` | Ada Lovelace (L4, L40), Hopper (H100), Blackwell and newer |
-| CPU / CUDA SM80 (A100) | Fallback | `use_optimized_inference=True` is ignored, the model runs dequantized |
+| Apple silicon (MPS) | `torch.nn.functional.scaled_mm` | Requires torch >= 2.15 |
+| CPU / CUDA SM80 (A100) / MPS with torch < 2.15 | Fallback | `use_optimized_inference=True` is ignored, the model runs dequantized |
 
 The FP8 kernel path supports these quantization layouts.
 

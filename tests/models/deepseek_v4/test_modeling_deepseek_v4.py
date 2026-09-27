@@ -602,7 +602,7 @@ def _run_distributed_compile_worker(
     if num_gpus < 1:
         raise RuntimeError(f"No visible devices for torch_device={torch_device!r}")
     redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
-    with tempfile.NamedTemporaryFile("w", suffix="_distributed_compile_worker.py") as f:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix="_distributed_compile_worker.py") as f:
         f.write(script)
         f.flush()
         result = subprocess.run(
@@ -637,7 +637,7 @@ def _run_distributed_worker(
     # subprocess stderr and the test failure message — `:3` would file-log both and turn any
     # rank>0 crash into a bare non-zero return code with no diagnostic.
     redirects = ",".join(f"{r}:1" for r in range(1, num_gpus))
-    with tempfile.NamedTemporaryFile("w", suffix="_distributed_worker.py") as f:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix="_distributed_worker.py") as f:
         f.write(script)
         f.flush()
         result = subprocess.run(
