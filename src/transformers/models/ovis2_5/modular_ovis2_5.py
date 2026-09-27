@@ -441,7 +441,7 @@ class Ovis2_5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        # Released Hub checkpoints still use the remote-code names; map them to the native config fields.
+        # BC: Released Hub checkpoints still use the remote-code names; map them to the native config fields.
         legacy_text_config = kwargs.get("llm_config")
         legacy_vision_config = kwargs.get("vit_config")
         legacy_visual_vocab_size = kwargs.get("visual_vocab_size")
