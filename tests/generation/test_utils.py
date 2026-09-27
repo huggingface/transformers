@@ -57,7 +57,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_sklearn_available
+from transformers.utils import is_kernels_available, is_sklearn_available
 from transformers.utils.generic import is_flash_attention_requested
 
 
@@ -1986,6 +1986,17 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
 
+            # Models listing other flash implementations auto-correct to them, which needs the kernels library
+            if (
+                model_class._compatible_flash_implementations is not None
+                and attn_implementation not in model_class._compatible_flash_implementations
+                and not is_kernels_available()
+            ):
+                self.skipTest(
+                    f"{model_class.__name__} falls back to {model_class._compatible_flash_implementations}, "
+                    "which requires the kernels library"
+                )
+
             config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
             inputs_dict = {}
             for input_name, input_data in original_inputs_dict.items():
@@ -2103,6 +2114,17 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention.")
 
+            # Models listing other flash implementations auto-correct to them, which needs the kernels library
+            if (
+                model_class._compatible_flash_implementations is not None
+                and "flash_attention_2" not in model_class._compatible_flash_implementations
+                and not is_kernels_available()
+            ):
+                self.skipTest(
+                    f"{model_class.__name__} falls back to {model_class._compatible_flash_implementations}, "
+                    "which requires the kernels library"
+                )
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
@@ -2203,6 +2225,17 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         for model_class in self.all_generative_model_classes:
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
+            # Models listing other flash implementations auto-correct to them, which needs the kernels library
+            if (
+                model_class._compatible_flash_implementations is not None
+                and attn_implementation not in model_class._compatible_flash_implementations
+                and not is_kernels_available()
+            ):
+                self.skipTest(
+                    f"{model_class.__name__} falls back to {model_class._compatible_flash_implementations}, "
+                    "which requires the kernels library"
+                )
 
             # can't infer if new attn mask API is supported by assume that only model with attention backend support it
             if not model_class._supports_attention_backend:
