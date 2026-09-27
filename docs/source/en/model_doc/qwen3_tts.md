@@ -235,14 +235,6 @@ model_id = "shahvandit/qwen3-tts-base-hf"
 device = "cuda"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype=torch.bfloat16).to(device)
-model.train()
-model.gradient_checkpointing_enable()
-
-# Speaker embeddings are cached and used as conditioning; the speaker encoder is not trained.
-model.speaker_encoder.requires_grad_(False)
-model.speaker_encoder.eval()
-
 audio_tokenizer = processor.audio_tokenizer.to(device).eval()
 sample = {
     "text": "This is a short fine-tuning example.",
@@ -252,19 +244,27 @@ sample = {
 
 target_audio = load_audio(sample["audio"], sampling_rate=audio_tokenizer.config.input_sampling_rate)
 target_audio = torch.from_numpy(target_audio).unsqueeze(0).to(device)
-reference_audio = load_audio(sample["ref_audio"], sampling_rate=model.speaker_encoder_sample_rate)
 
 with torch.inference_mode():
     audio_codes = audio_tokenizer.encode(target_audio).audio_codes[0].cpu()
-    speaker_embedding = model.extract_speaker_embedding(
-        reference_audio,
-        model.speaker_encoder_sample_rate,
-        processor.feature_extractor,
-    ).cpu()
 
 # The audio tokenizer is only needed during preprocessing.
 audio_tokenizer.to("cpu")
 torch.cuda.empty_cache()
+
+model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype=torch.bfloat16).to(device)
+model.train()
+model.gradient_checkpointing_enable()
+
+# Speaker embeddings are cached and used as conditioning; the speaker encoder is not trained.
+model.speaker_encoder.requires_grad_(False)
+model.speaker_encoder.eval()
+reference_audio = load_audio(sample["ref_audio"], sampling_rate=model.speaker_encoder_sample_rate)
+speaker_embedding = model.extract_speaker_embedding(
+    reference_audio,
+    model.speaker_encoder_sample_rate,
+    processor.feature_extractor,
+).cpu()
 
 cached_examples = [
     {
