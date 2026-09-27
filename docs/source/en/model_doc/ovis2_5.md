@@ -25,16 +25,13 @@ vision encoder with a visual tokenizer and a Qwen3 language backbone. Unlike a f
 vision encoder keeps variable-resolution visual inputs as a sequence of patches. Ovis2.5 also provides an optional
 thinking prompt format for tasks that benefit from a longer reasoning response.
 
-Two checkpoints are available:
+Transformers-compatible checkpoints are available from the Ovis community:
 
-- [AIDC-AI/Ovis2.5-2B](https://huggingface.co/AIDC-AI/Ovis2.5-2B)
-- [AIDC-AI/Ovis2.5-9B](https://huggingface.co/AIDC-AI/Ovis2.5-9B)
+- [ovis-community/Ovis2.5-2B](https://huggingface.co/ovis-community/Ovis2.5-2B)
+- [ovis-community/ovis-2.5-9B](https://huggingface.co/ovis-community/ovis-2.5-9B)
 
-> [!IMPORTANT]
-> The released repositories still contain legacy SigLIP processor metadata, so [`AutoProcessor`] cannot select the
-> native Ovis2.5 components yet. Load [`Ovis2_5Processor`] explicitly as shown below; it replaces the legacy metadata
-> with the native image and video processors. The model weights are converted on the fly by the registered loading
-> mapping.
+These checkpoints retain the original weights and include native model, tokenizer, and processor metadata. The
+original repositories still use legacy processor metadata. Weight names are mapped during loading.
 
 ## Image inference
 
@@ -42,11 +39,11 @@ Use [`Ovis2_5Processor.apply_chat_template`] to load the image, format the conve
 For the 9B checkpoint, replace the model ID.
 
 ```python
-from transformers import AutoModelForImageTextToText, Ovis2_5Processor
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
-model_id = "AIDC-AI/Ovis2.5-2B"
-processor = Ovis2_5Processor.from_pretrained(model_id)
+model_id = "ovis-community/Ovis2.5-2B"
+processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
     model_id,
     device_map="auto",
