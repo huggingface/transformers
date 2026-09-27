@@ -47,6 +47,21 @@ def get_train_dataloader(self):
     }
 ```
 
+> [!WARNING]
+> **Custom fields in your dataset may be silently dropped.** By default, [`Trainer`] removes any dataset column
+> whose name is not in the model's `forward()` signature (`remove_unused_columns=True`). This filtering happens
+> *before* your data collator or `compute_loss` receives the data. If you add custom fields to your dataset
+> (e.g., `loss_weights` for per-token weighting, `task_type` for multi-task routing), they will be silently
+> removed and your code will raise a `KeyError` at training time. To preserve custom fields, set
+> `remove_unused_columns=False` in [`TrainingArguments`]:
+>
+> ```python
+> training_args = TrainingArguments(
+>     output_dir="./results",
+>     remove_unused_columns=False,  # keep custom dataset fields
+> )
+> ```
+
 ## Compute loss
 
 [`~Trainer.compute_loss`] returns the cross-entropy loss calculated by the model.
