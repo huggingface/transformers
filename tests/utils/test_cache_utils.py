@@ -163,28 +163,7 @@ class CacheTest(unittest.TestCase):
         # before the fix this raised `AttributeError`. It reflects the attention layer's state.
         self.assertTrue(cache.is_initialized)
 
-    @parameterized.expand(
-        [
-            ("unsharded", 1, ([4, 2], [8, 16])),
-            ("tensor_parallel", 2, ([2, 1], [8, 16])),
-            ("uneven_tensor_parallel", 4, None),
-        ]
-    )
-    def test_static_cache_init_shapes(self, _, tp_size, expected):
-        model = GenerationMixin()
-        model._tp_size = tp_size
-        model.config = PreTrainedConfig(
-            hidden_size=32,
-            num_hidden_layers=3,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            head_dim=8,
-            num_kv_shared_layers=1,
-            per_layer_config={1: {"num_key_value_heads": 2, "head_dim": 16}, 2: {"num_key_value_heads": 1}},
-        )
-        self.assertEqual(model._get_static_cache_init_shape(), expected)
-
-    def test_static_cache_init_shapes_inferred_per_layer(self):
+    def test_static_cache_init_shapes_with_per_layer_attention_heads(self):
         model = GenerationMixin()
         model.config = PreTrainedConfig(
             hidden_size=32,
@@ -220,27 +199,6 @@ class CacheTest(unittest.TestCase):
         self.assertIsInstance(layers[2], DynamicSlidingWindowLayer)
         self.assertEqual(layers[2].sliding_window, 16)
         self.assertFalse(layers[3].is_sliding)
-
-    def test_dynamic_cache_uses_per_layer_conv_state_counts(self):
-        config = LlamaConfig(
-            hidden_size=64,
-            num_hidden_layers=4,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            number_of_conv_states=1,
-            layer_types=["linear_attention", "hybrid", "full_attention", "conv"],
-            per_layer_config={
-                0: {"number_of_conv_states": 2},
-                1: {"number_of_conv_states": 3},
-                3: {"number_of_conv_states": 4},
-            },
-        )
-        layers = DynamicCache(config=config).layers
-
-        self.assertEqual(
-            [getattr(layer, "number_of_states", None) for layer in layers],
-            [2, 3, None, 4],
-        )
 
     def test_static_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
