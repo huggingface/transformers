@@ -431,7 +431,7 @@ class Ovis2_5Config(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: PreTrainedConfig | dict | None = None
-    vision_config: Ovis2_5VisionConfig | dict | None = None
+    vision_config: PreTrainedConfig | dict | None = None
     image_token_id: int = 151669
     video_token_id: int = 151669
     image_start_token_id: int = 151670
