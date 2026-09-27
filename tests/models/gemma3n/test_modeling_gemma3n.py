@@ -873,13 +873,13 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 @require_torch_accelerator
 class Gemma3nIntegrationTest(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
-        stale_ds_dir = "/mnt/cache/hub/datasets--etechgrid--28.5k_wavfiles_dataset"
-        logger.warning(f"[setUpClass] Checking dataset dir: {stale_ds_dir}")
-        if os.path.isdir(stale_ds_dir):
+    def _log_ds_dir(cls, label):
+        ds_dir = "/mnt/cache/hub/datasets--etechgrid--28.5k_wavfiles_dataset"
+        logger.warning(f"[setUpClass] {label}: {ds_dir}")
+        if os.path.isdir(ds_dir):
             logger.warning(f"[setUpClass] Dir exists. Contents:")
-            for root, dirs, files in os.walk(stale_ds_dir):
-                rel = os.path.relpath(root, stale_ds_dir)
+            for root, dirs, files in os.walk(ds_dir):
+                rel = os.path.relpath(root, ds_dir)
                 for d in dirs:
                     logger.warning(f"[setUpClass]   DIR  {os.path.join(rel, d)}")
                 for f in files:
@@ -888,6 +888,17 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                     logger.warning(f"[setUpClass]   FILE {os.path.join(rel, f)} ({size} bytes)")
         else:
             logger.warning(f"[setUpClass] Dir does NOT exist.")
+
+    @classmethod
+    def setUpClass(cls):
+        cls._log_ds_dir("BEFORE hf_hub_download")
+        cls.audio_file_path = hf_hub_download(
+            repo_id="etechgrid/28.5k_wavfiles_dataset",
+            filename="wav_dataset/103-1240-0000.wav",
+            repo_type="dataset",
+        )
+        logger.warning(f"[setUpClass] hf_hub_download returned: {cls.audio_file_path}")
+        cls._log_ds_dir("AFTER hf_hub_download")
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Google/gemma-3n-E4B-it", padding_side="left")
@@ -904,10 +915,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             },
         ]
 
-        audio_ds = load_dataset(
-            "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
-        )
-        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
+        self.audio_file_path = self.__class__.audio_file_path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
