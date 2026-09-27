@@ -380,6 +380,12 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
+def fla_needs_equal_qk_heads() -> bool:
+    """Whether the FLA kernels in use predate grouped value attention (FLA < 0.5.0), so query/key must be repeated up
+    to the value head count. The torch fallbacks and the hub kernels accept fewer query/key heads."""
+    return is_flash_linear_attention_available() and not is_flash_linear_attention_available("0.5.0")
+
+
 @use_kernel_func_from_hub_with_fallback("chunk_gated_delta_rule", "fla")
 def torch_chunk_gated_delta_rule(
     query: torch.Tensor,
@@ -599,12 +605,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         self.head_v_dim = config.linear_value_head_dim
         self.key_dim = self.head_k_dim * self.num_k_heads
         self.value_dim = self.head_v_dim * self.num_v_heads
-        # FLA only accepts fewer query/key heads than value heads since 0.5.0; the torch path and hub kernels always do
-        self.repeat_qk_heads = (
-            self.num_v_heads > self.num_k_heads
-            and is_flash_linear_attention_available()
-            and not is_flash_linear_attention_available("0.5.0")
-        )
+        self.repeat_qk_heads = self.num_v_heads > self.num_k_heads and fla_needs_equal_qk_heads()
 
         self.conv_kernel_size = config.linear_conv_kernel_dim
         self.layer_idx = layer_idx

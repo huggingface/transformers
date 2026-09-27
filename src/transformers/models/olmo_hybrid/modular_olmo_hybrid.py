@@ -31,7 +31,7 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_flash_linear_attention_available, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
@@ -53,6 +53,7 @@ from ..qwen3_next.modeling_qwen3_next import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
+    fla_needs_equal_qk_heads,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -289,12 +290,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.head_v_dim = config.linear_value_head_dim
         self.key_dim = self.head_k_dim * self.num_k_heads
         self.value_dim = self.head_v_dim * self.num_v_heads
-        # FLA only accepts fewer query/key heads than value heads since 0.5.0; the torch path and hub kernels always do
-        self.repeat_qk_heads = (
-            self.num_v_heads > self.num_k_heads
-            and is_flash_linear_attention_available()
-            and not is_flash_linear_attention_available("0.5.0")
-        )
+        self.repeat_qk_heads = self.num_v_heads > self.num_k_heads and fla_needs_equal_qk_heads()
         self.layer_idx = layer_idx
         self.conv_kernel_size = config.linear_conv_kernel_dim
         self.allow_neg_eigval = config.linear_allow_neg_eigval
