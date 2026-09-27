@@ -216,13 +216,8 @@ sf.write("output.wav", output["audio"], output["sampling_rate"])
 
 ### Training
 
-Qwen3-TTS Base checkpoints can be fine-tuned with a standard forward and backward pass or with [`Trainer`].
-Training uses precomputed target audio codes and speaker embeddings. Computing these once before training keeps
-the frozen audio tokenizer and speaker encoder out of the training loop.
-
-The following example prepares one training example. In a real dataset, cache the returned tensors for every
-example instead of encoding the audio again each epoch. Target audio is resampled to the audio tokenizer's input
-rate, while reference audio for the speaker encoder must be mono 24 kHz.
+Qwen3-TTS Base checkpoints can be trained with the loss returned by the model. Training uses target audio codes
+and a speaker embedding, which should be precomputed once for a larger dataset.
 
 ```python
 import torch
@@ -232,118 +227,37 @@ from transformers.audio_utils import load_audio
 
 
 model_id = "shahvandit/qwen3-tts-base-hf"
-device = "cuda"
-
 processor = AutoProcessor.from_pretrained(model_id)
-audio_tokenizer = processor.audio_tokenizer.to(device).eval()
-sample = {
-    "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker conversational audio.",
-    "audio": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
-    "ref_audio": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
-}
-
-target_audio = load_audio(sample["audio"], sampling_rate=audio_tokenizer.config.input_sampling_rate)
-target_audio = torch.from_numpy(target_audio).unsqueeze(0).to(device)
-
-with torch.inference_mode():
-    audio_codes = audio_tokenizer.encode(target_audio).audio_codes[0].cpu()
-
-# The audio tokenizer is only needed during preprocessing.
-audio_tokenizer.to("cpu")
-torch.cuda.empty_cache()
-
-model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype=torch.bfloat16).to(device)
+model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 model.train()
 model.gradient_checkpointing_enable()
-
-# Speaker embeddings are cached and used as conditioning; the speaker encoder is not trained.
 model.speaker_encoder.requires_grad_(False)
 model.speaker_encoder.eval()
-reference_audio = load_audio(sample["ref_audio"], sampling_rate=model.speaker_encoder_sample_rate)
-speaker_embedding = model.extract_speaker_embedding(
-    reference_audio,
-    model.speaker_encoder_sample_rate,
-    processor.feature_extractor,
-).cpu()
 
-cached_examples = [
-    {
-        "text": sample["text"],
-        "audio_codes": audio_codes,
-        "speaker_embeddings": speaker_embedding,
-    }
-]
-```
+audio_url = "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav"
+reference_url = "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav"
+text = "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker conversational audio."
 
-The collator formats each text as a non-streaming synthesis prompt, pads text and audio independently, and masks
-padded audio targets with `-100`. The model returns the weighted sum of the primary-codebook and residual-codebook
-losses in `outputs.loss`. The following shows one manual optimization step.
+target_audio = load_audio(audio_url, sampling_rate=processor.audio_tokenizer.config.input_sampling_rate)
+reference_audio = load_audio(reference_url, sampling_rate=model.speaker_encoder_sample_rate)
+with torch.inference_mode():
+    audio_codes = processor.audio_tokenizer.encode(torch.from_numpy(target_audio).unsqueeze(0)).audio_codes
+    speaker_embedding = model.extract_speaker_embedding(
+        reference_audio, model.speaker_encoder_sample_rate, processor.feature_extractor
+    )
 
-```python
-class Qwen3TTSDataCollator:
-    def __init__(self, processor):
-        self.processor = processor
+inputs = processor(
+    text=[text],
+    audio_codes=audio_codes,
+    speaker_embeddings=[speaker_embedding],
+    output_labels=True,
+).to(model.device)
 
-    def __call__(self, examples):
-        return self.processor(
-            text=[example["text"] for example in examples],
-            audio_codes=[example["audio_codes"] for example in examples],
-            speaker_embeddings=[example["speaker_embeddings"] for example in examples],
-            output_labels=True,
-            return_tensors="pt",
-        )
-
-
-data_collator = Qwen3TTSDataCollator(processor)
-
-# An ordinary manual training step.
-batch = {name: value.to(model.device) for name, value in data_collator(cached_examples).items()}
-optimizer = torch.optim.AdamW((parameter for parameter in model.parameters() if parameter.requires_grad), lr=2e-6)
-outputs = model(**batch)
+outputs = model(**inputs)
 outputs.loss.backward()
-optimizer.step()
-optimizer.zero_grad()
-del batch, outputs, optimizer
-torch.cuda.empty_cache()
 ```
 
-The same cached examples and collator work with [`Trainer`]. Keep label smoothing disabled because the model
-computes separate losses for the primary and residual codebooks. `remove_unused_columns=False` preserves the
-model-specific inputs produced by the collator.
-
-```python
-from transformers import Trainer, TrainingArguments
-
-
-training_args = TrainingArguments(
-    output_dir="qwen3-tts-finetuned",
-    per_device_train_batch_size=1,
-    gradient_accumulation_steps=4,
-    learning_rate=2e-6,
-    max_steps=10,
-    bf16=True,
-    gradient_checkpointing=True,
-    label_smoothing_factor=0.0,
-    prediction_loss_only=True,
-    remove_unused_columns=False,
-    save_strategy="no",
-    report_to="none",
-)
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=cached_examples,
-    data_collator=data_collator,
-    processing_class=processor,
-)
-trainer.train()
-trainer.save_model()
-```
-
-Use FP32 or BF16 for training. The released checkpoint's residual predictor can overflow in FP16. [`Trainer`]
-saves the processor with the model, and the resulting directory remains a Base checkpoint. Reload that directory
-with `AutoProcessor.from_pretrained` and `AutoModelForTextToWaveform.from_pretrained`, then generate as shown in
-[Voice Cloning](#voice-cloning).
+Use FP32 or BF16 for training because the released checkpoint's residual predictor can overflow in FP16.
 
 ### Torch compile
 
