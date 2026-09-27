@@ -1457,7 +1457,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         codec_prefix = torch.cat(
             [
                 codec_special[:, :3].expand(batch_size, -1, -1),
-                speaker_embeddings[:, None],
+                speaker_embeddings[:, None].to(codec_special),
                 codec_pad.expand(batch_size, -1, -1),
             ],
             dim=1,

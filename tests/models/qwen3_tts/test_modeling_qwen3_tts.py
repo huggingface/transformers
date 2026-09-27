@@ -29,6 +29,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
+    require_torch_bf16,
     require_torch_large_gpu,
     slow,
     torch_device,
@@ -385,6 +386,19 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
             actual = restored(**inputs, labels=inputs["audio_codes"])
         torch.testing.assert_close(actual.loss, expected.loss)
         torch.testing.assert_close(actual.logits, expected.logits)
+
+    @require_torch_bf16
+    def test_teacher_forcing_with_float32_speaker_embeddings_and_bfloat16_weights(self):
+        model = self.get_model().to(dtype=torch.bfloat16).train()
+        inputs = self.prepare_inputs()
+        output = model(**inputs, labels=inputs["audio_codes"])
+        self.assertEqual(inputs["speaker_embeddings"].dtype, torch.float32)
+        self.assertEqual(output.logits.dtype, torch.bfloat16)
+        self.assertTrue(torch.isfinite(output.loss))
+        output.loss.backward()
+        for parameter in (model.codec_head.weight, model.code_predictor.lm_head.weight):
+            self.assertIsNotNone(parameter.grad)
+            self.assertTrue(torch.isfinite(parameter.grad).all())
 
     @parameterized.expand([False, True])
     def test_teacher_forcing_gradient_checkpointing(self, use_reentrant):
