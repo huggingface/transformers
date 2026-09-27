@@ -259,14 +259,18 @@ class Ovis2_5VideoProcessorInitKwargs(VideosKwargs, total=False):
 
 
 class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
+    # Use the Ovis2.5 image resize and normalization defaults for video frames.
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
+    # Keep the supplied frames by default; GLM4V samples frames by FPS.
     do_sample_frames = False
+    # Match Ovis2.5's vision patch layout instead of GLM4V's 14-pixel, two-frame patches.
     patch_size = 16
     temporal_patch_size = 1
     merge_size = 2
+    # Remove GLM4V-only resize and sampling options from the generated processor.
     max_image_size = AttributeError()
     max_duration = AttributeError()
     num_frames = AttributeError()
@@ -290,6 +294,7 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 
         height, width = videos.shape[-2:]
+        # Match Ovis2.5 image resizing; GLM4V also factors in the video frame count.
         resized_height, resized_width = smart_resize(
             height=height,
             width=width,
@@ -313,6 +318,8 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
     ) -> int:
         """
         A utility that returns the number of video patches for a given video size.
+
+        Used by `Ovis2_5Processor._get_num_multimodal_tokens` to estimate visual token counts from video dimensions.
 
         Args:
             num_frames (`int`):
@@ -338,6 +345,7 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
             size = videos_kwargs.get("size", self.size)
             min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
             max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
+            # Mirror `resize` so the estimate matches the processed video grid.
             resized_height, resized_width = smart_resize(
                 height,
                 width,
@@ -353,6 +361,7 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
                 f"`patch_size * merge_size` ({factor}), got ({resized_height}, {resized_width})."
             )
 
+        # Match `patchify`'s last-frame padding when the frame count is not divisible by the temporal patch size.
         num_temporal_patches = math.ceil(num_frames / temporal_patch_size)
         return num_temporal_patches * (resized_height // patch_size) * (resized_width // patch_size)
 
