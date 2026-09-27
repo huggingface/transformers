@@ -877,7 +877,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         tp_init.assert_called_once()
-        self.assertEqual(tp_init.call_args.kwargs["num_heads"], [1] * tc.num_hidden_layers)
+        self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
         model._tp_size = None
 
         # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
