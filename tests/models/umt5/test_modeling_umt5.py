@@ -354,6 +354,40 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_base_model_prefix(self):
         pass
 
+    def test_decoder_self_attention_is_causal(self):
+        # The logits at a decoder position must not depend on the tokens that follow it.
+        # Regression test for the decoder self-attention losing `is_causal`: under SDPA the
+        # causal mask is skipped when there is no padding, so causality comes from the flag
+        # alone. See https://github.com/huggingface/transformers/issues/49134
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # The common tester initializes weights with initializer_factor=0.002, which makes the
+        # attention output too small for a causality violation to be measurable.
+        config = copy.deepcopy(config)
+        config.initializer_factor = 1.0
+
+        model = UMT5ForConditionalGeneration(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+        decoder_input_ids = inputs_dict["decoder_input_ids"]
+        self.assertGreater(decoder_input_ids.shape[1], 1)
+
+        # No decoder_attention_mask on purpose: that is the case where SDPA skips the mask.
+        with torch.no_grad():
+            truncated = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids[:, :1])
+            full = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+        torch.testing.assert_close(truncated.logits[:, 0], full.logits[:, 0], rtol=1e-4, atol=1e-4)
+
+    def test_decoder_self_attention_is_causal_flag(self):
+        # The decoder self-attention must be built causal, the encoder and the cross-attention
+        # bidirectional.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = UMT5ForConditionalGeneration(config)
+
+        self.assertTrue(all(block.layer[0].SelfAttention.is_causal for block in model.decoder.block))
+        self.assertFalse(any(block.layer[0].SelfAttention.is_causal for block in model.encoder.block))
+        self.assertFalse(any(block.layer[1].EncDecAttention.is_causal for block in model.decoder.block))
+
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->UMT5
 class UMT5EncoderOnlyModelTester:
