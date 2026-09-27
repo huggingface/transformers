@@ -29,7 +29,13 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_exporting, logging
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    is_flash_linear_attention_available,
+    is_torchdynamo_exporting,
+    logging,
+)
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
@@ -242,6 +248,9 @@ def torch_chunk_gated_delta_rule(
     initial_dtype = query.dtype
     batch_size, sequence_length, _, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
+    # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
+    if key.shape[2] != num_v_heads:
+        query, key = (x.repeat_interleave(num_v_heads // x.shape[2], dim=2) for x in (query, key))
     recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
     padded_output_shape = (batch_size, num_v_heads, -1, v_head_dim)  # -1 is the padded sequence length
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
@@ -364,6 +373,9 @@ def torch_recurrent_gated_delta_rule(
     initial_dtype = query.dtype
     batch_size, sequence_length, _, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
+    # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
+    if key.shape[2] != num_v_heads:
+        query, key = (x.repeat_interleave(num_v_heads // x.shape[2], dim=2) for x in (query, key))
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
@@ -422,6 +434,12 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         self.head_v_dim = config.linear_value_head_dim
         self.key_dim = self.head_k_dim * self.num_k_heads
         self.value_dim = self.head_v_dim * self.num_v_heads
+        # FLA only accepts fewer query/key heads than value heads since 0.5.0; the torch path and hub kernels always do
+        self.repeat_qk_heads = (
+            self.num_v_heads > self.num_k_heads
+            and is_flash_linear_attention_available()
+            and not is_flash_linear_attention_available("0.5.0")
+        )
 
         self.conv_kernel_size = config.linear_conv_kernel_dim
         self.layer_idx = layer_idx
@@ -554,7 +572,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
+        if self.repeat_qk_heads:
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 

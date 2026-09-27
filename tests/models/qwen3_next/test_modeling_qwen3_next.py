@@ -330,6 +330,37 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(chunk_out, recurrent_out, rtol=1e-4, atol=1e-5)
         torch.testing.assert_close(chunk_state, recurrent_state, rtol=1e-4, atol=1e-5)
 
+    @parameterized.expand([("chunked", True), ("recurrent", False)])
+    def test_gdn_grouped_value_heads_match_repeated_query_key(self, name: str, chunked: bool):
+        """Passing fewer query/key heads than value heads (grouped value attention, as in Qwen3.5 checkpoints) must
+        match repeating each query/key head over its group of value heads, for the torch path and FLA kernels alike."""
+        torch.manual_seed(0)
+        batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim = 2, 13, 2, 6, 8, 16
+        group_size = num_v_heads // num_k_heads
+        query = torch.randn(batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=True)
+        key = torch.randn(batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=True)
+        value = torch.randn(batch_size, seq_length, num_v_heads, v_head_dim, device=torch_device, requires_grad=True)
+        g = -torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)  # log-decays, must be <= 0
+        beta = torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)
+        gated_delta_rule = torch_chunk_gated_delta_rule if chunked else torch_recurrent_gated_delta_rule
+        # By keyword: FLA's fused recurrent kernel takes `gk` and `gv` between `g` and `beta`
+        kwargs = {"g": g, "beta": beta, "output_final_state": True, "use_qk_l2norm_in_kernel": True}
+
+        grouped_out, grouped_state = gated_delta_rule(query, key, value, **kwargs)
+        repeated_out, repeated_state = gated_delta_rule(
+            query.repeat_interleave(group_size, dim=2), key.repeat_interleave(group_size, dim=2), value, **kwargs
+        )
+        torch.testing.assert_close(grouped_out, repeated_out, rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(grouped_state, repeated_state, rtol=1e-4, atol=1e-5)
+
+        # FLA's fused recurrent kernel is forward-only; training goes through the chunked kernel
+        if chunked:
+            grad_out = torch.randn_like(grouped_out)
+            grouped_grads = torch.autograd.grad(grouped_out, (query, key, value), grad_out)
+            repeated_grads = torch.autograd.grad(repeated_out, (query, key, value), grad_out)
+            for grouped_grad, repeated_grad in zip(grouped_grads, repeated_grads):
+                torch.testing.assert_close(grouped_grad, repeated_grad, rtol=1e-4, atol=1e-5)
+
 
 @slow
 class Qwen3NextIntegrationTest(unittest.TestCase):

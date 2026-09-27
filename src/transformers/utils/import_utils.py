@@ -162,6 +162,7 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
+FLA_MIN_VERSION = "0.2.2"
 KERNELS_MIN_VERSION = "0.17.0"
 KERNELS_MAX_VERSION = "0.18.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
@@ -969,12 +970,12 @@ def is_mamba_2_ssm_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
-def is_flash_linear_attention_available():
+def is_flash_linear_attention_available(min_version: str = FLA_MIN_VERSION):
     is_available, fla_version = _is_package_available("fla", return_version=True)
     return (
         (is_torch_cuda_available() or is_torch_xpu_available() or is_torch_mlu_available())
         and is_available
-        and version.parse(fla_version) >= version.parse("0.2.2")
+        and version.parse(fla_version) >= version.parse(min_version)
     )
 
 
