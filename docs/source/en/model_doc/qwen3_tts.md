@@ -262,6 +262,10 @@ with torch.inference_mode():
         processor.feature_extractor,
     ).cpu()
 
+# The audio tokenizer is only needed during preprocessing.
+audio_tokenizer.to("cpu")
+torch.cuda.empty_cache()
+
 cached_examples = [
     {
         "text": sample["text"],
@@ -273,12 +277,9 @@ cached_examples = [
 
 The collator formats each text as a non-streaming synthesis prompt, pads text and audio independently, and masks
 padded audio targets with `-100`. The model returns the weighted sum of the primary-codebook and residual-codebook
-losses in `outputs.loss`.
+losses in `outputs.loss`. The following shows one manual optimization step.
 
 ```python
-from transformers import Trainer, TrainingArguments
-
-
 class Qwen3TTSDataCollator:
     def __init__(self, processor):
         self.processor = processor
@@ -302,8 +303,18 @@ outputs = model(**batch)
 outputs.loss.backward()
 optimizer.step()
 optimizer.zero_grad()
+del batch, outputs, optimizer
+torch.cuda.empty_cache()
+```
 
-# The same cached examples and collator work with Trainer.
+The same cached examples and collator work with [`Trainer`]. Keep label smoothing disabled because the model
+computes separate losses for the primary and residual codebooks. `remove_unused_columns=False` preserves the
+model-specific inputs produced by the collator.
+
+```python
+from transformers import Trainer, TrainingArguments
+
+
 training_args = TrainingArguments(
     output_dir="qwen3-tts-finetuned",
     per_device_train_batch_size=1,
@@ -329,40 +340,10 @@ trainer.train()
 trainer.save_model()
 ```
 
-Use FP32 or BF16 for training. The released checkpoint's residual predictor can overflow in FP16. The saved
-directory remains a Base checkpoint and can be reloaded for generation with the cached reference-speaker
-embedding.
-
-```python
-from transformers import AutoModelForTextToWaveform, AutoProcessor
-
-
-output_dir = "qwen3-tts-finetuned"
-processor = AutoProcessor.from_pretrained(output_dir)
-model = AutoModelForTextToWaveform.from_pretrained(
-    output_dir, dtype=torch.bfloat16, device_map="auto"
-).eval()
-
-conversation = [
-    {
-        "role": "user",
-        "content": [{"type": "text", "text": "This sentence uses the fine-tuned voice."}],
-        "language": "Auto",
-    }
-]
-inputs = processor.apply_chat_template(conversation)
-codes = model.generate(
-    **inputs,
-    voice_clone_prompt={
-        "ref_spk_embedding": [speaker_embedding],
-        "x_vector_only_mode": [True],
-        "icl_mode": [False],
-        "ref_code": None,
-    },
-).sequences
-audio = processor.decode(codes)
-processor.save_audio(audio, "qwen3_tts_finetuned.wav")
-```
+Use FP32 or BF16 for training. The released checkpoint's residual predictor can overflow in FP16. [`Trainer`]
+saves the processor with the model, and the resulting directory remains a Base checkpoint. Reload that directory
+with `AutoProcessor.from_pretrained` and `AutoModelForTextToWaveform.from_pretrained`, then generate as shown in
+[Voice Cloning](#voice-cloning).
 
 ### Torch compile
 
