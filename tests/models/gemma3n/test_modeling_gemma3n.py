@@ -916,6 +916,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         ]
 
         self.audio_file_path = self.__class__.audio_file_path
+        logger.warning(f"[setUp] audio_file_path: {self.audio_file_path}")
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
