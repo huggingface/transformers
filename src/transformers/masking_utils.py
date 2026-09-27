@@ -998,6 +998,7 @@ def create_causal_mask(
     return causal_mask
 
 
+@support_per_layer_mask_creation()
 def create_bidirectional_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1247,6 +1248,7 @@ def create_sliding_window_causal_mask(
     return causal_mask
 
 
+@support_per_layer_mask_creation()
 def create_bidirectional_sliding_window_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
