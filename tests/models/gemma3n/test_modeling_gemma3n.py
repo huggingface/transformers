@@ -17,10 +17,9 @@ import copy
 import inspect
 import unittest
 
-from huggingface_hub import hf_hub_download
-
 import numpy as np
 import pytest
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
