@@ -50,8 +50,12 @@ if is_torch_available():
         Cache,
         DynamicCache,
         Gemma2Config,
+        Gemma4ForCausalLM,
+        Gemma4TextConfig,
         GenerationConfig,
         LlamaConfig,
+        MixtralConfig,
+        MixtralForCausalLM,
         QuantizedCache,
         StaticCache,
         convert_and_export_with_cache,
@@ -67,6 +71,9 @@ if is_torch_available():
         StaticLayer,
     )
     from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
+    from transformers.integrations.heterogeneity.configuration_utils import (
+        AmbiguousGlobalPerLayerAttributeError,
+    )
 
 
 # FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
@@ -188,6 +195,79 @@ class CacheTest(unittest.TestCase):
         for layer_idx in attention_indices:
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
+
+    def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
+        """
+        Regression test for heterogeneous models with per-layer head shapes. The static cache is eagerly initialized
+        for a chunked prefill, and `generate` derives the head shapes of the static cache. Models such as Gemma4 use
+        a different `head_dim` depending on the layer, and reading a single global one raises on them, so the shapes
+        must be derived per layer.
+        """
+        config = Gemma4TextConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            num_hidden_layers=4,
+            intermediate_size=64,
+            vocab_size=99,
+            layer_types=["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+            per_layer_config={1: {"head_dim": 16}, 3: {"head_dim": 16}},
+        )
+        # On such a config there is no global `head_dim` to read, not even a default one
+        with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
+            getattr(config.get_text_config(decoder=True), "head_dim", None)
+
+        model = Gemma4ForCausalLM(config).to(torch_device).eval()
+        inputs = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        out = model.generate(
+            inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        # Each layer must be allocated with its own `head_dim`, instead of all of them sharing the global one
+        cache = out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 16, 8, 16])
+
+    def test_chunked_prefill_static_cache_none_head_dim(self):
+        """
+        Regression test for models that declare `head_dim` but leave it `None` (e.g. Mixtral). The head shapes of the
+        eagerly initialized static cache are read with a `getattr` default, which only fires on a missing attribute:
+        a `None` one was returned as is, instead of falling back to `hidden_size // num_attention_heads`.
+        """
+        config = MixtralConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_hidden_layers=2,
+            intermediate_size=64,
+            vocab_size=99,
+            num_local_experts=2,
+            num_experts_per_tok=1,
+        )
+        # The config carries a `head_dim`, it is just left unset
+        self.assertIsNone(config.head_dim)
+
+        model = MixtralForCausalLM(config).to(torch_device).eval()
+        inputs = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        out = model.generate(
+            inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        # Each layer must fall back to the `hidden_size // num_attention_heads` division
+        cache = out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 8])
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
@@ -485,6 +565,37 @@ class CacheHardIntegrationTest(unittest.TestCase):
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
+
+    @require_torch_accelerator
+    @slow
+    def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
+        """
+        Integration counterpart of the same test in `CacheTest`, on a real Gemma4: its layers do not share a single
+        `head_dim`, so the static cache eagerly initialized for the chunked prefill must be given one per layer.
+        """
+        model_name = "google/gemma-4-E2B-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", dtype=torch.bfloat16)
+        inputs = tokenizer("Fun fact:", return_tensors="pt").to(model.device)
+
+        gen_out = model.generate(
+            **inputs,
+            max_new_tokens=10,
+            do_sample=False,
+            cache_implementation="static",
+            prefill_chunk_size=2,
+            return_dict_in_generate=True,
+        )
+
+        self.assertEqual(gen_out.sequences.shape[-1], inputs.input_ids.shape[-1] + 10)
+        cache = gen_out.past_key_values
+        self.assertIsInstance(cache, StaticCache)
+
+        # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
+        text_config = model.config.get_text_config(decoder=True)
+        expected_head_dims = [text_config.per_layer_config[layer].head_dim for layer in range(len(cache.layers))]
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], expected_head_dims)
+        self.assertGreater(len(set(expected_head_dims)), 1)
 
     @require_torch_accelerator
     @slow

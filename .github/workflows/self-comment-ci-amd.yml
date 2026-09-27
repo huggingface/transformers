@@ -39,6 +39,7 @@ jobs:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
   check-timestamps:
+    permissions: {}
     name: Check timestamps (security check)
     runs-on: ubuntu-22.04
     needs: get-pr-info
@@ -61,6 +62,8 @@ jobs:
 
   # use a python script to handle this complex logic.
   get-tests:
+    permissions:
+      contents: read
     runs-on: ubuntu-22.04
     needs: [get-pr-number, check-timestamps]
     outputs:
@@ -195,6 +198,7 @@ jobs:
   # AMD has no equivalent yet, so we upload a dummy artifact here as a temporary
   # workaround until a proper solution is implemented on the reusable workflow side.
   upload_dummy_artifact:
+    permissions: {}
     name: Upload dummy artifact
     if: ${{ needs.get-tests.outputs.models != '[]' }}
     needs: [create_run, get-tests]

@@ -62,7 +62,9 @@ def get_dinov2_config(model_name, image_classifier=False):
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
         config.num_labels = 1000
-        config.id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        config.id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8")
+        )
         config.id2label = {int(k): v for k, v in config.id2label.items()}
 
     return config

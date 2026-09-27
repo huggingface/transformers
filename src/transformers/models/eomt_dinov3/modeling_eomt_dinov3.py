@@ -416,7 +416,7 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         num_patches_w = width // patch_width
 
         device = pixel_values.device
-        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
+        device_type = device.type if isinstance(device.type, str) else "cpu"
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             # Although we could precompute static patch_coords from image_size and patch_size in the config,
@@ -590,7 +590,13 @@ class EomtDinov3HungarianMatcher(nn.Module):
         mask_labels: torch.Tensor,
         class_labels: torch.Tensor,
     ) -> list[tuple[Tensor]]:
-        """
+        """Performs the matching
+
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             masks_queries_logits (`torch.Tensor`):
                 A tensor of dim `batch_size, num_queries, num_labels` with the classification logits.
@@ -639,10 +645,10 @@ class EomtDinov3HungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
-            # eliminate infinite values in cost_matrix to avoid the error ``ValueError: cost matrix is infeasible``
-            cost_matrix = torch.minimum(cost_matrix, torch.tensor(1e10))
-            cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
-            cost_matrix = torch.nan_to_num(cost_matrix, 0)
+            # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+            # these predictions only if there are no other valid predictions.
+            max_value = torch.finfo(cost_matrix.dtype).max
+            cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
             # do the assignment using the hungarian algorithm in scipy
             assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)

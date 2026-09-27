@@ -188,7 +188,7 @@ class ConfigTestUtils(unittest.TestCase):
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -200,7 +200,7 @@ class ConfigTestUtils(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             configuration.save_pretrained(tmp_dir)
             configuration.hidden_size = 2
-            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w"))
+            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w", encoding="utf-8"))
 
             # This should pick the new configuration file as the version of Transformers is > 4.0.0
             new_configuration = AutoConfig.from_pretrained(tmp_dir)
