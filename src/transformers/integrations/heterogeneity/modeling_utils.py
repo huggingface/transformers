@@ -34,7 +34,7 @@ from transformers.integrations.heterogeneity.masking_utils import AttentionMasks
 if TYPE_CHECKING:
     from torch import nn
 
-    from transformers import PreTrainedModel
+    from transformers import PreTrainedConfig, PreTrainedModel
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,7 @@ class _LayerInitContext:
     layer_cls: type[nn.Module]
     layer_idx_resolver: LayerIdxResolver
     skip_descriptors: dict[str, SkipDescriptors]
+    model_layer_configs: dict[int, PreTrainedConfig]
 
 
 _layer_init_contexts: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
@@ -76,13 +77,19 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     skip_descriptors = heterogeneous_modeling_spec.skip_descriptors or {}
     _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
 
+    layer_init_contexts = _layer_init_contexts.get()
+    model_layer_configs = next(
+        (context.model_layer_configs for context in layer_init_contexts if context.model.config is model.config),
+        {},
+    )
     context = _LayerInitContext(
         model=model,
         layer_cls=heterogeneous_modeling_spec.layer_cls,
         layer_idx_resolver=heterogeneous_modeling_spec.layer_idx_resolver,
         skip_descriptors=skip_descriptors,
+        model_layer_configs=model_layer_configs,
     )
-    _layer_init_contexts.set((*_layer_init_contexts.get(), context))
+    _layer_init_contexts.set((*layer_init_contexts, context))
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
 
@@ -92,8 +99,9 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
     That function runs inside ``PreTrainedModel.__init__`` and registers temporary state that is used later, when the
     model subclass creates its layers. This wrapper keeps that state available across the model's ``super().__init__()``
     chain and restores the previous state when initialization finishes. Generic heterogeneous modeling is marked as
-    applied only after construction succeeds. Nested models receive their own nested scope. If generic heterogeneous
-    modeling is not applied, the wrapper does not change model initialization.
+    applied only after construction succeeds. Nested models sharing a config collect their layer configs together and
+    publish them when the outermost applicable initialization succeeds. If generic heterogeneous modeling is not applied,
+    the wrapper does not change model initialization.
     """
     if getattr(orig_init, "_scoped_for_heterogeneous_modeling", False):
         return orig_init
@@ -105,12 +113,18 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
             return orig_init(self, *args, **kwargs)
 
         model_init_contexts_token = _model_init_contexts.set((*model_init_contexts, self))
+        # Setting the current value gives us a token to restore it after initialization.
         layer_init_contexts_token = _layer_init_contexts.set(_layer_init_contexts.get())
         try:
             result = orig_init(self, *args, **kwargs)
 
-            if any(context.model is self for context in _layer_init_contexts.get()):
-                self.config._heterogeneity_spec.generic_modeling_applied = True
+            # Nested models can share a config. Its first context belongs to the outermost model,
+            # which must finish successfully before we publish the collected layer configs.
+            outermost_context = next(
+                (context for context in _layer_init_contexts.get() if context.model.config is self.config), None
+            )
+            if outermost_context is not None and outermost_context.model is self:
+                self.config._heterogeneity_spec.model_layer_configs = outermost_context.model_layer_configs
 
             return result
         finally:
@@ -172,6 +186,7 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
             # --- Patch forward for attention mask selection ---
             _patch_layer_forward_for_attention_mask_layer_selection(layer=self, layer_idx=layer_idx)
+            context.model_layer_configs[layer_idx] = layer_config
 
         _patched_layer_init._heterogeneity_layer_cls = layer_cls
         layer_cls.__init__ = _patched_layer_init

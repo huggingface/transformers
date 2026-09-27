@@ -51,7 +51,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             },
         )
         config._attn_implementation = "sdpa"
-        config._heterogeneity_spec.generic_modeling_applied = True
+        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
 
         inputs_embeds = torch.randn(1, 4, config.hidden_size)
         cache = DynamicCache(config=config)
@@ -92,7 +92,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             },
         )
         config._attn_implementation = "eager"
-        config._heterogeneity_spec.generic_modeling_applied = True
+        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
         cache = DynamicCache(config=config)
         layer_0_states = torch.randn(1, config.num_key_value_heads, 1, config.head_dim)
         layer_1_states = torch.randn(1, config.num_key_value_heads, 4, config.head_dim)
@@ -119,7 +119,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             },
         )
         config._attn_implementation = "sdpa"
-        config._heterogeneity_spec.generic_modeling_applied = True
+        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
 
         inputs_embeds = torch.randn(1, 4, config.hidden_size)
         cache = DynamicCache(config=config)
@@ -154,7 +154,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             attn_implementation="eager",
             per_layer_config={1: {"_attn_implementation": "sdpa"}},
         )
-        config._heterogeneity_spec.generic_modeling_applied = True
+        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
         masks = create_causal_mask(
             config,
             torch.randn(1, 2, config.hidden_size),

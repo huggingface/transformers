@@ -136,6 +136,25 @@ class TestHeterogeneousModeling(unittest.TestCase):
         for layer in model.model.layers:
             self.assertEqual(layer.self_attn.config._attn_implementation, expected_attn_implementation)
 
+    def test_failed_outer_init_does_not_publish_layer_configs(self):
+        config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
+
+        def fail_post_init(model):
+            self.assertEqual(len(model.model.layers), config.num_hidden_layers)
+            self.assertIsNone(config._heterogeneity_spec.model_layer_configs)
+            raise RuntimeError("Outer model initialization failed")
+
+        with patch.object(LlamaForCausalLM, "post_init", fail_post_init):
+            with self.assertRaisesRegex(RuntimeError, "Outer model initialization failed"):
+                build_model(config, LlamaForCausalLM)
+
+        self.assertFalse(config.generic_modeling_applied)
+
+        model = build_model(config, LlamaForCausalLM)
+        self.assertTrue(config.generic_modeling_applied)
+        for layer_idx, layer in enumerate(model.model.layers):
+            self.assertIs(config._heterogeneity_spec.model_layer_configs[layer_idx], layer.self_attn.config)
+
     def test_error_missing_skip_descriptor(self):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
         config = tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})

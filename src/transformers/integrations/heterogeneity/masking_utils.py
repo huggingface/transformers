@@ -100,7 +100,6 @@ def _create_attention_masks_by_layer_idx(
     past_key_values = kwargs.get("past_key_values")
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
-        # Resolving a layer config copies it, which currently prevents full-graph compilation of this path.
         layer_config = config.per_layer_config[layer_idx]
 
         if attribute_name is not None:

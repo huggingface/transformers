@@ -124,6 +124,11 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config["full_attention"].num_key_value_heads, 4)
         self.assertEqual(config.per_layer_config["sliding_attention"].num_key_value_heads, 2)
 
+        model_layer_configs = dict(enumerate(config.per_layer_config))
+        config._heterogeneity_spec.model_layer_configs = model_layer_configs
+        self.assertIs(config.per_layer_config["full_attention"], model_layer_configs[0])
+        self.assertIs(config.per_layer_config["sliding_attention"], model_layer_configs[1])
+
     def test_indexing_homogeneous_config_by_layer_type_returns_global_config(self):
         config = tiny_llama_config(layer_types=["full_attention", "sliding_attention"] * 2)
 
