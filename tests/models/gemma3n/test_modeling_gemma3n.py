@@ -874,8 +874,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 class Gemma3nIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import shutil
-
         stale_ds_dir = "/mnt/cache/hub/datasets--etechgrid--28.5k_wavfiles_dataset"
         logger.warning(f"[setUpClass] Checking dataset dir: {stale_ds_dir}")
         if os.path.isdir(stale_ds_dir):
@@ -888,11 +886,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                     fpath = os.path.join(root, f)
                     size = os.path.getsize(fpath)
                     logger.warning(f"[setUpClass]   FILE {os.path.join(rel, f)} ({size} bytes)")
-            logger.warning(f"[setUpClass] Deleting {stale_ds_dir} ...")
-            shutil.rmtree(stale_ds_dir)
-            logger.warning(f"[setUpClass] Deleted.")
         else:
-            logger.warning(f"[setUpClass] Dir does NOT exist, nothing to delete.")
+            logger.warning(f"[setUpClass] Dir does NOT exist.")
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Google/gemma-3n-E4B-it", padding_side="left")
@@ -909,11 +904,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             },
         ]
 
-        self.audio_file_path = hf_hub_download(
-            repo_id="etechgrid/28.5k_wavfiles_dataset",
-            filename="wav_dataset/103-1240-0000.wav",
-            repo_type="dataset",
+        audio_ds = load_dataset(
+            "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
         )
+        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
