@@ -263,9 +263,6 @@ IGNORE_NON_TESTED = (
         "Qwen3TTSTalkerCodePredictorModel",  # Building part of bigger (tested) model.
         "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model.
         "Qwen3TTSForConditionalGeneration",  # Not a regular model. Tested through integration tests.
-        "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel",  # Building part of bigger (tested) model.
-        "Qwen3TTSTokenizerSingleCodebookDecoderDiTModel",  # Building part of bigger (tested) model.
-        "Qwen3TTSTokenizerSingleCodebookQuantizer",  # Building part of bigger (tested) model.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
@@ -564,7 +561,6 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "Qwen3TTSTalkerModel",  # Building part of a bigger model
         "Qwen3TTSTalkerCodePredictorModel",  # Building part of a bigger model
         "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of a bigger model
-        "Qwen3TTSTokenizerSingleCodebookQuantizer",  # Building part of a bigger model
         "HunYuanVLTextModel",  # Building part of bigger (tested) model.
         "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
         "PeAudioFrameLevelModel",
