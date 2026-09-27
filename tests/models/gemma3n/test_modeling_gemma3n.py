@@ -15,17 +15,12 @@
 
 import copy
 import inspect
-import logging
-import os
 import unittest
 
 from huggingface_hub import hf_hub_download
 
-logger = logging.getLogger(__name__)
-
 import numpy as np
 import pytest
-from datasets import load_dataset
 from parameterized import parameterized
 
 from transformers import (
@@ -872,27 +867,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 @slow
 @require_torch_accelerator
 class Gemma3nIntegrationTest(unittest.TestCase):
-    @classmethod
-    def _log_ds_dir(cls, label):
-        ds_dir = "/mnt/cache/hub/datasets--etechgrid--28.5k_wavfiles_dataset"
-        logger.warning(f"[setUpClass] {label}: {ds_dir}")
-        if os.path.isdir(ds_dir):
-            logger.warning(f"[setUpClass] Dir exists. Contents:")
-            for root, dirs, files in os.walk(ds_dir):
-                rel = os.path.relpath(root, ds_dir)
-                for d in dirs:
-                    logger.warning(f"[setUpClass]   DIR  {os.path.join(rel, d)}")
-                for f in files:
-                    fpath = os.path.join(root, f)
-                    size = os.path.getsize(fpath)
-                    logger.warning(f"[setUpClass]   FILE {os.path.join(rel, f)} ({size} bytes)")
-        else:
-            logger.warning(f"[setUpClass] Dir does NOT exist.")
-
-    @classmethod
-    def setUpClass(cls):
-        cls._log_ds_dir("BEFORE")
-
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Google/gemma-3n-E4B-it", padding_side="left")
 
@@ -908,10 +882,11 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             },
         ]
 
-        audio_ds = load_dataset(
-            "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
+        self.audio_file_path = hf_hub_download(
+            repo_id="etechgrid/28.5k_wavfiles_dataset",
+            filename="wav_dataset/103-1240-0000.wav",
+            repo_type="dataset",
         )
-        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
