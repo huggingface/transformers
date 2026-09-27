@@ -891,7 +891,18 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._log_ds_dir("BEFORE hf_hub_download")
+        cls._log_ds_dir("BEFORE load_dataset")
+        logger.warning("[setUpClass] Trying load_dataset ...")
+        try:
+            audio_ds = load_dataset(
+                "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
+            )
+            load_dataset_path = audio_ds["train"][0]["audio"].metadata.path
+            logger.warning(f"[setUpClass] load_dataset SUCCESS: {load_dataset_path}")
+        except Exception as e:
+            logger.warning(f"[setUpClass] load_dataset FAILED: {e}")
+        cls._log_ds_dir("AFTER load_dataset / BEFORE hf_hub_download")
+        logger.warning("[setUpClass] Trying hf_hub_download ...")
         cls.audio_file_path = hf_hub_download(
             repo_id="etechgrid/28.5k_wavfiles_dataset",
             filename="wav_dataset/103-1240-0000.wav",
