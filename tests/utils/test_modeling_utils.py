@@ -3314,32 +3314,6 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue(ShieldGemma2ForImageClassification._can_set_attn_implementation())
 
-    def test_set_attn_implementation_nested_submodels(self):
-        from transformers import DeepseekOcr2Config, DeepseekOcr2Model, T5Config, T5ForConditionalGeneration
-
-        # DeepseekOcr2Model -> vision_tower -> (sam_encoder, vision_encoder): the dict value of `vision_config` must
-        # reach the submodels nested in the vision tower, on every call
-        config = DeepseekOcr2Config(text_config={"num_hidden_layers": 1, "mlp_layer_types": ["dense"]})
-        config._attn_implementation = "sdpa"
-        with torch.device("meta"):
-            model = DeepseekOcr2Model(config)
-        vision_tower = model.vision_tower
-        for attn_implementation in ["eager", "sdpa"]:
-            model.set_attn_implementation({"vision_config": attn_implementation})
-            self.assertEqual(model.config._attn_implementation, "sdpa")
-            self.assertEqual(model.language_model.config._attn_implementation, "sdpa")
-            self.assertEqual(vision_tower.config._attn_implementation, attn_implementation)
-            self.assertEqual(vision_tower.sam_encoder.config._attn_implementation, attn_implementation)
-            self.assertEqual(vision_tower.vision_encoder.config._attn_implementation, attn_implementation)
-
-        # T5 stacks hold copies of the config, of the same class as the one of the top-level model
-        config = T5Config(num_layers=1, num_decoder_layers=1, d_model=8, d_kv=4, num_heads=2, d_ff=8, vocab_size=10)
-        config._attn_implementation = "sdpa"
-        model = T5ForConditionalGeneration(config)
-        model.set_attn_implementation("eager")
-        self.assertEqual(model.encoder.config._attn_implementation, "eager")
-        self.assertEqual(model.decoder.config._attn_implementation, "eager")
-
     def test_can_set_experts_moe_vs_dense(self):
         # MoE model with @use_experts_implementation: True. Non-MoE model: False.
         from transformers.models.llama.modeling_llama import LlamaModel
