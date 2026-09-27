@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_flash_linear_attention_available
 
 
 if is_torch_available():
@@ -306,12 +307,13 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         if with_initial_state:
             initial_state = torch.randn(batch_size, num_heads, k_head_dim, v_head_dim, device=torch_device)
 
+        # `g` and `beta` by keyword: FLA's fused recurrent kernel takes `gk` and `gv` between them
         chunk_out, chunk_state = torch_chunk_gated_delta_rule(
             query,
             key,
             value,
-            g,
-            beta,
+            g=g,
+            beta=beta,
             chunk_size=4,
             initial_state=initial_state,
             output_final_state=True,
@@ -321,14 +323,16 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
             query,
             key,
             value,
-            g,
-            beta,
+            g=g,
+            beta=beta,
             initial_state=initial_state,
             output_final_state=True,
             use_qk_l2norm_in_kernel=True,
         )
-        torch.testing.assert_close(chunk_out, recurrent_out, rtol=1e-4, atol=1e-5)
-        torch.testing.assert_close(chunk_state, recurrent_state, rtol=1e-4, atol=1e-5)
+        # FLA's chunked kernel runs its dot products in TF32 (largest gap measured on a B200: 1.5e-3), the torch path in fp32
+        atol, rtol = (5e-3, 5e-3) if is_flash_linear_attention_available() else (1e-5, 1e-4)
+        torch.testing.assert_close(chunk_out, recurrent_out, rtol=rtol, atol=atol)
+        torch.testing.assert_close(chunk_state, recurrent_state, rtol=rtol, atol=atol)
 
     @parameterized.expand([("chunked", True), ("recurrent", False)])
     def test_gdn_grouped_value_heads_match_repeated_query_key(self, name: str, chunked: bool):
