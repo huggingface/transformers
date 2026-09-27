@@ -1249,7 +1249,7 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
         if video_sizes is not None:
             merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
             num_video_patches = [
-                self.video_processor.get_number_of_video_patches(num_frames, height, width, videos_kwargs)
+                self.video_processor.get_num_of_video_patches(num_frames, height, width, videos_kwargs)
                 for num_frames, height, width in video_sizes
             ]
             vision_data["num_video_tokens"] = [num_patches // merge_size**2 for num_patches in num_video_patches]

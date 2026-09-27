@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.cohere_compass.image_processing_cohere_compass import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -40,47 +39,27 @@ if is_vision_available():
 
 
 class CohereCompassImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_frames=10,
-        min_resolution=56,
-        max_resolution=1024,
-        min_pixels=56 * 56,
-        max_pixels=28 * 28 * 1280,
-        do_normalize=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        do_resize=True,
-        patch_size=14,
-        temporal_patch_size=2,
-        merge_size=2,
-        do_convert_rgb=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.num_channels = num_channels
-        self.num_frames = num_frames
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 7)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("num_frames", 10)
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
+
+        # Image processor init kwargs
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("min_pixels", 56 * 56)
+        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
             "min_pixels": self.min_pixels,
             "max_pixels": self.max_pixels,
             "patch_size": self.patch_size,
@@ -116,25 +95,7 @@ class CohereCompassImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = CohereCompassImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "temporal_patch_size"))
-            self.assertTrue(hasattr(image_processing, "merge_size"))
+    image_processor_tester_class = CohereCompassImageProcessingTester
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():

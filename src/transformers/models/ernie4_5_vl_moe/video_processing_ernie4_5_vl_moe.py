@@ -44,7 +44,7 @@ from ...utils import (
     logging,
     safe_load_json_file,
 )
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, resolve_revision
 from ...utils.import_utils import is_torchvision_available, is_tracing, requires
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
@@ -120,7 +120,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             raise ValueError("`Ernie 4.5 VL` only supports a temporal patch size of 2")
 
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        size = dict(self.size) if size is None else size
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
@@ -138,6 +138,15 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -440,6 +449,40 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
 
             processed_videos.append(video)
         return processed_videos
+
+    def get_num_of_video_patches(
+        self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
+    ) -> int:
+        """
+        A utility that returns number of video patches for a given video size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without a video input.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs or {}
+        size = videos_kwargs.get("size", self.size)
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        # `_prepare_input_videos` copies the last frame if uneven, ignoring any kwarg
+        grid_t = num_frames + -num_frames % self.temporal_patch_size
+        return grid_t * grid_h * grid_w
 
     def _preprocess(
         self,

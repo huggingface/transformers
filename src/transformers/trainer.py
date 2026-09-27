@@ -3005,6 +3005,25 @@ class Trainer:
 
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
+    def end(self):
+        """
+        Finish the trackers and destroy the distributed process group.
+
+        Call this once, at the very end of a script, after everything that needs the other processes:
+        [`~Trainer.train`], [`~Trainer.evaluate`], [`~Trainer.predict`], [`~Trainer.save_model`] and
+        [`~Trainer.push_to_hub`] all communicate between processes and will fail once the group is gone.
+
+        Example:
+
+        ```python
+        trainer.train()
+        trainer.evaluate()
+        trainer.push_to_hub()
+        trainer.end()
+        ```
+        """
+        self.accelerator.end_training()
+
     def predict(
         self, test_dataset: Dataset, ignore_keys: list[str] | None = None, metric_key_prefix: str = "test"
     ) -> PredictionOutput:
@@ -4192,7 +4211,7 @@ class Trainer:
             dataset_args=dataset_args,
         )
         model_card = training_summary.to_model_card()
-        with open(model_card_filepath, "w") as f:
+        with open(model_card_filepath, "w", encoding="utf-8") as f:
             f.write(model_card)
 
         if is_peft_library:
@@ -4297,7 +4316,7 @@ class Trainer:
             index_path = os.path.join(checkpoint_folder, index_file)
             if os.path.isfile(index_path):
                 modeling_files.append(index_file)
-                with open(index_path) as f:
+                with open(index_path, encoding="utf-8") as f:
                     index = json.loads(f.read())
                 shard_files = list(set(index["weight_map"].values()))
                 modeling_files.extend(shard_files)
