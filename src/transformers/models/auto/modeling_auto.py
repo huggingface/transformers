@@ -487,7 +487,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_omni_moe_thinker", "Qwen3OmniMoeThinkerModel"),
         ("qwen3_tts", "Qwen3TTSForConditionalGeneration"),
         ("qwen3_tts_tokenizer_12hz", "Qwen3TTSTokenizerModel"),
-        ("qwen3_tts_tokenizer_single_codebook", "Qwen3TTSTokenizerSingleCodebookModel"),
         ("qwen3_vl", "Qwen3VLModel"),
         ("qwen3_vl_moe", "Qwen3VLMoeModel"),
         ("qwen3_vl_moe_text", "Qwen3VLMoeTextModel"),
@@ -2110,7 +2109,6 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("neucodec", "NeuCodecModel"),
         ("pocket_tts_audio_tokenizer", "PocketTTSAudioTokenizerModel"),
         ("qwen3_tts_tokenizer_12hz", "Qwen3TTSTokenizerModel"),
-        ("qwen3_tts_tokenizer_single_codebook", "Qwen3TTSTokenizerSingleCodebookModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]
