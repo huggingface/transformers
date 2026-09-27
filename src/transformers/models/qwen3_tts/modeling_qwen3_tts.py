@@ -1571,75 +1571,61 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         hidden_states = outputs.last_hidden_state
         logits = self.codec_head(hidden_states)
 
-        if teacher_forcing:
-            loss = talker_loss = code_predictor_loss = None
-            if labels is not None:
-                if labels.shape != audio_codes.shape:
-                    raise ValueError("`labels` must match the shape of `audio_codes`.")
-                if audio_attention_mask is None:
-                    audio_attention_mask = torch.ones_like(audio_codes[..., 0], dtype=torch.bool)
-                labels = labels.masked_fill(~audio_attention_mask.bool()[..., None], -100)
-                torch_compilable_check(
-                    (labels[..., 0] == -100) | ((labels[..., 0] >= 0) & (labels[..., 0] < self.vocab_size)),
-                    "Primary labels must be vocabulary IDs or -100.",
-                )
-                torch_compilable_check(
-                    (labels[..., 1:] == -100)
-                    | ((labels[..., 1:] >= 0) & (labels[..., 1:] < self.code_predictor.vocab_size)),
-                    "Residual labels must be vocabulary IDs or -100.",
-                )
-                primary_labels = labels.new_full(logits.shape[:2], -100)
-                # Padded frames write only to the ignored role prefix, never over a valid target or EOS.
-                frame_positions = audio_positions.masked_fill(~audio_attention_mask.bool(), 0)
-                primary_labels.scatter_(1, frame_positions, labels[..., 0])
-                eos_labels = labels.new_full((labels.shape[0], 1), self.config.talker_config.codec_eos_token_id)
-                eos_labels = eos_labels.masked_fill(~(labels[..., 0] != -100).any(-1, keepdim=True), -100)
-                primary_labels.scatter_(1, eos_positions[:, None], eos_labels)
-                talker_loss = self.loss_function(
-                    logits=logits,
-                    labels=primary_labels,
-                    vocab_size=self.vocab_size,
-                    num_items_in_batch=(primary_labels != -100).sum().clamp_min(1),
-                )
-
-                safe_codes = audio_codes.masked_fill(~audio_attention_mask.bool()[..., None], 0).flatten(0, 1)
-                previous_hidden = hidden_states.gather(
-                    1, (audio_positions - 1)[..., None].expand(-1, -1, hidden_states.shape[-1])
-                ).flatten(0, 1)
-                predictor_labels = labels[..., 1:].flatten(0, 1)
-                # Keep fixed frame dimensions under compilation; eager training drops ignored frames.
-                if not is_torchdynamo_compiling():
-                    train_mask = (predictor_labels != -100).any(-1)
-                    # Retain one ignored frame for an autograd-connected zero loss when all targets are ignored.
-                    train_mask[0] |= ~train_mask.any()
-                    safe_codes = safe_codes[train_mask]
-                    previous_hidden = previous_hidden[train_mask]
-                    predictor_labels = predictor_labels[train_mask]
-                predictor_inputs = [previous_hidden, self.get_input_embeddings()(safe_codes[:, 0])]
-                for index in range(self.config.talker_config.num_code_groups - 2):
-                    predictor_inputs.append(
-                        self.code_predictor.get_input_embeddings()[index](safe_codes[:, index + 1])
-                    )
-                predictor_inputs = torch.stack(predictor_inputs, dim=1)
-                predictor_output = self.code_predictor(
-                    inputs_embeds=predictor_inputs,
-                    labels=predictor_labels,
-                    use_cache=False,
-                )
-                code_predictor_loss = predictor_output.loss
-                loss = talker_loss + self.config.code_predictor_loss_weight * code_predictor_loss
-            return Qwen3TTSTalkerOutputWithPast(
-                loss=loss,
+        loss = talker_loss = code_predictor_loss = None
+        if teacher_forcing and labels is not None:
+            if labels.shape != audio_codes.shape:
+                raise ValueError("`labels` must match the shape of `audio_codes`.")
+            if audio_attention_mask is None:
+                audio_attention_mask = torch.ones_like(audio_codes[..., 0], dtype=torch.bool)
+            labels = labels.masked_fill(~audio_attention_mask.bool()[..., None], -100)
+            torch_compilable_check(
+                (labels[..., 0] == -100) | ((labels[..., 0] >= 0) & (labels[..., 0] < self.vocab_size)),
+                "Primary labels must be vocabulary IDs or -100.",
+            )
+            torch_compilable_check(
+                (labels[..., 1:] == -100)
+                | ((labels[..., 1:] >= 0) & (labels[..., 1:] < self.code_predictor.vocab_size)),
+                "Residual labels must be vocabulary IDs or -100.",
+            )
+            primary_labels = labels.new_full(logits.shape[:2], -100)
+            # Padded frames write only to the ignored role prefix, never over a valid target or EOS.
+            frame_positions = audio_positions.masked_fill(~audio_attention_mask.bool(), 0)
+            primary_labels.scatter_(1, frame_positions, labels[..., 0])
+            eos_labels = labels.new_full((labels.shape[0], 1), self.config.talker_config.codec_eos_token_id)
+            eos_labels = eos_labels.masked_fill(~(labels[..., 0] != -100).any(-1, keepdim=True), -100)
+            primary_labels.scatter_(1, eos_positions[:, None], eos_labels)
+            talker_loss = self.loss_function(
                 logits=logits,
-                past_key_values=outputs.past_key_values,
-                hidden_states=outputs.hidden_states,
-                attentions=outputs.attentions,
-                talker_loss=talker_loss,
-                code_predictor_loss=code_predictor_loss,
+                labels=primary_labels,
+                vocab_size=self.vocab_size,
+                num_items_in_batch=(primary_labels != -100).sum().clamp_min(1),
             )
 
-        loss = None
-        if labels is not None:
+            safe_codes = audio_codes.masked_fill(~audio_attention_mask.bool()[..., None], 0).flatten(0, 1)
+            previous_hidden = hidden_states.gather(
+                1, (audio_positions - 1)[..., None].expand(-1, -1, hidden_states.shape[-1])
+            ).flatten(0, 1)
+            predictor_labels = labels[..., 1:].flatten(0, 1)
+            # Keep fixed frame dimensions under compilation; eager training drops ignored frames.
+            if not is_torchdynamo_compiling():
+                train_mask = (predictor_labels != -100).any(-1)
+                # Retain one ignored frame for an autograd-connected zero loss when all targets are ignored.
+                train_mask[0] |= ~train_mask.any()
+                safe_codes = safe_codes[train_mask]
+                previous_hidden = previous_hidden[train_mask]
+                predictor_labels = predictor_labels[train_mask]
+            predictor_inputs = [previous_hidden, self.get_input_embeddings()(safe_codes[:, 0])]
+            for index in range(self.config.talker_config.num_code_groups - 2):
+                predictor_inputs.append(self.code_predictor.get_input_embeddings()[index](safe_codes[:, index + 1]))
+            predictor_inputs = torch.stack(predictor_inputs, dim=1)
+            predictor_output = self.code_predictor(
+                inputs_embeds=predictor_inputs,
+                labels=predictor_labels,
+                use_cache=False,
+            )
+            code_predictor_loss = predictor_output.loss
+            loss = talker_loss + self.config.code_predictor_loss_weight * code_predictor_loss
+        elif labels is not None:
             loss = self.loss_function(
                 logits=logits,
                 labels=labels,
@@ -1653,7 +1639,9 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            past_hidden=hidden_states[:, -1:, :],
+            talker_loss=talker_loss,
+            code_predictor_loss=code_predictor_loss,
+            past_hidden=None if teacher_forcing else hidden_states[:, -1:, :],
         )
 
 
