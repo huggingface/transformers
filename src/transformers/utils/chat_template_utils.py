@@ -84,6 +84,9 @@ def _get_json_schema_type(param_type: type) -> dict[str, str]:
         str: {"type": "string"},
         bool: {"type": "boolean"},
         type(None): {"type": "null"},
+        list: {"type": "array"},
+        tuple: {"type": "array"},
+        dict: {"type": "object"},
         Any: {},
     }
     if is_vision_available():
