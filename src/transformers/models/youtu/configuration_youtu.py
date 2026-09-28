@@ -60,6 +60,7 @@ class YoutuConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    # Router masking with all-reduce until TP + FSDP composes for this model (token dispatch always applies FSDP2).
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",

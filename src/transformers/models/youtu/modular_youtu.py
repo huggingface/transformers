@@ -65,6 +65,13 @@ class YoutuConfig(DeepseekV3Config):
         "layers.*.mlp.down_proj": "rowwise",
     }
     attribute_map = {}
+    # Router masking with all-reduce until TP + FSDP composes for this model (token dispatch always applies FSDP2).
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     vocab_size: int = 128256
     hidden_size: int = 2048

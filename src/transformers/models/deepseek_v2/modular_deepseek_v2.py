@@ -84,10 +84,9 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     model_type = "deepseek_v2"
