@@ -33,7 +33,6 @@ class VideoLlama3Processor(ProcessorMixin):
     valid_processor_kwargs = VideoLlama3ProcessorKwargs
     text_kwargs = {
         "padding": False,
-        "return_mm_token_type_ids": False,
     }
     videos_kwargs = {"return_metadata": True}
 

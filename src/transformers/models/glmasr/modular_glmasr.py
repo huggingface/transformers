@@ -62,6 +62,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         audio_token="<|pad|>",
         default_transcription_prompt="Please transcribe this audio into text",
         max_audio_len=655,
+        **kwargs,
     ):
         r"""
         audio_token (`Optional[str]`, *optional*, defaults to `"<|pad|>`"):
@@ -79,6 +80,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
             audio_token=audio_token,
             default_transcription_prompt=default_transcription_prompt,
             max_audio_len=max_audio_len,
+            **kwargs,
         )
 
     def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":

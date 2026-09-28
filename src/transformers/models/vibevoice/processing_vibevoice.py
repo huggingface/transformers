@@ -54,6 +54,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         audio_bos_token="<|vision_start|>",
         audio_eos_token="<|vision_end|>",
         audio_token="<|vision_pad|>",
+        **kwargs,
     ):
         r"""
         audio_bos_token (`str`, *optional*, defaults to `"<|vision_start|>"`):
@@ -81,7 +82,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             if getattr(tokenizer, "audio_token_id", None)
             else tokenizer.convert_tokens_to_ids(audio_token)
         )
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         processed_audio = self.feature_extractor(audio, **kwargs)
@@ -103,21 +104,15 @@ class VibeVoiceProcessor(ProcessorMixin):
         output_labels: bool | None = False,
         **kwargs: Unpack[VibeVoiceProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to process text inputs with optional voice samples.
-
-        This method processes text inputs (typically prepared by apply_chat_template) and optional voice samples for
-        voice cloning. It expands audio diffusion tokens based on the actual audio length.
-
-        Args:
-            text (`str`, `List[str]`):
-                The input text(s) to process, typically prepared by apply_chat_template with audio token placeholders.
-            audio (`List[Union[str, np.ndarray]]`, *optional*):
-                Audio samples for speaker voice cloning. Should match the number of audio token placeholders in text.
-            output_labels (bool, *optional*, default=False):
-                Whether to return labels for training.
-            **kwargs:
-                Additional keyword arguments passed to the tokenizer and feature extractor.
+        r"""
+        text (`str`, `List[str]`):
+            The input text(s) to process, typically prepared by apply_chat_template with audio token placeholders.
+        audio (`List[Union[str, np.ndarray]]`, *optional*):
+            Audio samples for speaker voice cloning. Should match the number of audio token placeholders in text.
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training.
+        **kwargs:
+            Additional keyword arguments passed to the tokenizer and feature extractor.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

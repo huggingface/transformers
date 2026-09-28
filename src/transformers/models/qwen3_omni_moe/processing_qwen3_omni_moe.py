@@ -119,9 +119,17 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen3OmniMoeProcessorKwargs
 
     def __init__(
-        self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
+        self,
+        image_processor=None,
+        video_processor=None,
+        feature_extractor=None,
+        tokenizer=None,
+        chat_template=None,
+        **kwargs,
     ):
-        super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(
+            image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template, **kwargs
+        )
         self.image_token = self.tokenizer.image_token
         self.audio_token = self.tokenizer.audio_token
         self.video_token = self.tokenizer.video_token

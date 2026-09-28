@@ -35,6 +35,8 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
 
     valid_processor_kwargs = ProcessingKwargs
 
+    return_mm_token_type_ids = False
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token

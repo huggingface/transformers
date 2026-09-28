@@ -65,8 +65,8 @@ class UdopProcessor(ProcessorMixin):
     prepare labels for language modeling tasks.
     """
 
-    def __init__(self, image_processor, tokenizer):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor, tokenizer, **kwargs):
+        super().__init__(image_processor, tokenizer, **kwargs)
 
     @auto_docstring
     def __call__(

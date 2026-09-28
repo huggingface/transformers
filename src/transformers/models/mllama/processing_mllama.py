@@ -168,7 +168,7 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
 class MllamaProcessor(ProcessorMixin):
     valid_processor_kwargs = MllamaProcessorKwargs
 
-    def __init__(self, image_processor, tokenizer, chat_template=None):
+    def __init__(self, image_processor, tokenizer, chat_template=None, **kwargs):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"
             self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -179,7 +179,7 @@ class MllamaProcessor(ProcessorMixin):
         self.python_token = "<|python_tag|>"
         self.python_token_id = tokenizer.convert_tokens_to_ids(self.python_token)
         self.bos_token = tokenizer.bos_token
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     @auto_docstring
     def __call__(

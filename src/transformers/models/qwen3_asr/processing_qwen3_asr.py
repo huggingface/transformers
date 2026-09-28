@@ -350,17 +350,13 @@ class Qwen3ASRProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen3ASRProcessorKwargs
 
     def __init__(
-        self,
-        feature_extractor=None,
-        tokenizer=None,
-        chat_template=None,
-        timestamp_segment_time: float = 80,
+        self, feature_extractor=None, tokenizer=None, chat_template=None, timestamp_segment_time: float = 80, **kwargs
     ):
         r"""
         timestamp_segment_time (`float`, *optional*):
             Milliseconds per timestamp class. Defaults to 80 ms.
         """
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
         self.timestamp_segment_time = timestamp_segment_time
         self.audio_token = self.tokenizer.audio_token
         self.audio_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_token)

@@ -1089,7 +1089,6 @@ class Glm4vProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
         },
         "videos_kwargs": {"return_metadata": True},
     }

@@ -44,9 +44,9 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class Pix2StructProcessor(ProcessorMixin):
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor, tokenizer, **kwargs):
         tokenizer.return_token_type_ids = False
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, **kwargs)
 
     @auto_docstring
     def __call__(

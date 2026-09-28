@@ -32,13 +32,7 @@ class DeepseekVLHybridProcessorKwargs(ProcessingKwargs, total=False):
 class DeepseekVLHybridProcessor(ProcessorMixin):
     valid_processor_kwargs = DeepseekVLHybridProcessorKwargs
 
-    def __init__(
-        self,
-        image_processor,
-        tokenizer,
-        chat_template=None,
-        num_image_tokens=576,
-    ):
+    def __init__(self, image_processor, tokenizer, chat_template=None, num_image_tokens=576, **kwargs):
         r"""
         num_image_tokens (`int`, *optional*, defaults to 576):
             The number of special image tokens used as placeholders for visual content in text sequences.
@@ -47,7 +41,7 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.num_image_tokens = num_image_tokens
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens

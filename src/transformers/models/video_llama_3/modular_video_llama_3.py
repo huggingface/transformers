@@ -894,9 +894,9 @@ class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
 
 
 class VideoLlama3Processor(Qwen3VLProcessor):
+    return_mm_token_type_ids = AttributeError()
     text_kwargs = {
         "padding": False,
-        "return_mm_token_type_ids": False,
     }
     videos_kwargs = {"return_metadata": True}
 

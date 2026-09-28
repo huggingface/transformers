@@ -192,8 +192,8 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
 class VideoPrismProcessor(ProcessorMixin):
     valid_processor_kwargs = VideoPrismProcessorKwargs
 
-    def __init__(self, video_processor=None, tokenizer=None):
-        super().__init__(video_processor, tokenizer)
+    def __init__(self, video_processor=None, tokenizer=None, **kwargs):
+        super().__init__(video_processor, tokenizer, **kwargs)
 
 
 @auto_docstring(custom_intro="""Base class for model outputs that include spatial and temporal states.""")

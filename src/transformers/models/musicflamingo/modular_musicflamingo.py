@@ -129,6 +129,7 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         audio_bos_token="<|sound_bos|>",
         audio_eos_token="<|sound_eos|>",
         max_audio_len=1200,
+        **kwargs,
     ):
         r"""
         audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
@@ -146,6 +147,7 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
             chat_template=chat_template,
             audio_token=audio_token,
             max_audio_len=max_audio_len,
+            **kwargs,
         )
         del self.default_transcription_prompt
         self.audio_bos_token = audio_bos_token

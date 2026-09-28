@@ -21,8 +21,8 @@ from ...utils import auto_docstring
 
 @auto_docstring
 class GitProcessor(ProcessorMixin):
-    def __init__(self, image_processor, tokenizer):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor, tokenizer, **kwargs):
+        super().__init__(image_processor, tokenizer, **kwargs)
 
 
 __all__ = ["GitProcessor"]

@@ -44,6 +44,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         audio_token="<|AUDIO|>",
         audio_bos_token="<|audio_bos|>",
         audio_eos_token="<|audio_eos|>",
+        **kwargs,
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
@@ -59,7 +60,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
 
     def validate_inputs(
         self,

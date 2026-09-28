@@ -47,8 +47,8 @@ class SeamlessM4TProcessorKwargs(ProcessingKwargs, total=False):
 class SeamlessM4TProcessor(ProcessorMixin):
     valid_processor_kwargs = SeamlessM4TProcessorKwargs
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, feature_extractor, tokenizer, **kwargs):
+        super().__init__(feature_extractor, tokenizer, **kwargs)
 
     @auto_docstring
     def __call__(

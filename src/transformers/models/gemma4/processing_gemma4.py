@@ -40,9 +40,9 @@ class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
 class Gemma4Processor(ProcessorMixin):
     valid_processor_kwargs = Gemma4ProcessorKwargs
 
+    return_mm_token_type_ids = True
     text_kwargs = {
         "padding": True,
-        "return_mm_token_type_ids": True,
     }
     videos_kwargs = {"return_metadata": True}
 

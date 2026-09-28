@@ -35,13 +35,7 @@ class GraniteSpeechProcessorKwargs(ProcessingKwargs, total=False):
 class GraniteSpeechProcessor(ProcessorMixin):
     valid_processor_kwargs = GraniteSpeechProcessorKwargs
 
-    def __init__(
-        self,
-        audio_processor,
-        tokenizer,
-        audio_token="<|audio|>",
-        chat_template=None,
-    ):
+    def __init__(self, audio_processor, tokenizer, audio_token="<|audio|>", chat_template=None, **kwargs):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio|>"`):
             The special token used to represent audio in the text sequence. This token serves as a placeholder
@@ -49,7 +43,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
             audio tokens inserted depends on the audio feature dimensions extracted by the audio processor.
         """
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
-        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     @auto_docstring
     def __call__(

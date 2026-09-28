@@ -36,8 +36,8 @@ class NougatProcessorKwargs(ProcessingKwargs, total=False):
 class NougatProcessor(ProcessorMixin):
     valid_processor_kwargs = NougatProcessorKwargs
 
-    def __init__(self, image_processor, tokenizer):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor, tokenizer, **kwargs):
+        super().__init__(image_processor, tokenizer, **kwargs)
 
     @auto_docstring
     def __call__(self, images=None, text=None, **kwargs):

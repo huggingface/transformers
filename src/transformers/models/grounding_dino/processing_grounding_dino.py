@@ -114,8 +114,8 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
 class GroundingDinoProcessor(ProcessorMixin):
     valid_processor_kwargs = GroundingDinoProcessorKwargs
 
-    def __init__(self, image_processor, tokenizer):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor, tokenizer, **kwargs):
+        super().__init__(image_processor, tokenizer, **kwargs)
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         if text is not None:

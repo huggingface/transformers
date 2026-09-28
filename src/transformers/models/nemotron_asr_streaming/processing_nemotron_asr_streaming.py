@@ -55,6 +55,7 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
         blank_token="<blank>",
         supported_num_lookahead_tokens=None,
         default_num_lookahead_tokens=None,
+        **kwargs,
     ):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
@@ -80,7 +81,7 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
         )
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(feature_extractor, tokenizer, **kwargs)
 
     @auto_docstring
     def __call__(

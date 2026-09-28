@@ -80,8 +80,8 @@ class SamProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class SamProcessor(ProcessorMixin):
-    def __init__(self, image_processor):
-        super().__init__(image_processor)
+    def __init__(self, image_processor, **kwargs):
+        super().__init__(image_processor, **kwargs)
         self.target_size = self.image_processor.size["longest_edge"]
 
     @auto_docstring

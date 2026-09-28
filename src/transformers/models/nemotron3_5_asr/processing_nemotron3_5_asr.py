@@ -195,6 +195,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         default_num_lookahead_tokens=None,
         prompt_dictionary=None,
         num_prompts=128,
+        **kwargs,
     ):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
@@ -230,7 +231,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         )
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(feature_extractor, tokenizer, **kwargs)
 
     @auto_docstring
     def __call__(

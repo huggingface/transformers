@@ -1037,6 +1037,13 @@ class ProcessorMixin(PushToHubMixin):
         dict_to_copy = {k: v for k, v in self.__dict__.items() if k not in tokenizer_attributes}
         output = copy.deepcopy(dict_to_copy)
 
+        # Return None values only when the class defines a non-None default.
+        output = {
+            key: value
+            for key, value in output.items()
+            if value is not None or getattr(self.__class__, key, None) is not None
+        }
+
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
@@ -1500,11 +1507,28 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict.update(kwargs)
 
         # check if there is an overlap between args and processor_dict
-        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
+        init_parameters = inspect.signature(cls.__init__).parameters
+        # Positional or keyword arguments (no **kwargs)
+        accepted_args_and_kwargs = [
+            name
+            for name, parameter in init_parameters.items()
+            if name != "self" and parameter.kind in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        # Keyword arguments only (no **kwargs)
+        accepted_kwargs = {
+            name
+            for name, parameter in init_parameters.items()
+            if name != "self" and parameter.kind in (parameter.POSITIONAL_OR_KEYWORD, parameter.KEYWORD_ONLY)
+        }
+        # Check if __init__ accepts **kwargs.
+        # Required for BC with remote processors that might not accept **kwargs.
+        if any(parameter.kind == parameter.VAR_KEYWORD for parameter in init_parameters.values()):
+            accepted_kwargs.update(cls.valid_processor_kwargs.__annotations__)
 
         # validate both processor_dict and given kwargs
         unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
-            processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
+            processor_config=processor_dict,
+            valid_kwargs=accepted_kwargs,
         )
 
         # update args that are already in processor_dict to avoid duplicate arguments
@@ -1644,8 +1668,8 @@ class ProcessorMixin(PushToHubMixin):
         common_kwargs = getattr(self, "common_kwargs", {})
 
         # 7): flat, not modality-specific processor attributes
-        for key in self.valid_processor_kwargs.__annotations__:
-            if key != "common_kwargs" and key not in default_kwargs:
+        for key in ModelProcessorKwargs.__annotations__:
+            if key != "common_kwargs" and key not in default_kwargs and hasattr(self, key):
                 default_kwargs[key] = copy.copy(getattr(self, key))
 
         # get defaults from set model processor kwargs if they exist
@@ -1685,7 +1709,7 @@ class ProcessorMixin(PushToHubMixin):
         output_kwargs.update(default_kwargs)
 
         # 4): For `_defaults.common_kwargs` update all modality-specific kwargs with same key/values
-        common_kwargs = processor_kwargs_defaults.get("common_kwargs", {})
+        common_kwargs = processor_kwargs_defaults.get("common_kwargs", {}).copy()
         # 3): Explicit common_kwargs override
         common_kwargs.update(kwargs.get("common_kwargs", {}))
         if common_kwargs:

@@ -85,12 +85,12 @@ class DiaProcessor(ProcessorMixin):
     audio_tokenizer_class = "DacModel"
     valid_processor_kwargs = DiaProcessorKwargs
 
-    def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
+    def __init__(self, feature_extractor, tokenizer, audio_tokenizer, **kwargs):
         r"""
         audio_tokenizer (`DacModel`):
             An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is a required input.
         """
-        super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
+        super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, **kwargs)
 
     def _process_audio(self, audio, **kwargs):
         """Full audio processing: feature extraction → DAC codebook encoding → delay pattern."""

@@ -81,8 +81,8 @@ class SamHQProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class SamHQProcessor(ProcessorMixin):
-    def __init__(self, image_processor):
-        super().__init__(image_processor)
+    def __init__(self, image_processor, **kwargs):
+        super().__init__(image_processor, **kwargs)
         # Ensure image_processor is properly initialized
         if not hasattr(self, "image_processor"):
             raise ValueError("image_processor was not properly initialized")

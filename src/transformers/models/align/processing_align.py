@@ -33,8 +33,8 @@ class AlignProcessorKwargs(ProcessingKwargs, total=False):
 class AlignProcessor(ProcessorMixin):
     valid_processor_kwargs = AlignProcessorKwargs
 
-    def __init__(self, image_processor, tokenizer):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor, tokenizer, **kwargs):
+        super().__init__(image_processor, tokenizer, **kwargs)
 
 
 __all__ = ["AlignProcessor"]

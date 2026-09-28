@@ -62,20 +62,14 @@ def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]
 class FunAsrNanoProcessor(ProcessorMixin):
     valid_processor_kwargs = FunAsrNanoProcessorKwargs
 
-    def __init__(
-        self,
-        feature_extractor,
-        tokenizer,
-        chat_template=None,
-        audio_token="<|object_ref_start|>",
-    ):
+    def __init__(self, feature_extractor, tokenizer, chat_template=None, audio_token="<|object_ref_start|>", **kwargs):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
             The token used as a placeholder for audio in the text.
         """
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
 
     @auto_docstring
     def __call__(

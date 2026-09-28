@@ -86,23 +86,12 @@ class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: T
 class FunAsrNanoProcessor(AudioFlamingo3Processor):
     valid_processor_kwargs = FunAsrNanoProcessorKwargs
 
-    def __init__(
-        self,
-        feature_extractor,
-        tokenizer,
-        chat_template=None,
-        audio_token="<|object_ref_start|>",
-    ):
+    def __init__(self, feature_extractor, tokenizer, chat_template=None, audio_token="<|object_ref_start|>", **kwargs):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
             The token used as a placeholder for audio in the text.
         """
-        super().__init__(
-            feature_extractor,
-            tokenizer,
-            chat_template=chat_template,
-            audio_token=audio_token,
-        )
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, audio_token=audio_token, **kwargs)
         del self.max_audio_len
         del self.default_transcription_prompt
 

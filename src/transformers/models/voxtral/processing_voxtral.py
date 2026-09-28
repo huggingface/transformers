@@ -78,15 +78,11 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
 @requires(backends=("torch",))
 @auto_docstring
 class VoxtralProcessor(ProcessorMixin):
-    def __init__(
-        self,
-        feature_extractor,
-        tokenizer,
-    ):
+    def __init__(self, feature_extractor, tokenizer, **kwargs):
         self.audio_token_id = 24
         self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
 
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(feature_extractor, tokenizer, **kwargs)
 
     def _retrieve_input_features(self, audio, max_source_positions, **kwargs):
         """

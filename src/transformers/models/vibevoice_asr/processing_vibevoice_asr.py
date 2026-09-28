@@ -83,6 +83,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         audio_bos_token="<|object_ref_start|>",
         audio_eos_token="<|object_ref_end|>",
         audio_duration_token="<|AUDIO_DURATION|>",
+        **kwargs,
     ):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
@@ -91,7 +92,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         self.audio_eos_token = audio_eos_token
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
         self.audio_duration_token = audio_duration_token
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
 
     @auto_docstring
     def __call__(

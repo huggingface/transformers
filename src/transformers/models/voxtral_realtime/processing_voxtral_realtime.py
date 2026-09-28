@@ -48,11 +48,11 @@ class VoxtralRealtimeProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 @requires(backends=("mistral-common",))
 class VoxtralRealtimeProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
+    def __init__(self, feature_extractor, tokenizer, **kwargs):
         if not isinstance(tokenizer, MistralCommonBackend):
             raise ValueError("`tokenizer` must be a `MistralCommonBackend` tokenizer.")
 
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(feature_extractor, tokenizer, **kwargs)
 
         if feature_extractor.win_length != self.mistral_common_audio_config.encoding_config.window_size:
             raise ValueError(

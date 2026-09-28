@@ -312,6 +312,7 @@ class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
     # once the hub template is simplified to emit one placeholder token per video.
     # See https://github.com/huggingface/transformers/pull/44314#issuecomment-5569986614
     video_duration_token = "<|video_duration|>"
+    return_mm_token_type_ids = AttributeError()
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)

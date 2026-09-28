@@ -41,8 +41,8 @@ class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
 class BridgeTowerProcessor(ProcessorMixin):
     valid_processor_kwargs = BridgeTowerProcessorKwargs
 
-    def __init__(self, image_processor, tokenizer):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor, tokenizer, **kwargs):
+        super().__init__(image_processor, tokenizer, **kwargs)
 
 
 __all__ = ["BridgeTowerProcessor"]

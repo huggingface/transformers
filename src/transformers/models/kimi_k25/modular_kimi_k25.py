@@ -718,6 +718,9 @@ class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Kimi_K25Processor(Qwen2VLProcessor):
+    valid_processor_kwargs = Kimi_K25ProcessorKwargs
+
+    return_mm_token_type_ids = AttributeError()
     text_kwargs = AttributeError()
 
     def __init__(

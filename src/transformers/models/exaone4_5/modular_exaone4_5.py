@@ -442,6 +442,9 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class Exaone4_5_Processor(Qwen2VLProcessor):
+    valid_processor_kwargs = Exaone4_5_ProcessorKwargs
+
+    return_mm_token_type_ids = False
     text_kwargs = AttributeError()
 
     @property

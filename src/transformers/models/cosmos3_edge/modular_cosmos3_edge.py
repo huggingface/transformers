@@ -1123,6 +1123,8 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
     """Construct a Cosmos3 Edge multimodal prompt from image, video, and text inputs."""
 
     valid_processor_kwargs = ProcessingKwargs
+
+    return_mm_token_type_ids = False
     text_kwargs = AttributeError()
     videos_kwargs = AttributeError()
 

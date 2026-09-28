@@ -657,9 +657,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": True,
-        },
         "videos_kwargs": {"return_metadata": True},
     }
 

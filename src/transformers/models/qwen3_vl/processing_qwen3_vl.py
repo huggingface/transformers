@@ -34,11 +34,12 @@ class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Qwen3VLProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen3VLProcessorKwargs
+
     text_kwargs = {
         "padding": False,
         "return_token_type_ids": False,
-        "return_mm_token_type_ids": True,
     }
+    return_mm_token_type_ids = True
     videos_kwargs = {"return_metadata": True}
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
