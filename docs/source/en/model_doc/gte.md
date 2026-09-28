@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2024-07-29 and contributed to Hugging Face Transformers on 2026-09-01.*
+*This model was published in HF papers on 2024-07-29 and contributed to Hugging Face Transformers on 2026-09-28.*
 
 # GTE
 
@@ -45,11 +45,9 @@ The example below demonstrates how to extract features (embeddings) with [`Pipel
 from transformers import pipeline
 
 
-# TODO: Remove revision
 pipeline = pipeline(
     task="feature-extraction",
-    model="Alibaba-NLP/gte-multilingual-base",
-    revision="refs/pr/31",
+    model="alibaba-nlp-community/gte-multilingual-base",
 )
 pipeline("Plants create oxygen through a process known as photosynthesis.")
 ```
@@ -63,13 +61,8 @@ import torch
 from transformers import AutoModel, AutoTokenizer
 
 
-# TODO: Remove revision
-tokenizer = AutoTokenizer.from_pretrained("Alibaba-NLP/gte-multilingual-base", revision="refs/pr/31")
-model = AutoModel.from_pretrained(
-    "Alibaba-NLP/gte-multilingual-base",
-    revision="refs/pr/31",
-    device_map="auto",
-)
+tokenizer = AutoTokenizer.from_pretrained("alibaba-nlp-community/gte-multilingual-base")
+model = AutoModel.from_pretrained("alibaba-nlp-community/gte-multilingual-base", device_map="auto")
 inputs = tokenizer("Plants create oxygen through a process known as photosynthesis.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
@@ -85,7 +78,7 @@ print(f"Embeddings shape: {embeddings.shape}")
 ## Notes
 
 - GTE uses RoPE, so for correct positional encoding either use right padding (the default), or use left padding and prepare `position_ids` accordingly.
-- `type_vocab_size` differs across checkpoints. `Alibaba-NLP/gte-base-en-v1.5` sets it to `0`, in which case no token type embedding is created and `token_type_ids` are ignored.
+- `type_vocab_size` differs across checkpoints. `alibaba-nlp-community/gte-base-en-v1.5` sets it to `0`, in which case no token type embedding is created and `token_type_ids` are ignored.
 - The `gte-*-v1.5` and `gte-multilingual-*` checkpoints apply static NTK scaling on top of RoPE. It is expressed as a `linear` [`~modeling_rope_utils.RopeParameters`] entry whose `rope_theta` is the base scaled by the NTK factor.
 
 ## GteConfig

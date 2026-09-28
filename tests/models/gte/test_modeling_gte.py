@@ -245,14 +245,12 @@ class GteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class GteModelIntegrationTest(unittest.TestCase):
     sentences = ["Plants create oxygen.", "Photosynthesis is a process where plants create oxygen."]
 
-    # TODO: Remove revision
-
     @slow
     def test_inference_no_head_multilingual(self):
-        model = AutoModel.from_pretrained(
-            "Alibaba-NLP/gte-multilingual-base", revision="refs/pr/31", dtype=torch.float32
-        ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("Alibaba-NLP/gte-multilingual-base", revision="refs/pr/31")
+        model = AutoModel.from_pretrained("alibaba-nlp-community/gte-multilingual-base", dtype=torch.float32).to(
+            torch_device
+        )
+        tokenizer = AutoTokenizer.from_pretrained("alibaba-nlp-community/gte-multilingual-base")
 
         inputs = tokenizer(self.sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
 
@@ -279,10 +277,10 @@ class GteModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_english_v1_5(self):
-        model = AutoModel.from_pretrained(
-            "Alibaba-NLP/gte-base-en-v1.5", revision="refs/pr/17", dtype=torch.float32
-        ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("Alibaba-NLP/gte-base-en-v1.5", revision="refs/pr/17")
+        model = AutoModel.from_pretrained("alibaba-nlp-community/gte-base-en-v1.5", dtype=torch.float32).to(
+            torch_device
+        )
+        tokenizer = AutoTokenizer.from_pretrained("alibaba-nlp-community/gte-base-en-v1.5")
 
         inputs = tokenizer(self.sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
 
@@ -340,9 +338,9 @@ class GteModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_reranker(self):
         model = AutoModelForSequenceClassification.from_pretrained(
-            "Alibaba-NLP/gte-multilingual-reranker-base", revision="refs/pr/23", dtype=torch.float32
+            "alibaba-nlp-community/gte-multilingual-reranker-base", dtype=torch.float32
         ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("Alibaba-NLP/gte-multilingual-reranker-base", revision="refs/pr/23")
+        tokenizer = AutoTokenizer.from_pretrained("alibaba-nlp-community/gte-multilingual-reranker-base")
 
         inputs = tokenizer(self.sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
 
@@ -359,9 +357,9 @@ class GteModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = AutoModelForMaskedLM.from_pretrained(
-            "Alibaba-NLP/gte-multilingual-mlm-base", revision="refs/pr/2", dtype=torch.float32
+            "alibaba-nlp-community/gte-multilingual-mlm-base", dtype=torch.float32
         ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("Alibaba-NLP/gte-multilingual-mlm-base", revision="refs/pr/2")
+        tokenizer = AutoTokenizer.from_pretrained("alibaba-nlp-community/gte-multilingual-mlm-base")
 
         inputs = tokenizer(self.sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
 

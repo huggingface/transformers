@@ -25,7 +25,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="Alibaba-NLP/gte-multilingual-base")
+@auto_docstring(checkpoint="alibaba-nlp-community/gte-multilingual-base")
 @strict
 class GteConfig(PreTrainedConfig):
     r"""
@@ -34,10 +34,10 @@ class GteConfig(PreTrainedConfig):
     ```python
     >>> from transformers import GteConfig, GteModel
 
-    >>> # Initializing a GTE Alibaba-NLP/gte-multilingual-base style configuration
+    >>> # Initializing a GTE alibaba-nlp-community/gte-multilingual-base style configuration
     >>> configuration = GteConfig()
 
-    >>> # Initializing a model (with random weights) from the Alibaba-NLP/gte-multilingual-base style configuration
+    >>> # Initializing a model (with random weights) from the alibaba-nlp-community/gte-multilingual-base style configuration
     >>> model = GteModel(configuration)
 
     >>> # Accessing the model configuration

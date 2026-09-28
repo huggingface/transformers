@@ -42,7 +42,7 @@ from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
-@auto_docstring(checkpoint="Alibaba-NLP/gte-multilingual-base")
+@auto_docstring(checkpoint="alibaba-nlp-community/gte-multilingual-base")
 @strict
 class GteConfig(BertConfig):
     r"""
@@ -51,10 +51,10 @@ class GteConfig(BertConfig):
     ```python
     >>> from transformers import GteConfig, GteModel
 
-    >>> # Initializing a GTE Alibaba-NLP/gte-multilingual-base style configuration
+    >>> # Initializing a GTE alibaba-nlp-community/gte-multilingual-base style configuration
     >>> configuration = GteConfig()
 
-    >>> # Initializing a model (with random weights) from the Alibaba-NLP/gte-multilingual-base style configuration
+    >>> # Initializing a model (with random weights) from the alibaba-nlp-community/gte-multilingual-base style configuration
     >>> model = GteModel(configuration)
 
     >>> # Accessing the model configuration
