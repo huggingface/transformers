@@ -22,7 +22,6 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding_side": "left",
             "padding": True,
-            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "crop_to_patches": True,

@@ -39,7 +39,6 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "add_special_tokens": True,
             "is_split_into_words": False,
-            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "return_row_col_info": True,

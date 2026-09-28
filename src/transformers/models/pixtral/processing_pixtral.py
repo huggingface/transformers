@@ -35,9 +35,6 @@ logger = logging.get_logger(__name__)
 
 class PixtralProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": False,
-        },
         "common_kwargs": {
             "return_tensors": "pt",
         },

@@ -22,7 +22,6 @@ class Cohere2VisionProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding_side": "left",
             "padding": True,
-            "return_mm_token_type_ids": False,
             "return_text_replacement_offsets": False,
         },
     }

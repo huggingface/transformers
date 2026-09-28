@@ -45,7 +45,6 @@ class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_for_text_completion": False,
-            "return_mm_token_type_ids": False,
         },
         "common_kwargs": {
             "return_tensors": "pt",

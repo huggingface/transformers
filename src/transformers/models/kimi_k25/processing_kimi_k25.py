@@ -31,9 +31,6 @@ logger = logging.get_logger(__name__)
 
 class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": False,
-        },
         "videos_kwargs": {"return_metadata": True},
     }
 

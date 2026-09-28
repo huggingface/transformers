@@ -26,12 +26,7 @@ logger = logging.get_logger(__name__)
 
 
 class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
-    _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": False,
-        },
-    }
+    pass
 
 
 @auto_docstring

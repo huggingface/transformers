@@ -45,9 +45,6 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: GlmImageImagesKwargs
 
     _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": False,
-        },
         "images_kwargs": {
             "target_h": 1152,
             "target_w": 768,

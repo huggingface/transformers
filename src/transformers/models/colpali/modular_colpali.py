@@ -33,7 +33,6 @@ class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": "longest",
-            "return_mm_token_type_ids": False,
             "return_text_replacement_offsets": False,
         },
         "images_kwargs": {

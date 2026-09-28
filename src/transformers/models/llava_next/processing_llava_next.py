@@ -30,9 +30,6 @@ logger = logging.get_logger(__name__)
 
 class LlavaNextProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": False,
-        },
         "images_kwargs": {
             "do_pad": True,
         },

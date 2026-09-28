@@ -28,9 +28,6 @@ from ...utils import auto_docstring
 
 class Granite4VisionProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": False,
-        },
         "images_kwargs": {
             "do_pad": True,
         },

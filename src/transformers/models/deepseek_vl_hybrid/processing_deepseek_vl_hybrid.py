@@ -25,7 +25,6 @@ from ...utils import auto_docstring
 class DeepseekVLHybridProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "return_mm_token_type_ids": False,
             "return_text_replacement_offsets": False,
         },
         "common_kwargs": {"return_tensors": "pt"},

@@ -43,7 +43,6 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
-            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "ratio": "1:1",
