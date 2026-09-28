@@ -45,7 +45,6 @@ class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "return_row_col_info": True,
             "data_format": "channels_first",
-            "do_convert_rgb": True,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }

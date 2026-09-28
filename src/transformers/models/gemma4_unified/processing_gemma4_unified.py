@@ -54,7 +54,6 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         "padding": True,
         "return_mm_token_type_ids": True,
     }
-    images_kwargs = {"do_convert_rgb": True}
     videos_kwargs = {"return_metadata": True}
 
     def __init__(

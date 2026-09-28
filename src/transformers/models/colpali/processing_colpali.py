@@ -40,7 +40,6 @@ class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
         },
         "images_kwargs": {
             "data_format": "channels_first",
-            "do_convert_rgb": True,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }

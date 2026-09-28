@@ -29,10 +29,6 @@ from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 
 class MyModelProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: MyModelImageProcessorKwargs
-    _defaults = {
-        "text_kwargs": {"padding": True},
-        "images_kwargs": {"do_convert_rgb": True},
-    }
 
 class MyModelProcessor(ProcessorMixin):
     valid_processor_kwargs = MyModelProcessorKwargs

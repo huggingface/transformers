@@ -27,6 +27,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": True,
         },
         "images_kwargs": {
+            # Values are "null" in preprocessor_config.json
             "do_convert_rgb": True,
             "do_pan_and_scan": False,
             "pan_and_scan_min_crop_size": 256,
