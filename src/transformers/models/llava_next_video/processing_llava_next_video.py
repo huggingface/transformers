@@ -29,9 +29,7 @@ logger = logging.get_logger(__name__)
 class LlavaNextVideoProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {},
         "common_kwargs": {
             "return_tensors": "pt",
         },

@@ -49,7 +49,6 @@ class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
-            "padding": False,
             "is_split_into_words": False,
         },
     }

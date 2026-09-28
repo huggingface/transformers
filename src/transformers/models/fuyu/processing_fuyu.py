@@ -57,7 +57,6 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
-            "padding": False,
         },
     }
 

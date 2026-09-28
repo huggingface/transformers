@@ -37,7 +37,6 @@ class UdopProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
-            "padding": False,
             "truncation": False,
             "stride": 0,
             "return_overflowing_tokens": False,

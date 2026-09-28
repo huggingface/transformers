@@ -23,7 +23,6 @@ class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
-            "padding": False,
             "stride": 0,
             "return_overflowing_tokens": False,
             "return_special_tokens_mask": False,

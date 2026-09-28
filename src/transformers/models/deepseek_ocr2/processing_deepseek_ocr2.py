@@ -29,9 +29,7 @@ logger = logging.get_logger(__name__)
 
 class DeepseekOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {},
         "images_kwargs": {
             "crop_to_patches": True,
             "min_patches": 2,

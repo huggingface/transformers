@@ -1088,7 +1088,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 class Glm4vProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "return_token_type_ids": False,
             "return_mm_token_type_ids": True,
         },

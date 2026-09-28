@@ -18,12 +18,7 @@ from ...utils import auto_docstring
 
 
 class Ovis2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "images_kwargs": {},
-    }
+    pass
 
 
 @auto_docstring

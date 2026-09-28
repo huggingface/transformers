@@ -81,7 +81,6 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
 
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "padding_side": "left",
         },
         "videos_kwargs": {

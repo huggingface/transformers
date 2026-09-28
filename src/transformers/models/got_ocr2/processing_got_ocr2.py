@@ -76,7 +76,6 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: GotOcr2ImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "format": False,
         },
         "images_kwargs": {

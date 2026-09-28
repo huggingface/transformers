@@ -23,7 +23,6 @@ from ...utils import auto_docstring
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "return_mm_token_type_ids": True,
         },
         "images_kwargs": {

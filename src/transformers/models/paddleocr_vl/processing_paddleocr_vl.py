@@ -29,7 +29,6 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "return_mm_token_type_ids": True,
         },
     }

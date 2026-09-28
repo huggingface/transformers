@@ -50,7 +50,6 @@ class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: PaliGemmaTextKwargs
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "return_mm_token_type_ids": False,
         },
         "images_kwargs": {

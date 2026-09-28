@@ -68,7 +68,6 @@ class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
-            "padding": False,
             "stride": 0,
             "return_overflowing_tokens": False,
             "return_special_tokens_mask": False,
@@ -158,7 +157,7 @@ class Kosmos2Processor(ProcessorMixin):
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
 
         add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
-        padding = output_kwargs["text_kwargs"]["padding"]
+        padding = output_kwargs["text_kwargs"].get("padding", False)
         return_tensors = output_kwargs["text_kwargs"].setdefault("return_tensors", None)
 
         encoding = BatchFeature()

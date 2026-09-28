@@ -2709,7 +2709,6 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
 class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "padding_side": "left",
         },
         "videos_kwargs": {

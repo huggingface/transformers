@@ -23,9 +23,7 @@ from ...utils import auto_docstring
 
 
 class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": False},
-    }
+    pass
 
 
 @auto_docstring

@@ -48,7 +48,6 @@ class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "use_image_special_tokens": True,
             "add_special_tokens": False,
-            "padding": False,
             "is_split_into_words": False,
         },
     }

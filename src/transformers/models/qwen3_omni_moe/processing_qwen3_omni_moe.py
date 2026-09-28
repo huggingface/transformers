@@ -83,7 +83,6 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
     videos_kwargs: Qwen3OmniMoeVideosKwargs
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "padding_side": "left",
         },
         "videos_kwargs": {

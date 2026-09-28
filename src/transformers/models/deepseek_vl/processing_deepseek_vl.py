@@ -26,7 +26,6 @@ from ...utils import auto_docstring
 class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "return_mm_token_type_ids": False,
             "return_text_replacement_offsets": False,
         },

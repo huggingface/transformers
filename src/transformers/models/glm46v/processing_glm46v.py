@@ -30,7 +30,6 @@ logger = logging.get_logger(__name__)
 class Glm46VProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "return_token_type_ids": False,
             "return_mm_token_type_ids": True,
         },

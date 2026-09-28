@@ -29,7 +29,6 @@ class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {
         "text_kwargs": {
-            "padding": False,
             "return_mm_token_type_ids": False,
         },
     }
