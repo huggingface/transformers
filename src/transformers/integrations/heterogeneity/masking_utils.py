@@ -46,10 +46,24 @@ def _get_mask_layer_indices(config: PreTrainedConfig, create_mask_fn: Callable) 
         return range(config.num_hidden_layers)
 
     # Lazy import to avoid circular imports
-    from transformers.masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING
+    from transformers.masking_utils import (
+        LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING,
+        create_bidirectional_mask,
+        create_bidirectional_sliding_window_mask,
+        create_causal_mask,
+        create_sliding_window_causal_mask,
+    )
 
     matching_patterns = set()
     mask_fn = _unwrap_mask_function(create_mask_fn)
+
+    # Reuse the registry's causal full/sliding attention entries to select layers
+    # for bidirectional masks.
+    if mask_fn is _unwrap_mask_function(create_bidirectional_mask):
+        mask_fn = _unwrap_mask_function(create_causal_mask)
+    elif mask_fn is _unwrap_mask_function(create_bidirectional_sliding_window_mask):
+        mask_fn = _unwrap_mask_function(create_sliding_window_causal_mask)
+
     for pattern, entry in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING.items():
         mask_functions = entry.values() if isinstance(entry, dict) else (entry,)
         if any(_unwrap_mask_function(fn) is mask_fn for fn in mask_functions):

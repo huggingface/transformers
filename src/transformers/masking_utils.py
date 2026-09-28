@@ -1253,7 +1253,7 @@ def create_sliding_window_causal_mask(
     return causal_mask
 
 
-@support_per_layer_mask_creation()
+@support_per_layer_mask_creation("sliding_window")
 def create_bidirectional_sliding_window_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,

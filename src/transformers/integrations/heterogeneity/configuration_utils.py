@@ -30,6 +30,14 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 _SENTINEL = object()
+_GLOBAL_ONLY_ATTRIBUTES = {
+    "_attn_implementation",
+    "_attn_implementation_internal",
+    "_experts_implementation",
+    "_experts_implementation_internal",
+    "_is_quantized",
+    "is_causal",
+}
 
 
 class AmbiguousGlobalPerLayerAttributeError(RuntimeError):
@@ -81,6 +89,15 @@ def _validate_layer_indices(config: PreTrainedConfig, per_layer_overrides: dict[
 def _validate_per_layer_config_is_not_nested(per_layer_overrides: dict[int, dict[str, Any]]) -> None:
     if any("per_layer_config" in layer_overrides for layer_overrides in per_layer_overrides.values()):
         raise ValueError("`per_layer_config` cannot be nested within itself.")
+
+
+def _validate_global_only_attributes(per_layer_overrides: dict[int, dict[str, Any]]) -> None:
+    for layer_idx, layer_overrides in per_layer_overrides.items():
+        if attributes := _GLOBAL_ONLY_ATTRIBUTES.intersection(layer_overrides):
+            raise ValueError(
+                f"`per_layer_config` for layer {layer_idx} overrides global-only attributes: {sorted(attributes)}. "
+                "Set these attributes on the global config instead."
+            )
 
 
 def _validate_sliding_window_and_attention_chunk_size(
@@ -192,6 +209,7 @@ def _apply_heterogeneous_config(
 
     _validate_layer_indices(config, normalized_per_layer_overrides)
     _validate_per_layer_config_is_not_nested(normalized_per_layer_overrides)
+    _validate_global_only_attributes(normalized_per_layer_overrides)
     _validate_sliding_window_and_attention_chunk_size(config, normalized_per_layer_overrides)
 
     config._heterogeneity_spec = _modify_config_and_create_heterogeneity_spec(config, normalized_per_layer_overrides)
@@ -294,6 +312,16 @@ class HeterogeneousConfigMixin:
     property in the post-init phase and calls hook methods where heterogeneity needs to participate in the config lifecycle: attribute
     access, key iteration, and serialization.
     """
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        super().__setattr__(key, value)
+        if (
+            key in ("_attn_implementation_internal", "_experts_implementation_internal")
+            and self.generic_modeling_applied
+        ):
+            # Propagate the changed settings to the configs by the layers
+            for layer_config in self._heterogeneity_spec.model_layer_configs.values():
+                setattr(layer_config, key, value)
 
     def __getattribute__(self, key: str) -> Any:
         # In heterogeneous configs, per-layer attributes are ambiguous on the global config.

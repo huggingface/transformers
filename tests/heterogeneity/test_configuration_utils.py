@@ -66,6 +66,20 @@ class TestHeterogeneousConfig(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot be nested within itself"):
             tiny_llama_config(per_layer_config={0: {"per_layer_config": {0: {"intermediate_size": 32}}}})
 
+    @parameterized.expand(
+        [
+            ("_attn_implementation", "sdpa"),
+            ("_attn_implementation_internal", "sdpa"),
+            ("_experts_implementation", "batched_mm"),
+            ("_experts_implementation_internal", "batched_mm"),
+            ("_is_quantized", True),
+            ("is_causal", False),
+        ]
+    )
+    def test_global_attributes_cannot_be_overridden_per_layer(self, attribute, value):
+        with self.assertRaisesRegex(ValueError, f"layer 1.*{attribute}"):
+            tiny_llama_config(per_layer_config={1: {attribute: value}})
+
     def test_per_layer_config_and_fallback(self):
         """Per-layer values should override, and non-overridden layers should fall back to global."""
         config = tiny_llama_config(per_layer_config={1: {"num_key_value_heads": 2}, 3: {"num_key_value_heads": 1}})
