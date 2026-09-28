@@ -55,7 +55,7 @@ import json
 import os
 import re
 from contextlib import contextmanager
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 from git import Repo
@@ -563,16 +563,15 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
-@lru_cache(maxsize=1)
+@cache
 def _get_backbone_map() -> dict[str, frozenset[str]]:
     """
     {composite_model_dir: {backbone_model_dir, ...}} built from `sub_configs_defaults[...].model_type`.
     Cached: the config imports are the expensive part, so do them at most once per process.
     """
-    from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 
     mapping = {}
-    for model_type in CONFIG_MAPPING_NAMES:
+    for model_type in CONFIG_MAPPING:
         parent = model_type_to_module_name(model_type)
         config_cls = CONFIG_MAPPING[model_type]  # imports only this config module
         specs = getattr(config_cls, "sub_configs_defaults", None) or {}
@@ -1073,9 +1072,6 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
     # Remove duplicates
     impacted_files = sorted(set(impacted_files))
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
-
-    # Add multimodal models where an `impacted_file` is a backbone. e.g. if CLIP is
-    # in `impacted_files` then add Llava there as well - we need to test both
 
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     # Grab the corresponding test files:
