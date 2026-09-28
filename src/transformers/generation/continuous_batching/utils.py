@@ -13,7 +13,7 @@
 # limitations under the License.
 import queue
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
 from typing import Any
@@ -22,6 +22,58 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from .requests import FutureRequestState, RequestState, RequestStatus
+
+
+DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
+
+
+def device_stream_ctx(stream: torch.cuda.Stream | None):
+    if stream is None:
+        return nullcontext()
+    return torch.get_device_module(stream.device).stream(stream)
+
+
+def get_available_device_module(device: torch.device):
+    device = torch.device(device)
+    if device.type not in DEVICE_TYPE_TO_GRAPH_NAME:
+        return None
+    try:
+        device_module = torch.get_device_module(device)
+    except RuntimeError:
+        return None
+    is_available = getattr(device_module, "is_available", None)
+    if callable(is_available) and is_available():
+        return device_module
+    return None
+
+
+def is_cuda_graph_available(device: torch.device | None = None) -> bool:
+    device_types = DEVICE_TYPE_TO_GRAPH_NAME if device is None else (torch.device(device).type,)
+    for device_type in device_types:
+        graph_class_name = DEVICE_TYPE_TO_GRAPH_NAME.get(device_type)
+        if graph_class_name is None:
+            continue
+        try:
+            device_module = torch.get_device_module(device_type)
+        except RuntimeError:
+            continue
+        is_available = getattr(device_module, "is_available", None)
+        required_attrs = (graph_class_name, "graph", "MemPool", "use_mem_pool")
+        if callable(is_available) and is_available() and all(hasattr(device_module, attr) for attr in required_attrs):
+            return True
+    return False
+
+
+def get_cuda_graph(device: torch.device) -> torch.cuda.CUDAGraph:
+    device_type = torch.device(device).type
+    device_module = torch.get_device_module(device)
+    graph_class_name = DEVICE_TYPE_TO_GRAPH_NAME.get(device_type)
+    if graph_class_name is None:
+        raise RuntimeError(f"Expected one of {tuple(DEVICE_TYPE_TO_GRAPH_NAME)}, but got {device_type = }.")
+    graph_class = getattr(device_module, graph_class_name, None)
+    if graph_class is None:
+        raise RuntimeError(f"Graph capture on {device_type} requires torch.{device_type}.{graph_class_name}.")
+    return graph_class()
 
 
 class CudaGraphBuffer:
@@ -204,17 +256,30 @@ def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
     return new_states
 
 
-def get_cuda_pools() -> tuple:
+def get_cuda_graph_pools() -> tuple:
     """Returns a tuple of (mem_pool, graph_pool_id) for CUDA graphs."""
-    mem_pool = torch.cuda.MemPool()
+    device_module = torch.get_device_module()
+    mem_pool = device_module.MemPool()
     graph_pool_id = mem_pool.id
     return mem_pool, graph_pool_id
 
 
 @contextmanager
-def mem_pool_ctx(mem_pool):
-    """A context manager to use a CUDA mem pool."""
-    with torch.cuda.use_mem_pool(mem_pool):
+def mem_pool_ctx(device: torch.device, mem_pool):
+    """A context manager to use a CUDA graph mem pool."""
+    device_module = torch.get_device_module(device)
+    with device_module.use_mem_pool(mem_pool):
+        yield
+
+
+@contextmanager
+def graph_capture_ctx(device: torch.device, graph, stream, graph_pool_id):
+    device_type = torch.device(device).type
+    device_module = torch.get_device_module(device)
+    kwargs = {"stream": stream, "pool": graph_pool_id}
+    if device_type == "cuda":
+        kwargs["capture_error_mode"] = "thread_local"
+    with device_module.graph(graph, **kwargs):
         yield
 
 
