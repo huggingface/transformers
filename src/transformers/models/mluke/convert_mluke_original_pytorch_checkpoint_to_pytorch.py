@@ -27,7 +27,7 @@ from transformers.tokenization_utils_base import AddedToken
 @torch.no_grad()
 def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, pytorch_dump_folder_path, model_size):
     # Load configuration defined in the metadata file
-    with open(metadata_path) as metadata_file:
+    with open(metadata_path, encoding="utf-8") as metadata_file:
         metadata = json.load(metadata_file)
     config = LukeConfig(use_entity_aware_attention=True, **metadata["model_config"])
 
@@ -50,13 +50,17 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     tokenizer.save_pretrained(pytorch_dump_folder_path)
-    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "r") as f:
+    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "r", encoding="utf-8") as f:
         tokenizer_config = json.load(f)
     tokenizer_config["tokenizer_class"] = "MLukeTokenizer"
-    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w") as f:
+    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f)
 
-    with open(os.path.join(pytorch_dump_folder_path, MLukeTokenizer.vocab_files_names["entity_vocab_file"]), "w") as f:
+    with open(
+        os.path.join(pytorch_dump_folder_path, MLukeTokenizer.vocab_files_names["entity_vocab_file"]),
+        "w",
+        encoding="utf-8",
+    ) as f:
         json.dump(entity_vocab, f)
 
     tokenizer = MLukeTokenizer.from_pretrained(pytorch_dump_folder_path)
@@ -185,7 +189,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 def load_original_entity_vocab(entity_vocab_path):
     SPECIAL_TOKENS = ["[MASK]", "[PAD]", "[UNK]"]
 
-    data = [json.loads(line) for line in open(entity_vocab_path)]
+    data = [json.loads(line) for line in open(entity_vocab_path, encoding="utf-8")]
 
     new_mapping = {}
     for entry in data:

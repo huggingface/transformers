@@ -455,7 +455,7 @@ def get_all_doctest_files() -> list[str]:
     test_files_to_run = [x for x in test_files_to_run if not x.endswith(("__init__.py",))]
 
     # These are files not doctested yet.
-    with open("utils/not_doctested.txt") as fp:
+    with open("utils/not_doctested.txt", encoding="utf-8") as fp:
         not_doctested = {x.split(" ")[0] for x in fp.read().strip().split("\n")}
 
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
@@ -527,7 +527,7 @@ def get_doctest_files(diff_with_last_commit: bool = False) -> list[str]:
     test_files_to_run = list(set(test_files_to_run + new_test_files))
 
     # Do not run slow doctest tests on CircleCI
-    with open("utils/slow_documentation_tests.txt") as fp:
+    with open("utils/slow_documentation_tests.txt", encoding="utf-8") as fp:
         slow_documentation_tests = set(fp.read().strip().split("\n"))
     test_files_to_run = [
         x for x in test_files_to_run if x in all_test_files_to_run and x not in slow_documentation_tests
@@ -1159,7 +1159,7 @@ def create_test_list_from_filter(full_test_list, out_path):
             to_output.append((job_name, file_name, files_to_test))
 
     for _, file_name, files_to_test in to_output:
-        with open(file_name, "w") as f:
+        with open(file_name, "w", encoding="utf-8") as f:
             f.write("\n".join(files_to_test))
 
 

@@ -77,6 +77,29 @@ config.rope_parameters = {
 }
 ```
 
+## MRoPE
+
+MRoPE is a type of rotation applied in multimodal models and defined by `mrope_section`. It is not a separate entry in the `rope_type` table. You can still apply rope scaling (`linear`, `dynamic`) with it.
+
+`mrope_section` sizes contiguous frequency bands for the temporal, height, and width axes (those sizes sum to `head_dim // 2`). Frequencies are then repeated so the embedding spans the full `head_dim`. For multimodal inputs (usually vision), RoPE is applied in one shot (matmul or elementwise multiply of frequencies with positions). `mrope_section` only reorders those frequencies along `(t, h, w)` first, as in Qwen2-VL's `recomposition_frequencies`. Prompt text and generated tokens keep normal 1D RoPE by using identical position ids on all three THW grids.
+
+```python
+from transformers import Qwen2VLConfig
+
+config = Qwen2VLConfig()
+config.text_config.rope_parameters = {
+    "rope_type": "default",
+    "rope_theta": 1000000.0,
+    "mrope_section": [16, 24, 24],  # temporal, height, width frequency band sizes
+}
+```
+
+Qwen2-VL uses `mrope_section = [16, 24, 24]` (16 temporal, 24 height, 24 width when `head_dim` is 128). Multimodal models often use this layout in the text backbone (Qwen2-VL, GLM-4V). Some VLMs do not use MRoPE and stay on normal 2D text RoPE instead. Check `mrope_section` in the text config.
+
+## Axial RoPE
+
+Separately, `"axial"` is a registered `rope_type` for vision models, but it is not listed in `ROPE_INIT_FUNCTIONS`. Frequency setup stays on the model. It usually applies the same frequencies (`head_dim // 4` per spatial axis) for height and width positions and does not allow scaling on top. Examples include the Qwen2-VL vision model and other vision stacks such as Pixtral.
+
 ## Utilities
 
 [[autodoc]] RopeParameters

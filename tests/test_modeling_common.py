@@ -15,7 +15,6 @@ import collections
 import copy
 import inspect
 import math
-import os
 import os.path
 import random
 import re
@@ -25,6 +24,7 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
+from typing import get_args
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -1253,7 +1253,7 @@ class ModelTesterMixin(ExportTesterMixin):
         # This is used to get the addition year of the model
         filename = inspect.getfile(config.__class__)
         # No easy way to get model addition date -> check copyright year on top of file
-        with open(filename) as file:
+        with open(filename, encoding="utf-8") as file:
             source_code = file.read()
         addition_year = 0  # if we cannot find it, set it to 0 (i.e. oldest)
         if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
@@ -5870,6 +5870,47 @@ class ModelTesterMixin(ExportTesterMixin):
                         with torch.no_grad():
                             _ = model(**all_inputs)
 
+    def test_output_router_logits_from_config(self):
+        """`config.output_router_logits` turns the router logits on, and an explicit forward argument wins over it.
+        A head that wraps a MoE backbone has to resolve the flag against the config like the backbone does, otherwise
+        the config setting is silently ignored."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not hasattr(config.get_text_config(decoder=True), "output_router_logits"):
+            self.skipTest("This model has no `output_router_logits` in its config.")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                return_type = model_class.forward.__annotations__.get("return")
+                output_fields = set().union(
+                    *(getattr(t, "__dataclass_fields__", {}).keys() for t in (get_args(return_type) or (return_type,)))
+                )
+                if "router_logits" not in output_fields:
+                    self.skipTest(f"{model_class.__name__} does not declare router_logits in its output type.")
+
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+                model.config.get_text_config(decoder=True).output_router_logits = False
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                inputs.pop("output_router_logits", None)
+
+                with torch.no_grad():
+                    explicit = model(**inputs, output_router_logits=True)
+                    if not explicit.router_logits:
+                        self.skipTest(f"{model_class.__name__} was built without any sparse layer.")
+                    self.assertFalse(model(**inputs).router_logits, "router logits returned with the flag off")
+
+                    model.config.get_text_config(decoder=True).output_router_logits = True
+                    from_config = model(**inputs)
+                    self.assertTrue(from_config.router_logits, "`config.output_router_logits=True` was ignored")
+                    if getattr(explicit, "aux_loss", None) is not None:
+                        self.assertIsNotNone(
+                            from_config.aux_loss, "`config.output_router_logits=True` skipped the aux loss"
+                        )
+                    self.assertFalse(
+                        model(**inputs, output_router_logits=False).router_logits,
+                        "an explicit `output_router_logits=False` did not win over the config",
+                    )
+
     def test_format_of_can_record_outputs(self):
         """Test that that the attribute `_can_record_outputs` is correctly set for a model. It must either be "None" or
         a dictionnary with output names as keys and a recorder or list of recorders as values. A recorder can be an
@@ -5979,7 +6020,7 @@ class ModelTesterMixin(ExportTesterMixin):
         """
         Tests that we can initialize a model with RoPE scaling in the config, that it can run a forward pass, and
         that a few basic model output properties are honored.
-        Note that we test only text backbone's rope module since multimodal rope can be special.
+        Note that we test only text backbone's rope module - if vision/audio backbone has RoPE then it will NOT be tested.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
@@ -5996,10 +6037,6 @@ class ModelTesterMixin(ExportTesterMixin):
 
         if not _config_supports_rope_scaling(text_config):
             self.skipTest("This model does not support RoPE scaling")
-
-        # TODO: raushan, add separate tests for mrope in MultimodalTester
-        if text_config.rope_parameters.get("mrope_section") is not None:
-            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
 
         if not hasattr(text_config, "vocab_size"):
             self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
@@ -6067,7 +6104,7 @@ class ModelTesterMixin(ExportTesterMixin):
     def test_model_rope_scaling_frequencies(self):
         """
         Tests the frequency properties of the different RoPE scaling types on the model RoPE layer.
-        Note that we test only text backbone's rope module since multimodal rope can be special.
+        Note that we test only text backbone's rope module - if vision/audio backbone has RoPE then it will NOT be tested.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
@@ -6111,20 +6148,10 @@ class ModelTesterMixin(ExportTesterMixin):
         if rope_class is None:
             self.skipTest("This model has no standardized RoPE module found.")
 
-        # TODO: raushan, add separate tests for mrope in MultimodalTester
         is_nested_rope = (
             "rope_theta" not in text_config.rope_parameters.keys()
             and "rope_theta" in list(text_config.rope_parameters.values())[0]
         )
-        if (not is_nested_rope and text_config.rope_parameters.get("mrope_section") is not None) or (
-            is_nested_rope
-            and any(
-                layer_rope.get("mrope_section") is not None
-                for layer_rope in text_config.rope_parameters.values()
-                if layer_rope is not None
-            )
-        ):
-            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
 
         scaling_factor = 10
         short_input_length = 10
@@ -6145,6 +6172,34 @@ class ModelTesterMixin(ExportTesterMixin):
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
         position_ids_long = position_ids_long.unsqueeze(0)
+
+        # Infer number of mrope axis which is usually `3` but can be different in special models
+        if getattr(text_config, "layer_types", None) is None or set(text_config.rope_parameters.keys()).isdisjoint(
+            text_config.layer_types
+        ):
+            has_per_layer_rope = False
+        else:
+            has_per_layer_rope = True
+
+        num_multimodal_rope_axis = None
+        if not has_per_layer_rope and "mrope_section" in text_config.rope_parameters:
+            num_multimodal_rope_axis = len(text_config.rope_parameters["mrope_section"])
+        else:
+            mrope_sections = [
+                sub_dict["mrope_section"]
+                for sub_dict in text_config.rope_parameters.values()
+                if isinstance(sub_dict, dict) and "mrope_section" in sub_dict
+            ]
+            if mrope_sections:
+                if len({tuple(sections) for sections in mrope_sections}) > 1:
+                    raise ValueError(
+                        "Model has different `mrope_section` per layer type, override the test if needed!"
+                    )
+                num_multimodal_rope_axis = len(mrope_sections[0])
+
+        if num_multimodal_rope_axis is not None:
+            position_ids_short = position_ids_short[None, ...].repeat(num_multimodal_rope_axis, 1, 1)
+            position_ids_long = position_ids_long[None, ...].repeat(num_multimodal_rope_axis, 1, 1)
 
         # Sanity check original RoPE
         _set_config_rope_params(
@@ -6205,12 +6260,13 @@ class ModelTesterMixin(ExportTesterMixin):
         else:
             layer_types = getattr(text_config, "_rope_type_labels", getattr(text_config, "layer_types"))
             for layer_type in layer_types:
-                self.assertTrue(
-                    (
-                        getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
-                        <= getattr(original_rope, f"{layer_type}_inv_freq")
-                    ).all()
-                )
+                if text_config.rope_parameters[layer_type] is not None:
+                    self.assertTrue(
+                        (
+                            getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
+                            <= getattr(original_rope, f"{layer_type}_inv_freq")
+                        ).all()
+                    )
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
@@ -6236,6 +6292,124 @@ class ModelTesterMixin(ExportTesterMixin):
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
+
+    def test_vision_axial_rope(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
+
+        rope_class = None
+        base_model = base_model_class(config)
+        for name, module in base_model.named_modules():
+            if hasattr(module, "compute_axial_rope_parameters"):
+                rope_class = type(module)
+                vision_config = module.config
+                break
+
+        if rope_class is None:
+            self.skipTest(f"{base_model_class} has no axial RoPE layer defined.")
+
+        # First make sure that validation on default config raises no rope-related warnings
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("", cl.out)
+        logger.warning_once.cache_clear()
+
+        # Axial rope type expects only `rope_theta`, otherwise raises warning
+        vision_config.rope_parameters["factor"] = 0.25
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("Unrecognized keys in `rope_parameters` for 'rope_type'='axial': {'factor'}\n", cl.out)
+        del vision_config.rope_parameters["factor"]
+        logger.warning_once.cache_clear()
+
+        inv_freq, attention_scale = rope_class.compute_axial_rope_parameters(config=vision_config)
+        rope_module = rope_class(vision_config).to(device=torch_device)
+
+        self.assertTrue(hasattr(rope_module, "inv_freq"))
+        self.assertTrue(hasattr(rope_module, "attention_scaling"))
+        self.assertEqual(attention_scale, 1.0)  # attention scale is always 1
+        torch.testing.assert_close(inv_freq, rope_module.inv_freq.cpu())
+
+        # create 2D position IDs for a single grid of one row and 10 cols `size=(10, 2)`
+        position_ids = torch.stack(
+            [
+                torch.arange(10, dtype=torch.long, device=torch_device),
+                torch.zeros(10, dtype=torch.long, device=torch_device),
+            ]
+        ).transpose(0, 1)
+        # and an empty hidden states used only to infer device/dtype
+        hidden_states = torch.empty(1, dtype=torch.float32, device=torch_device)
+        cos, sin = rope_module(hidden_states, position_ids)
+        self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
+
+    def test_model_rope_with_partial_rotation(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
+
+        if not hasattr(text_config, "rope_parameters"):
+            self.skipTest("This model does not have RoPE")
+
+        if not hasattr(text_config, "vocab_size"):
+            self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
+
+        n_required_args = sum(
+            p.default is inspect.Parameter.empty
+            and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY, p.POSITIONAL_ONLY)
+            and p.name != "self"
+            for p in inspect.signature(base_model_class.forward).parameters.values()
+        )
+        if n_required_args > 1:
+            self.skipTest("This model requires more than single main input, skip for now as it's not supported")
+
+        input_ids = ids_tensor([1, 10], text_config.vocab_size)
+        model_kwargs = {}
+        if base_model_class.main_input_name != "input_ids":
+            model_kwargs[base_model_class.main_input_name] = input_dict[base_model_class.main_input_name][:1]
+        else:
+            model_kwargs = {"input_ids": input_ids}
+
+        if config.is_encoder_decoder:
+            model_kwargs["decoder_input_ids"] = input_ids.clone()
+
+        if "partial_rotary_factor" not in text_config.rope_parameters:
+            self.skipTest("This model does not have partial rope supported")
+
+        # Run with partial rotary factor set to a values less than one, should not raise any shape errors
+        # If tested already has a value > 1, use it since that might affect to other config field values
+        default_partial_rotation = text_config.rope_parameters["partial_rotary_factor"]
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "default",
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": 0.5 if default_partial_rotation >= 1.0 else default_partial_rotation,
+            },
+        )
+        model = base_model_class(config)
+        model.to(torch_device).eval()
+        model(**model_kwargs)
 
 
 global_rng = random.Random()
@@ -6367,7 +6541,6 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
     # Axial rope doesn't scale as images usually have a pre-defined length
     # so the config will have no `max_position_embeddings` field defined
-    # FIXME: add non-scaling rope tests for vision models @raushan
     if not hasattr(config, "max_position_embeddings"):
         main_config_scales_rope = False
     return main_config_scales_rope
@@ -6375,7 +6548,7 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
-    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
+    config.rope_parameters = copy.deepcopy(getattr(config, "rope_parameters", {}) or {})
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
     # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`

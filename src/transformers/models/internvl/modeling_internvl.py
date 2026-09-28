@@ -793,11 +793,11 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         ...         "content": [
         ...             {
         ...                 "type": "image",
-        ...                 "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+        ...                 "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
         ...             },
         ...             {
         ...                 "type": "image",
-        ...                 "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+        ...                 "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
         ...             },
         ...             {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
         ...         ],

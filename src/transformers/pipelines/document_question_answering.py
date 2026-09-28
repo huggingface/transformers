@@ -221,7 +221,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     >>> document_qa = pipeline(model="impira/layoutlm-document-qa")
     >>> document_qa(
-    ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+    ...     image="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
     ...     question="What is the invoice number?",
     ... )
     [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]

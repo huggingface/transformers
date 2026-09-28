@@ -742,7 +742,7 @@ def prepare_groceries_image():
 
 
 def prepare_dog_img():
-    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
@@ -855,13 +855,13 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
 
         torch.testing.assert_close(
-            scores2, torch.tensor([0.9504, 0.8117, 0.7426]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores2, torch.tensor([0.9469, 0.7221, 0.194]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits2,
-            torch.tensor(
-                [[-13.1182, -17.3217, -14.9651], [-16.2372, -12.7739, -17.6346], [-13.5013, -17.1549, -15.6614]]
-            ).to(torch_device),
+            torch.tensor([[-2.9496, -2.3006, -2.4117], [1.0153, 0.4223, 2.0633], [2.5226, 4.4429, 4.8272]]).to(
+                torch_device
+            ),
             atol=1e-4,
             rtol=1e-4,
         )

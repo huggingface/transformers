@@ -18,11 +18,11 @@ from copy import deepcopy
 import torch
 from torch import nn
 
-from ...core_model_loading import WeightConverter, WeightRenaming, WeightTransform
+from ...core_model_loading import WeightConverter, WeightRenaming, WeightTransform, rename_source_key
 from ...utils import logging
-from .dequant import GGML_BLOCK
+from .dequant import GGML_BLOCK, row_bytes
 from .gguf_conversion_mapping import GGUF_ARCHS, Cast, Dequantize
-from .kernels import DEQUANT_CHUNK_ELEMS, MAX_GEMV_ROWS, dequantize_blocks, mul_mat_vec
+from .kernels import DEQUANT_CHUNK_ELEMS, MAX_GEMV_ROWS, dequantize_blocks, mul_mat_id, mul_mat_vec
 from .reader import GgufHeader
 
 
@@ -43,12 +43,21 @@ def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]
 
 def get_gguf_plan(
     header: GgufHeader, mapping: list[WeightTransform]
-) -> tuple[dict[str, int], dict[str, int], dict[str, torch.Tensor], list[str]]:
-    """The file's quantized tensors, the subset that can stay packed, their input permutations, and
-    every tensor's renamed name.
+) -> tuple[dict[str, int], dict[str, int], dict[str, torch.Tensor]]:
+    """Work out, for every tensor the file stores as blocks, whether it can stay that way.
 
-    Read before `add_gguf_load_ops` inserts the unpacking op: what a converter does to a tensor
-    decides whether it can stay packed.
+    It can if none of the conversions on its way to the model touch the bytes. `mapping` is the whole
+    of what will run, so this is decided, not guessed.
+
+    Returns:
+        `quantized`: every block tensor, keyed by the model's name for it -> ggml type.
+            `{"lm_head.weight": 14, "model.embed_tokens.weight": 8}`
+        `packable`: the subset whose conversions are all safe on packed bytes, so the layer can be
+            swapped for a `GgufLinear` / `GgufExperts` / `GgufEmbedding` and keep its blocks.
+            `{"model.layers.0.mlp.experts.gate_up_proj": 12}`
+        `permutations`: model name -> index tensor, for a packed weight whose *input* is gathered
+            instead, since permuting its columns would mean requantizing.
+            `{"model.layers.0.linear_attn.out_proj.weight": tensor([0, 1, 2, ...])}`
     """
     # On a copy: asking a transform whether it matches a name marks it as used and arms the stateful
     # renamings, and the mapping handed back to the loader has to be untouched by that.
@@ -56,16 +65,15 @@ def get_gguf_plan(
     renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
 
-    quantized, packable, permutations, names = {}, {}, {}, []
+    pattern_to_converter = {pattern: converter for converter in converters for pattern in converter.source_patterns}
+
+    quantized, packable, permutations = {}, {}, {}
     for gguf_name, ggml_type in header.ggml_types.items():
-        param_name = gguf_name
-        for renaming in renamings:
-            param_name, _ = renaming.rename_source_key(param_name)
-        names.append(param_name)
         if ggml_type not in GGML_BLOCK:
             continue
+        param_name, source_pattern = rename_source_key(gguf_name, renamings, converters)
         quantized[param_name] = ggml_type
-        converter = next((entry for entry in converters if entry.rename_source_key(param_name)[1]), None)
+        converter = pattern_to_converter.get(source_pattern)
         operations = getattr(converter, "operations", ())
         # every conversion applied to this tensor must be safe on packed bytes
         if converter is None or all(getattr(op, "supports_packed", False) for op in operations):
@@ -74,13 +82,29 @@ def get_gguf_plan(
             for operation in operations:
                 if (permutation := getattr(operation, "input_permutation", None)) is not None:
                     permutations[param_name] = permutation
-    return quantized, packable, permutations, names
+    return quantized, packable, permutations
 
 
-def add_gguf_load_ops(mapping: list[WeightTransform], to_unpack: dict[str, int], names: list[str], dtype) -> list:
-    """Bracket every conversion chain: unpack blocks first where needed, cast to `dtype` last."""
+def get_unconverted_keys(mapping: list[WeightTransform], header: GgufHeader) -> list[str]:
+    """The keys of the tensors no converter claims, in the form the loader will match them."""
+    mapping = deepcopy(mapping)
+    renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
-    dequantize_op = Dequantize(to_unpack, dtype) if to_unpack else None
+    renamed = [rename_source_key(name, renamings, converters) for name in header.ggml_types]
+    return [name for name, converter_pattern in renamed if converter_pattern is None]
+
+
+def add_gguf_load_ops(
+    mapping: list[WeightTransform], needs_unpacking: dict[str, int], header: GgufHeader, dtype
+) -> list:
+    """Give every tensor the two ops it needs: unpack its blocks first, cast to `dtype` last.
+
+    A tensor that already has a converter gets them added at either end of it. One that has none gets
+    a converter created for it, which only runs those two ops and leaves the name alone.
+    """
+    unconverted = get_unconverted_keys(mapping, header)
+    converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
+    dequantize_op = Dequantize(needs_unpacking, dtype) if needs_unpacking else None
     cast_op = Cast(dtype)
     for converter in converters:
         if dequantize_op is not None:
@@ -88,7 +112,6 @@ def add_gguf_load_ops(mapping: list[WeightTransform], to_unpack: dict[str, int],
         converter.operations.append(cast_op)
     # `Dequantize` passes through a name it was not given, so one converter serves both kinds here
     operations = [dequantize_op, cast_op] if dequantize_op is not None else [cast_op]
-    unconverted = [name for name in names if not any(c.rename_source_key(name)[1] for c in converters)]
     if unconverted:
         return mapping + [
             WeightConverter(
@@ -108,9 +131,9 @@ class GgufLinear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.ggml_type = ggml_type
-        block_elems, block_bytes = GGML_BLOCK[ggml_type]
-        bytes_per_row = in_features // block_elems * block_bytes
-        self.weight = nn.Parameter(torch.empty((out_features, bytes_per_row), dtype=torch.uint8), requires_grad=False)
+        self.weight = nn.Parameter(
+            torch.empty((out_features, row_bytes(ggml_type, in_features)), dtype=torch.uint8), requires_grad=False
+        )
         # A GGUF stores a bias as its own f32 tensor, never quantized, so it stays an ordinary
         # parameter and the loader fills it like any other.
         self.bias = None
@@ -151,6 +174,48 @@ class GgufLinear(nn.Module):
         )
 
 
+class GgufExperts(nn.Module):
+    """One MoE layer's experts, stacked and left as GGUF blocks: `(n_experts, rows, bytes_per_row)`."""
+
+    def __init__(self, num_experts, hidden_dim, intermediate_dim, gate_up_type, down_type, act_fn):
+        super().__init__()
+        self.num_experts = num_experts
+        self.hidden_dim = hidden_dim
+        self.intermediate_dim = intermediate_dim
+        self.gate_up_type = gate_up_type
+        self.down_type = down_type
+        self.act_fn = act_fn
+        self.gate_up_proj = nn.Parameter(
+            torch.empty((num_experts, 2 * intermediate_dim, row_bytes(gate_up_type, hidden_dim)), dtype=torch.uint8),
+            requires_grad=False,
+        )
+        self.down_proj = nn.Parameter(
+            torch.empty((num_experts, hidden_dim, row_bytes(down_type, intermediate_dim)), dtype=torch.uint8),
+            requires_grad=False,
+        )
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        num_tokens, top_k = top_k_index.shape
+        ids = top_k_index.to(torch.int32)
+        gate, up = mul_mat_id(
+            self.gate_up_proj, hidden_states, ids, self.gate_up_type, 2 * self.intermediate_dim
+        ).chunk(2, dim=-1)
+        current_hidden_states = (self.act_fn(gate) * up).reshape(num_tokens * top_k, self.intermediate_dim)
+        current_hidden_states = mul_mat_id(
+            self.down_proj, current_hidden_states, ids.reshape(-1, 1), self.down_type, self.hidden_dim
+        )
+        current_hidden_states = current_hidden_states.reshape(num_tokens, top_k, self.hidden_dim)
+        current_hidden_states = current_hidden_states * top_k_weights.unsqueeze(-1)
+        final_hidden_states = current_hidden_states.sum(dim=1).to(hidden_states.dtype)
+        return final_hidden_states
+
+    def extra_repr(self) -> str:
+        return (
+            f"num_experts={self.num_experts}, hidden_dim={self.hidden_dim}, "
+            f"intermediate_dim={self.intermediate_dim}, ggml_types=({self.gate_up_type}, {self.down_type})"
+        )
+
+
 class GgufEmbedding(nn.Module):
     """`nn.Embedding` whose table stays as GGUF blocks."""
 
@@ -160,9 +225,8 @@ class GgufEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.ggml_type = ggml_type
         self.compute_dtype = dtype or torch.get_default_dtype()
-        block_elems, block_bytes = GGML_BLOCK[ggml_type]
         self.weight = nn.Parameter(
-            torch.empty((num_embeddings, embedding_dim // block_elems * block_bytes), dtype=torch.uint8),
+            torch.empty((num_embeddings, row_bytes(ggml_type, embedding_dim)), dtype=torch.uint8),
             requires_grad=False,
         )
 
@@ -187,6 +251,22 @@ def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -
 
     replaced, unsupported = {}, set()
     for module_name, module in model.named_modules():
+        if module_name.endswith(".experts"):
+            expert_params = ("gate_up_proj", "down_proj")
+            expert_types = [plan.get(f"{module_name}.{name}") for name in expert_params]
+            if any(ggml_type is None for ggml_type in expert_types):
+                continue
+            if not all(kernel.supports(ggml_type) for ggml_type in expert_types):
+                unsupported.update(expert_types)
+                continue
+            new_module = GgufExperts(
+                module.num_experts, module.hidden_dim, module.intermediate_dim, *expert_types, module.act_fn
+            )
+            model.set_submodule(module_name, new_module)
+            for name in expert_params:
+                replaced[f"{module_name}.{name}"] = new_module
+            continue
+
         param_name = f"{module_name}.weight"
         ggml_type = plan.get(param_name)
         if ggml_type is None:

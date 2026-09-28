@@ -14,14 +14,17 @@
 """Testing suite for the PyTorch Glm5Next model."""
 
 import copy
+import tempfile
 import unittest
 
 import pytest
+from safetensors.torch import load_file
 
 from transformers import (
     Glm5NextConfig,
     Glm5NextForConditionalGeneration,
     Glm5NextModel,
+    Glm5NextTextModel,
     Glm5NextVisionConfig,
     is_torch_available,
     logging,
@@ -99,7 +102,7 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("hidden_size", 48)
         kwargs.setdefault("intermediate_size", 16)
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("layer_types", ["linear_attention", "deepseek_sparse_attention"])
+        kwargs.setdefault("layer_types", ["linear_attention", "indexed_attention"])
         super().__init__(parent, **kwargs)
 
     def create_pixel_values(self):
@@ -170,6 +173,26 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8, 0.9]
     # FIXME: export is very sensitive to any shape changes
     test_torch_exportable = False
+
+    def test_text_model_save_uses_original_weight_names(self):
+        """Keep text-only saves in the released layout expected by SGLang (sgl-project/sglang#38618)."""
+        config = self.model_tester.get_text_config()
+        model = Glm5NextTextModel(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
+
+        expected_keys = {
+            "layers.0.hc_attn_fn",
+            "layers.0.hc_ffn_fn",
+            "layers.0.self_attn.f_a_proj.weight",
+            "layers.0.self_attn.q_conv1d.weight",
+            "layers.1.mlp.experts.0.gate_proj.weight",
+            "layers.1.mlp.experts.0.up_proj.weight",
+            "layers.1.mlp.experts.0.down_proj.weight",
+        }
+        self.assertTrue(expected_keys.issubset(saved_keys))
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
@@ -293,7 +316,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             attentions = outputs.attentions
             self.assertEqual(
                 len(attentions),
-                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
             )
 
             # Check that output_attentions also works through config.
@@ -310,7 +333,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             attentions = outputs.attentions
             self.assertEqual(
                 len(attentions),
-                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
             )
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -333,7 +356,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
             self.assertEqual(out_len + 1, len(outputs))
             self.assertEqual(
                 len(self_attentions),
-                sum(layer == "deepseek_sparse_attention" for layer in text_config.layer_types),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
             )
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),

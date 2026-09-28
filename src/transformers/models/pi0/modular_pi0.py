@@ -163,6 +163,8 @@ class PI0Processor(ProcessorMixin):
         padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
 
         for batch, sample_images in enumerate(batched_images):
+            if not sample_images:
+                continue
             processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])
 
             num_cameras = len(sample_images)

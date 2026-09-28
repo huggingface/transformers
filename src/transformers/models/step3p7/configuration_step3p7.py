@@ -62,7 +62,6 @@ class Step3p7VisionConfig(PreTrainedConfig):
     # New fields
     mlp_ratio: float = 8960 / 1536
     layer_scale_init_value: float = 0.1
-    # RoPE config (compatible with Gemma4VisionRotaryEmbedding)
     rope_parameters: dict | None = None
     max_position_embeddings: int = 2704  # (image_size // patch_size)^2 = (728//14)^2
 

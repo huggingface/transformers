@@ -169,21 +169,8 @@ class DFineLoss(RTDetrLoss):
     prediction (supervise class and box).
 
     Args:
-        matcher (`DetrHungarianMatcher`):
-            Module able to compute a matching between targets and proposals.
-        weight_dict (`Dict`):
-            Dictionary relating each loss with its weights. These losses are configured in DFineConf as
-            `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`, `weight_loss_fgl`, `weight_loss_ddf`
-        losses (`list[str]`):
-            List of all the losses to be applied. See `get_loss` for a list of all available losses.
-        alpha (`float`):
-            Parameter alpha used to compute the focal loss.
-        gamma (`float`):
-            Parameter gamma used to compute the focal loss.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
+        config (`DFineConfig`):
+            Configuration object holding the matcher settings, loss weights and class counts.
     """
 
     def __init__(self, config):
@@ -330,6 +317,11 @@ def DFineForObjectDetectionLoss(
 ):
     criterion = DFineLoss(config)
     criterion.to(device)
+    if denoising_meta_values is not None:
+        # Drop denoising queries and calculate loss only over normal queries.
+        # See https://github.com/huggingface/transformers/pull/48528
+        _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
+        _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
     # Second: compute the losses, based on outputs and labels
     outputs_loss = {}
     outputs_loss["logits"] = logits

@@ -2180,7 +2180,7 @@ class Gemma3nModel(PaliGemmaModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3nForConditionalGeneration
 
@@ -2282,7 +2282,7 @@ class Gemma3nModel(PaliGemmaModel):
 
         return Gemma3nModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values if use_cache else None,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
@@ -2358,7 +2358,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
@@ -2431,6 +2431,9 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
             audio_hidden_states=outputs.audio_hidden_states,
         )
+
+    def _update_model_kwargs_for_generation(self, **super_kwargs):
+        raise AttributeError("PaliGemma's token_type_ids mark its prefix, Gemma3n's mark image spans!")
 
     def prepare_inputs_for_generation(self, **super_kwargs):
         raise NotImplementedError("Do not inherit prepare_inputs_for_generation from PaliGemma")

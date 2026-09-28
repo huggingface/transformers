@@ -22,11 +22,11 @@ from collections.abc import AsyncIterator, Awaitable
 from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
-import httpx
 import requests
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
+from huggingface_hub.utils import httpx
 
 from transformers import GenerationConfig
 from transformers.utils import is_rich_available
@@ -369,7 +369,7 @@ class Chat:
 
         # Load examples
         if examples_path:
-            with open(examples_path) as f:
+            with open(examples_path, encoding="utf-8") as f:
                 self.examples = yaml.safe_load(f)
         else:
             self.examples = DEFAULT_EXAMPLES
@@ -669,7 +669,7 @@ def new_chat_history(system_prompt: str | None = None) -> list[dict]:
 def save_chat(filename: str, chat: list[dict], settings: dict) -> str:
     """Saves the chat history to a file."""
     os.makedirs(os.path.dirname(filename), exist_ok=True)
-    with open(filename, "w") as f:
+    with open(filename, "w", encoding="utf-8") as f:
         json.dump({"settings": settings, "chat_history": chat}, f, indent=4)
     return os.path.abspath(filename)
 

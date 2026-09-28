@@ -509,7 +509,7 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -524,7 +524,8 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
         model = Qwen3VLForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-4B-Instruct", device_map="auto")
         expected_texts = Expectations(
             {
-                ("cuda", None): "user\nWhat kind of dog is this?\nassistant\nBased on the image, this appears to be a **Labrador Retriever**.\n\nHere’s why:\n\n- **Build and Size**: The dog has a large, muscular, and sturdy build, which is characteristic of Labradors.\n- **",
+                (None, None): 'user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: Golden-yellow coat, which is the classic color for a Yellow Labrador.\n- **Build**: Stocky, muscular, and friendly-looking — typical of the breed',
+                ("rocm", (9, 4)): 'user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: The dog has a classic golden-yellow coat, which is the most common color for the breed.\n- **Build**: It has a sturdy, athletic build with',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
