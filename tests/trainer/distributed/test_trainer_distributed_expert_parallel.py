@@ -61,7 +61,7 @@ class TestTrainerExpertParallel(TestCasePlus):
             f"--output_dir={output_dir}",
         ]
         execute_subprocess_async(cmd, env=self.get_env())
-        with open(os.path.join(output_dir, "results.json")) as f:
+        with open(os.path.join(output_dir, "results.json"), encoding="utf-8") as f:
             results = json.load(f)
         return results, load_file(os.path.join(output_dir, "model", "model.safetensors"))
 

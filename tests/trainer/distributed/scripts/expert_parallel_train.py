@@ -102,7 +102,7 @@ def main():
 
     if trainer.is_world_process_zero():
         steps = [log for log in trainer.state.log_history if "loss" in log]
-        with open(os.path.join(args.output_dir, "results.json"), "w") as f:
+        with open(os.path.join(args.output_dir, "results.json"), "w", encoding="utf-8") as f:
             json.dump({"loss": [s["loss"] for s in steps], "grad_norm": [s["grad_norm"] for s in steps]}, f)
 
 
