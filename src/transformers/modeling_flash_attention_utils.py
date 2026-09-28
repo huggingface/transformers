@@ -287,7 +287,7 @@ def lazy_import_flash_attention(
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
-        _flash_fn, _flash_varlen_fn, _bare_flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
+        _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
 
@@ -707,6 +707,9 @@ def _process_flash_attention_kwargs(
         elif supports_mapping["page_table"]:
             flash_kwargs["page_table"] = block_table  # FA3 (vllm)
 
+    if supports_mapping["cache_seqlens"] and cache_seqlens is not None:
+        flash_kwargs["cache_seqlens"] = cache_seqlens
+
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
     #
@@ -726,9 +729,6 @@ def _process_flash_attention_kwargs(
         elif not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
             max_seqlen_k = max_seqlen_k.item()
         flash_kwargs["max_seqlen_k"] = max_seqlen_k
-
-    if supports_mapping["cache_seqlens"] and cache_seqlens is not None:
-        flash_kwargs["cache_seqlens"] = cache_seqlens
 
     return flash_kwargs
 
@@ -811,7 +811,7 @@ def _flash_attention_forward(
         **kwargs,
     )
 
-    # There is a block table: we use the paged flash function to compute attention and update the cache and return early
+    # There is a block table: we use the paged flash function to compute attention and update the cache
     if is_fa_with_paged_kwargs:
         # Flash paged happens in [seq_len, 1, num_heads, head_dim] format to match the cache
         q, k, v = (x.reshape(-1, 1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
@@ -853,6 +853,6 @@ def _flash_attention_forward(
         out = out[0] if isinstance(out, tuple) else out
         return out.view(batch_size, -1, *out.shape[-2:])
 
-    # Padding free and same sequence lengths: we can run flash (no varlen) and return early
+    # Padding free and same sequence lengths: we can run flash (no varlen)
     out = flash_fn(query_states, key_states, value_states, **flash_kwargs_fn())
     return out[0] if isinstance(out, tuple) else out
