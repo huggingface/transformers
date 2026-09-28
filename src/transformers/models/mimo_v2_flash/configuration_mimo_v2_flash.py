@@ -43,6 +43,9 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation
         of `sqrt(hidden_size / (num_attention_heads * v_head_dim))`):
         Constant multiplier applied to rescale the attention values.
+    sliding_window (`int`, *optional*, defaults to 129):
+        Number of keys a sliding-window query attends to, including itself. The Hub `config.json` stores
+        `sliding_window_size` (128), the number of previous tokens, so this is `sliding_window_size + 1`.
     """
 
     model_type = "mimo_v2_flash"
@@ -103,7 +106,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     # MiMo-V2-Flash specific
     head_dim: int = 192
     v_head_dim: int = 128
-    sliding_window: int = 128
+    sliding_window: int = 129
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
     attention_value_scale: float | None = 0.707
@@ -127,6 +130,10 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
+        # The hub config.json stores `sliding_window_size`, the number of previous tokens an SWA query attends to
+        # (the flash-attention left window of the reference implementation); `sliding_window` also counts the query.
+        if kwargs.get("sliding_window_size") is not None:
+            self.sliding_window = kwargs["sliding_window_size"] + 1
 
         super().__post_init__(**kwargs)
 
