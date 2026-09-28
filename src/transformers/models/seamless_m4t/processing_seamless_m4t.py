@@ -41,7 +41,6 @@ class SeamlessM4TTextKwargs(TextKwargs):
 
 class SeamlessM4TProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: SeamlessM4TTextKwargs
-    _defaults = {}
 
 
 @auto_docstring

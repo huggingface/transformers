@@ -22,10 +22,7 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteSpeech5ProcessorKwargs(ProcessingKwargs, total=False):
-    # the defaults this model needs are shipped with the checkpoint rather than hardcoded here: the audio
-    # ones are the feature extractor's own signature defaults, and the tokenizer's `padding` comes from
-    # `tokenizer_config.json` (`ProcessorMixin._merge_kwargs` reads the tokenizer's init kwargs)
-    _defaults = {}
+    pass
 
 
 @auto_docstring

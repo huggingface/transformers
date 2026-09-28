@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 class VisionTextDualEncoderProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 @auto_docstring

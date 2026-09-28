@@ -37,7 +37,6 @@ AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: ImagesKwargs
     videos_kwargs: VideosKwargs
-    _defaults = {}
 
 
 @auto_docstring

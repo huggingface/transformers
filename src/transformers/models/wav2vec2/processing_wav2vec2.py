@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 class Wav2Vec2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 @auto_docstring

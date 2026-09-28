@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 class TrOCRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 @auto_docstring

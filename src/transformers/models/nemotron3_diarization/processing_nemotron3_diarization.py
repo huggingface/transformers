@@ -32,8 +32,7 @@ DEFAULT_STREAMING_MODES = {
 
 
 class Nemotron3DiarizationProcessorKwargs(ProcessingKwargs, total=False):
-    # Defaults travel with the checkpoint, in `processor_config.json`.
-    _defaults = {}
+    pass
 
 
 @auto_docstring

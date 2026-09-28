@@ -24,7 +24,7 @@ from ...utils import auto_docstring, logging
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    pass
 
 
 logger = logging.get_logger(__name__)
