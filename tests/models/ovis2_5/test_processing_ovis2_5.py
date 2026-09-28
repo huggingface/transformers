@@ -56,6 +56,7 @@ NAMED_VISUAL_TOKENS = {
     "video_start_token": "<ovis_video_start>",
     "video_end_token": "<ovis_video_end>",
 }
+BOUNDARY_TOKEN_ATTRIBUTES = ("image_start_token", "image_end_token", "video_start_token", "video_end_token")
 
 
 @require_vision
@@ -107,9 +108,11 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_visual_tokens_use_tokenizer_attributes(self):
         processor = self.get_processor()
 
-        for token_attribute in NAMED_VISUAL_TOKENS:
+        for token_attribute in BOUNDARY_TOKEN_ATTRIBUTES:
             self.assertEqual(getattr(processor, token_attribute), getattr(processor.tokenizer, token_attribute))
-        self.assertEqual(processor.image_token, processor.video_token)
+        self.assertEqual(processor.image_token, "<image>")
+        self.assertEqual(processor.video_token, "<video>")
+        self.assertEqual(processor.visual_atom_token, processor.tokenizer.image_token)
         self.assertEqual(processor.image_token_id, processor.video_token_id)
 
     def test_visual_tokens_fall_back_to_ovis_tokens(self):
@@ -120,8 +123,11 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             video_processor=self.get_component("video_processor"),
         )
 
-        for token_attribute, expected_token in NAMED_VISUAL_TOKENS.items():
-            self.assertEqual(getattr(processor, token_attribute), expected_token)
+        for token_attribute in BOUNDARY_TOKEN_ATTRIBUTES:
+            self.assertEqual(getattr(processor, token_attribute), NAMED_VISUAL_TOKENS[token_attribute])
+        self.assertEqual(processor.image_token, "<image>")
+        self.assertEqual(processor.video_token, "<video>")
+        self.assertEqual(processor.visual_atom_token, "<ovis_visual_atom>")
         self.assertEqual(processor.image_token_id, processor.video_token_id)
 
     def test_visual_tokens_survive_processor_reload(self):
@@ -139,6 +145,8 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             for token_attribute in NAMED_VISUAL_TOKENS:
                 self.assertEqual(getattr(reloaded_processor, token_attribute), getattr(processor, token_attribute))
                 self.assertNotIn(token_attribute, processor.to_dict())
+            self.assertEqual(reloaded_processor.visual_atom_token, processor.visual_atom_token)
+            self.assertEqual(reloaded_processor.visual_atom_token_id, processor.visual_atom_token_id)
             self.assertEqual(reloaded_processor.image_token_id, reloaded_processor.video_token_id)
 
     def test_processor_loads_legacy_hub_metadata(self):
@@ -256,7 +264,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Truncation raises instead of silently dropping part of an expanded visual sequence."""
         processor = self.get_processor()
 
-        with self.assertRaisesRegex(ValueError, "Mismatch in `image` token count"):
+        with self.assertRaisesRegex(ValueError, "Mismatch in visual atom token count"):
             processor(
                 images=self.prepare_image_inputs(),
                 text="<image> lower newer",

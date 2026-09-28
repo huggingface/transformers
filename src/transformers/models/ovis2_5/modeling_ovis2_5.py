@@ -861,6 +861,7 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
+    # Exaone handles packed visual input expansion; Qwen2-VL's 3D position IDs do not apply here.
     model: Ovis2_5Model
 
     def __init__(self, config: Ovis2_5Config):
@@ -978,12 +979,9 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor | None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Returns per-sample counts of image and video placeholder tokens.
+        """Count image and video starts per sample for Exaone's packed-input expansion.
 
-        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
-        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
-        computed directly from `input_ids`.
+        Both modalities use the same visual atom ID, so their separate start IDs distinguish them.
         """
         # Generation creates placeholder `input_ids` when the caller supplies
         # only `inputs_embeds`. Prefer the real embeddings whenever they are

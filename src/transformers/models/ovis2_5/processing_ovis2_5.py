@@ -14,7 +14,7 @@
 """Processor class for Ovis2.5."""
 
 from ...image_utils import make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
 from ...video_utils import make_batched_videos
 
@@ -35,19 +35,19 @@ class Ovis2_5Processor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        self._image_placeholder = "<image>"
-        self._video_placeholder = "<video>"
-
-        self.image_token = (
+        self.image_token = "<image>"
+        self.video_token = "<video>"
+        self.visual_atom_token = (
             getattr(tokenizer, "image_token", None) or getattr(tokenizer, "video_token", None) or "<ovis_visual_atom>"
         )
-        self.video_token = self.image_token
         self.image_start_token = getattr(tokenizer, "image_start_token", None) or "<ovis_image_start>"
         self.image_end_token = getattr(tokenizer, "image_end_token", None) or "<ovis_image_end>"
         self.video_start_token = getattr(tokenizer, "video_start_token", None) or "<ovis_video_start>"
         self.video_end_token = getattr(tokenizer, "video_end_token", None) or "<ovis_video_end>"
 
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.visual_atom_token_id = tokenizer.convert_tokens_to_ids(self.visual_atom_token)
+        # Image and video use the same atom ID after their prompt placeholders are expanded.
+        self.image_token_id = self.visual_atom_token_id
         self.video_token_id = self.image_token_id
         self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
@@ -77,13 +77,6 @@ class Ovis2_5Processor(ProcessorMixin):
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, **kwargs):
         images, text, videos, _ = super().prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
-        if text is not None:
-            text = [
-                sample.replace(self._image_placeholder, self.image_token).replace(
-                    self._video_placeholder, self.video_token
-                )
-                for sample in text
-            ]
         if images is not None:
             images = make_flat_list_of_images(images)
         if videos is not None:
@@ -106,12 +99,25 @@ class Ovis2_5Processor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         num_visual_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
-        return self.image_start_token + self.image_token * num_visual_tokens + self.image_end_token
+        return self.image_start_token + self.visual_atom_token * num_visual_tokens + self.image_end_token
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
         num_visual_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
-        return self.video_start_token + self.video_token * num_visual_tokens + self.video_end_token
+        return self.video_start_token + self.visual_atom_token * num_visual_tokens + self.video_end_token
+
+    def _check_special_mm_tokens(self, text: list[str], text_inputs: BatchFeature, modalities: list[str]):
+        """Check the visual atom count after either prompt placeholder is expanded."""
+        input_ids = text_inputs["input_ids"]
+        if hasattr(input_ids, "tolist"):
+            input_ids = input_ids.tolist()
+        ids_count = [list(ids).count(self.visual_atom_token_id) for ids in input_ids]
+        text_count = [sample.count(self.visual_atom_token) for sample in text]
+        if ids_count != text_count:
+            raise ValueError(
+                f"Mismatch in visual atom token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
+                "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
+            )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute multimodal token counts without materializing pixel values."""

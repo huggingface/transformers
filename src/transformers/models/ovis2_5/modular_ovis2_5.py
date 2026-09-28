@@ -941,6 +941,7 @@ class Ovis2_5Model(Ovis2Model):
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForConditionalGeneration):
     """Ovis2.5 multimodal conditional generation model."""
 
+    # Exaone handles packed visual input expansion; Qwen2-VL's 3D position IDs do not apply here.
     model: Ovis2_5Model
 
     def __init__(self, config: Ovis2_5Config):
@@ -953,6 +954,10 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForCondi
         input_ids: torch.LongTensor | None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Count image and video starts per sample for Exaone's packed-input expansion.
+
+        Both modalities use the same visual atom ID, so their separate start IDs distinguish them.
+        """
         # Generation creates placeholder `input_ids` when the caller supplies
         # only `inputs_embeds`. Prefer the real embeddings whenever they are
         # available so beam expansion still sees the multimodal boundaries.
