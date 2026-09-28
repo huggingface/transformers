@@ -53,9 +53,6 @@ jobs:
             REF=main
           clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
           clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
-          # Report findings without holding the push back. These images carry the CVEs of
-          # a CUDA/ROCm base we do not choose, and the clusters only require that a scan
-          # exists, not that it passed.
           enforcement: audit
 
       - name: Post to Slack
@@ -220,9 +217,6 @@ jobs:
             REF=main
           clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
           clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
-          # Report findings without holding the push back. These images carry the CVEs of
-          # a CUDA/ROCm base we do not choose, and the clusters only require that a scan
-          # exists, not that it passed.
           enforcement: audit
 
       - name: Post to Slack
