@@ -460,7 +460,7 @@ class MtpModel(PreTrainedModel):
         if defined, and otherwise uses full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
-        layer_config = self.config.per_layer_config[layer_idx]
+        layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
         mask_kwargs = {
             "config": layer_config,
             "inputs_embeds": inputs_embeds,

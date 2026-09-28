@@ -42,9 +42,8 @@ The models below are heterogeneous checkpoints. Layers are not uniform across th
 Pass `per_layer_config` to [`~transformers.LlamaConfig`] as a mapping from layer indices to attribute overrides. Layer
 indices are zero-based. Only attributes that differ from the global configuration need to be specified.
 
-The example below shows how to specify per-layer overrides and resolve each layer's configuration. Applying these
-overrides or skips to a model requires modeling support, either directly in the model implementation or through
-[generic heterogeneous modeling](./generic_heterogeneous_modeling).
+The example below shows how to specify per-layer overrides and resolve each layer's configuration. To apply these
+overrides or skips to a model, see [Architecture support](#architecture-support).
 
 The following example records overrides for four layers: layer 5 uses a smaller MLP, layer 11 uses
 fewer key-value heads, and layers 23 and 27 record `skip` values for architectures that support them.
