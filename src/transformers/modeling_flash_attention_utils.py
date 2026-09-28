@@ -292,10 +292,8 @@ def lazy_import_flash_attention(
         )
 
         # Paged flash attention is not compatible with torch.compile, so we decorate it here (unless it doesnt exist)
-        if _bare_flash_with_kvcache_fn is not None:
-            _flash_with_kvcache_fn = torch.compiler.disable(_bare_flash_with_kvcache_fn)
-        else:
-            _flash_with_kvcache_fn = None
+        if _flash_with_kvcache_fn is not None:
+            _flash_with_kvcache_fn = torch.compiler.disable(_flash_with_kvcache_fn)
 
         # Some kernels, like the MSA kernel from minimax, have no varlen function. In this case, the varlen path
         # can never be used, so no need to build a processing function for it, just return a dict builder.
