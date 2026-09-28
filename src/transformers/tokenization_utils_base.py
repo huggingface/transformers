@@ -1165,7 +1165,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # V5: Allowed keys are SPECIAL_TOKENS_ATTRIBUTES + "extra_special_tokens"
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         special_tokens_dict = dict(special_tokens_dict)
-        if "additional_special_tokens" in special_tokens_dict and "extra_special_tokens" not in special_tokens_dict:
+        if "additional_special_tokens" in special_tokens_dict and not special_tokens_dict.get("extra_special_tokens"):
             special_tokens_dict["extra_special_tokens"] = special_tokens_dict.pop("additional_special_tokens")
 
         allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
