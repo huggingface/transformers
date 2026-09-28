@@ -110,9 +110,12 @@ class _IdentityOp(ConversionOps):
 
 
 class Chunk(ConversionOps):
-    """Split a tensor along `dim` into one chunk per target, each sized like its target parameter (like GQA qkv). Falls back
-    to equal chunks when the targets are not model parameters, i.e. when saving. Additionally, `num_shards_attribute` is a
-    config field to read to know how many tensors to chunk into. Useful when concatenating an arbitrary number of tensors."""
+    """Split a tensor along `dim` into one piece per target, each as large as that target's model parameter along `dim`.
+    This allows uneven splits, such as a fused GQA `qkv` weight where k and v are smaller than q. Under TP the tensor
+    arrives already sharded, so a sharded target counts with its local shard. When the targets are not model parameters
+    (the reverse of `Concatenate`, on save), the pieces are equal. Additionally, `num_shards_attribute`
+    is a config field to read to know how many tensors to chunk into. Useful when concatenating an arbitrary number of
+    tensors."""
 
     def __init__(self, dim: int = 0, num_shards_attribute: str | None = None):
         self.dim = dim
@@ -133,11 +136,12 @@ class Chunk(ConversionOps):
 
     def get_target_sizes(self, targets: list[str], full_layer_name=None, model=None, **kwargs) -> list[int]:
         try:
-            return [
-                model.get_parameter(full_layer_name.replace(targets[0], target)).shape[self.dim] for target in targets
-            ]
+            parameters = [model.get_parameter(full_layer_name.replace(targets[0], target)) for target in targets]
         except AttributeError:
             return []
+        return [
+            (parameter.to_local() if is_dtensor(parameter) else parameter).shape[self.dim] for parameter in parameters
+        ]
 
     def get_target_patterns(self, target_patterns: list[str], **kwargs) -> list[str]:
         if self.num_shards_attribute is None:
