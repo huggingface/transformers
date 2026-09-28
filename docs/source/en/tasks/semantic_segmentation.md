@@ -203,7 +203,7 @@ Common real-world applications of semantic segmentation include training self-dr
 
 We will now:
 
-1. Finetune [SegFormer](../model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/scene_parse_150) dataset.
+1. Finetune [SegFormer](../model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/zhoubolei/scene_parse_150) dataset.
 2. Use your fine-tuned model for inference.
 
 <Tip>
@@ -469,7 +469,7 @@ Reload the dataset and load an image for inference.
 ```py
 >>> from datasets import load_dataset
 
->>> ds = load_dataset("scene_parse_150", split="train[:50]")
+>>> ds = load_dataset("zhoubolei/scene_parse_150", split="train[:50]")
 >>> ds = ds.train_test_split(test_size=0.2)
 >>> test_ds = ds["test"]
 >>> image = ds["test"][0]["image"]
