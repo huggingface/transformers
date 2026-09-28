@@ -137,9 +137,16 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         try:
             original_batch_size = self.model_tester.batch_size
             self.model_tester.batch_size = batch_size
+            # Some old multimodal testers are composed of separate classes for vision/text (e.g. kosmos2, pix2struct)
+            if hasattr(self.model_tester, "text_model_tester") and hasattr(self.model_tester, "vision_model_tester"):
+                self.model_tester.text_model_tester.batch_size = batch_size
+                self.model_tester.vision_model_tester.batch_size = batch_size
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         finally:
             self.model_tester.batch_size = original_batch_size
+            if hasattr(self.model_tester, "text_model_tester") and hasattr(self.model_tester, "vision_model_tester"):
+                self.model_tester.text_model_tester.batch_size = original_batch_size
+                self.model_tester.vision_model_tester.batch_size = original_batch_size
 
         # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
@@ -1659,8 +1666,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if not model_class._can_compile_fullgraph:
                 self.skipTest("This model doesn't support compilation without graph breaks")
 
-            # 2. Prepares two sets of inputs
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
+            # 2. Prepares two sets of inputs, For this test we need two sets of *different* inputs with the same shape
+            config, input_1 = self.prepare_config_and_inputs_for_generate(batch_size=2)
+            _, input_2 = self.prepare_config_and_inputs_for_generate(batch_size=2)
+            model_input_sets = [input_1, input_2]
+
             set_config_for_less_flaky_test(config)
             model = model_class(config).to(torch_device)
             set_model_for_less_flaky_test(model)
@@ -1674,19 +1684,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             else:
                 model_to_be_compiled = model
 
-            # creates two sets of *different* inputs with the same shape
-            main_input = inputs_dict[model.main_input_name].to(torch_device)
-            half_batch_size = main_input.shape[0] // 2
-            input_1 = {}
-            input_2 = {}
-            for key, value in inputs_dict.items():
-                if isinstance(value, torch.Tensor):
-                    input_1[key] = value[:half_batch_size, :].to(torch_device)
-                    input_2[key] = value[half_batch_size : half_batch_size * 2, :].to(torch_device)
-                else:
-                    input_1[key] = value
-                    input_2[key] = value
-            model_input_sets = [input_1, input_2]
             self.assertTrue(
                 model_input_sets[0][model.main_input_name].shape == model_input_sets[1][model.main_input_name].shape
             )

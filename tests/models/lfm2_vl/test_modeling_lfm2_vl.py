@@ -55,7 +55,6 @@ class Lfm2VlModelTester(CausalLMModelTester):
         is_training=True,
         batch_size=2,
         scale_factor=2,
-        num_images=2,
         vision_config={
             "hidden_size": 32,
             "intermediate_size": 37,
@@ -97,7 +96,6 @@ class Lfm2VlModelTester(CausalLMModelTester):
         self.is_training = is_training
         self.batch_size = batch_size
         self.scale_factor = scale_factor
-        self.num_images = num_images
         self.downsample_factor = downsample_factor
         self.projector_hidden_size = projector_hidden_size
         self.image_seq_length = 4
@@ -112,16 +110,16 @@ class Lfm2VlModelTester(CausalLMModelTester):
         )
 
     def prepare_config_and_inputs(self):
-        # Create dummy pixel values: [num_images, num_patches, channels * patch_size^2]
+        # Create dummy pixel values: [batch_size, num_patches, channels * patch_size^2]
         patch_size = self.vision_config["patch_size"]
-        pixel_values = floats_tensor([self.num_images, 64, 3 * patch_size * patch_size])
+        pixel_values = floats_tensor([self.batch_size, 64, 3 * patch_size * patch_size])
 
         # Spatial shapes: one (height_patches, width_patches) per image
         patches = int(math.sqrt(64))
-        spatial_shapes = torch.tensor([[patches, patches]] * self.num_images, dtype=torch.long, device=torch_device)
+        spatial_shapes = torch.tensor([[patches, patches]] * self.batch_size, dtype=torch.long, device=torch_device)
 
         # Pixel attention mask: mark all patches as valid (no padding)
-        pixel_attention_mask = torch.ones((self.num_images, 64), dtype=torch.long, device=torch_device)
+        pixel_attention_mask = torch.ones((self.batch_size, 64), dtype=torch.long, device=torch_device)
         config = self.get_config()
         return config, pixel_values, spatial_shapes, pixel_attention_mask
 

@@ -291,7 +291,6 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
 @require_torch
 class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniCPMV4_7VisionText2TextModelTester
-    additional_model_inputs = ["target_sizes", "target_sizes_videos"]
 
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -327,16 +326,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="Vision backbone is packed Qwen-style and return no attentions yet")
     def test_get_video_features_attentions(self):
-        pass
-
-    @unittest.skip(reason="Batch splitting in compile test incompatible with list-of-list pixel_values")
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip(reason="Batch splitting in compile test incompatible with list-of-list pixel_values")
-    @pytest.mark.torch_compile_test
-    def test_generate_compilation_all_outputs(self):
         pass
 
     @unittest.skip(reason="FA works on generate test, inference needs override to pass target sizes")
