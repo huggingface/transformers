@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_kernels_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -204,6 +203,8 @@ class TDTLossKernelTest(unittest.TestCase):
 
     def test_use_kernels(self):
         """`use_kernels=True` swaps `tdt_loss` for the kernel in `ParakeetForTDT`, with the same loss."""
+        if not isinstance(tdt_loss, torch.nn.Module):
+            self.skipTest("Hub kernels are disabled (USE_HUB_KERNELS)")
         tester = ParakeetForTDTModelTester(self)
         config, input_features, attention_mask = tester.prepare_config_and_inputs()
         model = ParakeetForTDT(config).to(torch_device).eval()
@@ -942,7 +943,8 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         inputs.to(model.device)
 
         # Check both the PyTorch implementation and the `kernels-community/tdt-loss` CUDA kernel (`use_kernels=True`)
-        backends = ["torch", "kernel"] if is_kernels_available() else ["torch"]
+        # (`tdt_loss` is only kernelizable when the `kernels` library is installed and enabled)
+        backends = ["torch", "kernel"] if isinstance(tdt_loss, torch.nn.Module) else ["torch"]
 
         def set_backend(backend):
             if backend == "kernel":
