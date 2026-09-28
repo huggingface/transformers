@@ -21,6 +21,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -63,7 +64,16 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    # `tencent/Hunyuan-A13B-Instruct` is 80.4B parameters -- 149.7 GiB of bfloat16 weights, of which 96.8% live in
+    # the stacked `HunYuanMoEV1Experts` parameters (`gate_up_proj` is `(64, 6144, 4096)`, `down_proj` is
+    # `(64, 4096, 3072)`, so 2.4B parameters per layer across 32 layers).
+    #
+    # That does not fit the budget `device_map="auto"` plans against on the daily CI `a10` runners -- 24 GiB of
+    # accelerator plus the 60 GiB `CI_CPU_MEMORY_LIMIT_GB` allowance on the single-accelerator runner, and 48 + 120 on
+    # the two-accelerator one -- so the tail of the model is placed on `"disk"`, and loading dies with
+    # `ValueError: ... Please provide an offload_folder ...` at the first offloaded expert.
     @slow
+    @require_torch_accelerator_memory(memory=160)
     def test_model_generation(self):
         EXPECTED_ANSWER = "\nOkay, I need to write a"
         prompt = "Write a short summary of the benefits of regular exercise"

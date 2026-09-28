@@ -48,24 +48,12 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_chat_template_save_loading(self):
         self.skipTest("SamProcessor does not have a tokenizer")
 
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
     def test_image_processor_no_masks(self):
         image_processor = self.get_component("image_processor")
 
         processor = SamProcessor(image_processor=image_processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         input_feat_extract = image_processor(image_input, return_tensors="pt")
         input_processor = processor(images=image_input, return_tensors="pt")
@@ -89,7 +77,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = SamProcessor(image_processor=image_processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         mask_input = self.prepare_mask_inputs()
 
         input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="pt")

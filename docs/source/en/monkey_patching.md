@@ -240,7 +240,7 @@ register_patch_mapping(
 )
 
 register_checkpoint_conversion_mapping(
-    model_type="llama",
+    model_type_or_class_name="llama",
     mapping=[
         WeightConverter(
             source_patterns=["q_proj", "k_proj", "v_proj"],
@@ -405,7 +405,7 @@ register_patch_mapping(
 # - Override the original conversion mapping for qwen2_moe which concatenated the experts into a single parameter format.
 # - Concatenate the q_proj, k_proj, v_proj weights/biases into a single qkv_proj weight/bias for the new fused attention module.
 register_checkpoint_conversion_mapping(
-    model_type="qwen2_moe",
+    model_type_or_class_name="qwen2_moe",
     mapping=[
         WeightConverter(
             source_patterns=["q_proj", "k_proj", "v_proj"],

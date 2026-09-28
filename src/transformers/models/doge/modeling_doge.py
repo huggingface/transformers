@@ -118,7 +118,7 @@ class DogeRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -576,6 +576,8 @@ class DogeModel(DogePreTrainedModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
+            # Always materialize the mask: the dynamic mask is added onto it in `prepare_dynamic_mask`.
+            allow_is_causal_skip=False,
         )
 
         hidden_states = inputs_embeds
@@ -741,11 +743,6 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -807,6 +804,19 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+            "allow_is_causal_skip": False,  # Always force creation, as in `DogeModel.forward`
+        }
+        mask_function = create_causal_mask if config.sliding_window is None else create_sliding_window_causal_mask
+        return mask_function(**mask_kwargs)
 
 
 class DogeForSequenceClassification(GenericForSequenceClassification, DogePreTrainedModel):

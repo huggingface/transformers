@@ -61,6 +61,7 @@ class GlmMoeDsaModelTester(CausalLMModelTester):
         v_head_dim=128,
         num_hidden_layers=2,
         mlp_layer_types=["sparse", "dense"],
+        index_topk=8,
     ):
         super().__init__(parent=parent, num_hidden_layers=num_hidden_layers)
         self.n_routed_experts = n_routed_experts
@@ -70,6 +71,7 @@ class GlmMoeDsaModelTester(CausalLMModelTester):
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
         self.mlp_layer_types = mlp_layer_types
+        self.index_topk = index_topk
 
 
 @require_torch
@@ -106,10 +108,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across batching.")
     def test_eager_matches_batched_and_grouped_inference(self, *args):
-        pass
-
-    @unittest.skip("DSA hard top-k selection is sensitive to padding shifts (selection can flip).")
-    def test_left_padding_compatibility(self):
         pass
 
     @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")

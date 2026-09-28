@@ -154,6 +154,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
 
+# NOTE: can copy from qwen vision config!
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
@@ -164,6 +165,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 
     model_type = "minimax_m3_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     default_theta = 10000.0
 
     hidden_size: int = 1280

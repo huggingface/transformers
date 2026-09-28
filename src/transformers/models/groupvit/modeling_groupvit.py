@@ -1059,7 +1059,7 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GroupViTVisionModel
 
@@ -1221,7 +1221,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GroupViTModel
 

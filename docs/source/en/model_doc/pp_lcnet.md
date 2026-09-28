@@ -50,7 +50,7 @@ from transformers import pipeline
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none", device_map="auto")
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg", stream=True).raw)
 result = image_classifier(image)
 print(result)
 ```
@@ -70,7 +70,7 @@ model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg", stream=True).raw)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 predicted_label = outputs.logits.argmax(-1).item()
@@ -97,7 +97,7 @@ from transformers import pipeline
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none", device_map="auto")
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg", stream=True).raw)
 result = image_classifier([image, image])
 print(result)
 ```
@@ -117,7 +117,7 @@ model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg", stream=True).raw)
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 

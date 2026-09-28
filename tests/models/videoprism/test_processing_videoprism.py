@@ -60,7 +60,7 @@ def expected_tennis_pixel_slice():
 @require_torch
 class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VideoPrismProcessor
-    video_text_kwargs_max_length = 64
+    videos_text_kwargs_max_length = 64
 
     @classmethod
     def setUpClass(cls):

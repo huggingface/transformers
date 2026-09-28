@@ -44,7 +44,6 @@ from ..utils.import_utils import (
     resolve_internal_import,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
-from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -108,7 +107,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     version_json = os.path.join(cuda_home, "version.json")
     if os.path.isfile(version_json):
         try:
-            with open(version_json) as f:
+            with open(version_json, encoding="utf-8") as f:
                 components = json.load(f)
             version = components.get("cuda_nvcc", components.get("cuda", {})).get("version", "")
             major, minor = version.split(".")[:2]
@@ -119,7 +118,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     version_txt = os.path.join(cuda_home, "version.txt")
     if os.path.isfile(version_txt):
         try:
-            with open(version_txt) as f:
+            with open(version_txt, encoding="utf-8") as f:
                 match = re.search(r"CUDA Version (\d+)\.(\d+)", f.read())
             if match:
                 return int(match.group(1)), int(match.group(2))
@@ -130,7 +129,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     cuda_h = os.path.join(cuda_home, "include", "cuda.h")
     if os.path.isfile(cuda_h):
         try:
-            with open(cuda_h) as f:
+            with open(cuda_h, encoding="utf-8") as f:
                 match = re.search(r"#define CUDA_VERSION (\d+)", f.read())
             if match:
                 cuda_version = int(match.group(1))
@@ -505,6 +504,7 @@ def _dispatch_routed_input(
     num_experts: int,
     m_alignment: int,
     use_psum_layout: bool,
+    is_expert_parallel: bool,
 ) -> tuple:
     """Sort tokens by expert id and build the M-grouped padded layout.
 
@@ -534,8 +534,10 @@ def _dispatch_routed_input(
     # keeps any per-row gather (e.g. bias) in-bounds — bias added at sentinel positions falls
     # in rows the kernel skips, so harmless. Safe to mutate now: the layout was built from the
     # unclamped tensor and nothing downstream needs the sentinel info from `expert_ids_g` itself.
-    sentinel_mask = (expert_ids_g >= num_experts).unsqueeze(-1)
-    expert_ids_g.clamp_(max=num_experts - 1)
+    sentinel_mask = None
+    if is_expert_parallel:
+        sentinel_mask = (expert_ids_g >= num_experts).unsqueeze(-1)
+        expert_ids_g.clamp_(max=num_experts - 1)
     return (
         sorted_hidden_states_g,
         sample_weights_g,
@@ -551,7 +553,7 @@ def _dispatch_routed_input(
 def _combine_routed_output(
     out_padded: torch.Tensor,
     sorted_weights: torch.Tensor,
-    sentinel_mask: torch.Tensor,
+    sentinel_mask: torch.Tensor | None,
     perm: torch.Tensor,
     sorted_to_padded: torch.Tensor,
     num_tokens: int,
@@ -564,7 +566,8 @@ def _combine_routed_output(
     weighted = out * sorted_weights.to(out.dtype).unsqueeze(-1)
     # Sentinel rows past the valid expert blocks may carry NaN from allocator
     # reuse (`0 * NaN = NaN`); zero them so the top-k reduction stays finite.
-    weighted.masked_fill_(sentinel_mask, 0.0)
+    if sentinel_mask is not None:
+        weighted.masked_fill_(sentinel_mask, 0.0)
     inv_perm = torch.empty_like(perm)
     inv_perm[perm] = torch.arange(perm.size(0), device=out.device)
     # Deterministic reshape+sum (index_add_ with duplicates is non-deterministic on CUDA).
@@ -647,13 +650,19 @@ def deepgemm_bf16_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.num_experts,
+        deepgemm.m_alignment,
+        is_sm100(),
+        is_expert_parallel=self._is_expert_parallel,
     )
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_down = to_local(self.down_proj)
-    up_bias = to_local(self.gate_up_proj_bias if self.has_gate else self.up_proj_bias) if self.has_bias else None
-    down_bias = to_local(self.down_proj_bias) if self.has_bias else None
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_down = self.down_proj
+    up_bias = (self.gate_up_proj_bias if self.has_gate else self.up_proj_bias) if self.has_bias else None
+    down_bias = self.down_proj_bias if self.has_bias else None
 
     # Up projection.
     up_out_dim = weight_up.shape[-1] if self.is_transposed else weight_up.shape[1]
@@ -717,10 +726,10 @@ def deepgemm_fp8_fp4_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    weight_down = to_local(self.down_proj)
-    weight_scale_down = to_local(self.down_proj_scale_inv)
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    weight_down = self.down_proj
+    weight_scale_down = self.down_proj_scale_inv
 
     cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, self.block_size, is_sm100())
     (
@@ -733,7 +742,13 @@ def deepgemm_fp8_fp4_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.num_experts,
+        deepgemm.m_alignment,
+        is_sm100(),
+        is_expert_parallel=self._is_expert_parallel,
     )
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 
@@ -795,11 +810,11 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     side Parameters — the kernel takes raw pointers.
     """
     deepgemm = load_deepgemm_kernel()
-    gate_up_sf_raw = to_local(module.gate_up_proj_scale_inv.data)
-    down_sf_raw = to_local(module.down_proj_scale_inv.data)
+    gate_up_sf_raw = module.gate_up_proj_scale_inv.data
+    down_sf_raw = module.down_proj_scale_inv.data
     # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
-    gate_up_w = to_local(module.gate_up_proj.data).view(torch.int8).contiguous()
-    down_w = to_local(module.down_proj.data).view(torch.int8).contiguous()
+    gate_up_w = module.gate_up_proj.data.view(torch.int8).contiguous()
+    down_w = module.down_proj.data.view(torch.int8).contiguous()
 
     intermediate_hidden = module.intermediate_dim
     num_local_experts = module.num_experts

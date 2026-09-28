@@ -150,7 +150,6 @@ class LagunaConfig(Qwen2MoeConfig):
         )
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
 
     def validate_architecture(self):

@@ -13,8 +13,10 @@
 # limitations under the License.
 from __future__ import annotations
 
+import copy
 import os
 import re
+import sys
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -89,12 +91,6 @@ class GradientCheckpointingLayer(nn.Module):
 
             if not self._can_checkpoint_with_cache:
                 # different names for the same thing in different layers
-                # TODO cyril: this one without `S` can be removed after deprecation cycle
-                if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
-                    kwargs["past_key_value"] = None
-                    message += " `past_key_value=None`,"
-                    do_warn = True
-
                 if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
                     kwargs["past_key_values"] = None
                     message += " `past_key_values=None`,"
@@ -408,6 +404,11 @@ class MtpModel(PreTrainedModel):
         """Tie the embedding/head/rotary layer with the main model."""
         # The embeddings and head are shared between main model and MTP layers
         self.embed_tokens = main_model.get_input_embeddings()
+        # Some models may subclass nn.Embedding directly, but here we do not want the added norm (note that we cannot simply set it to
+        # nn.Identity, as it would modify the main model inplace as well)
+        if hasattr(self.embed_tokens, "embed_norm"):
+            self.embed_tokens = copy.deepcopy(self.embed_tokens)
+            self.embed_tokens.embed_norm = nn.Identity()
         self.shared_head = main_model.lm_head
         # Use the same rotary class (it only has non-persistent buffers); models with learned
         # position biases (e.g. Inkling) have none
@@ -429,12 +430,13 @@ class MtpModel(PreTrainedModel):
         self, layer_idx: int, inputs_embeds: torch.Tensor, mtp_cache: MtpCache, position_ids: torch.Tensor
     ):
         """
-        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_type`
-        attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
+        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_types` from the MTP config
+        if defined, and otherwise uses full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
+        layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
         mask_kwargs = {
-            "config": self.config,
+            "config": layer_config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": None,
             "past_key_values": mtp_cache,
@@ -443,7 +445,8 @@ class MtpModel(PreTrainedModel):
             "layer_idx": layer_idx,
         }
 
-        mtp_layer_type = getattr(self.layers[layer_idx], "layer_type", None)
+        mtp_layer_types = getattr(self.config, "layer_types", None)
+        mtp_layer_type = mtp_layer_types[layer_idx] if mtp_layer_types is not None else None
         masks = {}
         if mtp_layer_type is not None and mtp_layer_type in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING:
             mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[mtp_layer_type]
@@ -548,7 +551,8 @@ class MtpModel(PreTrainedModel):
 
             # Roll by 1 and append for next layer
             input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
-            attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
+            if attention_mask is not None:
+                attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
             position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
 
             # Need to cat ful_ids as well for the processors
@@ -605,8 +609,12 @@ class MtpModel(PreTrainedModel):
         # Open the files, get the slices corresponding only to mtp weights, rename them, and load them
         mtp_state_dict = {}
         all_pointer = set()
+        is_mps = device_map is not None and any(
+            (d.type if isinstance(d, torch.device) else d) == "mps" for d in device_map.values()
+        )
+        backend = "pread" if is_mps or sys.platform == "win32" else "mmap"
         for file in mtp_files:
-            file_pointer = safe_open(file, framework="pt", device="cpu")
+            file_pointer = safe_open(file, framework="pt", device="cpu", backend=backend)
             all_pointer.add(file_pointer)
             for k in file_pointer.keys():
                 # It's one of the mtp weights
@@ -635,7 +643,6 @@ class MtpModel(PreTrainedModel):
             load_config=LoadStateDictConfig(
                 weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
             ),
-            tp_plan=None,
         )
         # finally close all opened file pointers
         for k in all_pointer:

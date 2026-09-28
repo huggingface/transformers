@@ -20,7 +20,7 @@ A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templat
 
 ```jinja
 {%- for message in messages %}
-    {{- '<|' + message['role'] + |>\n' }}
+    {{- '<|' + message['role'] + '|>\n' }}
     {{- message['content'] + eos_token }}
 {%- endfor %}
 {%- if add_generation_prompt %}
