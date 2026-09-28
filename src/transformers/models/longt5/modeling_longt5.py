@@ -212,15 +212,8 @@ def _make_global_fixed_block_ids(
     # [batch_size, seq_len]
     global_block_ids = handle_orphan_tokens(global_block_ids)
     num_globals = seq_len // global_block_size
-    # [batch_size, seq_len // global_block_size]
-    if num_globals > 0:
-        _sequence_block_ids_max = torch.max(global_block_ids, dim=-1).values.repeat(num_globals, 1).transpose(0, 1)
-    else:
-        _sequence_block_ids_max = torch.zeros(
-            batch_size, 0, dtype=global_block_ids.dtype, device=global_block_ids.device
-        )
-    global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
-    global_segment_ids = global_segment_ids.to(attention_mask.device)
+    _sequence_block_ids_max = torch.max(global_block_ids, dim=-1).values.unsqueeze(-1)
+    global_segment_ids = torch.arange(num_globals, device=attention_mask.device).unsqueeze(0).expand(batch_size, -1)
     global_segment_ids = torch.where(global_segment_ids <= _sequence_block_ids_max, 1, 0)
     return global_block_ids.type(torch.int), global_segment_ids.type(torch.int)
 
