@@ -270,6 +270,7 @@ class CvtModelIntegrationTest(unittest.TestCase):
         expected_slice = Expectations(
             {
                 (None, None): torch.tensor([0.9282, 0.9025, -0.3145]),
+                ("cuda", 8): torch.tensor([0.9280, 0.9023, -0.3142]),
                 ("xpu", 5): torch.tensor([0.92800, 0.9023, -0.3142]),
             }
         ).get_expectation().to(torch_device)

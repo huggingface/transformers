@@ -113,8 +113,9 @@ def _parse_type_hint(hint: str) -> dict:
         if len(subtypes) == 1:
             # A single non-null type can be expressed directly
             return_dict = subtypes[0]
-        elif all("type" in subtype and isinstance(subtype["type"], str) for subtype in subtypes):
-            # A union of basic types can be expressed as a list in the schema
+        elif all(subtype.keys() == {"type"} and isinstance(subtype["type"], str) for subtype in subtypes):
+            # A union of basic types can be expressed as a list in the schema. Subtypes carrying extra keys
+            # (`items`, `enum`, `prefixItems`, ...) must go through `anyOf` so that information is not lost
             return_dict = {"type": sorted([subtype["type"] for subtype in subtypes])}
         else:
             # A union of more complex types requires "anyOf"

@@ -30,8 +30,8 @@ from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
+    get_device_type,
     is_kernels_available,
-    is_rocm_platform,
     is_torch_available,
     is_torchdynamo_compiling,
     is_torchdynamo_exporting,
@@ -939,13 +939,8 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
-    def get_device(device_type):
-        if device_type == "cuda" and is_rocm_platform():
-            device_type = "rocm"
-        return Device(type=device_type)
-
     mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
-    device = get_device(model.device.type)
+    device = Device(type=get_device_type(model.device))
 
     if model.kernel_config is not None:
         inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
