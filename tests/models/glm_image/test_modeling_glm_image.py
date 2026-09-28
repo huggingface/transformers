@@ -337,10 +337,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="GlmImage needs special input preparation to pass this test")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
     @unittest.skip(
         reason="GlmImage is a multimodal model that requires pixel_values and image_grid_thw. "
         "This test drops all inputs except input_ids which causes NoneType iteration error."

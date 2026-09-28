@@ -159,6 +159,8 @@ class VLMModelTest(MultiModalModelTest):
             smaller_input_dict.update({k: v for k, v in curr_input_dict.items() if k not in smaller_input_dict})
             if "mm_token_type_ids" in curr_input_dict:
                 smaller_input_dict["mm_token_type_ids"] = curr_input_dict["mm_token_type_ids"]
+            elif "token_type_ids" in curr_input_dict:
+                smaller_input_dict["token_type_ids"] = curr_input_dict["token_type_ids"]
             with self.assertRaises(ValueError):
                 _ = model(**smaller_input_dict)
 
@@ -186,6 +188,8 @@ class VLMModelTest(MultiModalModelTest):
             double_input_dict.update({k: v for k, v in curr_input_dict.items() if k not in double_input_dict})
             if "mm_token_type_ids" in curr_input_dict:
                 double_input_dict["mm_token_type_ids"] = curr_input_dict["mm_token_type_ids"]
+            elif "token_type_ids" in curr_input_dict:
+                double_input_dict["token_type_ids"] = curr_input_dict["token_type_ids"]
             _ = model(**double_input_dict)
 
     @unittest.skip(

@@ -717,12 +717,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             text_config={"activation_sparsity_pattern": None},
         )
 
-    @unittest.skip(
-        reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
-    )
-    def test_flex_attention_with_grads(self):
-        pass
-
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -731,19 +725,15 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 

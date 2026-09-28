@@ -15,8 +15,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import (
     AutoProcessor,
     MiniCPMV4_7Config,
@@ -307,11 +305,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
             "pixel_values_videos": inputs_dict["pixel_values"],
             "target_sizes_videos": inputs_dict["target_sizes"],
         }
-
-    @unittest.skip(reason="Compile not yet supported for MiniCPM-V models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
 
     @unittest.skip(
         reason="NaViT packs all images into a single tensor (batch dim=1); "

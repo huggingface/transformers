@@ -110,12 +110,6 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip(
-        "Gemma3 has no base model prefix which causes issues when loading base model from saved task model checkpoint"
-    )
-    def test_load_with_mismatched_shapes(self):
-        pass
-
     def test_bidirectional_sliding_window_survives_save_and_reload(self):
         config = Gemma3TextConfig(sliding_window=512, use_bidirectional_attention=True)
         self.assertEqual(config.sliding_window, 257)
@@ -309,10 +303,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
-
-    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
-    def test_load_with_mismatched_shapes(self):
-        pass
 
     def test_automodelforcausallm(self):
         """
