@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import functools
 import gc
 import itertools
@@ -125,7 +126,11 @@ def flush_memory(flush_compile: bool = True) -> None:
 
 
 def get_tokenizer_and_model(
-    model_id: str, attn_implementation: str, device: str, dtype: str | torch.dtype = "auto"
+    model_id: str,
+    attn_implementation: str,
+    device: str,
+    dtype: str | torch.dtype = "auto",
+    upcast_lm_head: bool = False,
 ) -> tuple[AutoTokenizer, GenerationMixin]:
     """Returns a tokenizer and a model for the given model ID. Attributes to setup the models (attn_implementation,
     dtype and device) are needed as arguments."""
@@ -133,9 +138,15 @@ def get_tokenizer_and_model(
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
     if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
         tokenizer.pad_token = tokenizer.eos_token
-    # Load model on CPU
+    # Load model
     model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, torch_dtype=dtype)
     model = model.to(device).eval()
+    # If needed, upcast the lm_head to fp32 for added precision. This helps break ties in bf16 that would lead to token
+    # # divergence between CB and generate, while not affecting the rest of the model: if there is a real divergence in
+    # # the model, it will accumulate over layers, and having a more precise LM head will not close the gap.
+    if upcast_lm_head:
+        model.lm_head = copy.deepcopy(model.lm_head).to(torch.float32)  # copy in case embedding are tied
+        model.lm_head.register_forward_pre_hook(lambda m, args: (args[0].float(), *args[1:]))
     return tokenizer, model
 
 
@@ -1181,7 +1192,6 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
 
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
-
     def flexible_flash_skip(self, attn_implementation: str) -> None:
         """Skip the test if Flash Attention 2 or 3 is required but not available."""
         is_fa2 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
@@ -1191,7 +1201,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         is_fa3 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=3)
         if is_fa3 and not is_flash_attn_3_available(kernels_fallback_ok=True):
             self.skipTest("Flash Attention 3 is not available, as a package or through `kernels`. Skipping test.")
-
 
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
@@ -1205,7 +1214,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         attn_implementation: str,
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
-        compare_to_fp32_eager: bool = False,
+        upcast_lm_head: bool = False,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -1224,11 +1233,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
         # continuous batching but not in generate
+        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
         dtype = "auto" if is_fa else torch.float32
 
         # Prepare inputs (add paged| prefix so that eager or sdpa is not overridden by flash)
         paged_attn_implem = ("paged|" if "paged|" not in attn_implementation else "") + attn_implementation
-        tokenizer, model = get_tokenizer_and_model(model_id, paged_attn_implem, torch_device, dtype)
+        tokenizer, model = get_tokenizer_and_model(model_id, paged_attn_implem, torch_device, dtype, upcast_lm_head)
         if (
             attn_implementation == "flash_attention_2"
             and torch_device == "cpu"
@@ -1259,26 +1269,18 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             flush_memory(flush_compile=True)
 
         # Generation without continuous batching (reload model to avoid any state contamination)
-        if compare_to_fp32_eager:
-            non_paged_attn_implem = "eager"
-            dtype = torch.float32
-        else:
-            non_paged_attn_implem = attn_implementation.replace("paged|", "")
-
-        _, model = get_tokenizer_and_model(model_id, non_paged_attn_implem, torch_device, dtype)
+        non_paged_attn_implem = attn_implementation.replace("paged|", "")
+        _, model = get_tokenizer_and_model(model_id, non_paged_attn_implem, torch_device, dtype, upcast_lm_head)
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
 
-        # The fp32 eager reference stays a plain generate: flash + StaticCache (needed to compile a regular generate)
-        # can flip an early greedy tie in bf16, whereas eager float32 tracks the true greedy path.
+        model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
+        model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
+        # Create a static cache if compile_config is set, because regular generate requires a compileable cache
         past_key_values = None
-        if not compare_to_fp32_eager:
-            model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
-            model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
-            # Create a static cache if compile_config is set, because regular generate requires a compileable cache
-            if model.generation_config.compile_config is not None:
-                max_cache_len = num_input_tokens + max_new_tokens
-                past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
+        if model.generation_config.compile_config is not None:
+            max_cache_len = num_input_tokens + max_new_tokens
+            past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
 
         generate_outputs = model.generate(
             **inputs.to(torch_device), generation_config=model.generation_config, past_key_values=past_key_values
@@ -1350,12 +1352,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=use_cuda_graph,
             default_compile_level=1,
         )
-        # Flash + compile forces a StaticCache reference that can flip an early greedy tie in bf16: use fp32 eager
+        # Flash runs in bf16, where compile and padding can flip near-tied greedy picks: upcast the lm_head
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
             attn_implementation=attn_implementation,
-            compare_to_fp32_eager=is_flash_attention_requested(requested_attention_implementation=attn_implementation),
+            upcast_lm_head=is_flash_attention_requested(requested_attention_implementation=attn_implementation),
         )
 
     @parameterized.expand(
@@ -2044,7 +2046,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     ) -> None:
         # Again, we try to not overly use_compile because it adds a lot of overhead
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        # Flash + compile forces a StaticCache reference that can flip an early greedy tie in bf16: use fp32 eager
+        # Flash runs in bf16, where compile and padding can flip near-tied greedy picks: upcast the lm_head
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -2055,7 +2057,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 default_compile_level=1 if use_compile else 0,
             ),
             attn_implementation=attn_implementation,
-            compare_to_fp32_eager=is_fa and use_compile,
+            upcast_lm_head=is_fa and use_compile,
         )
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
@@ -2064,7 +2066,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_flash_attn_with_kvcache_parity(self, use_cuda_graph: bool, use_async: bool) -> None:
         """Test that paged flash_attn3 (flash_attn_with_kvcache path) produces same outputs as varlen."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        tokenizer, model = get_tokenizer_and_model(model_id, "flash_attention_2", torch_device, torch.bfloat16)
+        # Upcast the lm_head: in bf16, near-tied logits round to the same value and padding (CUDA graphs) flips greedy picks
+        tokenizer, model = get_tokenizer_and_model(
+            model_id, "flash_attention_2", torch_device, torch.bfloat16, upcast_lm_head=True
+        )
         user_messages = _DEFAULT_USER_MESSAGES[:]
         input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
@@ -2519,7 +2524,7 @@ def _tp_continuous_batching_worker(
         model_id,
         attn_implementation=attn_implementation,
         distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
-        dtype=torch.float32,
+        dtype="auto",
     ).eval()
 
     # Direct broadcast tests: only rank 0's value should propagate to every TP rank
@@ -2609,7 +2614,7 @@ def _tp_cancellation_worker(
         model_id,
         attn_implementation=attn_implementation,
         distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
-        dtype=torch.float32,
+        dtype="auto",
     ).eval()
 
     chat = [{"role": "user", "content": "Tell me a long story about a robot exploring the galaxy."}]
@@ -2682,7 +2687,7 @@ def _tp_pause_generation_worker(
         model_id,
         attn_implementation=attn_implementation,
         distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
-        dtype=torch.float32,
+        dtype="auto",
     ).eval()
 
     chats = [[{"role": "user", "content": message}] for message in _DEFAULT_USER_MESSAGES]
@@ -2792,7 +2797,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         """Spawn `_tp_continuous_batching_worker` on `tp_size` NCCL processes with sensible defaults."""
         defaults = {
             "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "attn_implementation": "paged|sdpa",
+            "attn_implementation": "flash_attention_2",
             "max_new_tokens": max_new_tokens,
             "do_sample": False,
             "seed": 42,
@@ -2812,7 +2817,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         iterations, and that pausing repeatedly mid-generation loses no request and does not make the ranks diverge."""
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_pause_generation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            attn_implementation="paged|sdpa",
+            attn_implementation="flash_attention_2",
             max_new_tokens=20,
             num_pauses=5,
             skew_seconds=0.25,
@@ -2849,7 +2854,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            attn_implementation="paged|sdpa",
+            attn_implementation="flash_attention_2",
         )
 
     @slow
@@ -2858,7 +2863,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            attn_implementation="paged|sdpa",
+            attn_implementation="flash_attention_2",
             use_async_batching=True,
             use_cuda_graph=True,
         )
