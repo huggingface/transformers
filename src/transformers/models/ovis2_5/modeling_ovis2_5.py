@@ -721,6 +721,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
 
         image_hidden_states = None
         video_hidden_states = None
+        visual_features = None
         visual_indicator_features = None
         boundary_token_ids = ()
         indicator_indexes = ()
@@ -733,19 +734,11 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 **kwargs,
             )
             image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0)
+            visual_features = image_hidden_states
             visual_indicator_features = image_outputs.visual_indicator_features
             boundary_token_ids = (self.config.image_start_token_id, self.config.image_end_token_id)
             indicator_indexes = (0, 1)
             num_visual_inputs = len(image_outputs.pooler_output)
-            image_mask, _ = self.get_placeholder_mask(
-                input_ids,
-                inputs_embeds=merged_inputs_embeds,
-                image_features=image_hidden_states,
-            )
-            merged_inputs_embeds = merged_inputs_embeds.masked_scatter(
-                image_mask,
-                image_hidden_states.to(merged_inputs_embeds.device, merged_inputs_embeds.dtype),
-            )
         elif pixel_values_videos is not None:
             video_outputs = self.get_video_features(
                 pixel_values_videos=pixel_values_videos,
@@ -754,18 +747,23 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 **kwargs,
             )
             video_hidden_states = torch.cat(video_outputs.pooler_output, dim=0)
+            visual_features = video_hidden_states
             visual_indicator_features = video_outputs.visual_indicator_features
             boundary_token_ids = (self.config.video_start_token_id, self.config.video_end_token_id)
             indicator_indexes = (2, 3)
             num_visual_inputs = len(video_outputs.pooler_output)
-            _, video_mask = self.get_placeholder_mask(
+
+        if visual_features is not None:
+            image_mask, video_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=merged_inputs_embeds,
+                image_features=image_hidden_states,
                 video_features=video_hidden_states,
             )
+            visual_mask = image_mask if image_hidden_states is not None else video_mask
             merged_inputs_embeds = merged_inputs_embeds.masked_scatter(
-                video_mask,
-                video_hidden_states.to(merged_inputs_embeds.device, merged_inputs_embeds.dtype),
+                visual_mask,
+                visual_features.to(merged_inputs_embeds.device, merged_inputs_embeds.dtype),
             )
 
         if visual_indicator_features is not None:
