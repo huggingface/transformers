@@ -465,6 +465,10 @@ class Trainer:
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
 
+        # Sharded at load time by `from_pretrained(distributed_config=...)`, whatever the parallelism: the model owns
+        # its placement and gradient reduction, so Accelerate must not wrap or shard it again.
+        self.is_distributed_loading_by_transformers = getattr(model, "is_distributed_loading_by_transformers", False)
+
         self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
         if args.fsdp:
             if self.is_deepspeed_enabled:
@@ -486,7 +490,7 @@ class Trainer:
             or is_sagemaker_mp_enabled()
             # Sharded at load time (`DistributedConfig`): the model manages its own placement, and
             # `.to()` on FSDP2-managed (possibly CPU-offloaded) parameters raises in `_apply`.
-            or getattr(model, "_device_mesh", None) is not None
+            or self.is_distributed_loading_by_transformers
         ):
             self.place_model_on_device = False
         else:
@@ -627,7 +631,7 @@ class Trainer:
         # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
         self._mixed_mesh_grads: bool | None = None
         if (
-            getattr(model, "_device_mesh", None) is not None
+            self.is_distributed_loading_by_transformers
             and args.save_strategy != SaveStrategy.NO
             and not args.save_only_model
         ):
@@ -1723,14 +1727,9 @@ class Trainer:
         use_accelerator_prepare = model is self.model
 
         # prepare using `accelerator` prepare
-        if (
-            getattr(model, "_is_fsdp_managed_module", False)
-            and not self.is_fsdp_enabled
-            and not self.is_deepspeed_enabled
-        ):
-            # Sharded at load time (`DistributedConfig` with FSDP2 or expert-parallel token dispatch): the model
-            # already owns placement and gradient reduction. Prepare autocast and compilation only, without
-            # asking Accelerate to wrap the DTensor parameters in DDP or to shard them again.
+        if self.is_distributed_loading_by_transformers:
+            # The model already owns placement and gradient reduction. Prepare autocast and compilation only,
+            # without asking Accelerate to wrap the DTensor parameters in DDP or to shard them again.
             model = self.accelerator.prepare_model(model, device_placement=False, evaluation_mode=True)
             self.optimizer = self.accelerator.prepare(self.optimizer)
             self._sync_replicated_trainable_parameters(model)
@@ -4088,7 +4087,7 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif getattr(self.model, "_device_mesh", None) is not None and not _is_peft_model(self.model):
+        elif self.is_distributed_loading_by_transformers and not _is_peft_model(self.model):
             # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
             # is collective, so every rank saves; only the main process writes, the others leave at the
             # closing barrier. (PEFT models fall through to the adapter-only save below.)
