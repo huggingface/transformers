@@ -67,7 +67,6 @@ class ModelRunner:
         self.cb_config = cb_config
         self.inputs_and_outputs = inputs_and_outputs
         self.device = inputs_and_outputs.device
-        self.device_module = inputs_and_outputs.device_module
         # Helper attributes
         self.do_sample = do_sample
         self.return_logprobs = return_logprobs
@@ -82,7 +81,7 @@ class ModelRunner:
 
         # Set up the graph pool. This allows all graphs to share the same memory pool, greatly saving memory.
         if self.use_cuda_graph_varlen or self.use_cuda_graph_decode:
-            self.mem_pool, self.graph_pool_id = get_cuda_graph_pools(self.device)
+            self.mem_pool, self.graph_pool_id = get_cuda_graph_pools()
         else:
             self.mem_pool, self.graph_pool_id = None, None
 

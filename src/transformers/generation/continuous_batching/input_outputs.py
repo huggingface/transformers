@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from contextlib import AbstractContextManager
 from functools import partial
 from itertools import repeat
 from typing import TypedDict
@@ -31,6 +32,7 @@ from .utils import (
     attn_mask_is_needed,
     build_attention_mask,
     device_stream_ctx,
+    get_available_device_module,
     pad_to_pow2,
 )
 
@@ -102,7 +104,6 @@ class ContinuousBatchingIOs:
         # Memoize attributes
         self.cache = cache
         self.device = device
-        self.device_module = torch.get_device_module(device) if device.type in ("cuda", "xpu") else None
         self.config = config
         self.model_dtype = model_dtype
         self.max_requests_per_batch = continuous_batching_config.max_requests_per_batch
@@ -122,7 +123,8 @@ class ContinuousBatchingIOs:
         # Setup static tensors and compute stream
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
-        self.compute_stream = self.device_module.Stream(device=self.device) if self.device_module is not None else None
+        device_module = get_available_device_module(device)
+        self.compute_stream = device_module.Stream(device=self.device) if device_module is not None else None
 
     def _setup_static_tensors(self, logit_processor: ContinuousBatchingLogitsProcessorList) -> None:
         """Allocates static tensors for generation inputs and outputs. This is called only once at init time, to avoid
@@ -232,8 +234,7 @@ class ContinuousBatchingIOs:
         other.max_seqlen_q = self.max_seqlen_q
         other.max_seqlen_k = dict(self.max_seqlen_k)
         # Transfer static tensors
-        maybe_stream = device_stream_ctx(stream)
-        with maybe_stream:
+        with device_stream_ctx(stream):
             other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             # Only transfer block_table for decode-only batches (when it's actually used)
             if self.use_block_table:
@@ -317,7 +318,7 @@ class ContinuousBatchingIOs:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
 
-    def compute_stream_ctx(self):
+    def compute_stream_ctx(self) -> AbstractContextManager:
         return device_stream_ctx(self.compute_stream)
 
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
@@ -606,10 +607,11 @@ class HostDeviceIOPair:
             model_dtype=model_dtype,
             logit_processor=logit_processor,
         )
-        self.device_module = torch.get_device_module(device)
-        self.h2d_over = self.device_module.Event()
-        self.compute_over = self.device_module.Event()
-        self.d2h_over = self.device_module.Event()
+        # Create events only on available accelerator devices.
+        device_module = get_available_device_module(device)
+        self.h2d_over = device_module.Event() if device_module is not None else None
+        self.compute_over = device_module.Event() if device_module is not None else None
+        self.d2h_over = device_module.Event() if device_module is not None else None
 
     def reset(self) -> None:
         self.host_io.reset()
@@ -622,8 +624,7 @@ class HostDeviceIOPair:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
 
     def transfer_outputs_d2h(self, stream: torch.cuda.Stream | None) -> None:
-        maybe_stream = device_stream_ctx(stream)
-        with maybe_stream:
+        with device_stream_ctx(stream):
             self.host_io.output_ids.copy_(self.device_io.output_ids, non_blocking=True)
 
 
@@ -683,8 +684,9 @@ class ContinuousBatchingAsyncIOs:
         logit_processor: ContinuousBatchingLogitsProcessorList,
     ) -> None:
         self.device = device
-        self.device_module = torch.get_device_module(device)
-        if not self.device_module.is_available():
+        # Async batching needs streams to function, so check the target device is available.
+        device_module = get_available_device_module(device)
+        if device_module is None:
             raise RuntimeError(f"Async batching requires an available {device.type} device.")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
@@ -700,9 +702,9 @@ class ContinuousBatchingAsyncIOs:
             for _ in range(2)
         ]
         # CUDA streams
-        self.h2d_stream = self.device_module.Stream(device=device)
-        self.d2h_stream = self.device_module.Stream(device=device)
-        self.compute_stream = self.device_module.Stream(device=device)
+        self.h2d_stream = device_module.Stream(device=device)
+        self.d2h_stream = device_module.Stream(device=device)
+        self.compute_stream = device_module.Stream(device=device)
         # Set all unused compute streams to None
         self.io_pairs[0].host_io.compute_stream = None
         self.io_pairs[0].device_io.compute_stream = None
@@ -822,7 +824,7 @@ class ContinuousBatchingAsyncIOs:
         # Swap IO pair
         self.swap_io_pairs()
 
-    def compute_stream_ctx(self):
+    def compute_stream_ctx(self) -> AbstractContextManager:
         return device_stream_ctx(self.compute_stream)
 
     def swap_io_pairs(self) -> None:

@@ -67,13 +67,11 @@ class OffloadingManager:
         scheduler: Scheduler,
         cpu_offload_space_gib: float | None,
         safety_threshold: float,
-        compute_stream,
+        compute_stream: torch.cuda.Stream | None,
         distributed_helper: DistributedHelper,
     ) -> None:
         self.cache = cache
         self.scheduler = scheduler
-        cache_device = torch.device(cache.device)
-        self.device_module = torch.get_device_module(cache_device) if cache_device.type in ("cuda", "xpu") else None
         # All offloading transfers run on the compute stream (stream-ordered, like the fork copy path)
         self._compute_stream = compute_stream
 

@@ -63,7 +63,7 @@ from transformers.generation.continuous_batching.requests import (
     get_device_and_memory_breakdown,
 )
 from transformers.generation.continuous_batching.utils import (
-    SUPPORTED_CUDA_GRAPH_DEVICE_TYPES,
+    DEVICE_TYPE_TO_GRAPH_NAME,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -1214,10 +1214,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         if is_fa and not is_flash_attn_2_available(kernels_fallback_ok=True):
             self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
         # Skip the test if CUDA graph is on but the device does not support graph capture.
-        if (
-            any(continuous_batching_config.cuda_graph_booleans)
-            and torch_device not in SUPPORTED_CUDA_GRAPH_DEVICE_TYPES
-        ):
+        if any(continuous_batching_config.cuda_graph_booleans) and torch_device not in DEVICE_TYPE_TO_GRAPH_NAME:
             self.skipTest("CUDA graph is only supported on CUDA or XPU devices. Skipping test.")
 
         # If the config turns on compile, change the generation config to use the default mode instead of
@@ -1280,7 +1277,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         if not compare_to_fp32_eager:
             model.generation_config.use_cuda_graph = (
                 any(continuous_batching_config.cuda_graph_booleans)
-                if torch_device in SUPPORTED_CUDA_GRAPH_DEVICE_TYPES
+                if torch_device in DEVICE_TYPE_TO_GRAPH_NAME
                 else False
             )
             model.generation_config.compile_config = continuous_batching_config.varlen_compile_config

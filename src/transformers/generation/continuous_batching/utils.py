@@ -24,15 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from .requests import FutureRequestState, RequestState, RequestStatus
 
 
-SUPPORTED_CUDA_GRAPH_DEVICE_TYPES = ("cuda", "xpu")
-
-
-def _get_graph_class_name(device_type: str) -> str:
-    if device_type == "cuda":
-        return "CUDAGraph"
-    if device_type == "xpu":
-        return "XPUGraph"
-    raise RuntimeError(f"Expected one of {SUPPORTED_CUDA_GRAPH_DEVICE_TYPES}, but got {device_type = }.")
+DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
 
 
 def device_stream_ctx(stream: torch.cuda.Stream | None):
@@ -41,15 +33,32 @@ def device_stream_ctx(stream: torch.cuda.Stream | None):
     return torch.get_device_module(stream.device).stream(stream)
 
 
+def get_available_device_module(device: torch.device):
+    device = torch.device(device)
+    if device.type not in DEVICE_TYPE_TO_GRAPH_NAME:
+        return None
+    try:
+        device_module = torch.get_device_module(device)
+    except RuntimeError:
+        return None
+    is_available = getattr(device_module, "is_available", None)
+    if callable(is_available) and is_available():
+        return device_module
+    return None
+
+
 def is_cuda_graph_available(device: torch.device | None = None) -> bool:
-    device_types = SUPPORTED_CUDA_GRAPH_DEVICE_TYPES if device is None else (torch.device(device).type,)
+    device_types = DEVICE_TYPE_TO_GRAPH_NAME if device is None else (torch.device(device).type,)
     for device_type in device_types:
+        graph_class_name = DEVICE_TYPE_TO_GRAPH_NAME.get(device_type)
+        if graph_class_name is None:
+            continue
         try:
             device_module = torch.get_device_module(device_type)
         except RuntimeError:
             continue
         is_available = getattr(device_module, "is_available", None)
-        required_attrs = (_get_graph_class_name(device_type), "graph", "MemPool", "use_mem_pool")
+        required_attrs = (graph_class_name, "graph", "MemPool", "use_mem_pool")
         if callable(is_available) and is_available() and all(hasattr(device_module, attr) for attr in required_attrs):
             return True
     return False
@@ -58,7 +67,9 @@ def is_cuda_graph_available(device: torch.device | None = None) -> bool:
 def get_cuda_graph(device: torch.device) -> torch.cuda.CUDAGraph:
     device_type = torch.device(device).type
     device_module = torch.get_device_module(device)
-    graph_class_name = _get_graph_class_name(device_type)
+    graph_class_name = DEVICE_TYPE_TO_GRAPH_NAME.get(device_type)
+    if graph_class_name is None:
+        raise RuntimeError(f"Expected one of {tuple(DEVICE_TYPE_TO_GRAPH_NAME)}, but got {device_type = }.")
     graph_class = getattr(device_module, graph_class_name, None)
     if graph_class is None:
         raise RuntimeError(f"Graph capture on {device_type} requires torch.{device_type}.{graph_class_name}.")
@@ -72,9 +83,6 @@ class CudaGraphBuffer:
         self._storage: dict[tuple[int, ...], torch.cuda.CUDAGraph] = {}
 
     def __del__(self) -> None:
-        self.clear()
-
-    def clear(self) -> None:
         while self._storage:
             _, graph = self._storage.popitem()
             graph.reset()
@@ -248,9 +256,9 @@ def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
     return new_states
 
 
-def get_cuda_graph_pools(device: torch.device) -> tuple:
+def get_cuda_graph_pools() -> tuple:
     """Returns a tuple of (mem_pool, graph_pool_id) for CUDA graphs."""
-    device_module = torch.get_device_module(device)
+    device_module = torch.get_device_module()
     mem_pool = device_module.MemPool()
     graph_pool_id = mem_pool.id
     return mem_pool, graph_pool_id
