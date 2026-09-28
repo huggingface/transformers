@@ -175,8 +175,6 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             self.patch_size,
             self.patch_size,
         )
-        kwargs["interp_indices"] = interp_indices
-        kwargs["interp_weights"] = interp_weights.to(self.position_embedding.weight.dtype)
         batch_size, sequence_len, channel, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
         pixel_values = pixel_values.reshape(batch_size * sequence_len, channel, height, width)
@@ -184,14 +182,7 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size * sequence_len, -1)
 
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
-            kwargs=kwargs,
-        )
+        interp_weights = interp_weights.to(self.position_embedding.weight.dtype)
         pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
