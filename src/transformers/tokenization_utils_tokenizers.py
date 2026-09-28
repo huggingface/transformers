@@ -383,8 +383,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
         # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
         kwargs.pop("_spm_precompiled_charsmap", None)
-        # Same for the checkpoint's own pre_tokenizer regex (see convert_to_native_format): already
-        # consumed by model-specific tokenizers that opt in (e.g. Qwen2Tokenizer), not needed otherwise.
+        # Same for the checkpoint's own pre_tokenizer regex (see convert_to_native_format)
         kwargs.pop("_pretokenizer_regex", None)
 
         tokenizer_object = kwargs.pop("tokenizer_object", None)
