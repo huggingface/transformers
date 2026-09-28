@@ -161,11 +161,6 @@ class DistributedMixin:
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
-        if distributed_config.ep_size > 1 and distributed_config.ep_size != distributed_config.tp_size:
-            raise ValueError(
-                "All-reduce expert parallelism requires `ep_size=tp_size` and identical tokens per EP group."
-            )
-
         if distributed_config.tp_size == 1 and distributed_config.fsdp_size == 1 and distributed_config.pp_size == 1:
             return distributed_config, device_map, None
 
