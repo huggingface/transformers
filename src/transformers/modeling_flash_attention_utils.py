@@ -80,6 +80,16 @@ FLASH_ATTN_KERNEL_VERSIONS = {
     "kernels-community/metal-flash-sdpa": 1,
 }
 
+# Devices each hub flash kernel ships builds for, unlisted kernels are assumed to run everywhere
+FLASH_ATTN_KERNEL_DEVICES = {
+    "kernels-community/flash-attn2": ("cuda", "xpu"),
+    "kernels-community/flash-attn3": ("cuda",),
+    "kernels-community/vllm-flash-attn3": ("cuda",),
+    "kernels-community/aiter-flash-attn": ("rocm",),
+    "kernels-community/flash-attn4": ("cuda",),
+    "kernels-community/metal-flash-sdpa": ("mps",),
+}
+
 # Meta information on each mainline FA compatibility:
 #   1. The import structure and availability
 #   2. Device support (with custom ones that use other workarounds, e.g. kernels)
