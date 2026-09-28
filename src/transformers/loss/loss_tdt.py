@@ -14,25 +14,14 @@
 
 import torch
 
+from ..integrations import use_kernel_forward_from_hub
 from ..utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-def _load_tdt_kernel():
-    """Load the `kernels-community/tdt-loss` CUDA kernel from the Hub, or return `None` if it is unavailable."""
-    from ..integrations.hub_kernels import _KERNEL_MODULE_MAPPING, lazy_load_kernel
-
-    try:
-        return lazy_load_kernel("tdt-loss")
-    except Exception as e:
-        # e.g. the Hub is unreachable: fall back to the PyTorch implementation, and don't retry on every call
-        logger.warning_once(f"Could not load the tdt-loss kernel, using the PyTorch implementation: {e}")
-        _KERNEL_MODULE_MAPPING["tdt-loss"] = None
-        return None
-
-
+@use_kernel_forward_from_hub("tdt_loss")
 def tdt_loss(
     token_logits: torch.Tensor,
     duration_logits: torch.Tensor,
@@ -51,8 +40,8 @@ def tdt_loss(
     the token prediction head and the duration prediction head. It uses vectorized anti-diagonal processing for
     efficiency: all (t, u) pairs on each anti-diagonal t+u=n are computed in parallel as batched tensor operations.
 
-    On CUDA, the [`kernels-community/tdt-loss`](https://huggingface.co/kernels-community/tdt-loss) kernel is used
-    when the `kernels` library is installed (disable with `USE_HUB_KERNELS=0`).
+    With `use_kernels=True`, CUDA models use the [`kernels-community/tdt-loss`](https://huggingface.co/kernels-community/tdt-loss)
+    kernel instead, which computes the same loss with fused CUDA kernels.
 
     Args:
         token_logits: Token logits of shape `(batch, T, U+1, vocab_size+1)`.
@@ -76,19 +65,6 @@ def tdt_loss(
     if reduction not in valid_reductions:
         raise ValueError(
             f'Invalid reduction mode "{reduction}". Expected one of {", ".join(repr(r) for r in valid_reductions)}.'
-        )
-
-    if token_logits.is_cuda and (kernel := _load_tdt_kernel()) is not None:
-        return kernel.tdt_loss(
-            token_logits,
-            duration_logits,
-            targets,
-            logit_lengths,
-            target_lengths,
-            durations,
-            blank_token_id,
-            sigma=sigma,
-            reduction=reduction,
         )
 
     device = token_logits.device

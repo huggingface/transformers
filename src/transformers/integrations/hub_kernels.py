@@ -709,6 +709,9 @@ if is_kernels_available():
                     ),
                 },
             },
+            "tdt_loss": {
+                "cuda": LayerRepository(repo_id="kernels-community/tdt-loss", layer_name="TDTLoss", version=1),
+            },
         }
 
         return _KERNEL_MAPPING
@@ -787,7 +790,6 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
     "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
-    "tdt-loss": {"repo_id": "kernels-community/tdt-loss", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
