@@ -77,7 +77,6 @@ def get_tiny_text_config(tester) -> "NemotronHConfig":
         mamba_chunk_size=8,
         n_routed_experts=4,
         num_experts_per_tok=2,
-        use_mamba_kernels=False,
         pad_token_id=tester.pad_token_id,
         bos_token_id=tester.bos_token_id,
         eos_token_id=tester.eos_token_id,
