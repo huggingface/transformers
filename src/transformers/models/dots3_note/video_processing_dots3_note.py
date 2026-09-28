@@ -27,11 +27,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    logging,
-)
+from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
@@ -355,11 +351,12 @@ class Dots3NoteVideoProcessor(BaseVideoProcessor):
             videos_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the video processor.
         Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+            `int`: Number of video patches per video.
         """
         videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        size = videos_kwargs.get("size", None) or self.size
+        min_pixels = size["shortest_edge"]
+        max_pixels = size["longest_edge"]
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
         merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
@@ -382,7 +379,7 @@ class Dots3NoteVideoProcessor(BaseVideoProcessor):
             max_pixels=max_pixels,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        grid_t = num_frames // temporal_patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
         return grid_t * grid_h * grid_w
 
 

@@ -15,8 +15,9 @@ import tempfile
 import unittest
 
 from tokenizers import Tokenizer
-from tokenizers.models import WordLevel
-from tokenizers.pre_tokenizers import WhitespaceSplit
+from tokenizers.decoders import ByteLevel as ByteLevelDecoder
+from tokenizers.models import BPE
+from tokenizers.pre_tokenizers import ByteLevel
 
 from transformers import (
     AutoFeatureExtractor,
@@ -32,6 +33,8 @@ from transformers import (
 )
 from transformers.testing_utils import require_torch, require_torchvision
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_torch_available():
     import torch
@@ -46,7 +49,7 @@ AUDIO_END = "<|audio_comp_end|>"
 
 def get_tiny_tokenizer():
     backend = Tokenizer(
-        WordLevel(
+        BPE(
             vocab={
                 "[UNK]": 0,
                 IMAGE: 1,
@@ -56,14 +59,18 @@ def get_tiny_tokenizer():
                 AUDIO_END: 5,
                 "describe": 6,
                 "plain": 7,
+                **{token: index + 8 for index, token in enumerate(sorted(ByteLevel.alphabet()))},
             },
+            merges=[],
             unk_token="[UNK]",
         )
     )
-    backend.pre_tokenizer = WhitespaceSplit()
+    backend.pre_tokenizer = ByteLevel(add_prefix_space=False)
+    backend.decoder = ByteLevelDecoder()
     return PreTrainedTokenizerFast(
         tokenizer_object=backend,
         unk_token="[UNK]",
+        pad_token="[UNK]",
         additional_special_tokens=[IMAGE, VIDEO, AUDIO_START, AUDIO_PAD, AUDIO_END],
     )
 
@@ -91,7 +98,13 @@ def get_tiny_processor():
 
 @require_torch
 @require_torchvision
-class Dots3NoteProcessorTest(unittest.TestCase):
+class Dots3NoteProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Dots3NoteProcessor
+
+    @classmethod
+    def _setup_from_components(cls):
+        return get_tiny_processor()
+
     def test_component_defaults(self):
         processor = Dots3NoteProcessor(
             image_processor=Dots3NoteImageProcessorPil(),
@@ -160,8 +173,9 @@ class Dots3NoteProcessorTest(unittest.TestCase):
         self.assertNotIn("pixel_values", output)
 
     def test_preserves_text_only_inputs(self):
-        output = get_tiny_processor()(text="plain", add_special_tokens=False)
-        self.assertEqual(output.input_ids, [[7]])
+        processor = get_tiny_processor()
+        output = processor(text="plain", add_special_tokens=False)
+        self.assertEqual(output.input_ids, [processor.tokenizer.encode("plain", add_special_tokens=False)])
         self.assertNotIn("input_features", output)
 
     def test_save_and_reload(self):
@@ -181,7 +195,3 @@ class Dots3NoteProcessorTest(unittest.TestCase):
         for vision_processor in (image_processor, video_processor):
             self.assertEqual(dict(vision_processor.size), {"shortest_edge": 16, "longest_edge": 64})
             self.assertEqual(vision_processor.temporal_patch_size, 1)
-
-
-if __name__ == "__main__":
-    unittest.main()

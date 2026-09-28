@@ -39,6 +39,7 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
 
     model_type = "dots3_note_vision_encoder"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     embed_dim: int = 1536
     hidden_size: int = 1536
@@ -58,20 +59,20 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     mlp_layer_types: list[str] | None = None
     num_local_experts: int = 64
-    num_experts_per_tok: int = 2
-    router_scaling_factor: float = 1.0
+    num_experts_per_tok: int | None = None
+    router_scaling_factor: float | None = None
     adapter_in_dim: int = 1536
     adapter_out_dim: int = 5120
     adapter_merge_size: int = 2
 
     def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "axial", "rope_theta": 10_000.0}
         pyramid_num_routed = kwargs.pop("pyramid_num_routed", None)
         if pyramid_num_routed is None and self.mlp_layer_types is None:
             pyramid_num_routed = [-1] * 25 + list(range(4, 65, 4)) + [64]
-        self.num_experts_per_tok = kwargs.pop("capacity_factor", self.num_experts_per_tok)
-        self.router_scaling_factor = kwargs.pop("router_scale", self.router_scaling_factor)
+        if self.num_experts_per_tok is None:
+            self.num_experts_per_tok = kwargs.get("capacity_factor", 2)
+        if self.router_scaling_factor is None:
+            self.router_scaling_factor = kwargs.get("router_scale", 1.0)
         if pyramid_num_routed is not None:
             self.mlp_layer_types = ["sparse" if count > 0 else "dense" for count in pyramid_num_routed]
             kwargs.setdefault(
@@ -85,6 +86,7 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
         self.hidden_size = self.embed_dim
         self.num_attention_heads = kwargs.pop("num_heads", self.num_attention_heads)
         self.attention_bias = kwargs.pop("use_bias", self.attention_bias)
+        kwargs.pop("is_causal", None)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -155,18 +157,9 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
                 setattr(self, name, whisper_config[legacy_name])
         self.dropout = whisper_config.get("dropout", self.dropout)
         self.attention_dropout = whisper_config.get("attention_dropout", self.attention_dropout)
-        if (attention_backend := kwargs.pop("attention_backend", None)) is not None:
-            kwargs.setdefault("attn_implementation", attention_backend)
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.num_key_value_heads = self.num_attention_heads
-        self.rope_parameters = {
-            "rope_type": "default",
-            "partial_rotary_factor": 0.5,
-            "rope_theta": 10_000.0,
-            **(self.rope_parameters or {}),
-        }
-        rotary_dim = int(self.head_dim * self.rope_parameters["partial_rotary_factor"]) // 2 * 2
-        self.rope_parameters["partial_rotary_factor"] = rotary_dim / self.head_dim
+        kwargs.setdefault("partial_rotary_factor", 0.5)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -276,7 +269,7 @@ class Dots3NoteTextConfig(PreTrainedConfig):
             self.sliding_window = kwargs.pop("sliding_window_size", 512)
 
         if self.layer_types is None:
-            full_attention_type = "full_attention" if use_dsa is False else "deepseek_sparse_attention"
+            full_attention_type = "full_attention" if use_dsa is False else "indexed_attention"
             self.layer_types = [
                 full_attention_type if not use_sliding_window or i < 2 or i % 4 == 1 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
@@ -284,10 +277,10 @@ class Dots3NoteTextConfig(PreTrainedConfig):
         else:
             self.layer_types = list(self.layer_types)
         self.layer_types = [
-            "deepseek_sparse_attention"
+            "indexed_attention"
             if use_dsa is True and layer_type == "full_attention"
             else "full_attention"
-            if use_dsa is False and layer_type == "deepseek_sparse_attention"
+            if use_dsa is False and layer_type == "indexed_attention"
             else layer_type
             for layer_type in self.layer_types
         ]
@@ -322,15 +315,17 @@ class Dots3NoteTextConfig(PreTrainedConfig):
             {i: sliding_config for i, layer_type in enumerate(self.layer_types) if layer_type == "sliding_attention"},
         )
         super().__post_init__(**kwargs)
-        for layer_type in set(self.layer_types):
-            layer_config = self.per_layer_config[layer_type]
-            self.rope_parameters[layer_type]["partial_rotary_factor"] = (
-                layer_config.qk_rope_head_dim / layer_config.head_dim
-            )
 
     def convert_rope_params_to_dict(self, **kwargs):
         # Legacy checkpoints contain null; its compatibility setter would erase the per-layer RoPE parameters.
         kwargs.pop("rope_scaling", None)
+        self.rope_parameters = kwargs.pop("rope_parameters", None) or self.rope_parameters
+        per_layer_config = {int(i): values for i, values in (kwargs.get("per_layer_config") or {}).items()}
+        for layer_type in set(self.layer_types):
+            layer_config = per_layer_config.get(self.layer_types.index(layer_type), {})
+            self.rope_parameters[layer_type]["partial_rotary_factor"] = layer_config.get(
+                "qk_rope_head_dim", self.qk_rope_head_dim
+            ) / layer_config.get("head_dim", self.head_dim)
         return kwargs
 
     def validate_architecture(self):
@@ -348,7 +343,7 @@ class Dots3NoteTextConfig(PreTrainedConfig):
             config = self.per_layer_config[layer_type]
             if config.num_key_value_heads != config.num_attention_heads:
                 raise ValueError("num_key_value_heads must match num_attention_heads")
-            if layer_type == "deepseek_sparse_attention" and config.qk_rope_head_dim > self.index_head_dim:
+            if layer_type == "indexed_attention" and config.qk_rope_head_dim > self.index_head_dim:
                 raise ValueError("qk_rope_head_dim must not exceed index_head_dim")
         if "sliding_attention" in self.layer_types:
             config = self.per_layer_config["sliding_attention"]
@@ -390,22 +385,25 @@ class Dots3NoteConfig(PreTrainedConfig):
                     "attn_implementation",
                     "experts_implementation",
                     "output_attentions",
+                    "num_labels",
+                    "id2label",
+                    "label2id",
                     "name_or_path",
                     "_commit_hash",
                 )
             }
-        for name, config_class in self.sub_configs.items():
-            value = getattr(self, name)
-            if value is None:
-                setattr(self, name, config_class())
-            elif isinstance(value, dict):
-                setattr(self, name, config_class(**value))
+        elif isinstance(self.text_config, dict):
+            self.text_config = Dots3NoteTextConfig(**self.text_config)
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Dots3NoteVisionConfig(**self.vision_config)
+        if isinstance(self.audio_config, dict):
+            self.audio_config = Dots3NoteAudioConfig(**self.audio_config)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
-        if self.vision_config.adapter_out_dim != self.text_config.hidden_size:
+        if self.vision_config is not None and self.vision_config.adapter_out_dim != self.text_config.hidden_size:
             raise ValueError("vision adapter output width must match the text hidden size")
-        if self.audio_config.adapter_output_size != self.text_config.hidden_size:
+        if self.audio_config is not None and self.audio_config.adapter_output_size != self.text_config.hidden_size:
             raise ValueError("audio adapter output width must match the text hidden size")
 
 

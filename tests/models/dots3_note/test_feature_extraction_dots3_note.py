@@ -94,7 +94,3 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
     def test_rejects_wrong_sample_rate(self):
         with self.assertRaisesRegex(ValueError, "sampling rate"):
             self.get_feature_extractor()(torch.zeros(64), sampling_rate=16)
-
-
-if __name__ == "__main__":
-    unittest.main()

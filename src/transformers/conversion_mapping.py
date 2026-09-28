@@ -1122,6 +1122,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"audio_adapter\.proj\.0\.", "audio_adapter.norm."),
             WeightRenaming(r"audio_adapter\.proj\.1\.", "audio_adapter.fc1."),
             WeightRenaming(r"audio_adapter\.proj\.3\.", "audio_adapter.fc2."),
+            WeightRenaming(r"speech_encoder\.", "audio_encoder."),
         ],
         "dots3_note_vision_encoder": [
             WeightRenaming(r"(blocks\.\d+)\.norm_1\.", r"\1.norm1."),
@@ -1144,6 +1145,8 @@ def _build_checkpoint_conversion_mapping():
         ],
         "Dots3NoteModel": [
             WeightRenaming(r"^(embed_tokens|layers|norm)\.", r"language_model.\1."),
+            WeightRenaming(r"^vision_encoder\.", "vision_tower."),
+            WeightRenaming(r"^audio_encoder\.", "audio_tower."),
         ],
         "qwen3_vl_moe": [
             WeightConverter(
