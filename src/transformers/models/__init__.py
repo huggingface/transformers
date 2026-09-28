@@ -112,7 +112,6 @@ if TYPE_CHECKING:
     from .deformable_detr import *
     from .deimv2 import *
     from .deit import *
-    from .deprecated import *
     from .depth_anything import *
     from .depth_pro import *
     from .detr import *
