@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_moss_transcribe_diarize import *
+    from .feature_extraction_moss_transcribe_diarize import *
     from .modeling_moss_transcribe_diarize import *
     from .processing_moss_transcribe_diarize import *
 else:
