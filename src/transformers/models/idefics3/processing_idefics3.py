@@ -110,8 +110,14 @@ class Idefics3Processor(ProcessorMixin):
         )
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop(
+            "return_text_replacement_offsets", output_kwargs["return_text_replacement_offsets"]
+        )
+        # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop(
+            "return_mm_token_type_ids", output_kwargs["return_mm_token_type_ids"]
+        )
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         image_inputs = text_inputs = {}

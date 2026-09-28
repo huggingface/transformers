@@ -463,6 +463,8 @@ class ProcessingKwargs(TypedDict, total=False):
     videos_kwargs: VideosKwargs
     audio_kwargs: AudioKwargs
     common_kwargs: dict[str, Any]
+    return_mm_token_type_ids: bool
+    return_text_replacement_offsets: bool
 
 
 class TokenizerChatTemplateKwargs(TypedDict, total=False):
@@ -602,6 +604,9 @@ class ProcessorMixin(PushToHubMixin):
     audio_kwargs: AudioKwargs
     common_kwargs: dict[str, Any]
 
+    return_mm_token_type_ids: bool = False
+    return_text_replacement_offsets: bool = False
+
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
         # First, extract chat template from kwargs. It can never be a positional arg
@@ -676,9 +681,13 @@ class ProcessorMixin(PushToHubMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
+            # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             text, text_replacement_offsets = self.get_text_with_replacements(
