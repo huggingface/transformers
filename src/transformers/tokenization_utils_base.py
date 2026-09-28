@@ -1807,7 +1807,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         init_kwargs.update(kwargs)
 
         # V5: Convert deprecated additional_special_tokens to extra_special_tokens
-        if "additional_special_tokens" in init_kwargs and "extra_special_tokens" not in init_kwargs:
+        if "additional_special_tokens" in init_kwargs and not init_kwargs.get("extra_special_tokens"):
             init_kwargs["extra_special_tokens"] = init_kwargs.pop("additional_special_tokens")
 
         # V5: Collect model-specific tokens (custom *_token keys not in standard attributes)
