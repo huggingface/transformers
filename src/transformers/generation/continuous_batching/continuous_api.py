@@ -45,7 +45,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import ThreadLocalCounter, WorkloadHints, device_stream_ctx, drain_queue
+from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, stream_context
 
 
 """
@@ -600,9 +600,7 @@ class ContinuousBatchProcessor:
                     self.scheduler.add_waiting_request(child_state)
 
             # Actually perform the block copies
-            compute_stream = self.inputs_and_outputs.compute_stream
-            maybe_stream = device_stream_ctx(compute_stream)
-            with maybe_stream:
+            with stream_context(self.inputs_and_outputs.compute_stream):
                 self.cache.perform_cache_copy(fork_src_and_dst)
 
     def has_pending_requests(self) -> bool:

@@ -23,14 +23,14 @@ from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import RequestState, RequestStatus, logger
 from .utils import (
+    accelerator_graph_capture_context,
+    create_accelerator_graph,
     create_warmup_future_states,
-    device_stream_ctx,
-    get_cuda_graph,
-    get_cuda_graph_pools,
-    graph_capture_ctx,
-    mem_pool_ctx,
+    get_memory_pools,
+    memory_pool_context,
     pad_to_interval,
     pad_to_pow2,
+    stream_context,
 )
 
 
@@ -66,8 +66,6 @@ class ModelRunner:
         self.logit_processor = logit_processor
         self.cb_config = cb_config
         self.inputs_and_outputs = inputs_and_outputs
-        self.device = inputs_and_outputs.device
-        self.device_module = inputs_and_outputs.device_module
         # Helper attributes
         self.do_sample = do_sample
         self.return_logprobs = return_logprobs
@@ -82,7 +80,7 @@ class ModelRunner:
 
         # Set up the graph pool. This allows all graphs to share the same memory pool, greatly saving memory.
         if self.use_cuda_graph_varlen or self.use_cuda_graph_decode:
-            self.mem_pool, self.graph_pool_id = get_cuda_graph_pools(self.device)
+            self.mem_pool, self.graph_pool_id = get_memory_pools()
         else:
             self.mem_pool, self.graph_pool_id = None, None
 
@@ -143,8 +141,7 @@ class ModelRunner:
 
         # If we are not using CUDA graphs, we perform the generation step and return
         if not use_cuda_graph:
-            maybe_stream = device_stream_ctx(compute_stream)
-            with maybe_stream:
+            with stream_context(compute_stream):
                 forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
 
         # Otherwise, we either create or replay the graph (an accelerator is available in this path)
@@ -152,7 +149,7 @@ class ModelRunner:
             graph = self.inputs_and_outputs.get_graph()
             # Case: the graph already exists, so we replay it
             if graph is not None:
-                with device_stream_ctx(compute_stream):
+                with stream_context(compute_stream):
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
@@ -172,11 +169,11 @@ class ModelRunner:
     def _capture_graph(self, forward_fn: Callable, compute_stream: torch.cuda.Stream, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
         # Warmup (ensures the right result is computed before capturing the graph)
-        with device_stream_ctx(compute_stream), mem_pool_ctx(self.device, self.mem_pool):
+        with stream_context(compute_stream), memory_pool_context(self.mem_pool):
             forward_fn(*args)
         # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
-        graph = get_cuda_graph(self.device)
-        with graph_capture_ctx(self.device, graph, stream=compute_stream, graph_pool_id=self.graph_pool_id):
+        graph = create_accelerator_graph()
+        with accelerator_graph_capture_context(graph, stream=compute_stream, pool=self.graph_pool_id):
             forward_fn(*args)
         # Store
         self.inputs_and_outputs.set_graph(graph)

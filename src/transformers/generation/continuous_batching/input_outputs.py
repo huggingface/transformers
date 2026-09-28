@@ -30,8 +30,9 @@ from .utils import (
     aligned_divide,
     attn_mask_is_needed,
     build_attention_mask,
-    device_stream_ctx,
+    create_device_stream,
     pad_to_pow2,
+    stream_context,
 )
 
 
@@ -102,7 +103,6 @@ class ContinuousBatchingIOs:
         # Memoize attributes
         self.cache = cache
         self.device = device
-        self.device_module = torch.get_device_module(device) if device.type in ("cuda", "xpu") else None
         self.config = config
         self.model_dtype = model_dtype
         self.max_requests_per_batch = continuous_batching_config.max_requests_per_batch
@@ -119,10 +119,11 @@ class ContinuousBatchingIOs:
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer()
-        # Setup static tensors and compute stream
+        # Setup static tensors
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
-        self.compute_stream = self.device_module.Stream(device=self.device) if self.device_module is not None else None
+        # If the device is an accelerator that supports streams, also create a compute stream
+        self.compute_stream = create_device_stream(device) if device.type != "cpu" else None
 
     def _setup_static_tensors(self, logit_processor: ContinuousBatchingLogitsProcessorList) -> None:
         """Allocates static tensors for generation inputs and outputs. This is called only once at init time, to avoid
@@ -232,8 +233,7 @@ class ContinuousBatchingIOs:
         other.max_seqlen_q = self.max_seqlen_q
         other.max_seqlen_k = dict(self.max_seqlen_k)
         # Transfer static tensors
-        maybe_stream = device_stream_ctx(stream)
-        with maybe_stream:
+        with stream_context(stream):
             other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             # Only transfer block_table for decode-only batches (when it's actually used)
             if self.use_block_table:
@@ -316,9 +316,6 @@ class ContinuousBatchingIOs:
     def retrieve_device_outputs(self) -> None:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
-
-    def compute_stream_ctx(self):
-        return device_stream_ctx(self.compute_stream)
 
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         new_tokens = self.output_ids[0, : self.num_request_in_batch].tolist()
@@ -606,24 +603,21 @@ class HostDeviceIOPair:
             model_dtype=model_dtype,
             logit_processor=logit_processor,
         )
-        self.device_module = torch.get_device_module(device)
-        self.h2d_over = self.device_module.Event()
-        self.compute_over = self.device_module.Event()
-        self.d2h_over = self.device_module.Event()
+        self.h2d_over = torch.Event(device, enable_timing=False)
+        self.compute_over = torch.Event(device, enable_timing=False)
+        self.d2h_over = torch.Event(device, enable_timing=False)
 
     def reset(self) -> None:
         self.host_io.reset()
         self.device_io.reset()
         for event in [self.h2d_over, self.compute_over, self.d2h_over]:
-            if event is not None:
-                event.synchronize()
+            event.synchronize()
 
     def transfer_inputs_h2d(self, stream: torch.cuda.Stream) -> None:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
 
     def transfer_outputs_d2h(self, stream: torch.cuda.Stream | None) -> None:
-        maybe_stream = device_stream_ctx(stream)
-        with maybe_stream:
+        with stream_context(stream):
             self.host_io.output_ids.copy_(self.device_io.output_ids, non_blocking=True)
 
 
@@ -673,6 +667,8 @@ class ContinuousBatchingAsyncIOs:
     Proper ordering of steps is ensured through the use of CUDA events and streams.
     """
 
+    _supported_device_types = ("cuda", "xpu")
+
     def __init__(
         self,
         cache: PagedAttentionCache,
@@ -682,10 +678,13 @@ class ContinuousBatchingAsyncIOs:
         model_dtype: torch.dtype,
         logit_processor: ContinuousBatchingLogitsProcessorList,
     ) -> None:
-        self.device = device
-        self.device_module = torch.get_device_module(device)
-        if not self.device_module.is_available():
-            raise RuntimeError(f"Async batching requires an available {device.type} device.")
+        # Check device module is compatible with async batching
+        if device.type not in self._supported_device_types:
+            raise RuntimeError(
+                f"Async batching requires a device type in {self._supported_device_types} but got {device.type = }"
+            )
+        if not torch.get_device_module(device).is_available():
+            raise RuntimeError("Async batching requires an available device.")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
         self.io_pairs = [
@@ -700,9 +699,11 @@ class ContinuousBatchingAsyncIOs:
             for _ in range(2)
         ]
         # CUDA streams
-        self.h2d_stream = self.device_module.Stream(device=device)
-        self.d2h_stream = self.device_module.Stream(device=device)
-        self.compute_stream = self.device_module.Stream(device=device)
+        self.h2d_stream: torch.cuda.Stream = create_device_stream(device)
+        self.d2h_stream: torch.cuda.Stream = create_device_stream(device)
+        self.compute_stream: torch.cuda.Stream = create_device_stream(device)
+        if self.h2d_stream is None or self.d2h_stream is None or self.compute_stream is None:
+            raise RuntimeError(f"Async batching requires stream to function. Stream creation failed with {device = }.")
         # Set all unused compute streams to None
         self.io_pairs[0].host_io.compute_stream = None
         self.io_pairs[0].device_io.compute_stream = None
@@ -821,9 +822,6 @@ class ContinuousBatchingAsyncIOs:
         self.d2h_stream.record_event(io_pair.d2h_over)
         # Swap IO pair
         self.swap_io_pairs()
-
-    def compute_stream_ctx(self):
-        return device_stream_ctx(self.compute_stream)
 
     def swap_io_pairs(self) -> None:
         """Switch to the other IO pair so the next batch reads from / writes into a fresh set of static buffers."""
