@@ -77,6 +77,9 @@ class PeAudioEncoderConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
+        # Keep for BC only - shouldn't appear in new releases!
+        if isinstance(self.dac_config, dict):
+            self.dac_config = {**self.sub_configs_defaults["dac_config"].init_kwargs, **self.dac_config}
         super().__post_init__(**kwargs)
 
 
@@ -117,6 +120,12 @@ class PeAudioConfig(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     audio_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        # Keep for BC only - shouldn't appear in new releases!
+        if isinstance(self.text_config, dict):
+            self.text_config = {**self.sub_configs_defaults["text_config"].init_kwargs, **self.text_config}
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PeAudioEncoderConfig", "PeAudioConfig"]

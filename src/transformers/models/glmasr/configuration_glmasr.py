@@ -108,5 +108,10 @@ class GlmAsrConfig(PreTrainedConfig):
     projector_hidden_act: str = "gelu"
     tie_word_embeddings: bool = True
 
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, dict):
+            self.text_config = {**self.sub_configs_defaults["text_config"].init_kwargs, **self.text_config}
+        super().__post_init__(**kwargs)
+
 
 __all__ = ["GlmAsrEncoderConfig", "GlmAsrConfig"]

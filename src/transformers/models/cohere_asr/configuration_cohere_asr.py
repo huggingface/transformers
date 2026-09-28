@@ -90,6 +90,7 @@ class CohereAsrConfig(PreTrainedConfig):
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        # Keep for BC only - shouldn't appear in new releases!
         if isinstance(self.encoder_config, dict):
             self.encoder_config = {**self.sub_configs_defaults["encoder_config"].init_kwargs, **self.encoder_config}
         super().__post_init__(**kwargs)

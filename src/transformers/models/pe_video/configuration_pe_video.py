@@ -75,6 +75,9 @@ class PeVideoEncoderConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        # Keep for BC only - shouldn't appear in new releases!
+        if isinstance(self.visino_config, dict):
+            self.vision_config = {**self.sub_configs_defaults["vision_config"].init_kwargs, **self.vision_config}
         super().__post_init__(**kwargs)
 
 
@@ -116,6 +119,12 @@ class PeVideoConfig(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     video_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        # Keep for BC only - shouldn't appear in new releases!
+        if isinstance(self.text_config, dict):
+            self.text_config = {**self.sub_configs_defaults["text_config"].init_kwargs, **self.text_config}
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PeVideoEncoderConfig", "PeVideoConfig"]

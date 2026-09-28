@@ -110,6 +110,17 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     downsample_factor: int = 320
 
     def __post_init__(self, **kwargs):
+        # Keep for BC only - shouldn't appear in new releases!
+        if isinstance(self.acoustic_model_config, dict):
+            self.acoustic_model_config = {
+                **self.sub_configs_defaults["acoustic_model_config"].init_kwargs,
+                **self.acoustic_model_config,
+            }
+        if isinstance(self.semantic_model_config, dict):
+            self.semantic_model_config = {
+                **self.sub_configs_defaults["semantic_model_config"].init_kwargs,
+                **self.semantic_model_config,
+            }
         super().__post_init__(**kwargs)
         if self.codebook_dim is None:
             self.codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
