@@ -140,7 +140,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt"
+            messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt", padding_side="left"
         )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
