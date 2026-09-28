@@ -62,6 +62,7 @@ jobs:
 
   build:
     needs: translate
+    if: ${{ !cancelled() && needs.translate.outputs.state_sha256 != '' && needs.translate.outputs.doc_builder_revision != '' }}
     uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@f2a1be5008bb3e67b331badd23b68afabc576a0f  # PR #813
     with:
       commit_sha: ${{ github.sha }}
