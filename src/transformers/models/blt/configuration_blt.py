@@ -275,6 +275,9 @@ class BltConfig(PreTrainedConfig):
             encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
         )
 
+        # Expose the decoder layer count at the top-level config so generation helpers can size caches.
+        self.num_hidden_layers = self.decoder_config.num_hidden_layers
+
         super().__post_init__(**kwargs)
 
 
