@@ -207,6 +207,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
         center: bool = True,
+        pad_end: bool = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -246,6 +247,9 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
                 subsequent streaming chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
                 reproduces, frame-for-frame, the features that a single `center=True` pass over the whole utterance
                 would have produced for those frames.
+            pad_end (`bool`, *optional*, defaults to `False`):
+                Pad the end of an uncentered final chunk after pre-emphasis so its last frames match offline
+                extraction. Has no effect when `center=True`.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -312,12 +316,16 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
+        if pad_end and not center:
+            input_features = torch.nn.functional.pad(input_features, (0, self.n_fft // 2))
         input_features = self._torch_extract_fbank_features(input_features, device, center=center)
         if center:
             # `center=True` pads `n_fft // 2` on each side, so the number of valid frames is `floor(L / hop)`.
             features_lengths = torch.floor_divide(
                 padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
             )
+        elif pad_end:
+            features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft // 2, self.hop_length)
         else:
             # `center=False` does no padding: `floor((L - n_fft) / hop) + 1` frames.
             features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft, self.hop_length) + 1

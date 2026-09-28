@@ -163,3 +163,76 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
             frame_idx += processor.num_mel_frames_per_step
         self.assertGreater(frame_idx, processor.num_mel_frames_per_step)
         self.assertLess(frame_idx, num_frames)
+
+    def test_last_streaming_chunk_matches_full_utterance(self):
+        """The final chunk must include every valid frame, including one needing right-side zero padding."""
+        processor = self.get_processor()
+        for mode in self.LATENCIES:
+            processor.set_streaming_mode(mode)
+            for length in (64000, 64100):
+                with self.subTest(mode=mode, length=length):
+                    audio = np.random.RandomState(length).randn(length).astype(np.float32)
+                    full = processor(audio, sampling_rate=16000)
+                    step = processor.num_mel_frames_per_step
+                    first = processor(
+                        audio[: processor.num_samples_first_audio_chunk],
+                        sampling_rate=16000,
+                        is_streaming=True,
+                    )
+                    parts = [first.input_features[:, :step]]
+                    frame_idx = step
+                    start = processor.audio_chunk_start(frame_idx)
+                    while start + processor.num_samples_per_audio_chunk <= length:
+                        chunk = processor(
+                            audio[start : start + processor.num_samples_per_audio_chunk],
+                            sampling_rate=16000,
+                            is_streaming=True,
+                            is_first_audio_chunk=False,
+                        )
+                        parts.append(chunk.input_features[:, :step])
+                        frame_idx += step
+                        start = processor.audio_chunk_start(frame_idx)
+                    last = processor(
+                        audio[start:],
+                        sampling_rate=16000,
+                        is_streaming=True,
+                        is_first_audio_chunk=False,
+                        is_last_audio_chunk=True,
+                    )
+                    parts.append(last.input_features)
+                    streamed = torch.cat(parts, dim=1)
+                    num_frames = int(full.attention_mask.sum())
+                    self.assertEqual(streamed.shape[1], num_frames)
+                    torch.testing.assert_close(streamed, full.input_features[:, :num_frames], atol=1e-4, rtol=1e-4)
+
+    def test_feature_extractor_end_padding_matches_offline_for_batched_audio(self):
+        processor = self.get_processor()
+        extractor = processor.feature_extractor
+        step = processor.num_mel_frames_per_step
+        start = processor.audio_chunk_start(step)
+        audio = [np.random.RandomState(length).randn(length).astype(np.float32) for length in (64000, 64100)]
+        full = extractor(audio, sampling_rate=16000)
+        tails = [sample[start:] for sample in audio]
+        unpadded = extractor(tails, sampling_rate=16000, center=False)
+        padded = extractor(tails, sampling_rate=16000, center=False, pad_end=True)
+
+        for index in range(len(audio)):
+            expected_frames = int(full.attention_mask[index].sum()) - step
+            self.assertEqual(int(padded.attention_mask[index].sum()), expected_frames)
+            self.assertEqual(int(unpadded.attention_mask[index].sum()), expected_frames - (index == 0))
+            torch.testing.assert_close(
+                padded.input_features[index, :expected_frames],
+                full.input_features[index, step : step + expected_frames],
+                atol=1e-4,
+                rtol=1e-4,
+            )
+
+    def test_single_chunk_marked_last_matches_offline(self):
+        processor = self.get_processor()
+        audio = np.random.RandomState(0).randn(4000).astype(np.float32)
+        full = processor(audio, sampling_rate=16000)
+        streamed = processor(audio, sampling_rate=16000, is_streaming=True, is_last_audio_chunk=True)
+        valid_frames = int(full.attention_mask.sum())
+        self.assertEqual(streamed.input_features.shape[1], valid_frames)
+        self.assertEqual(int(streamed.attention_mask.sum()), valid_frames)
+        torch.testing.assert_close(streamed.input_features, full.input_features[:, :valid_frames])
