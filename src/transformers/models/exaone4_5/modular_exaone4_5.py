@@ -442,6 +442,8 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class Exaone4_5_Processor(Qwen2VLProcessor):
+    text_kwargs = AttributeError()
+
     @property
     def model_input_names(self):
         return super().model_input_names

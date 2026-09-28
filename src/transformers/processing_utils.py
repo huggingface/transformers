@@ -1749,7 +1749,7 @@ class ProcessorMixin(PushToHubMixin):
                         f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                     )
 
-        # Validate flat kwargs
+        # Validate flat kwargs
         flat_kwargs = {
             key: value
             for key, value in output_kwargs.items()

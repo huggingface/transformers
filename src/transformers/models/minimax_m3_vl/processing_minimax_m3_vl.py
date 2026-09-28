@@ -38,10 +38,6 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
-    text_kwargs = {
-        "padding": False,
-        "return_mm_token_type_ids": True,
-    }
 
     IMAGE_TOKEN = "]<]image[>["
     VIDEO_TOKEN = "]<]video[>["

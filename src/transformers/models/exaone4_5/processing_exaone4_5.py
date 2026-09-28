@@ -31,10 +31,6 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Exaone4_5_Processor(ProcessorMixin):
     valid_processor_kwargs = Exaone4_5_ProcessorKwargs
-    text_kwargs = {
-        "padding": False,
-        "return_mm_token_type_ids": True,
-    }
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token

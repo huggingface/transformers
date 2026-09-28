@@ -34,10 +34,6 @@ class HyperCLOVAXVisionV2_ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class HyperCLOVAXVisionV2Processor(ProcessorMixin):
     valid_processor_kwargs = HyperCLOVAXVisionV2_ProcessorKwargs
-    text_kwargs = {
-        "padding": False,
-        "return_mm_token_type_ids": True,
-    }
     # Stopgap for `video_duration`: the hub template renders it as text, leaving the literal
     # `<|video_duration|>` placeholder when missing. These three overrides fill it in after the fact,
     # instead of the single `replace_video_token` hook other video models use (qwen3_vl, glm4v). Remove

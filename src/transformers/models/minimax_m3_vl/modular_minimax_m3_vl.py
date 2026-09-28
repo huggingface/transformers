@@ -1224,6 +1224,7 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     """
 
     valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
+    text_kwargs = AttributeError()
 
     IMAGE_TOKEN = "]<]image[>["
     VIDEO_TOKEN = "]<]video[>["
