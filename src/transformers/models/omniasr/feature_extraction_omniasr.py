@@ -121,7 +121,7 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         # Ensure batch of mono audio
-        audio = make_list_of_audio(audio)
+        audio = list(make_list_of_audio(audio))
         for idx, example in enumerate(audio):
             example = torch.tensor(example, dtype=torch.float32)
             if example.ndim != 1:

@@ -120,7 +120,7 @@ class OmniASRProcessor(ProcessorMixin):
             audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`, *optional*):
                 The audio input, passed to the feature extractor.
             text (`str`, `list[str]`, *optional*):
-                Text input, passed to the tokenizer (used for training labels).
+                Transcription(s), one per audio input, from which the training `labels` are built.
             language (`str` or `list[str]`, *optional*, defaults to `"auto"`):
                 Language code(s) for the LLM variant (e.g. `"eng_Latn"` or `["eng_Latn", "fra_Latn"]`), resolved
                 into the language token of each prompt via `language_mapping`. Either a single code applied to the
@@ -133,7 +133,8 @@ class OmniASRProcessor(ProcessorMixin):
         Returns:
             [`BatchFeature`]: For the CTC variant, `input_values` and its `padding_mask`. For the LLM variant, the
             decoder prompt as `input_ids` and its `attention_mask`, alongside `input_values` and `padding_mask` (the
-            mask over the raw samples). `labels` is added whenever `text` is given.
+            mask over the raw samples). `labels` is added whenever `text` is given: the CTC targets for the CTC
+            variant, and for the LLM variant the transcript appended to the prompt, aligned with `input_ids`.
         """
         audio = make_list_of_audio(audio)
 
@@ -167,14 +168,27 @@ class OmniASRProcessor(ProcessorMixin):
             else:
                 audio_lengths = torch.full((len(audio),), inputs["input_values"].shape[-1], dtype=torch.long)
             language_token_ids = self._resolve_language_token_ids(language, len(audio))
-            inputs["input_ids"], inputs["attention_mask"] = self._build_prompt(audio_lengths, language_token_ids)
+            text_token_ids = None
+            if text is not None:
+                if isinstance(text, str):
+                    text = [text]
+                if len(text) != len(audio):
+                    raise ValueError(f"Received {len(text)} `text` entries for {len(audio)} audio input(s).")
+                # Each transcript is appended to its own prompt, so it is tokenized unpadded.
+                text_kwargs = {**output_kwargs["text_kwargs"], "padding": False, "return_tensors": None}
+                text_token_ids = self.tokenizer(text, **text_kwargs)["input_ids"]
+            inputs["input_ids"], inputs["attention_mask"], labels = self._build_prompt(
+                audio_lengths, language_token_ids, text_token_ids
+            )
+            if labels is not None:
+                inputs["labels"] = labels
         elif language != LANGUAGE_AGNOSTIC:
             logger.warning_once(
                 f"`language={language!r}` is ignored: this processor has no `language_mapping`, so the model it "
                 "belongs to is not language-conditioned."
             )
 
-        if text is not None:
+        if text is not None and self.language_mapping is None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
             labels = encodings["input_ids"]
             # Mask padding positions with -100 so the CTC loss ignores them.
@@ -222,11 +236,18 @@ class OmniASRProcessor(ProcessorMixin):
         return audio_lengths
 
     def _build_prompt(
-        self, audio_lengths: "torch.Tensor", language_token_ids: list[int]
-    ) -> tuple["torch.LongTensor", "torch.LongTensor"]:
+        self,
+        audio_lengths: "torch.Tensor",
+        language_token_ids: list[int],
+        text_token_ids: list[list[int]] | None = None,
+    ) -> tuple["torch.LongTensor", "torch.LongTensor", "torch.LongTensor | None"]:
         """
         Build the decoder prompt `audio | lid_marker | language | bos` of each audio input, as `input_ids` holding
         one audio placeholder per speech encoder frame.
+
+        When `text_token_ids` are given, each transcript and an EOS follow its prompt, and `labels` are returned
+        aligned with `input_ids`: the prompt and the padding are masked with `-100`, so that the causal language
+        modeling loss only covers the transcript and its EOS.
 
         The prompts are left-padded, so that every sequence ends with `bos` -- decoding continues from there for the
         whole batch -- and the distance between the audio and the markers does not depend on how much the batch was
@@ -244,6 +265,8 @@ class OmniASRProcessor(ProcessorMixin):
             ]
             if value is None
         ]
+        if text_token_ids is not None and self.tokenizer.eos_token_id is None:
+            missing.append("eos_token_id")
         if missing:
             raise ValueError(
                 f"{self.__class__.__name__} cannot build the decoder prompt without {missing}, which are saved "
@@ -252,19 +275,27 @@ class OmniASRProcessor(ProcessorMixin):
             )
 
         num_audio_tokens = self._get_num_audio_tokens(audio_lengths).tolist()
-        # The LID marker, the language token and BOS close every prompt.
-        num_markers = 3
-        max_length = max(num_audio_tokens) + num_markers
+        prompts = [
+            [self.audio_token_id] * num_frames + [self.language_token_id, language_token_id, self.bos_token_id]
+            for num_frames, language_token_id in zip(num_audio_tokens, language_token_ids)
+        ]
+        if text_token_ids is None:
+            targets = [[] for _ in prompts]
+        else:
+            targets = [list(token_ids) + [self.tokenizer.eos_token_id] for token_ids in text_token_ids]
+        max_length = max(len(prompt) + len(target) for prompt, target in zip(prompts, targets))
 
-        input_ids = torch.full((len(num_audio_tokens), max_length), self.tokenizer.pad_token_id, dtype=torch.long)
-        attention_mask = torch.zeros((len(num_audio_tokens), max_length), dtype=torch.long)
-        for idx, (num_frames, language_token_id) in enumerate(zip(num_audio_tokens, language_token_ids)):
-            prompt = [self.audio_token_id] * num_frames
-            prompt += [self.language_token_id, language_token_id, self.bos_token_id]
-            input_ids[idx, max_length - len(prompt) :] = torch.tensor(prompt, dtype=torch.long)
-            attention_mask[idx, max_length - len(prompt) :] = 1
+        input_ids = torch.full((len(prompts), max_length), self.tokenizer.pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((len(prompts), max_length), dtype=torch.long)
+        labels = torch.full((len(prompts), max_length), -100, dtype=torch.long)
+        for idx, (prompt, target) in enumerate(zip(prompts, targets)):
+            sequence = prompt + target
+            input_ids[idx, max_length - len(sequence) :] = torch.tensor(sequence, dtype=torch.long)
+            attention_mask[idx, max_length - len(sequence) :] = 1
+            if target:
+                labels[idx, max_length - len(target) :] = torch.tensor(target, dtype=torch.long)
 
-        return input_ids, attention_mask
+        return input_ids, attention_mask, labels if text_token_ids is not None else None
 
     @property
     def model_input_names(self):

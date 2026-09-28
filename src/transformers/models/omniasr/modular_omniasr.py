@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...generation import CompileConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
@@ -116,6 +118,10 @@ class OmniASREncoderSubsamplingConv1D(nn.Module):
     def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         hidden_states = input_values[:, None]
 
+        # make sure hidden_states require grad for gradient_checkpointing (like Wav2Vec2FeatureEncoder)
+        if self.training:
+            hidden_states.requires_grad = True
+
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
@@ -147,6 +153,7 @@ class OmniASREncoderModelOutput(ParakeetEncoderModelOutput):
     pass
 
 
+@dataclass
 class OmniASRCTCGenerateOutput(ParakeetCTCGenerateOutput):
     pass
 
@@ -375,6 +382,7 @@ class OmniASRForCTC(ParakeetForCTC):
 )
 class OmniASRModel(VibeVoiceModel):
     config: OmniASRConfig
+    main_input_name = "input_ids"
     input_modalities = ("audio", "text")
 
     def __init__(self, config):
@@ -431,8 +439,11 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
         input_values: torch.Tensor | None = None,
         padding_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -470,7 +481,10 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
             input_values=input_values,
             padding_mask=padding_mask,
             attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
             **kwargs,
         )
 
@@ -496,7 +510,7 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
         input_values = kwargs.pop("input_values", None)
         padding_mask = kwargs.pop("padding_mask", None)
 
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = super().prepare_inputs_for_generation(*args, is_first_iteration=is_first_iteration, **kwargs)
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             if input_values is not None:
