@@ -87,6 +87,74 @@ class AutoTokenizerTest(unittest.TestCase):
     def setUp(self):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
+    @require_tokenizers
+    @parameterized.expand([("ImportError",), ("ModuleNotFoundError",)])
+    def test_tokenizer_with_model_config_import_error(self, error_type):
+        from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
+
+        backend = Tokenizer(models.BPE(unk_token="[UNK]"))
+        backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        backend.decoder = decoders.ByteLevel()
+        backend.train_from_iterator(
+            ["OCR test recognition", "hello  world\nsecond line"],
+            trainers.BpeTrainer(special_tokens=["[UNK]", "[EOS]", "[PAD]"]),
+        )
+        reference = TokenizersBackend(tokenizer_object=backend, eos_token="[EOS]", pad_token="[PAD]")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            reference.save_pretrained(tmp_dir)
+            config = {
+                "model_type": "deepseek_vl_v2",
+                "auto_map": {"AutoConfig": "configuration_broken.BrokenConfig"},
+            }
+            Path(tmp_dir, "config.json").write_text(json.dumps(config), encoding="utf-8")
+            Path(tmp_dir, "configuration_broken.py").write_text(
+                f'raise {error_type}("model-only dependency is unavailable")\n', encoding="utf-8"
+            )
+            tokenizer_config_path = Path(tmp_dir, "tokenizer_config.json")
+            tokenizer_config = json.loads(tokenizer_config_path.read_text(encoding="utf-8"))
+            tokenizer_config["tokenizer_class"] = "LlamaTokenizerFast"
+            tokenizer_config_path.write_text(json.dumps(tokenizer_config), encoding="utf-8")
+
+            tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True, local_files_only=True)
+            self.assertIsInstance(tokenizer, TokenizersBackend)
+            self.assertEqual(tokenizer.eos_token, reference.eos_token)
+            self.assertEqual(tokenizer.pad_token, reference.pad_token)
+            for text in ["OCR test recognition", "hello  world\nsecond line"]:
+                self.assertEqual(tokenizer(text)["input_ids"], reference(text)["input_ids"])
+                self.assertEqual(tokenizer.decode(tokenizer.encode(text)), text)
+
+    @parameterized.expand([("available",), ("import_error",)])
+    def test_custom_tokenizer_with_model_config_import_error(self, tokenizer_status):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = {
+                "model_type": "test_unregistered_dynamic",
+                "auto_map": {"AutoConfig": "configuration_broken.BrokenConfig"},
+            }
+            Path(tmp_dir, "config.json").write_text(json.dumps(config), encoding="utf-8")
+            Path(tmp_dir, "configuration_broken.py").write_text(
+                'raise ImportError("model-only dependency is unavailable")\n', encoding="utf-8"
+            )
+            tokenizer_config = {"auto_map": {"AutoTokenizer": ["tokenization_custom.CustomTokenizer", None]}}
+            Path(tmp_dir, "tokenizer_config.json").write_text(json.dumps(tokenizer_config), encoding="utf-8")
+            tokenizer_code = (
+                "from transformers import PythonBackend\n"
+                "class CustomTokenizer(PythonBackend):\n"
+                "    special_attribute_present = True\n"
+                "    def get_vocab(self):\n"
+                "        return {}\n"
+            )
+            if tokenizer_status == "import_error":
+                tokenizer_code = 'raise ImportError("tokenizer dependency is unavailable")\n'
+            Path(tmp_dir, "tokenization_custom.py").write_text(tokenizer_code, encoding="utf-8")
+
+            if tokenizer_status == "import_error":
+                with self.assertRaisesRegex(ImportError, "tokenizer dependency is unavailable"):
+                    AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True, local_files_only=True)
+            else:
+                tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True, local_files_only=True)
+                self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
+                self.assertTrue(tokenizer.special_attribute_present)
+
     @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):
