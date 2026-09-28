@@ -1031,12 +1031,14 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (tokens, 3), with temporal, height and width coordinates.
-        position_ids_expanded = position_ids[..., None].float()
+        position_ids_expanded = position_ids.to(device=x.device, dtype=torch.float32)[..., None]
         device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+            # Rebuild in FP32: model.half()/bfloat16() may have rounded the registered buffers.
+            inv_freq, attention_scaling = self.compute_axial_rope_parameters(self.config, x.device)
+            freqs = position_ids_expanded * inv_freq
+            cos = freqs.cos() * attention_scaling
+            sin = freqs.sin() * attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)

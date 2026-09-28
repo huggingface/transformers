@@ -75,3 +75,21 @@ class MiniMaxM3VLVisionRotaryTest(unittest.TestCase):
         torch.testing.assert_close(rotated_key[..., 3 * axis_dim :], key[..., 3 * axis_dim :], rtol=0, atol=0)
         self.assertFalse(torch.equal(rotated_query[..., : 3 * axis_dim], query[..., : 3 * axis_dim]))
         self.assertEqual(rotary.state_dict(), {})
+
+    @parameterized.expand([("bfloat16",), ("float16",)])
+    def test_dtype_conversion_preserves_fp32_frequency_ladder(self, dtype_name):
+        dtype = getattr(torch, dtype_name)
+        config = MiniMaxM3VLVisionConfig(
+            hidden_size=160,
+            num_attention_heads=2,
+            rope_parameters={"rope_type": "axial", "rope_theta": 10000.0},
+        )
+        rotary = MiniMaxM3VLVisionRotaryEmbedding(config)
+        positions = torch.tensor([[0, 0, 32], [1, 16, 0], [2, 4, 128]])
+        inputs = torch.empty(3, 80, dtype=dtype)
+        expected = rotary(inputs, positions)
+        rotary.to(dtype=dtype)
+        actual = rotary(inputs, positions)
+        for result, reference in zip(actual, expected):
+            self.assertEqual(result.dtype, dtype)
+            torch.testing.assert_close(result, reference, rtol=0, atol=0)
