@@ -18,6 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import torch
+
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -78,8 +81,6 @@ class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
     valid_processor_kwargs = Molmo2ProcessorKwargs
-    image_token = "<|image|>"
-    video_token = "<|video|>"
 
     @property
     def model_input_names(self):
@@ -119,8 +120,8 @@ class Molmo2Processor(ProcessorMixin):
         self.use_single_crop_start_token = use_single_crop_start_token
         self.video_use_col_tokens = video_use_col_tokens
         self.use_frame_special_tokens = use_frame_special_tokens
-        self.image_token = getattr(tokenizer, "image_token", self.image_token)
-        self.video_token = getattr(tokenizer, "video_token", self.video_token)
+        self.image_token = getattr(tokenizer, "image_token", "<|image|>")
+        self.video_token = getattr(tokenizer, "video_token", "<|video|>")
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         self.image_token_ids = tokenizer.convert_tokens_to_ids(
@@ -154,13 +155,11 @@ class Molmo2Processor(ProcessorMixin):
             text = [prompt if prompt.startswith(bos_token) else bos_token + prompt for prompt in text]
         return super().__call__(images=images, text=text, videos=videos, **kwargs)
 
-    def get_video_string(self, video_grid, timestamps) -> str:
-        if hasattr(video_grid, "tolist"):
-            video_grid = video_grid.tolist()
+    def get_video_string(self, video_grid: torch.Tensor, timestamps) -> str:
         start_token = "<frame_start>" if self.use_frame_special_tokens else "<im_start>"
         end_token = "<frame_end>" if self.use_frame_special_tokens else "<im_end>"
 
-        num_frames, num_patch_rows, num_patch_cols = video_grid
+        num_frames, num_patch_rows, num_patch_cols = video_grid.tolist()
         video_string = ""
         for frame_idx, frame_time in enumerate(timestamps):
             prev_space = " " if frame_idx > 0 else ""

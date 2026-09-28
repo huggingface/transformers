@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 import numpy as np
@@ -276,37 +275,6 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Output keys should be a subset of model_input_names (video keys absent when no video passed)
         self.assertTrue(set(inputs.keys()).issubset(set(processor.model_input_names)))
-
-    def _filter_auto_map(self, d):
-        """Remove auto_map keys from processor dict for comparison."""
-        filtered = {k: v for k, v in d.items() if k != "auto_map"}
-        for key in filtered:
-            if isinstance(filtered[key], dict) and "auto_map" in filtered[key]:
-                filtered[key] = {kk: vv for kk, vv in filtered[key].items() if kk != "auto_map"}
-        return filtered
-
-    def test_processor_from_and_save_pretrained(self):
-        processor_first = self.get_processor()
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_files = processor_first.save_pretrained(tmpdirname)
-            if len(saved_files) > 0:
-                processor_second = self.processor_class.from_pretrained(tmpdirname)
-                self.assertEqual(
-                    self._filter_auto_map(processor_second.to_dict()),
-                    self._filter_auto_map(processor_first.to_dict()),
-                )
-
-    def test_processor_from_and_save_pretrained_as_nested_dict(self):
-        processor_first = self.get_processor()
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            processor_first.save_pretrained(tmpdirname)
-            processor_second = self.processor_class.from_pretrained(tmpdirname)
-            self.assertEqual(
-                self._filter_auto_map(processor_second.to_dict()),
-                self._filter_auto_map(processor_first.to_dict()),
-            )
 
     @unittest.skip(
         reason="Hub processor_config.json has use_single_crop_col_tokens=False, which differs from the __init__ "

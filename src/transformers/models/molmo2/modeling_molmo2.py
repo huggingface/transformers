@@ -108,20 +108,17 @@ class Molmo2RotaryEmbedding(nn.Module):
 
         self.config = config
 
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        # `rope_type = "default"` also keeps the generic `_init_weights` rotary re-init on the unscaled table.
+        self.rope_type = self.config.rope_parameters["rope_type"] if scaled else "default"
+        rope_init_fn: Callable = (
+            self.compute_default_rope_parameters
+            if self.rope_type == "default"
+            else ROPE_INIT_FUNCTIONS[self.rope_type]
+        )
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        if not scaled:
-            # `rope_type = "default"` also keeps the generic `_init_weights` rotary re-init on the unscaled table.
-            self.rope_type = "default"
-            inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device=device)
-            self.inv_freq = inv_freq
-            self.original_inv_freq = inv_freq.clone()
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -277,12 +274,15 @@ class Molmo2Attention(nn.Module):
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.q_norm = Molmo2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
-        self.k_norm = Molmo2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.q_norm = Molmo2RMSNorm(
+            self.head_dim if config.qk_norm_type == "qwen3" else config.num_attention_heads * self.head_dim,
+            eps=config.rms_norm_eps,
+        )
+        self.k_norm = Molmo2RMSNorm(
+            self.head_dim if config.qk_norm_type == "qwen3" else config.num_key_value_heads * self.head_dim,
+            eps=config.rms_norm_eps,
+        )
         self.qk_norm_type = config.qk_norm_type
-        if self.qk_norm_type == "qwen3":
-            self.q_norm = Molmo2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Molmo2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -302,11 +302,14 @@ class Molmo2Attention(nn.Module):
         if self.qk_norm_type == "olmo":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
+
         query_states = query_states.view(hidden_shape)
         key_states = key_states.view(hidden_shape)
+
         if self.qk_norm_type == "qwen3":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
+
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
 
@@ -410,21 +413,19 @@ class Molmo2PreTrainedModel(PreTrainedModel):
     config: Molmo2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "Molmo2DecoderLayer",
-        "Molmo2VisionEncoderLayer",
-        "Molmo2VisionAttention",
-    ]
-    _skip_keys_device_placement = "past_key_values"
+    _no_split_modules = ["Molmo2DecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Molmo2DecoderLayer,
         "attentions": Molmo2Attention,
     }
+    input_modalities = ("image", "video", "text")
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -657,8 +658,6 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         self.norm = Molmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Molmo2RotaryEmbedding(config)
         self.rotary_emb_unscaled = Molmo2RotaryEmbedding(config, scaled=False)
-        # CODEPATH: O-7B lists 24 of its 32 layers in `rope_scaling_layers` (YaRN there, plain RoPE elsewhere);
-        # 4B/8B scale every layer.
         self.rope_types = [
             "scaled" if layer_idx in config.rope_scaling_layers else "unscaled"
             for layer_idx in range(config.num_hidden_layers)
@@ -763,7 +762,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
             pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
 
         image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
-        # `vision_feature_layer` indices are normalized to non-negative in `Molmo2Config.__post_init__`
         image_features = torch.cat(
             [image_outputs.hidden_states[layer + 1] for layer in self.config.adapter_config.vision_feature_layer],
             dim=-1,
@@ -818,23 +816,34 @@ class Molmo2Model(Molmo2PreTrainedModel):
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("pixel_values and pixel_values_videos are provided at the same time")
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features: torch.FloatTensor | None = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_token_pooling, image_grids).pooler_output
-        elif pixel_values_videos is not None:
-            image_features = self.get_video_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_token_pooling, image_grids)
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
                 pixel_values_videos, video_token_pooling, video_grids
-            ).pooler_output
+            )
+
+        image_features: torch.FloatTensor | None = None
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
+        elif mm_encoder_outputs.get("video") is not None:
+            image_features = mm_encoder_outputs["video"].pooler_output
 
         if image_features is not None:
             image_features = torch.cat(image_features, dim=0)
@@ -920,6 +929,26 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, **kwargs)
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_token_pooling: torch.Tensor,
+        video_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_video_features(pixel_values_videos, video_token_pooling, video_grids, **kwargs)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -940,6 +969,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2CausalLMOutputWithPast:
         r"""
@@ -982,6 +1012,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1002,44 +1033,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ):
-        visual_keys = (
-            "pixel_values",
-            "image_token_pooling",
-            "image_grids",
-            "image_num_crops",
-            "pixel_values_videos",
-            "video_token_pooling",
-            "video_grids",
-        )
-        visual = {k: model_kwargs.pop(k) for k in visual_keys if k in model_kwargs}
-        original_input_ids = input_ids
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-        if expand_size != 1 and original_input_ids is not None:
-            # image and video patches share `image_token_id` in `input_ids`, so the per-sample count
-            # covers whichever pooling tensor is present
-            patch_counts = (original_input_ids == self.config.image_token_id).sum(dim=-1).tolist()
-            for pooling_key in ("image_token_pooling", "video_token_pooling"):
-                if visual.get(pooling_key) is not None:
-                    chunks = visual[pooling_key].split(patch_counts)
-                    visual[pooling_key] = torch.cat([chunk for chunk in chunks for _ in range(expand_size)], dim=0)
-            for grid_key in ("image_grids", "video_grids"):
-                if visual.get(grid_key) is not None:
-                    visual[grid_key] = visual[grid_key].repeat_interleave(expand_size, dim=0)
-        model_kwargs.update(visual)
-        return input_ids, model_kwargs
 
     @staticmethod
     def create_masks_for_generate(

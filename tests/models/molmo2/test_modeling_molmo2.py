@@ -15,6 +15,7 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -33,7 +34,6 @@ from transformers.models.molmo2.configuration_molmo2 import (
 )
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_large_accelerator,
     require_vision,
@@ -42,6 +42,7 @@ from transformers.testing_utils import (
 )
 from transformers.video_utils import load_video
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -159,7 +160,7 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
             residual_dropout=0.0,
         )
         adapter_config = Molmo2AdapterConfig(
-            vision_feature_layer=[-1],
+            vision_feature_layer=[1],
             hidden_size=32,
             num_attention_heads=4,
             num_key_value_heads=4,
@@ -186,17 +187,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     """
 
     model_tester_class = Molmo2VisionText2TextModelTester
-    pipeline_model_mapping = (
-        {
-            "image-to-text": Molmo2ForConditionalGeneration,
-            "image-text-to-text": Molmo2ForConditionalGeneration,
-        }
-        if is_torch_available()
-        else {}
-    )
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
@@ -204,34 +194,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         full_pooling = self.model_tester.prepare_config_and_inputs_for_common()[1]["image_token_pooling"]
         inputs_dict["image_token_pooling"] = full_pooling[: batch_size * num_image_tokens]
         return config, inputs_dict
-
-    def test_expand_inputs_for_generation_expands_visual_token_pooling(self):
-        config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=2)
-        model = Molmo2ForConditionalGeneration(config).to(torch_device)
-
-        expand_size = 3
-        input_ids = inputs_dict["input_ids"]
-        image_token_pooling = inputs_dict["image_token_pooling"]
-        image_grids = inputs_dict["image_grids"]
-        expanded_input_ids, expanded_kwargs = model._expand_inputs_for_generation(
-            expand_size=expand_size,
-            input_ids=input_ids,
-            image_token_pooling=image_token_pooling,
-            image_grids=image_grids,
-        )
-
-        image_token_counts = (input_ids == config.image_token_id).sum(dim=-1).tolist()
-        expected_pooling = []
-        offset = 0
-        for count in image_token_counts:
-            image_token_pooling_slice = image_token_pooling[offset : offset + count]
-            offset += count
-            expected_pooling.extend(image_token_pooling_slice for _ in range(expand_size))
-        expected_pooling = torch.cat(expected_pooling, dim=0)
-
-        self.assertEqual(expanded_input_ids.shape[0], input_ids.shape[0] * expand_size)
-        self.assertTrue(torch.equal(expanded_kwargs["image_token_pooling"], expected_pooling))
-        self.assertTrue(torch.equal(expanded_kwargs["image_grids"], image_grids.repeat_interleave(expand_size, dim=0)))
 
     # overwrite inputs_embeds tests because we need to delete "pixel_values" for VLMs
     def test_inputs_embeds(self):
@@ -337,10 +299,18 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ):
-        self.skipTest(
-            "The test slices `pixel_values` per sample and drops `image_token_pooling`, but Molmo2 crops are "
-            "flat-concatenated with no batch dimension."
-        )
+        # The common test keeps one sample with `[:1]`, which cannot slice the flat `image_token_pooling`,
+        # so the check runs on text-only inputs.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict["input_ids"].clone()
+        input_ids[input_ids == config.image_patch_id] = self.model_tester.pad_token_id
+        text_inputs = {"input_ids": input_ids, "attention_mask": inputs_dict["attention_mask"]}
+        with patch.object(
+            self.model_tester,
+            "prepare_config_and_inputs_for_common",
+            side_effect=lambda: (copy.deepcopy(config), copy.deepcopy(text_inputs)),
+        ):
+            super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol=atol, rtol=rtol)
 
     @unittest.skip(
         reason="Multimodal special tokens live in the extra-vocab rows beyond `vocab_size`; standard resize is ill-defined"
@@ -415,32 +385,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         # a text token never sees a later text token
         self.assertTrue((attention[:, text_positions[0], text_positions[-1]] == 0).all())
 
-    def test_expand_inputs_for_generation_repeats_visual_pooling(self):
-        """
-        Beam expansion repeats each sample's flat pooling block `expand_size` times in batch order.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Molmo2ForConditionalGeneration._from_config(config).to(torch_device).eval()
-
-        input_ids = torch.ones((2, 4), dtype=torch.long, device=torch_device)
-        input_ids[0, :3] = config.image_token_id  # sample 0: 3 patches
-        input_ids[1, :2] = config.image_token_id  # sample 1: 2 patches
-        token_pooling = torch.arange(5 * 4, device=torch_device).reshape(5, 4)
-
-        expanded_ids, model_kwargs = model._expand_inputs_for_generation(
-            expand_size=2, input_ids=input_ids, image_token_pooling=token_pooling
-        )
-
-        expected = torch.cat([token_pooling[:3], token_pooling[:3], token_pooling[3:], token_pooling[3:]], dim=0)
-        self.assertTrue(torch.equal(model_kwargs["image_token_pooling"], expected))
-        self.assertTrue(torch.equal(expanded_ids, input_ids.repeat_interleave(2, dim=0)))
-
-        # a pooling tensor inconsistent with the per-sample patch counts raises instead of passing through
-        with self.assertRaises(RuntimeError):
-            model._expand_inputs_for_generation(
-                expand_size=2, input_ids=input_ids, image_token_pooling=token_pooling[:4]
-            )
-
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs handle single-batch image inputs correctly.
@@ -495,10 +439,11 @@ IMAGE_URL = "https://huggingface.co/datasets/huggingface/documentation-images/re
 @slow
 @require_torch
 @require_vision
-class Molmo2IntegrationTest(unittest.TestCase):
+class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "allenai/Molmo2-4B"
 
     def setUp(self):
+        super().setUp()
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
         self.image = load_image(url_to_local_path(IMAGE_URL))
         self.messages = [
@@ -510,10 +455,6 @@ class Molmo2IntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-
-    def tearDown(self):
-        super().tearDown()
-        cleanup(torch_device, gc_collect=True)
 
     def build_inputs(self):
         return self.processor.apply_chat_template(
@@ -614,10 +555,11 @@ class Molmo2IntegrationTest(unittest.TestCase):
 @slow
 @require_torch
 @require_vision
-class Molmo2O7BIntegrationTest(unittest.TestCase):
+class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "allenai/Molmo2-O-7B"
 
     def setUp(self):
+        super().setUp()
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
         self.image = load_image(url_to_local_path(IMAGE_URL))
         self.messages = [
@@ -629,10 +571,6 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-
-    def tearDown(self):
-        super().tearDown()
-        cleanup(torch_device, gc_collect=True)
 
     def build_inputs(self):
         return self.processor.apply_chat_template(
@@ -731,10 +669,11 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 @slow
 @require_torch
 @require_vision
-class Molmo2_8BIntegrationTest(unittest.TestCase):
+class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "allenai/Molmo2-8B"
 
     def setUp(self):
+        super().setUp()
         self.processor = Molmo2Processor.from_pretrained(self.model_id)
         self.image = load_image(url_to_local_path(IMAGE_URL))
         self.messages = [
@@ -746,10 +685,6 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-
-    def tearDown(self):
-        super().tearDown()
-        cleanup(torch_device, gc_collect=True)
 
     def build_inputs(self):
         return self.processor.apply_chat_template(

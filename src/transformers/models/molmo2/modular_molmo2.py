@@ -42,7 +42,7 @@ from ...image_utils import (
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import (
     ImagesKwargs,
@@ -101,18 +101,12 @@ class Molmo2VisionConfig(PreTrainedConfig):
         provided.
     """
 
-    model_type = "molmo2"
+    model_type = "molmo2_vision"
     base_config_key = "vision_config"
-    # Keys of the released checkpoints' `config.json`.
-    attribute_map = {
-        "image_default_input_size": "image_size",
-        "image_patch_size": "patch_size",
-        "image_num_pos": "num_position_embeddings",
-    }
 
     hidden_size: int = 1152
     intermediate_size: int = 4304
-    num_hidden_layers: int = 27
+    num_hidden_layers: int = 25
     num_attention_heads: int = 16
     num_key_value_heads: int = 16
     head_dim: int = 72
@@ -127,6 +121,11 @@ class Molmo2VisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        # Keys of the released checkpoints' `config.json`.
+        kwargs.pop("model_type", None)
+        self.image_size = kwargs.pop("image_default_input_size", self.image_size)
+        self.patch_size = kwargs.pop("image_patch_size", self.patch_size)
+        self.num_position_embeddings = kwargs.pop("image_num_pos", self.num_position_embeddings)
         if self.image_size is None:
             self.image_size = [378, 378]
         if self.num_position_embeddings is None:
@@ -141,16 +140,15 @@ class Molmo2VisionConfig(PreTrainedConfig):
 class Molmo2AdapterConfig(PreTrainedConfig):
     r"""
     vision_feature_layer (`list[int]`, *optional*):
-        Indices of the ViT layers whose outputs are concatenated and pooled, `[-3, -9]` when not provided.
+        Indices of the ViT layers whose outputs are concatenated and pooled, `[24, 18]` when not provided.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
         Dropout rate for image features.
     """
 
-    model_type = "molmo2"
+    model_type = "molmo2_adapter"
     base_config_key = "adapter_config"
-    attribute_map = {"vit_layers": "vision_feature_layer"}
 
     vision_feature_layer: list[int] | None = None
     hidden_size: int = 1152
@@ -166,8 +164,11 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        # Keys of the released checkpoints' `config.json`.
+        kwargs.pop("model_type", None)
+        self.vision_feature_layer = kwargs.pop("vit_layers", self.vision_feature_layer)
         if self.vision_feature_layer is None:
-            self.vision_feature_layer = [-3, -9]
+            self.vision_feature_layer = [24, 18]
         super().__post_init__(**kwargs)
 
 
@@ -184,8 +185,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         The dropout ratio for the embedding layer.
     residual_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio applied after residual connections.
-    rope_parameters (`RopeParameters`, *optional*):
-        RoPE parameters for the model.
     rope_scaling_layers (`list[int]`, *optional*):
         Indices of the layers that apply the scaled RoPE described by `rope_parameters`. The remaining layers use an
         unscaled RoPE with the same theta. All layers are scaled when not provided.
@@ -197,15 +196,6 @@ class Molmo2TextConfig(PreTrainedConfig):
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"qkv_bias": "attention_bias", "layer_norm_eps": "rms_norm_eps"}
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_gather_output",
-        "layers.*.self_attn.k_proj": "colwise_gather_output",
-        "layers.*.self_attn.v_proj": "colwise_gather_output",
-        "layers.*.self_attn.o_proj": "rowwise_split_input",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -271,7 +261,7 @@ class Molmo2Config(PreTrainedConfig):
     """
 
     model_type = "molmo2"
-    attribute_map = {"image_token_id": "image_patch_id"}
+    attribute_map = {"image_token_id": "image_patch_id", "video_token_id": "image_patch_id"}
     sub_configs = {
         "text_config": Molmo2TextConfig,
         "vision_config": Molmo2VisionConfig,
@@ -311,16 +301,25 @@ class Molmo2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
-        # Normalize negative `vision_feature_layer` indices and trim the ViT to the deepest layer the adapter reads.
-        num_vit_layers = self.vision_config.num_hidden_layers
-        self.adapter_config.vision_feature_layer = [
-            layer if layer >= 0 else layer + num_vit_layers for layer in self.adapter_config.vision_feature_layer
-        ]
-        last_layer_needed = max(self.adapter_config.vision_feature_layer) + 1
-        if last_layer_needed < num_vit_layers:
-            self.vision_config.num_hidden_layers = last_layer_needed
+        # The released checkpoints count `vit_layers` from the end of a 27-layer ViT but only ship the layers up to
+        # the deepest one read.
+        if legacy_vision_config is not None:
+            num_vit_layers = self.vision_config.num_hidden_layers
+            self.adapter_config.vision_feature_layer = [
+                layer % num_vit_layers for layer in self.adapter_config.vision_feature_layer
+            ]
+            self.vision_config.num_hidden_layers = max(self.adapter_config.vision_feature_layer) + 1
 
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        num_vit_layers = self.vision_config.num_hidden_layers
+        if not all(0 <= layer < num_vit_layers for layer in self.adapter_config.vision_feature_layer):
+            raise ValueError(
+                f"`adapter_config.vision_feature_layer` {self.adapter_config.vision_feature_layer} must index the "
+                f"{num_vit_layers} layers of `vision_config`."
+            )
 
 
 def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) -> tuple[int, int]:
@@ -935,8 +934,6 @@ class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
     valid_processor_kwargs = Molmo2ProcessorKwargs
-    image_token = "<|image|>"
-    video_token = "<|video|>"
 
     @property
     def model_input_names(self):
@@ -976,8 +973,8 @@ class Molmo2Processor(ProcessorMixin):
         self.use_single_crop_start_token = use_single_crop_start_token
         self.video_use_col_tokens = video_use_col_tokens
         self.use_frame_special_tokens = use_frame_special_tokens
-        self.image_token = getattr(tokenizer, "image_token", self.image_token)
-        self.video_token = getattr(tokenizer, "video_token", self.video_token)
+        self.image_token = getattr(tokenizer, "image_token", "<|image|>")
+        self.video_token = getattr(tokenizer, "video_token", "<|video|>")
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         self.image_token_ids = tokenizer.convert_tokens_to_ids(
@@ -1011,13 +1008,11 @@ class Molmo2Processor(ProcessorMixin):
             text = [prompt if prompt.startswith(bos_token) else bos_token + prompt for prompt in text]
         return super().__call__(images=images, text=text, videos=videos, **kwargs)
 
-    def get_video_string(self, video_grid, timestamps) -> str:
-        if hasattr(video_grid, "tolist"):
-            video_grid = video_grid.tolist()
+    def get_video_string(self, video_grid: torch.Tensor, timestamps) -> str:
         start_token = "<frame_start>" if self.use_frame_special_tokens else "<im_start>"
         end_token = "<frame_end>" if self.use_frame_special_tokens else "<im_end>"
 
-        num_frames, num_patch_rows, num_patch_cols = video_grid
+        num_frames, num_patch_rows, num_patch_cols = video_grid.tolist()
         video_string = ""
         for frame_idx, frame_time in enumerate(timestamps):
             prev_space = " " if frame_idx > 0 else ""
@@ -1125,13 +1120,23 @@ class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
     layers outside `rope_scaling_layers`."""
 
     def __init__(self, config: Molmo2TextConfig, device=None, scaled: bool = True):
-        super().__init__(config, device)
-        if not scaled:
-            # `rope_type = "default"` also keeps the generic `_init_weights` rotary re-init on the unscaled table.
-            self.rope_type = "default"
-            inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device=device)
-            self.inv_freq = inv_freq
-            self.original_inv_freq = inv_freq.clone()
+        nn.Module.__init__(self)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        # `rope_type = "default"` also keeps the generic `_init_weights` rotary re-init on the unscaled table.
+        self.rope_type = self.config.rope_parameters["rope_type"] if scaled else "default"
+        rope_init_fn: Callable = (
+            self.compute_default_rope_parameters
+            if self.rope_type == "default"
+            else ROPE_INIT_FUNCTIONS[self.rope_type]
+        )
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
 
 class Molmo2RMSNorm(LlamaRMSNorm):
@@ -1145,9 +1150,14 @@ class Molmo2Attention(Olmo2Attention):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.qk_norm_type = config.qk_norm_type
-        if self.qk_norm_type == "qwen3":
-            self.q_norm = Molmo2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Molmo2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Molmo2RMSNorm(
+            self.head_dim if config.qk_norm_type == "qwen3" else config.num_attention_heads * self.head_dim,
+            eps=config.rms_norm_eps,
+        )
+        self.k_norm = Molmo2RMSNorm(
+            self.head_dim if config.qk_norm_type == "qwen3" else config.num_key_value_heads * self.head_dim,
+            eps=config.rms_norm_eps,
+        )
 
     def forward(
         self,
@@ -1167,11 +1177,14 @@ class Molmo2Attention(Olmo2Attention):
         if self.qk_norm_type == "olmo":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
+
         query_states = query_states.view(hidden_shape)
         key_states = key_states.view(hidden_shape)
+
         if self.qk_norm_type == "qwen3":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
+
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
 
@@ -1253,23 +1266,7 @@ class Molmo2DecoderLayer(LlamaDecoderLayer):
 
 class Molmo2PreTrainedModel(LlamaPreTrainedModel):
     config: Molmo2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "Molmo2DecoderLayer",
-        "Molmo2VisionEncoderLayer",
-        "Molmo2VisionAttention",
-    ]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Molmo2DecoderLayer,
-        "attentions": Molmo2Attention,
-    }
+    input_modalities = ("image", "video", "text")
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -1459,8 +1456,6 @@ class Molmo2TextModel(LlamaModel):
         self.norm = Molmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Molmo2RotaryEmbedding(config)
         self.rotary_emb_unscaled = Molmo2RotaryEmbedding(config, scaled=False)
-        # CODEPATH: O-7B lists 24 of its 32 layers in `rope_scaling_layers` (YaRN there, plain RoPE elsewhere);
-        # 4B/8B scale every layer.
         self.rope_types = [
             "scaled" if layer_idx in config.rope_scaling_layers else "unscaled"
             for layer_idx in range(config.num_hidden_layers)
@@ -1565,7 +1560,6 @@ class Molmo2Model(LlavaModel):
             pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
 
         image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
-        # `vision_feature_layer` indices are normalized to non-negative in `Molmo2Config.__post_init__`
         image_features = torch.cat(
             [image_outputs.hidden_states[layer + 1] for layer in self.config.adapter_config.vision_feature_layer],
             dim=-1,
@@ -1613,23 +1607,34 @@ class Molmo2Model(LlavaModel):
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("pixel_values and pixel_values_videos are provided at the same time")
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features: torch.FloatTensor | None = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_token_pooling, image_grids).pooler_output
-        elif pixel_values_videos is not None:
-            image_features = self.get_video_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_token_pooling, image_grids)
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
                 pixel_values_videos, video_token_pooling, video_grids
-            ).pooler_output
+            )
+
+        image_features: torch.FloatTensor | None = None
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
+        elif mm_encoder_outputs.get("video") is not None:
+            image_features = mm_encoder_outputs["video"].pooler_output
 
         if image_features is not None:
             image_features = torch.cat(image_features, dim=0)
@@ -1698,6 +1703,26 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, **kwargs)
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_token_pooling: torch.Tensor,
+        video_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_video_features(pixel_values_videos, video_token_pooling, video_grids, **kwargs)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1718,6 +1743,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2CausalLMOutputWithPast:
         r"""
@@ -1760,6 +1786,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1780,44 +1807,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ):
-        visual_keys = (
-            "pixel_values",
-            "image_token_pooling",
-            "image_grids",
-            "image_num_crops",
-            "pixel_values_videos",
-            "video_token_pooling",
-            "video_grids",
-        )
-        visual = {k: model_kwargs.pop(k) for k in visual_keys if k in model_kwargs}
-        original_input_ids = input_ids
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-        if expand_size != 1 and original_input_ids is not None:
-            # image and video patches share `image_token_id` in `input_ids`, so the per-sample count
-            # covers whichever pooling tensor is present
-            patch_counts = (original_input_ids == self.config.image_token_id).sum(dim=-1).tolist()
-            for pooling_key in ("image_token_pooling", "video_token_pooling"):
-                if visual.get(pooling_key) is not None:
-                    chunks = visual[pooling_key].split(patch_counts)
-                    visual[pooling_key] = torch.cat([chunk for chunk in chunks for _ in range(expand_size)], dim=0)
-            for grid_key in ("image_grids", "video_grids"):
-                if visual.get(grid_key) is not None:
-                    visual[grid_key] = visual[grid_key].repeat_interleave(expand_size, dim=0)
-        model_kwargs.update(visual)
-        return input_ids, model_kwargs
 
     @staticmethod
     def create_masks_for_generate(

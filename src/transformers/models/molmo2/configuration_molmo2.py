@@ -36,18 +36,12 @@ class Molmo2VisionConfig(PreTrainedConfig):
         provided.
     """
 
-    model_type = "molmo2"
+    model_type = "molmo2_vision"
     base_config_key = "vision_config"
-    # Keys of the released checkpoints' `config.json`.
-    attribute_map = {
-        "image_default_input_size": "image_size",
-        "image_patch_size": "patch_size",
-        "image_num_pos": "num_position_embeddings",
-    }
 
     hidden_size: int = 1152
     intermediate_size: int = 4304
-    num_hidden_layers: int = 27
+    num_hidden_layers: int = 25
     num_attention_heads: int = 16
     num_key_value_heads: int = 16
     head_dim: int = 72
@@ -62,6 +56,11 @@ class Molmo2VisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        # Keys of the released checkpoints' `config.json`.
+        kwargs.pop("model_type", None)
+        self.image_size = kwargs.pop("image_default_input_size", self.image_size)
+        self.patch_size = kwargs.pop("image_patch_size", self.patch_size)
+        self.num_position_embeddings = kwargs.pop("image_num_pos", self.num_position_embeddings)
         if self.image_size is None:
             self.image_size = [378, 378]
         if self.num_position_embeddings is None:
@@ -76,16 +75,15 @@ class Molmo2VisionConfig(PreTrainedConfig):
 class Molmo2AdapterConfig(PreTrainedConfig):
     r"""
     vision_feature_layer (`list[int]`, *optional*):
-        Indices of the ViT layers whose outputs are concatenated and pooled, `[-3, -9]` when not provided.
+        Indices of the ViT layers whose outputs are concatenated and pooled, `[24, 18]` when not provided.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
         Dropout rate for image features.
     """
 
-    model_type = "molmo2"
+    model_type = "molmo2_adapter"
     base_config_key = "adapter_config"
-    attribute_map = {"vit_layers": "vision_feature_layer"}
 
     vision_feature_layer: list[int] | None = None
     hidden_size: int = 1152
@@ -101,8 +99,11 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        # Keys of the released checkpoints' `config.json`.
+        kwargs.pop("model_type", None)
+        self.vision_feature_layer = kwargs.pop("vit_layers", self.vision_feature_layer)
         if self.vision_feature_layer is None:
-            self.vision_feature_layer = [-3, -9]
+            self.vision_feature_layer = [24, 18]
         super().__post_init__(**kwargs)
 
 
@@ -119,8 +120,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         The dropout ratio for the embedding layer.
     residual_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio applied after residual connections.
-    rope_parameters (`RopeParameters`, *optional*):
-        RoPE parameters for the model.
     rope_scaling_layers (`list[int]`, *optional*):
         Indices of the layers that apply the scaled RoPE described by `rope_parameters`. The remaining layers use an
         unscaled RoPE with the same theta. All layers are scaled when not provided.
@@ -132,15 +131,6 @@ class Molmo2TextConfig(PreTrainedConfig):
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"qkv_bias": "attention_bias", "layer_norm_eps": "rms_norm_eps"}
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_gather_output",
-        "layers.*.self_attn.k_proj": "colwise_gather_output",
-        "layers.*.self_attn.v_proj": "colwise_gather_output",
-        "layers.*.self_attn.o_proj": "rowwise_split_input",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -206,7 +196,7 @@ class Molmo2Config(PreTrainedConfig):
     """
 
     model_type = "molmo2"
-    attribute_map = {"image_token_id": "image_patch_id"}
+    attribute_map = {"image_token_id": "image_patch_id", "video_token_id": "image_patch_id"}
     sub_configs = {
         "text_config": Molmo2TextConfig,
         "vision_config": Molmo2VisionConfig,
@@ -246,16 +236,25 @@ class Molmo2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
-        # Normalize negative `vision_feature_layer` indices and trim the ViT to the deepest layer the adapter reads.
-        num_vit_layers = self.vision_config.num_hidden_layers
-        self.adapter_config.vision_feature_layer = [
-            layer if layer >= 0 else layer + num_vit_layers for layer in self.adapter_config.vision_feature_layer
-        ]
-        last_layer_needed = max(self.adapter_config.vision_feature_layer) + 1
-        if last_layer_needed < num_vit_layers:
-            self.vision_config.num_hidden_layers = last_layer_needed
+        # The released checkpoints count `vit_layers` from the end of a 27-layer ViT but only ship the layers up to
+        # the deepest one read.
+        if legacy_vision_config is not None:
+            num_vit_layers = self.vision_config.num_hidden_layers
+            self.adapter_config.vision_feature_layer = [
+                layer % num_vit_layers for layer in self.adapter_config.vision_feature_layer
+            ]
+            self.vision_config.num_hidden_layers = max(self.adapter_config.vision_feature_layer) + 1
 
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        num_vit_layers = self.vision_config.num_hidden_layers
+        if not all(0 <= layer < num_vit_layers for layer in self.adapter_config.vision_feature_layer):
+            raise ValueError(
+                f"`adapter_config.vision_feature_layer` {self.adapter_config.vision_feature_layer} must index the "
+                f"{num_vit_layers} layers of `vision_config`."
+            )
 
 
 __all__ = ["Molmo2AdapterConfig", "Molmo2Config", "Molmo2TextConfig", "Molmo2VisionConfig"]
