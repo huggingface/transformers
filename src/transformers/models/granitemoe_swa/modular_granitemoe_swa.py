@@ -157,7 +157,11 @@ class GraniteMoeSWADecoderLayer(GraniteMoeSharedDecoderLayer):
 class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeSWADecoderLayer"]
     _supports_sdpa = False
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/aiter-flash-attn",
+    ]
     _can_record_outputs = {
         "hidden_states": GraniteMoeSWADecoderLayer,
         "attentions": GraniteMoeSWAAttention,
