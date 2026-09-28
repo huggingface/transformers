@@ -76,7 +76,7 @@ class PeVideoEncoderConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         # Keep for BC only - shouldn't appear in new releases!
-        if isinstance(self.visino_config, dict):
+        if isinstance(self.vision_config, dict):
             self.vision_config = {**self.sub_configs_defaults["vision_config"].init_kwargs, **self.vision_config}
         super().__post_init__(**kwargs)
 
