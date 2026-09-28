@@ -38,10 +38,6 @@ class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Kimi_K25Processor(ProcessorMixin):
     valid_processor_kwargs = Kimi_K25ProcessorKwargs
-    text_kwargs = {
-        "padding": False,
-        "return_mm_token_type_ids": True,
-    }
 
     def __init__(
         self,

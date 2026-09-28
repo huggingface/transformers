@@ -718,6 +718,8 @@ class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Kimi_K25Processor(Qwen2VLProcessor):
+    text_kwargs = AttributeError()
+
     def __init__(
         self,
         image_processor=None,
