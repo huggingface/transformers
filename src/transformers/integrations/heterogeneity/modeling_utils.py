@@ -272,7 +272,10 @@ def _apply_skip_descriptor(
 
     selected_targets = generic_targets | class_specific_targets
     for member_name, replacement_factory in selected_targets.items():
-        _setattr_by_path(layer, member_name, replacement_factory())
+        original = _getattr_by_path(layer, member_name)
+        replacement = replacement_factory()
+        replacement._heterogeneity_skipped_class = type(original)
+        _setattr_by_path(layer, member_name, replacement)
 
 
 def _getattr_by_path(obj: Any, attribute_path: str) -> Any:

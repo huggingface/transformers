@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -262,6 +263,56 @@ class TestHeterogeneousModeling(unittest.TestCase):
         torch.testing.assert_close(forward_logits(model_a, input_ids), expected_logits)
         forward_logits(model_b, input_ids)
 
+    def test_attention_outputs_with_custom_skipped_attention(self):
+        class CustomSkippedAttention(torch.nn.Module):
+            def forward(self, hidden_states, **kwargs):
+                return torch.zeros_like(hidden_states), None
+
+        config = tiny_llama_config(num_hidden_layers=3, per_layer_config={1: {"skip": ["attention"]}})
+        config._attn_implementation = "eager"
+        fixture = MODEL_FIXTURES["llama"]
+        spec = fixture.spec_factory()
+        spec.skip_descriptors["attention"]["self_attn"] = CustomSkippedAttention
+        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", spec, create=True):
+            model = build_model(config, LlamaForCausalLM)
+        input_ids = dummy_input_ids()
+
+        with torch.no_grad():
+            actual = model(input_ids, use_cache=False, output_attentions=True)
+
+        self.assertEqual(len(actual.attentions), 3)
+        self.assertIsNone(actual.attentions[1])
+        batch_size, seq_length = input_ids.shape
+        expected_shape = (batch_size, config.num_attention_heads, seq_length, seq_length)
+        for layer_idx in (0, 2):
+            self.assertEqual(actual.attentions[layer_idx].shape, expected_shape)
+
+    def test_save_pretrained_model_round_trip(self):
+        """Full model save/load: skips, weight shapes, and forward output should survive."""
+        per_layer = {
+            0: {"intermediate_size": 64},
+            1: {"skip": ["attention"]},
+            2: {"intermediate_size": 96},
+        }
+        hetero_config = tiny_llama_config(per_layer_config=per_layer)
+        hetero_model = build_model(hetero_config, LlamaForCausalLM)
+
+        input_ids = dummy_input_ids()
+        expected_logits = forward_logits(hetero_model, input_ids)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hetero_model.save_pretrained(tmpdir)
+            loaded_model = LlamaForCausalLM.from_pretrained(tmpdir)
+
+        loaded_model.eval()
+        self.assertEqual(list(loaded_model.model.layers[1].self_attn.parameters()), [])
+        for layer_idx in range(hetero_config.num_hidden_layers):
+            orig_shape = hetero_model.model.layers[layer_idx].mlp.gate_proj.weight.shape
+            loaded_shape = loaded_model.model.layers[layer_idx].mlp.gate_proj.weight.shape
+            self.assertEqual(orig_shape, loaded_shape, f"Layer {layer_idx} weight shape mismatch")
+
+        torch.testing.assert_close(forward_logits(loaded_model, input_ids), expected_logits)
+
 
 @require_torch
 class TestHeterogeneousCache(unittest.TestCase):
@@ -324,3 +375,33 @@ class TestHeterogeneousCache(unittest.TestCase):
 
         torch.testing.assert_close(actual.sequences, expected.sequences)
         torch.testing.assert_close(actual.logits, expected.logits)
+
+    def test_assisted_generation_attention_outputs_with_skipped_attention(self):
+        config = tiny_llama_config(
+            num_hidden_layers=3, per_layer_config={1: {"skip": ["attention"]}}, pad_token_id=0, eos_token_id=None
+        )
+        config._attn_implementation = "eager"
+        model = build_model(config, LlamaForCausalLM)
+        model.generation_config.num_assistant_tokens = 2
+        model.generation_config.num_assistant_tokens_schedule = "constant"
+        model.generation_config.assistant_confidence_threshold = 0.0
+        input_ids = torch.tensor([[1, 3, 4, 5]])
+
+        with torch.no_grad():
+            actual = model.generate(
+                input_ids,
+                assistant_model=model,
+                max_new_tokens=5,
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_attentions=True,
+            )
+
+        self.assertEqual(len(actual.attentions), 5)
+        for step, attentions in enumerate(actual.attentions):
+            self.assertEqual(len(attentions), 3)
+            self.assertIsNone(attentions[1])
+            query_length = input_ids.shape[1] if step == 0 else 1
+            expected_shape = (1, config.num_attention_heads, query_length, input_ids.shape[1] + step)
+            for layer_idx in (0, 2):
+                self.assertEqual(attentions[layer_idx].shape, expected_shape)

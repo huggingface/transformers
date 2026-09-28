@@ -4020,7 +4020,7 @@ class GenerationMixin(ContinuousMixin):
                             is_decoder_attention=True,
                         )
                     # some (V)LLMs have hard requirement on SDPA and thus never return attn
-                    elif outputs.attentions[0] is not None:
+                    elif outputs.attentions and any(attn is not None for attn in outputs.attentions):
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.attentions,
@@ -4252,6 +4252,9 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     if len(outputs) == 0:
         new_tuple = ()
         for layer in new_outputs:
+            if layer is None:
+                new_tuple += (None,)
+                continue
             last_dim_size = cur_len if is_decoder_attention else layer.shape[-1]
             new_tuple += (layer[..., :cur_len, :last_dim_size],)
         outputs += (new_tuple,)
@@ -4262,6 +4265,9 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     for i in range(added_len):
         new_tuple = ()
         for layer in new_outputs:
+            if layer is None:
+                new_tuple += (None,)
+                continue
             last_dim_size = cur_len + i if is_decoder_attention else layer.shape[-1]
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)

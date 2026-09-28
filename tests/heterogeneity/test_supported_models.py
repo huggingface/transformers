@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -313,29 +312,3 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
         # Use an uncached reference so a shared cache bug cannot make both outputs agree.
         expected_ids = ref.generate(input_ids, use_cache=False, **gen_kwargs)
         torch.testing.assert_close(actual_ids, expected_ids)
-
-    def test_save_pretrained_model_round_trip(self):
-        """Full model save/load: skips, weight shapes, and forward output should survive."""
-        per_layer = {
-            0: {"intermediate_size": 64},
-            1: {"skip": ["attention"]},
-            2: {"intermediate_size": 96},
-        }
-        hetero_config = tiny_llama_config(per_layer_config=per_layer)
-        hetero_model = build_model(hetero_config, LlamaForCausalLM)
-
-        input_ids = dummy_input_ids()
-        expected_logits = forward_logits(hetero_model, input_ids)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            hetero_model.save_pretrained(tmpdir)
-            loaded_model = LlamaForCausalLM.from_pretrained(tmpdir)
-
-        loaded_model.eval()
-        self.assertEqual(list(loaded_model.model.layers[1].self_attn.parameters()), [])
-        for layer_idx in range(hetero_config.num_hidden_layers):
-            orig_shape = hetero_model.model.layers[layer_idx].mlp.gate_proj.weight.shape
-            loaded_shape = loaded_model.model.layers[layer_idx].mlp.gate_proj.weight.shape
-            self.assertEqual(orig_shape, loaded_shape, f"Layer {layer_idx} weight shape mismatch")
-
-        torch.testing.assert_close(forward_logits(loaded_model, input_ids), expected_logits)

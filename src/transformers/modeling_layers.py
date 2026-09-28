@@ -30,7 +30,6 @@ from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_m
 from .integrations.heterogeneity import (
     HeterogeneousModelingSpec,
     LayerIdxFromArgument,
-    NoOpReplacement,
     get_heterogeneous_modeling_spec,
     nest_skip_descriptor_paths,
 )
@@ -403,8 +402,11 @@ class MtpModel(PreTrainedModel):
             if "norm" in name
         )
         norm_cls = type(norm)
-        if main_model.config.generic_modeling_applied and isinstance(norm, NoOpReplacement):
-            norm_cls = norm.source_class
+
+        # Support generic heterogeneous modeling
+        if hasattr(norm, "_heterogeneity_skipped_class") and main_model.config.generic_modeling_applied:
+            norm_cls = norm._heterogeneity_skipped_class
+
         # If the config contains the field, we never use per-layer post norm, but maybe a shared one
         self.use_post_norm = True
         self.use_shared_post_norm = False

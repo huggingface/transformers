@@ -134,6 +134,9 @@ def install_output_capuring_hook(
             collected_outputs[key].append(output)
         elif output[index] is not None:
             collected_outputs[key].append(output[index])
+        elif hasattr(module, "_heterogeneity_skipped_class") and key == "attentions":
+            # Support generic heterogeneous modeling: The attention module is skipped, so None is expected
+            collected_outputs[key].append(None)
 
     module.register_forward_hook(output_capturing_hook)
 
@@ -161,8 +164,12 @@ def recursively_install_hooks(
 
     # Potentially install the hook on current `parent_module`
     for key, specs in capture_tasks:
+        module_cls = type(parent_module)
+        # Support generic heterogeneous modeling: match the original attention class when attention is skipped.
+        if hasattr(parent_module, "_heterogeneity_skipped_class") and key == "attentions":
+            module_cls = parent_module._heterogeneity_skipped_class
         # Check if the spec matches the target class
-        match_target_class = specs.target_class is not None and isinstance(parent_module, specs.target_class)
+        match_target_class = specs.target_class is not None and issubclass(module_cls, specs.target_class)
         # This check is for multimodals where only backbone layer suffix is available
         match_class_name = specs.class_name is not None and module_name.endswith(specs.class_name)
 
