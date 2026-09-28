@@ -63,7 +63,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build, scan and push ${{ matrix.file }}.dockerfile
-        uses: huggingface/wiz-image-action/build-push@v1
+        uses: huggingface/wiz-image-action/build-push@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
         with:
           image: ${{ env.TAG }}
           context: ./docker
