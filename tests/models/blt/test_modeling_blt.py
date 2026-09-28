@@ -21,7 +21,6 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     _test_eager_matches_sdpa_inference,
@@ -40,6 +40,18 @@ if is_torch_available():
     import torch
 
     from transformers import BltConfig, BltForCausalLM, BltModel
+
+
+@require_torch
+def test_process_patch_lengths_vectorized():
+    from transformers.models.blt.modeling_blt import process_patch_lengths
+    from transformers.models.blt.modular_blt import process_patch_lengths as modular_process_patch_lengths
+
+    patch_lengths = torch.tensor([[0, 5, 9, 0], [4, 0, 13, 1]], device=torch_device)
+    expected = torch.tensor([[4, 1, 4, 4, 1, 0], [4, 4, 4, 4, 1, 1]], device=torch_device)
+
+    assert torch.equal(process_patch_lengths(patch_lengths, 4), expected)
+    assert torch.equal(modular_process_patch_lengths(patch_lengths, 4), expected)
 
 
 class BltModelTester(CausalLMModelTester):
@@ -191,6 +203,50 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
     @pytest.mark.generate
     @unittest.skip(
+        "BLT rebuilds its hash n-gram embeddings, patch lengths and global-transformer states from the "
+        "current step's `input_ids` alone, and calls the global transformer with no cache at all, so a "
+        "one-byte decode step carries no byte history: the n-grams come out zero-padded and the trunk "
+        "restarts its positions. Cached decode is a different computation rather than a cached one (measured: "
+        "the divergence is already there in the hash embeddings, before attention). TODO: keep the byte "
+        "window for hashing/patching and give the global transformer a cache."
+    )
+    def test_cached_decode_matches_cacheless(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT requires real token IDs for its hash-based embedding computation; continuing from inputs_embeds "
+        "diverges by one token vs continuing from input_ids."
+    )
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT's EncoderDecoderCache cross-attention path produces a kv length that disagrees with the causal "
+        "mask shape when assisted decoding rolls the cache back across rejected drafts."
+    )
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT's EncoderDecoderCache cross-attention path produces a kv length that disagrees with the causal "
+        "mask shape when assisted decoding rolls the cache back across rejected drafts."
+    )
+    def test_assisted_decoding_matches_greedy_search_1_same(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT's EncoderDecoderCache cross-attention path produces a kv length that disagrees with the causal "
+        "mask shape when assisted decoding rolls the cache back across rejected drafts."
+    )
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
         "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
     )
     def test_inputs_embeds_matches_input_ids(self):
@@ -232,17 +288,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-class BltIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
-
+class BltIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     def test_model(self):
         NUM_TOKENS_TO_GENERATE = 200

@@ -99,7 +99,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         outputs = depth_estimator(
             [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
                 # RGBA
                 self._dataset[0]["image"],
                 # LA
@@ -127,7 +127,9 @@ class DepthEstimationPipelineTests(unittest.TestCase):
     def test_large_model_pt(self):
         model_id = "Intel/dpt-large"
         depth_estimator = pipeline("depth-estimation", model=model_id)
-        outputs = depth_estimator("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = depth_estimator(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         outputs["depth"] = hashimage(outputs["depth"])
 
         # This seems flaky.

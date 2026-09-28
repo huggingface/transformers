@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-04-09 and added to Hugging Face Transformers on 2023-07-17.*
+*This model was contributed to Hugging Face Transformers on 2023-07-17.*
 
 # Bark
 
@@ -75,7 +75,7 @@ pip install -U flash-attn --no-build-isolation
 
 ##### Usage
 
-To load a model using Flash Attention 2, we can pass the `attn_implementation="flash_attention_2"` flag to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
+To load a model using Flash Attention 2, we can pass the `attn_implementation="flash_attention_2"` flag to [`~PreTrainedModel.from_pretrained`]. We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
 model = BarkModel.from_pretrained("suno/bark-small", attn_implementation="flash_attention_2", device_map="auto")

@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -282,6 +282,7 @@ class RoFormerAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
+            **kwargs,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -351,6 +352,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
             sinusoidal_pos=sinusoidal_pos,
             output_attentions=output_attentions,
             past_key_values=past_key_values,
+            **kwargs,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -369,6 +371,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
+                **kwargs,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
@@ -435,6 +438,7 @@ class RoFormerEncoder(nn.Module):
                 encoder_attention_mask,
                 past_key_values,
                 output_attentions,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -720,10 +724,12 @@ class RoFormerModel(RoFormerPreTrainedModel):
         if hasattr(self, "embeddings_project"):
             embedding_output = self.embeddings_project(embedding_output)
 
-        attention_mask = create_bidirectional_mask(
+        mask_function = create_causal_mask if self.config.is_decoder else create_bidirectional_mask
+        attention_mask = mask_function(
             config=self.config,
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
+            past_key_values=past_key_values if self.config.is_decoder else None,
         )
 
         if encoder_attention_mask is not None:
@@ -744,6 +750,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         sequence_output = encoder_outputs[0]
 
@@ -803,12 +810,6 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> MaskedLMOutput | tuple[torch.Tensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.roformer(
@@ -821,6 +822,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -895,7 +897,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -927,6 +929,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -1002,12 +1005,6 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> SequenceClassifierOutput | tuple[torch.Tensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.roformer(
@@ -1018,6 +1015,7 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1102,10 +1100,6 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1128,6 +1122,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1179,10 +1174,6 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> TokenClassifierOutput | tuple[torch.Tensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.roformer(
@@ -1193,6 +1184,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1255,6 +1247,7 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]

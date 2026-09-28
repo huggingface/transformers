@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-08-23 and added to Hugging Face Transformers on 2024-08-27.*
+*This model was published in HF papers on 2024-08-23 and contributed to Hugging Face Transformers on 2024-08-27.*
 
 <div class="flex flex-wrap space-x-1">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
@@ -30,7 +30,7 @@ You can find all the original Granite checkpoints under the [IBM-Granite](https:
 > [!TIP]
 > Click on the Granite models in the right sidebar for more examples of how to apply Granite to different language tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`, and from the command line.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">

@@ -862,6 +862,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
 
         init_std = self.config.initializer_range
         if isinstance(module, VJEPA2AttentivePooler):
@@ -881,9 +882,6 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, std=init_std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring
@@ -998,11 +996,6 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | ImageClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python

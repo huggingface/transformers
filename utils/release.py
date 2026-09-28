@@ -109,7 +109,7 @@ def update_version_in_examples(version: str, patch: bool = False):
             directories.remove("legacy")
         for fname in fnames:
             if fname.endswith(".py"):
-                if UV_SCRIPT_MARKER in Path(folder, fname).read_text():
+                if UV_SCRIPT_MARKER in Path(folder, fname).read_text(encoding="utf-8"):
                     # Update the dependencies in UV scripts
                     uv_script_file_type = "uv_script_dev" if ".dev" in version else "uv_script_release"
                     update_version_in_file(os.path.join(folder, fname), version, file_type=uv_script_file_type)
@@ -128,7 +128,8 @@ def global_version_update(version: str, patch: bool = False):
     """
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
-    update_version_in_examples(version, patch=patch)
+    # REMOVED AFTER v5! Uncomment to start updating the version of the examples again
+    # update_version_in_examples(version, patch=patch)
 
 
 def remove_conversion_scripts():
@@ -153,7 +154,7 @@ def get_version() -> packaging.version.Version:
     """
     Reads the current version in the main __init__.
     """
-    with open(REPLACE_FILES["init"], "r") as f:
+    with open(REPLACE_FILES["init"], "r", encoding="utf-8") as f:
         code = f.read()
     default_version = REPLACE_PATTERNS["init"][0].search(code).groups()[0]
     return packaging.version.parse(default_version)
@@ -187,9 +188,11 @@ def pre_release_work(patch: bool = False):
 
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
-    print("Deleting conversion and internal utils scripts.")
-    remove_conversion_scripts()
-    remove_internal_utils()
+    # If releasing a patch, all those files were already deleted on the branch when releasing the main version
+    if not patch:
+        print("Deleting conversion and internal utils scripts.")
+        remove_conversion_scripts()
+        remove_internal_utils()
 
 
 def post_release_work():

@@ -238,6 +238,7 @@ class HrmTextIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = Expectations(
             {
                 ("cuda", None): "The capital of France isParis",
+                ("xpu", None): "The capital of France isParis",
             }
         ).get_expectation()
 
@@ -255,6 +256,14 @@ class HrmTextIntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 6)): torch.tensor(
                     [[-6.8750, -5.0000, -7.0625], [-5.3750, -3.2656, -4.5938], [2.1875, 2.2031, 2.5625]],
+                    dtype=torch.bfloat16,
+                ),
+                ("xpu", 3): torch.tensor(
+                    [[-6.8750, -5.0000, -7.0625], [-5.3438, -3.2656, -4.5938], [2.1719, 2.1562, 2.5469]],
+                    dtype=torch.bfloat16,
+                ),
+                ("xpu", 5): torch.tensor(
+                    [[-6.8750, -4.9688, -7.0625], [-5.3750, -3.2812, -4.5938], [2.1719, 2.1719, 2.5625]],
                     dtype=torch.bfloat16,
                 ),
             }

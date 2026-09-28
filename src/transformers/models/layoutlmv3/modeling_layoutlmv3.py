@@ -97,9 +97,7 @@ class LayoutLMv3TextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -558,8 +556,8 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
             self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
             if self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
-                self.register_buffer(
-                    "visual_bbox", self.create_visual_bbox(image_size=(self.size, self.size)), persistent=False
+                self.visual_bbox = nn.Buffer(
+                    self.create_visual_bbox(image_size=(self.size, self.size)), persistent=False
                 )
 
             self.norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
@@ -873,8 +871,6 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 

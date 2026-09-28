@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-07-29 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-07-29 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 
 # BertGeneration
@@ -52,7 +52,7 @@ print(tokenizer.decode(outputs[0]))
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [BitsAndBytesConfig](../quantizationbitsandbytes) to quantize the weights to 4-bit.
+The example below uses [BitsAndBytesConfig](../quantization/bitsandbytes) to quantize the weights to 4-bit.
 
 ```python
 import torch

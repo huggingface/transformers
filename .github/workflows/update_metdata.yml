@@ -6,18 +6,20 @@ on:
       - main
       - update_transformers_metadata*
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   build_and_package:
+    permissions:
+      contents: read
     runs-on: ubuntu-22.04
     defaults:
       run:
         shell: bash -l {0}
 
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 

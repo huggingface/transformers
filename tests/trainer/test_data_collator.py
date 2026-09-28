@@ -48,6 +48,8 @@ from transformers.utils import PaddingStrategy
 if is_torch_available():
     import torch
 
+    from transformers.modeling_flash_attention_utils import _is_packed_sequence, prepare_fa_kwargs_from_position_ids
+
 
 class DataCollatorTestMixin:
     """Mixin providing common setup and utility methods for data collator tests."""
@@ -346,6 +348,31 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         for key in ["attention_mask", "cu_seq_lens_k", "cu_seq_lens_q", "seq_idx"]:
             self.assertNotIn(key, batch)
 
+    def test_position_ids_start(self):
+        """Test position_ids for models numbering positions from padding_idx + 1, like RoBERTa."""
+        for return_tensors in ["pt", "np"]:
+            collator = DataCollatorWithFlattening(return_tensors=return_tensors, position_ids_start=2)
+            batch = collator(self._get_features())
+
+            self.assertEqual(batch["position_ids"][0].tolist(), [2, 3, 4, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 8])
+
+    def test_position_ids_flash_attn_boundary_inference(self):
+        """Test FlashAttention sequence boundary inference from collator position_ids, 0-based or not."""
+        for position_ids_start in [0, 2]:
+            collator = DataCollatorWithFlattening(return_tensors="pt", position_ids_start=position_ids_start)
+            batch = collator(self._get_features())
+
+            self.assertTrue(_is_packed_sequence(batch["position_ids"], batch_size=1))
+            cu_seq_lens, max_lengths = prepare_fa_kwargs_from_position_ids(batch["position_ids"])
+            self.assertEqual(cu_seq_lens[0].tolist(), [0, 3, 9, 16])
+            self.assertEqual(cu_seq_lens[1].tolist(), [0, 3, 9, 16])
+            self.assertEqual(int(max_lengths[0]), 7)
+            self.assertEqual(int(max_lengths[1]), 7)
+
+            # A batch with a single sequence stays on the regular FA path
+            single = collator([self._get_features()[0]])
+            self.assertFalse(_is_packed_sequence(single["position_ids"], batch_size=1))
+
     def test_flash_attn_kwargs(self):
         """Test flattening with Flash Attention kwargs."""
         collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
@@ -498,6 +525,20 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
 
         self.assertEqual(batch["input_ids"].shape, (2, 6))
         self.assertEqual(batch["labels"][0].tolist(), [0, 1, 2, -100, -100, -100])
+
+    def test_numpy_output_with_singular_label_key(self):
+        """Test with NumPy output when feature key is 'label' rather than 'labels'."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        collator = DataCollatorForTokenClassification(tokenizer, return_tensors="np")
+        features = [
+            {"input_ids": [0, 1, 2], "label": [0, 1, 2]},
+            {"input_ids": [0, 1, 2, 3, 4, 5], "label": [0, 1, 2, 3, 4, 5]},
+        ]
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 6))
+        self.assertIn("label", batch)
+        self.assertEqual(batch["label"][0].tolist(), [0, 1, 2, -100, -100, -100])
 
     def test_immutability(self):
         """Test that collation does not mutate input data."""

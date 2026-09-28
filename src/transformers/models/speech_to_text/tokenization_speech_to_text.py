@@ -188,11 +188,12 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        all_special_tokens = set(self.all_special_tokens)
         current_sub_tokens = []
         out_string = ""
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
+            if token in all_special_tokens:
                 decoded = self.sp_model.decode(current_sub_tokens)
                 out_string += (decoded.upper() if self.do_upper_case else decoded) + token + " "
                 current_sub_tokens = []
@@ -282,12 +283,12 @@ def load_spm(path: str, sp_model_kwargs: dict[str, Any]) -> sentencepiece.Senten
 
 
 def load_json(path: str) -> dict | list:
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_json(data, path: str) -> None:
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 

@@ -19,12 +19,7 @@ import json
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import (
-    DetrImageProcessor,
-    RfDetrConfig,
-    RfDetrForInstanceSegmentation,
-    RfDetrForObjectDetection,
-)
+from transformers import RfDetrConfig, RfDetrForInstanceSegmentation, RfDetrForObjectDetection, RfDetrImageProcessor
 
 
 # Mapping of model names to their checkpoint files
@@ -156,7 +151,7 @@ def get_model_config(model_name: str):
         config["num_labels"] = 91
         repo_id = "huggingface/label-files"
         filename = "coco-detection-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config["id2label"] = id2label
         config["label2id"] = {v: k for k, v in id2label.items()}
@@ -223,7 +218,7 @@ def convert_rf_detr_checkpoint(
         print("MISMATCH:", len(loading_info["mismatched_keys"]))
         print(loading_info["mismatched_keys"])
 
-    image_processor = DetrImageProcessor(size=IMAGE_PROCESSORS[model_name], do_resize=True, use_fast=True)
+    image_processor = RfDetrImageProcessor(size=IMAGE_PROCESSORS[model_name], do_resize=True, use_fast=True)
 
     repo_id = f"{organization}/{model_name}"
     # Save model

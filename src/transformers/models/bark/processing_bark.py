@@ -24,7 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import auto_docstring, logging
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, resolve_revision
 from ..auto import AutoTokenizer
 
 
@@ -75,6 +75,14 @@ class BarkProcessor(ProcessorMixin):
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
         """
         token = kwargs.get("token")
+        # Resolve the revision once, so that the speaker embeddings and the tokenizer come from the same repo state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_processor_name_or_path,
+            kwargs.get("revision"),
+            token=token,
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
         if speaker_embeddings_dict_path is not None:
             speaker_embeddings_path = cached_file(
                 pretrained_processor_name_or_path,
@@ -82,10 +90,10 @@ class BarkProcessor(ProcessorMixin):
                 subfolder=kwargs.pop("subfolder", None),
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
-                proxies=kwargs.pop("proxies", None),
-                local_files_only=kwargs.pop("local_files_only", False),
+                proxies=kwargs.get("proxies"),
+                local_files_only=kwargs.get("local_files_only", False),
                 token=token,
-                revision=kwargs.pop("revision", None),
+                revision=kwargs["revision"],
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
@@ -98,7 +106,7 @@ class BarkProcessor(ProcessorMixin):
                 )
                 speaker_embeddings = None
             else:
-                with open(speaker_embeddings_path) as speaker_embeddings_json:
+                with open(speaker_embeddings_path, encoding="utf-8") as speaker_embeddings_json:
                     speaker_embeddings = json.load(speaker_embeddings_json)
         else:
             speaker_embeddings = None
@@ -145,48 +153,81 @@ class BarkProcessor(ProcessorMixin):
 
             embeddings_dict["repo_or_path"] = save_directory
 
+            embeddings_subdir = os.path.join(save_directory, speaker_embeddings_directory)
             for prompt_key in self.available_voice_presets:
                 voice_preset = self._load_voice_preset(prompt_key)
 
                 tmp_dict = {}
                 for key in self.speaker_embeddings[prompt_key]:
-                    np.save(
-                        os.path.join(
-                            embeddings_dict["repo_or_path"], speaker_embeddings_directory, f"{prompt_key}_{key}"
-                        ),
-                        voice_preset[key],
-                        allow_pickle=False,
-                    )
+                    target_filepath = os.path.join(embeddings_subdir, f"{prompt_key}_{key}")
+                    self._reject_path_traversal(embeddings_subdir, target_filepath, prompt_key)
+                    np.save(target_filepath, voice_preset[key], allow_pickle=False)
                     tmp_dict[key] = os.path.join(speaker_embeddings_directory, f"{prompt_key}_{key}.npy")
 
                 embeddings_dict[prompt_key] = tmp_dict
 
-            with open(os.path.join(save_directory, speaker_embeddings_dict_path), "w") as fp:
+            with open(os.path.join(save_directory, speaker_embeddings_dict_path), "w", encoding="utf-8") as fp:
                 json.dump(embeddings_dict, fp)
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
+
+    @staticmethod
+    def _reject_path_traversal(base_dir: str, target_path: str, offending_value: str):
+        # base_dir/target_path derive from the untrusted speaker_embeddings json; allow nested
+        # subdirectories but reject any value that escapes base_dir (path traversal, CWE-22).
+        # The only untrusted input is the relative path string, so this is a purely lexical check:
+        # we use os.path.abspath (not realpath/Path.resolve) and must NOT follow symlinks here.
+        # When repo_or_path points at a populated HF cache, the referenced snapshot files are
+        # symlinks into a sibling blobs/ directory that sits outside base_dir, so a resolve()-based
+        # containment check would wrongly reject perfectly legitimate loads.
+        base = os.path.abspath(base_dir)
+        target = os.path.abspath(target_path)
+        try:
+            contained = os.path.commonpath([base, target]) == base
+        except ValueError:
+            # e.g. different Windows drives: definitely an escape.
+            contained = False
+        if not contained:
+            raise ValueError(f"Invalid voice preset path: {offending_value!r}")
 
     def _load_voice_preset(self, voice_preset: str | None = None, **kwargs):
         voice_preset_paths = self.speaker_embeddings[voice_preset]
 
         voice_preset_dict = {}
         token = kwargs.get("token")
+        repo_or_path = self.speaker_embeddings.get("repo_or_path", "/")
+        subfolder = kwargs.pop("subfolder", None)
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        # Resolve the revision once, so that the three prompt files come from the same repository state.
+        revision = resolve_revision(
+            repo_or_path,
+            kwargs.pop("revision", None),
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset_paths:
                 raise ValueError(
                     f"Voice preset unrecognized, missing {key} as a key in self.speaker_embeddings[{voice_preset}]."
                 )
 
+            self._reject_path_traversal(
+                repo_or_path, os.path.join(repo_or_path, voice_preset_paths[key]), voice_preset_paths[key]
+            )
             path = cached_file(
-                self.speaker_embeddings.get("repo_or_path", "/"),
+                repo_or_path,
                 voice_preset_paths[key],
-                subfolder=kwargs.pop("subfolder", None),
-                cache_dir=kwargs.pop("cache_dir", None),
-                force_download=kwargs.pop("force_download", False),
-                proxies=kwargs.pop("proxies", None),
-                local_files_only=kwargs.pop("local_files_only", False),
+                subfolder=subfolder,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
                 token=token,
-                revision=kwargs.pop("revision", None),
+                revision=revision,
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,

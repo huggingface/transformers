@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import numpy as np
 from huggingface_hub.dataclasses import strict
 
@@ -87,9 +86,6 @@ class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
     _can_record_outputs = None
     _no_split_modules = None
 
-    def _init_weights(self, module):
-        raise AttributeError("Not needed")
-
 
 class Glm46VModel(Glm4vModel):
     _no_split_modules = None
@@ -105,8 +101,8 @@ class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
 
 
 class Glm46VProcessor(Glm4vProcessor):
-    def replace_frame_token_id(self, timestamp_sec):
-        return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec:.1f} seconds"
+    def replace_frame_token_id(self, timestamp_sec, num_image_tokens: int = 1):
+        return f"<|begin_of_image|>{self.image_token * num_image_tokens}<|end_of_image|>{timestamp_sec:.1f} seconds"
 
 
 class Glm46VImageProcessorPil(Glm4vImageProcessorPil):
@@ -182,7 +178,7 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
 
 __all__ = [

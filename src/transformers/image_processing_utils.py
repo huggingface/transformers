@@ -380,7 +380,13 @@ class BaseImageProcessor(ImageProcessingMixin):
         )
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
+    def preprocess(
+        self,
+        images: ImageInput,
+        *args,
+        image_like_kwargs: dict[str, Any] | None = None,
+        **kwargs: Unpack[ImagesKwargs],
+    ) -> BatchFeature:
         """
         Preprocess an image or a batch of images.
         """
@@ -397,7 +403,9 @@ class BaseImageProcessor(ImageProcessingMixin):
         # Validate kwargs
         self._validate_preprocess_kwargs(**kwargs)
 
-        return self._preprocess_image_like_inputs(images, *args, **kwargs)
+        image_like_kwargs = {} if image_like_kwargs is None else image_like_kwargs
+
+        return self._preprocess_image_like_inputs(images, *args, **image_like_kwargs, **kwargs)
 
     def to_dict(self) -> dict[str, Any]:
         processor_dict = super().to_dict()
@@ -451,7 +459,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         return rescale(image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs)
 
-    # The next methods are kept for backwards compatibility with remote code, but are overriden by backends.
+    # The next methods are kept for backwards compatibility with remote code, but are overridden by backends.
     def normalize(
         self,
         image: np.ndarray,
@@ -535,6 +543,7 @@ VALID_SIZE_DICT_KEYS = (
     {"shortest_edge", "longest_edge"},
     {"longest_edge"},
     {"max_height", "max_width"},
+    {"min_pixels", "max_pixels"},
 )
 
 

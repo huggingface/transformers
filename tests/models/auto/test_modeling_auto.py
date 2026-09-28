@@ -14,6 +14,7 @@
 
 import copy
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -382,10 +383,11 @@ class AutoModelTest(unittest.TestCase):
 
         # Test that it works with a custom cache dir too
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model = AutoModel.from_pretrained(
-                "hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
-            )
-            self.assertEqual(model.__class__.__name__, "NewModel")
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                model = AutoModel.from_pretrained(
+                    "hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
+                )
+                self.assertEqual(model.__class__.__name__, "NewModel")
 
     def test_new_model_registration(self):
         AutoConfig.register("custom", CustomConfig)
@@ -586,10 +588,10 @@ class AutoModelTest(unittest.TestCase):
             # Overwrite the base_model_name_or_path to an invalid value that
             # would cause the load to fail later
             adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
-            with open(adapter_config_path, "r") as handle:
+            with open(adapter_config_path, "r", encoding="utf-8") as handle:
                 adapter_config = json.load(handle)
             adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
-            with open(adapter_config_path, "w") as handle:
+            with open(adapter_config_path, "w", encoding="utf-8") as handle:
                 json.dump(adapter_config, handle)
 
             # Load from the saved path and make sure it actually loads despite

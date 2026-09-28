@@ -21,14 +21,10 @@ logger = logging.get_logger(__name__)
 
 
 def _load_tdt_kernel():
-    """Try to load the TDT loss CUDA kernel from the Hub. Returns None on failure."""
+    """Load the `kernels-community/tdt-loss` CUDA kernel from the Hub, or return `None` if it is unavailable."""
     from ..integrations.hub_kernels import lazy_load_kernel
 
-    kernel = lazy_load_kernel("tdt-loss")
-    if kernel is None or not hasattr(kernel, "tdt_loss"):
-        logger.warning_once("Falling back to pure PyTorch implementation.")
-        return None
-    return kernel
+    return lazy_load_kernel("tdt-loss")
 
 
 def tdt_loss(
@@ -49,8 +45,8 @@ def tdt_loss(
     the token prediction head and the duration prediction head. It uses vectorized anti-diagonal processing for
     efficiency: all (t, u) pairs on each anti-diagonal t+u=n are computed in parallel as batched tensor operations.
 
-    When the ``kernels-community/tdt-loss`` CUDA kernel is installed, it is used automatically for GPU tensors,
-    Falls back to the pure PyTorch implementation otherwise.
+    On CUDA, the [`kernels-community/tdt-loss`](https://huggingface.co/kernels-community/tdt-loss) kernel is used
+    when the `kernels` library is installed (disable with `USE_HUB_KERNELS=0`).
 
     Args:
         token_logits: Token logits of shape `(batch, T, U+1, vocab_size+1)`.
@@ -61,29 +57,33 @@ def tdt_loss(
         blank_token_id: Blank token id.
         durations: List of duration values (e.g., `[0, 1, 2, 3, 4]`).
         sigma: Logit undernormalization constant (see TDT paper). Defaults to `0.0`.
-        reduction: Loss reduction method. One of `"mean"`, `"sum"`, or `"none"`. Defaults to `"mean"`.
+        reduction: Loss reduction method. One of `"mean_volume"`, `"mean_batch"`, `"mean"`, `"sum"`, or `"none"`,
+            mirroring NeMo's `RNNTLoss` (TDT shares the same reduction knob as RNN-T). Defaults to `"mean"`,
+            the `rnnt_reduction` of the released Parakeet TDT checkpoints.
 
     Returns:
         Scalar loss tensor (or per-example losses if `reduction="none"`).
 
     """
-    kernel = _load_tdt_kernel() if token_logits.is_cuda else None
-    if kernel is not None and hasattr(kernel, "tdt_loss"):
-        durations_t = torch.tensor(durations, dtype=torch.int32, device=token_logits.device)
+
+    valid_reductions = ("mean_volume", "mean_batch", "mean", "sum", "none")
+    if reduction not in valid_reductions:
+        raise ValueError(
+            f'Invalid reduction mode "{reduction}". Expected one of {", ".join(repr(r) for r in valid_reductions)}.'
+        )
+
+    if token_logits.is_cuda and (kernel := _load_tdt_kernel()) is not None:
         return kernel.tdt_loss(
             token_logits,
             duration_logits,
             targets,
             logit_lengths,
             target_lengths,
-            durations_t,
+            durations,
             blank_token_id,
-            sigma,
-            reduction,
+            sigma=sigma,
+            reduction=reduction,
         )
-
-    if reduction not in ("mean", "sum", "none"):
-        raise ValueError(f'Invalid reduction mode "{reduction}". Expected one of "mean", "sum", or "none".')
 
     device = token_logits.device
     batch_size, max_t, max_u, _ = token_logits.shape
@@ -178,8 +178,13 @@ def tdt_loss(
 
     losses = -log_probs
 
-    if reduction == "mean":
-        return (losses / target_lengths.float()).mean()
+    target_lengths = target_lengths.float()
+    if reduction == "mean_volume":
+        return losses.sum() / target_lengths.sum()
+    elif reduction == "mean_batch":
+        return losses.mean()
+    elif reduction == "mean":
+        return (losses / target_lengths).mean()
     elif reduction == "sum":
         return losses.sum()
     return losses

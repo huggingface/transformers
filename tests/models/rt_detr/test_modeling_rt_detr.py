@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    require_scipy,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -48,6 +49,7 @@ if is_torch_available():
     import torch
 
     from transformers import RTDetrForObjectDetection, RTDetrModel
+    from transformers.loss.loss_rt_detr import RTDetrHungarianMatcher, RTDetrLoss
 
 if is_vision_available():
     from PIL import Image
@@ -259,8 +261,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = True
-
-    test_missing_keys = False
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -571,6 +571,71 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config = config.__class__(**config_dict)
         _validate_backbone_init(config)
 
+    def test_main_loss_excludes_denoising_queries(self):
+        """The main loss must only see the normal queries, not the denoising ones.
+        See https://github.com/huggingface/transformers/pull/48528
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_denoising = 10
+        config.auxiliary_loss = True
+        inputs_dict = self._prepare_for_class(inputs_dict, RTDetrForObjectDetection, return_labels=True)
+
+        model = RTDetrForObjectDetection(config)
+        model.to(torch_device)
+        model.train()
+
+        outputs = model(**inputs_dict)
+
+        # In training mode the last-layer outputs contain the denoising queries followed by the normal queries.
+        # `num_denoising` is split into groups of one positive and one negative query per (padded) target.
+        num_denoising_queries, num_queries = outputs.denoising_meta_values["dn_num_split"]
+        max_num_targets = max(len(target["class_labels"]) for target in inputs_dict["labels"])
+        num_groups = config.num_denoising // max_num_targets
+        self.assertEqual(num_denoising_queries, 2 * max_num_targets * num_groups)
+        self.assertEqual(outputs.logits.shape[1], num_denoising_queries + num_queries)
+
+        # The main loss terms must equal the loss computed on the normal queries alone
+        criterion = RTDetrLoss(config).to(torch_device)
+        reference = criterion(
+            {
+                "logits": outputs.logits[:, num_denoising_queries:],
+                "pred_boxes": outputs.pred_boxes[:, num_denoising_queries:],
+            },
+            inputs_dict["labels"],
+        )
+        for key in ("loss_vfl", "loss_bbox", "loss_giou"):
+            torch.testing.assert_close(outputs.loss_dict[key], reference[key])
+
+    def _prepare_matcher_and_targets(self, num_queries, num_targets):
+        config = RTDetrConfig(num_labels=4)
+        matcher = RTDetrHungarianMatcher(config)
+        logits = torch.rand(1, num_queries, config.num_labels)
+        pred_boxes = torch.rand(1, num_queries, 4) * 0.5 + 0.25
+        targets = [
+            {
+                "class_labels": torch.arange(num_targets) % config.num_labels,
+                "boxes": torch.rand(num_targets, 4) * 0.5 + 0.25,
+            }
+        ]
+        return matcher, logits, pred_boxes, targets
+
+    @require_scipy
+    def test_matcher_with_nan_logits(self):
+        """NaN costs must not make `linear_sum_assignment` fail. Predictions with NaN costs must only be
+        matched if there is no finite prediction left.
+
+        See https://github.com/huggingface/transformers/issues/47000
+        """
+        num_queries, num_nan_queries, num_targets = 4, 2, 2
+        matcher, logits, pred_boxes, targets = self._prepare_matcher_and_targets(num_queries, num_targets)
+        logits[0, :num_nan_queries] = float("nan")
+
+        indices = matcher({"logits": logits, "pred_boxes": pred_boxes}, targets)
+
+        source_indices, target_indices = indices[0]
+        self.assertEqual(source_indices.tolist(), list(range(num_nan_queries, num_queries)))
+        self.assertEqual(sorted(target_indices.tolist()), list(range(num_targets)))
+
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
@@ -635,6 +700,31 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 f"Max diff: {(outputs_static.last_hidden_state - outputs_dynamic.last_hidden_state).abs().max()}",
             )
 
+    def test_num_feature_levels_greater_than_backbone_outputs(self):
+        # Regression test for indexing bug when num_feature_levels > number of backbone outputs.
+        # This previously crashed with TypeError when num_feature_levels exceeded the number of backbone output levels.
+        config = self.model_tester.get_config()
+        config.num_labels = self.model_tester.num_labels
+        config.num_feature_levels = 4
+        config.decoder_in_channels = [32, 32, 32, 32]
+        model = RTDetrForObjectDetection(config)
+        model.to(torch_device)
+        model.eval()
+        pixel_values = torch.rand(
+            self.model_tester.batch_size,
+            self.model_tester.num_channels,
+            self.model_tester.image_size,
+            self.model_tester.image_size,
+            device=torch_device,
+        )
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+        self.assertIsNotNone(outputs.logits)
+        self.assertEqual(
+            outputs.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_queries, self.model_tester.num_labels),
+        )
+
 
 TOLERANCE = 1e-4
 
@@ -652,6 +742,21 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return RTDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
+
+    def test_base_model_from_detection_checkpoint(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722: detection checkpoints
+        # store every weight under the `model.` prefix, and `RTDetrModel` used to load them with all weights
+        # randomly initialized.
+        base_model, loading_info = RTDetrModel.from_pretrained(CHECKPOINT, output_loading_info=True)
+
+        self.assertFalse(loading_info["missing_keys"])
+        # only the object detection heads are not part of the base model
+        self.assertTrue(all("class_embed" in k or "bbox_embed" in k for k in loading_info["unexpected_keys"]))
+
+        head_model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT)
+        head_state_dict = {k.removeprefix("model."): v for k, v in head_model.state_dict().items()}
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[key]))
 
     def test_inference_object_detection_head(self):
         model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)

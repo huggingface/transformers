@@ -15,6 +15,7 @@
 ruff: isort: skip_file
 """
 
+import json
 import os
 import tempfile
 import unittest
@@ -27,6 +28,7 @@ from transformers import (
     BertTokenizer,
     LlamaTokenizer,
     PreTrainedTokenizerFast,
+    ProphetNetTokenizer,
     PythonBackend,
     TensorType,
     TokenSpan,
@@ -82,6 +84,33 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(encoded.word_to_tokens(0), TokenSpan(start=1, end=2))
         self.assertEqual(encoded.word_to_tokens(1), None)
         self.assertEqual(encoded.word_to_tokens(2), TokenSpan(start=2, end=3))
+
+    def test_batch_pretokenized_documents_of_two_words_are_not_pairs(self):
+        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+
+        encoded = tokenizer([["want", "hello"], ["want", "hello", "x"]], is_split_into_words=True)
+        self.assertEqual(encoded["input_ids"][0], tokenizer(["want", "hello"], is_split_into_words=True)["input_ids"])
+        self.assertEqual(
+            encoded["input_ids"][1], tokenizer(["want", "hello", "x"], is_split_into_words=True)["input_ids"]
+        )
+        sep_token_id = tokenizer.convert_tokens_to_ids(tokenizer.sep_token)
+        self.assertEqual(encoded["input_ids"][0].count(sep_token_id), 1)
+
+    def test_batch_pretokenized_tuples_are_still_pairs(self):
+        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+
+        # Mirrors the batch shape fed by TokenizerUtilsCommonTest.test_pretokenized_inputs: tuples of word
+        # lists are sequence pairs under is_split_into_words, while lists stay single pretokenized documents
+        encoded = tokenizer([(("want", "hello"), ("x",)), ["want", "hello"]], is_split_into_words=True)
+        self.assertEqual(encoded["input_ids"][0], tokenizer("want hello", "x")["input_ids"])
+        self.assertEqual(encoded["input_ids"][1], tokenizer(["want", "hello"], is_split_into_words=True)["input_ids"])
+
+    def test_batch_pair_detection_without_split_into_words(self):
+        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+
+        encoded = tokenizer([["hello", "world"], ["want", "x"]])
+        self.assertEqual(encoded["input_ids"][0], tokenizer("hello", "world")["input_ids"])
+        self.assertEqual(encoded["input_ids"][1], tokenizer("want", "x")["input_ids"])
 
     def test_batch_encoding_with_labels(self):
         batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
@@ -263,6 +292,26 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    def test_vocab_file_in_config_does_not_escape_repo(self):
+        # Regression test for path traversal (CWE-22): a vocab-file argument injected into
+        # `tokenizer_config.json` must not override the repository-resolved path nor be opened
+        # verbatim. Otherwise an attacker-controlled repo could read an arbitrary local file via
+        # `AutoTokenizer.from_pretrained(...)` with no `trust_remote_code`.
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as outside:
+            secret_path = os.path.join(outside, "secret.txt")
+            with open(secret_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "secret_leaked_token"]))
+            with open(os.path.join(repo, "vocab.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "benign_repo_token"]))
+            with open(os.path.join(repo, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                json.dump({"tokenizer_class": "BertTokenizer", "vocab_file": secret_path}, f)
+
+            tokenizer = AutoTokenizer.from_pretrained(repo, use_fast=False)
+            vocab = tokenizer.get_vocab()
+            # The repository's own vocab must win; the injected out-of-repo file must not be read.
+            self.assertIn("benign_repo_token", vocab)
+            self.assertNotIn("secret_leaked_token", vocab)
 
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:

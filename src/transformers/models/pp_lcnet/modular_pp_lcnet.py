@@ -450,7 +450,6 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.encoder(pixel_values, **kwargs).hidden_states
 
         feature_maps = ()
@@ -503,7 +502,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoModelForImageClassification, AutoImageProcessor
@@ -512,7 +511,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         >>> model = AutoModelForImageClassification.from_pretrained(model_path)
         >>> image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 

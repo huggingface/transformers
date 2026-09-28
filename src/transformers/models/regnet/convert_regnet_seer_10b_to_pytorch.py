@@ -96,7 +96,7 @@ class FakeRegNetVisslWrapper(nn.Module):
 
 class FakeRegNetParams(RegNetParams):
     """
-    Used to instantiace a RegNet model from classy vision with the same depth as the 10B one but with super small
+    Used to instantiate a RegNet model from classy vision with the same depth as the 10B one but with super small
     parameters, so we can trace it in memory.
     """
 
@@ -162,7 +162,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str | None = None
     num_labels = 1000
 
     repo_id = "huggingface/label-files"
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text(encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     label2id = {v: k for k, v in id2label.items()}

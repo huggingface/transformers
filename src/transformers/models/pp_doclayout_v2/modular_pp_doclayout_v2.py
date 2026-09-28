@@ -14,7 +14,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -32,6 +31,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TensorType
 from ..auto import AutoConfig
 from ..layoutlmv3.modeling_layoutlmv3 import (
@@ -382,7 +382,8 @@ class PPDocLayoutV2GlobalPointer(PPDocLayoutV3GlobalPointer):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
-    def __init__(self, config, device=None):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: PPDocLayoutV2Config, device=None):
         super().__init__()
         self.config = config
         self.embed_dim = config.relation_bias_embed_dim
@@ -391,23 +392,18 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
         inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: PPDocLayoutV2Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: PPDocLayoutV2Config, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -417,12 +413,9 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         half_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / half_dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / half_dim))
+        return inv_freq.to(device), attention_factor
 
     def box_relative_encoding(
         self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5
@@ -641,13 +634,9 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PPDocLayoutV2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        if isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight.data[module.padding_idx])
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
-            inv_freq, _ = module.compute_default_rope_parameters(module.config, module.inv_freq.device)
-            module.register_buffer("inv_freq", inv_freq, persistent=False)
+            inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring(
@@ -864,22 +853,17 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation.
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 
@@ -943,7 +927,7 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
         thresholds = class_thresholds[class_ids]
         mask = max_probs >= thresholds
 
-        indices = torch.argsort(mask.to(torch.int8), dim=1, descending=True)
+        indices = torch.argsort(mask.int(), dim=1, descending=True)
 
         sorted_class_ids = torch.take_along_dim(class_ids, indices, dim=1)
         sorted_boxes = torch.take_along_dim(bboxes, indices[..., None].expand(-1, -1, 4), dim=1)

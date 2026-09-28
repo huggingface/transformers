@@ -56,7 +56,7 @@ def process_file(
     if diff_list:
         # first save the copy of the original file, to be able to restore it later
         shutil.copy(file_path, file_path + BACKUP_EXT)
-        # we always save the generated content, to be able to update dependant files
+        # we always save the generated content, to be able to update dependent files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
             modeling_file.write(generated_modeling_content[file_type])
         if not show_diff:
@@ -85,11 +85,11 @@ def convert_and_run_ruff(modular_file_path: str) -> dict[str, str]:
             ".py", f"_temp_pattern__{file_name_suffix}.py"
         )
         # Write the file only temporarily
-        with open(temp_file_name, "w") as f:
+        with open(temp_file_name, "w", encoding="utf-8") as f:
             f.write(generated_modeling_content[file_type])
         # Run ruff on the new file (with similar name pattern as the original one)
         run_ruff(temp_file_name)
-        with open(temp_file_name, "r") as f:
+        with open(temp_file_name, "r", encoding="utf-8") as f:
             generated_modeling_content[file_type] = f.read()
         # delete file
         os.remove(temp_file_name)
@@ -226,6 +226,9 @@ if __name__ == "__main__":
     #  - ... and so on
     # files (models) within the same list are *independent* of each other;
     # we start applying modular conversion to each list in parallel, starting from the first list
+
+    pool = None
+    pool_size = 0
     try:
         for dependency_level_files in ordered_files:
             # Filter files guaranteed no diff
@@ -237,28 +240,34 @@ if __name__ == "__main__":
             if not files_to_check:
                 continue
 
-            # Process files with diff
-            num_workers = min(args.num_workers, len(files_to_check))
-            with multiprocessing.Pool(num_workers) as p:
-                try:
-                    is_changed_flags = p.map(
-                        partial(compare_files, show_diff=not args.fix_and_overwrite),
-                        files_to_check,
-                    )
-                except Exception as e:
-                    console.print(
-                        f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]"
-                    )
-                    console.print(f"[bold red]Error: {e}[/bold red]")
-                    # Try to process files individually to identify which one failed
-                    is_changed_flags = []
-                    for file_path in files_to_check:
-                        try:
-                            result = compare_files(file_path, show_diff=not args.fix_and_overwrite)
-                            is_changed_flags.append(result)
-                        except Exception as individual_error:
-                            console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
-                            is_changed_flags.append(0)  # Mark as no change to continue processing
+            required_pool_size = min(args.num_workers, len(files_to_check))
+            if pool is None or required_pool_size > pool_size * 4:
+                # Only create a new pool if we don't have one yet or the current one
+                # is too small. Creating new pools is expensive due to the imports in
+                # the workers.
+                if pool is not None:
+                    pool.terminate()
+                    pool.join()
+                pool_size = required_pool_size
+                pool = multiprocessing.Pool(processes=pool_size)
+
+            try:
+                is_changed_flags = pool.map(
+                    partial(compare_files, show_diff=not args.fix_and_overwrite),
+                    files_to_check,
+                )
+            except Exception as e:
+                console.print(f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]")
+                console.print(f"[bold red]Error: {e}[/bold red]")
+                # Try to process files individually to identify which one failed
+                is_changed_flags = []
+                for file_path in files_to_check:
+                    try:
+                        result = compare_files(file_path, show_diff=not args.fix_and_overwrite)
+                        is_changed_flags.append(result)
+                    except Exception as individual_error:
+                        console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
+                        is_changed_flags.append(1)  # Mark as changed to let it raise a proper Error
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):
@@ -270,6 +279,9 @@ if __name__ == "__main__":
                     models_in_diff.add(file_path.split("/")[-2])
 
     finally:
+        if pool is not None:
+            pool.terminate()
+            pool.join()
         # Restore overwritten files by modular (if needed)
         backup_files = glob.glob("**/*" + BACKUP_EXT, recursive=True)
         for backup_file_path in backup_files:

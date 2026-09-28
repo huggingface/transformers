@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -27,7 +27,7 @@ Consider the quantization methods below for inference.
 | quantization method | use case |
 |---|---|
 | bitsandbytes | ease of use and QLoRA fine-tuning on NVIDIA and Intel GPUs |
-| compressed-tensors | loading specific quantized formats (FP8, Sparse) |
+| compressed-tensors | loading specific quantized formats (FP8) |
 | GPTQModel or AWQ | good 4-bit accuracy with upfront calibration |
 | HQQ | fast on the fly quantization without calibration |
 | SINQ | super-fast but high-quality on the fly quantization without calibration |
@@ -112,8 +112,8 @@ See the [AWQ documentation](./awq) for more details.
 
 | Pros                                                         | Cons                                                        |
 |--------------------------------------------------------------|-------------------------------------------------------------|
-| Supports flexible formats including FP8 and sparsity.        | Primarily for loading pre-quantized models.                 |
-|                                                              | Doesn't perform quantization within Transformers directly.  |
+| Supports flexible formats like FP8.        | Primarily for loading pre-quantized models.                 |
+| FP8 kernel acceleration on NVIDIA (SM89+) and Intel XPU.    |                                                             |
 
 See the [compressed-tensors documentation](./compressed_tensors) for more details.
 
@@ -129,7 +129,7 @@ Consider the quantization method below during fine-tuning to save memory.
 
 Other methods offer PEFT compatibility, though bitsandbytes is the most established and straightforward path for QLoRA.
 
-See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details.
+See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#quantize-a-model) for more details.
 
 ## Research
 

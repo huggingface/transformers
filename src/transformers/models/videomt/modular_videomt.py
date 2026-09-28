@@ -18,6 +18,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...file_utils import ModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -152,7 +153,7 @@ class VideomtPreTrainedModel(EomtPreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
         if isinstance(module, VideomtEmbeddings):
-            nn.init.zeros_(module.mask_token)
+            init.zeros_(module.mask_token)
 
 
 class VideomtLayerNorm2d(EomtLayerNorm2d):

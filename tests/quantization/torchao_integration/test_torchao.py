@@ -36,9 +36,6 @@ if is_torch_available():
     import torch
 
 if is_torchao_available():
-    from torchao.dtypes import (
-        AffineQuantizedTensor,
-    )
     from torchao.prototype.mx_formats import NVFP4DynamicActivationNVFP4WeightConfig
     from torchao.quantization import (
         Float8DynamicActivationFloat8WeightConfig,
@@ -52,6 +49,9 @@ if is_torchao_available():
         IntxWeightOnlyConfig,
         MappingType,
         PerAxis,
+    )
+    from torchao.utils import (
+        TorchAOBaseTensor,
     )
 
 
@@ -105,7 +105,8 @@ class TorchAoTestBase:
         """
         Simple LLM model testing int4 weight only quantization
         """
-        config = Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d")
+        int4_packing_format = "plain_int32" if self.device == "xpu" else "tile_packed_to_4d"
+        config = Int4WeightOnlyConfig(int4_packing_format=int4_packing_format)
         quant_config = TorchAoConfig(config)
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -126,6 +127,7 @@ class TorchAoTestBase:
             {
                 ("cuda", None): "What are we having for dinner?\nRed, white, and green beans,",
                 ("xpu", None): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("xpu", 5): "What are we having for dinner?\n\n[Scene 2]\n\n[",
             }
         )
         # fmt: on
@@ -192,7 +194,7 @@ class TorchAoTestBase:
             torch_dtype=torch.bfloat16,
         )
         # making sure `model.layers.0.self_attn.q_proj` is skipped
-        self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, TorchAOBaseTensor))
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
@@ -212,7 +214,7 @@ class TorchAoTestBase:
             torch_dtype=torch.bfloat16,
         )
         # making sure `model.layers.0.self_attn.q_proj` is skipped
-        self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, TorchAOBaseTensor))
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
@@ -245,7 +247,7 @@ class TorchAoTestBase:
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
         # because regex `model\.layers\.+*\.self_attn\.q_pro` didin't fully match `model.layers.1.self_attn.q_proj` (missing last `j`)
         # this layer is not expected to be quantized to int8
-        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, TorchAOBaseTensor))
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
@@ -274,9 +276,9 @@ class TorchAoTestBase:
         # highest precedence is fully specified module fqn
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
         # second precedence: regex
-        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, TorchAOBaseTensor))
         # last precedence: _default
-        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, TorchAOBaseTensor))
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
@@ -303,8 +305,8 @@ class TorchAoTestBase:
             torch_dtype=torch.bfloat16,
         )
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
-        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
-        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, TorchAOBaseTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, TorchAOBaseTensor))
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
@@ -330,8 +332,8 @@ class TorchAoTestBase:
             quantization_config=quant_config,
             torch_dtype=torch.bfloat16,
         )
-        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
-        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, TorchAOBaseTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, TorchAOBaseTensor))
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
@@ -357,8 +359,8 @@ class TorchAoTestBase:
             quantization_config=quant_config,
             torch_dtype=torch.bfloat16,
         )
-        self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, AffineQuantizedTensor))
-        self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.k_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, TorchAOBaseTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.k_proj.weight, TorchAOBaseTensor))
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
@@ -384,8 +386,8 @@ class TorchAoTestBase:
             quantization_config=quant_config,
             torch_dtype=torch.bfloat16,
         )
-        self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, AffineQuantizedTensor))
-        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, TorchAOBaseTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, TorchAOBaseTensor))
         self.assertTrue(isinstance(quantized_model.model.layers[2].self_attn.q_proj.weight, Float8Tensor))
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -419,7 +421,7 @@ class TorchAoTestBase:
         self.assertTrue(
             not isinstance(quantized_model.model.layers[0].feed_forward.experts.gate_up_proj, Float8Tensor)
         )
-        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
+        self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, TorchAOBaseTensor))
 
     def test_compute_module_sizes(self):
         r"""
@@ -518,7 +520,8 @@ class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
             "lm_head": 0,
         }
 
-        config = Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d")
+        int4_packing_format = "plain_int32" if self.device == "xpu" else "tile_packed_to_4d"
+        config = Int4WeightOnlyConfig(int4_packing_format=int4_packing_format)
         quant_config = TorchAoConfig(config)
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -537,6 +540,7 @@ class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
             {
                 ("cuda", None): "What are we having for dinner?\nRed, white, and green beans,",
                 ("xpu", None): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("xpu", 5): "What are we having for dinner?\n\n[Scene 2]\n\n[",
             }
         )
         # fmt: on
@@ -550,7 +554,8 @@ class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
         set ZE_AFFINITY_MASK=0,1 if you have more than 2 Intel XPUs
         """
 
-        config = Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d")
+        int4_packing_format = "plain_int32" if self.device == "xpu" else "tile_packed_to_4d"
+        config = Int4WeightOnlyConfig(int4_packing_format=int4_packing_format)
         quant_config = TorchAoConfig(config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
@@ -569,6 +574,7 @@ class TorchAoAcceleratorTest(TorchAoTestBase, unittest.TestCase):
             {
                 ("cuda", None): "What are we having for dinner?\nRed, white, and green beans,",
                 ("xpu", None): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("xpu", 5): "What are we having for dinner?\n\n[Scene 2]\n\n[",
             }
         )
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT.get_expectation())
@@ -590,9 +596,9 @@ class TorchAoSerializationTest(unittest.TestCase):
         [
             ("Int8WeightOnlyConfig", Int8WeightOnlyConfig(version=2), ALL_DEVICES_COMMON),
             ("Int8DynamicActivationInt8WeightConfig", Int8DynamicActivationInt8WeightConfig(version=2), ALL_DEVICES_COMMON),
-            ("Float8DynamicActivationFloat8WeightConfig", Float8DynamicActivationFloat8WeightConfig(), Expectations({("cuda", None): COMMON_OUTPUT, ("xpu", None): "What are we having for dinner?\n\nJess: (smiling) I"})),
+            ("Float8DynamicActivationFloat8WeightConfig", Float8DynamicActivationFloat8WeightConfig(), Expectations({("cuda", None): COMMON_OUTPUT, ("xpu", None): "What are we having for dinner?\n\nJess: (smiling) I", ("xpu", 5): COMMON_OUTPUT})),
             ("Float8WeightOnlyConfig", Float8WeightOnlyConfig(), Expectations({("cuda", None): COMMON_OUTPUT, ("xpu", None): COMMON_OUTPUT})),
-            ("Int4WeightOnlyConfig", Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d"), Expectations({("cuda", None): "What are we having for dinner?\nRed, white, and green beans,", ("xpu", None): COMMON_OUTPUT})),
+            ("Int4WeightOnlyConfig", Int4WeightOnlyConfig(int4_packing_format="plain_int32" if torch_device == "xpu" else "tile_packed_to_4d"), Expectations({("cuda", None): "What are we having for dinner?\nRed, white, and green beans,", ("xpu", None): COMMON_OUTPUT, ("xpu", 5): "What are we having for dinner?\n\n[Scene 2]\n\n["})),
             ("Int8DynamicActivationIntxWeightConfig", Int8DynamicActivationIntxWeightConfig(), Expectations({("cpu", None): COMMON_OUTPUT, ("cuda", 9): COMMON_OUTPUT, ("cuda", 8): "What are we having for dinner?\n\nJEN: (smiling) I", ("xpu", None): COMMON_OUTPUT})),
             ("IntxWeightOnlyConfig", IntxWeightOnlyConfig(), ALL_DEVICES_COMMON),
             ("NVFP4DynamicActivationNVFP4WeightConfig", NVFP4DynamicActivationNVFP4WeightConfig(), Expectations({("cuda", None): "What are we having for dinner?\n\n10. Avoid using \"I"})),

@@ -4,6 +4,9 @@ from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
 
 
+# Compile is disabled because the cache update mutates in place aliased views of the cache tensor, which compile's
+# functionalization handles by making a copy of the full cache for every layer.
+@torch.compiler.disable
 def paged_attention_forward(
     module: torch.nn.Module,
     q: torch.Tensor,
@@ -40,6 +43,12 @@ def paged_attention_forward(
             read and dispatches the read using the block table. Same for the write. If a request has fewer than
             max_blocks_per_seq blocks, the block table is padded with -1s to indicate that the block is not allocated.
     """
+    # FlashAttention requires the query and value to share a head dim; pad `value` up to the
+    # query head dim (e.g. MLA, where `v_head_dim < qk_head_dim`) and crop the output below.
+    head_dim, v_head_dim = q.shape[-1], v.shape[-1]
+    if v_head_dim != head_dim:
+        v = torch.nn.functional.pad(v, [0, head_dim - v_head_dim])
+
     # Retrieve the flash attention functions
     flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
         module.config._attn_implementation
@@ -85,10 +94,16 @@ def paged_attention_forward(
         attn_output = _paged_decode_forward(
             module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **flash_kwargs
         )
+
+    if v_head_dim != head_dim:
+        attn_output = attn_output[..., :v_head_dim]
+        # flash_kwargs = {"s_aux": kwargs["s_aux"]} if "s_aux" in kwargs else {}  # this is only available in VLLM's FA3
+        # attn_output = _paged_decode_forward(
+        #     module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **flash_kwargs
+        # )
     return attn_output, None
 
 
-@torch.compiler.disable
 def _paged_decode_forward(
     module: torch.nn.Module,
     q: torch.Tensor,
@@ -101,14 +116,11 @@ def _paged_decode_forward(
     block_table: torch.Tensor,
     **flash_kwargs,
 ) -> torch.Tensor:
-    """Decode fast path using flash_attn_with_kvcache. Disabled because FA3 has issue with tracing this."""
-    # Get layer group index for this layer
-    group_idx, layer_idx_in_group = cache.layer_index_to_group_indices[module.layer_idx]
-    # KV cache shape: [num_pages, num_kv_heads, head_dim] -> [num_blocks, block_size, num_kv_heads, head_dim]
-    k_cache = cache.key_cache[layer_idx_in_group].view(-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
-    v_cache = cache.value_cache[layer_idx_in_group].view(
-        -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
-    )
+    """Decode fast path using flash_attn_with_kvcache: the kernel reads the paged KV through the block table and
+    writes the new KV states at cache_seqlens itself, so the python-side cache update is skipped entirely."""
+    # Retrieve this layer's paged K and V views
+    block_table_index, k_cache, v_cache = cache.get_cache_for_block_table(module.layer_idx)  # type: ignore
+    layer_block_table = block_table[block_table_index]
     # Reshape Q, K, V from [1, num_*_heads, batch_size, head_dim] to [batch_size, 1, num_*_heads, head_dim]
     q = q.permute(2, 0, 1, 3).contiguous()
     k = k.permute(2, 0, 1, 3).contiguous()
@@ -118,7 +130,7 @@ def _paged_decode_forward(
     batch_size = k.size(0)
     cache_seqlens = (cu_seq_lens_k[1 : batch_size + 1] - cu_seq_lens_k[:batch_size] - 1).to(torch.int32)
     # The arg name for the block table is not the same in VLLM's kernel and Tri Dao's kernel, so we need to parse it
-    flash_kwargs[cache.get_block_table_key(flash_attn_with_kvcache)] = block_table[group_idx]
+    flash_kwargs[cache.get_block_table_key(flash_attn_with_kvcache)] = layer_block_table
     # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
     attn_output = flash_attn_with_kvcache(
         q=q,

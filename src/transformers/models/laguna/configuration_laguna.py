@@ -30,6 +30,10 @@ from ...utils import auto_docstring
 @strict
 class LagunaConfig(PreTrainedConfig):
     r"""
+    gating (`bool` or `str`, *optional*, defaults to `True`):
+        Softplus output-gate granularity. ``True`` or ``"per-head"`` applies one gate per head,
+        broadcast across ``head_dim``; ``"per-element"`` applies one gate per ``(head, head_dim)``
+        channel.
     num_attention_heads_per_layer (`list[int]`, *optional*):
         Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
     mlp_layer_types (`list[str]`, *optional*):
@@ -79,6 +83,12 @@ class LagunaConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     vocab_size: int = 100352
     hidden_size: int = 2048
@@ -109,6 +119,7 @@ class LagunaConfig(PreTrainedConfig):
     # Laguna-specific attention
     head_dim: int = 128
     attention_bias: bool = False
+    gating: bool | str = True
     num_attention_heads_per_layer: list[int] | None = None
     # Laguna-specific MoE
     mlp_layer_types: list[str] | None = None
@@ -135,7 +146,6 @@ class LagunaConfig(PreTrainedConfig):
         super().__post_init__(**kwargs, ignore_keys_at_rope_validation={"sliding_attention", "full_attention"})
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
 
     def validate_architecture(self):

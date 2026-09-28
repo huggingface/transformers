@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch AudioFlamingo3 model."""
 
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from transformers import (
     AudioFlamingo3Config,
     AudioFlamingo3EncoderConfig,
     AudioFlamingo3ForConditionalGeneration,
+    AudioFlamingo3Model,
     AutoProcessor,
     Qwen2Config,
     is_torch_available,
@@ -42,6 +44,7 @@ if is_torch_available():
 
 class AudioFlamingo3ModelTester(ALMModelTester):
     config_class = AudioFlamingo3Config
+    base_model_class = AudioFlamingo3Model
     conditional_generation_class = AudioFlamingo3ForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = AudioFlamingo3EncoderConfig
@@ -55,11 +58,6 @@ class AudioFlamingo3ModelTester(ALMModelTester):
         # so it must equal (feat_seq_length - 1) // 2 + 1.
         kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
         super().__init__(parent, **kwargs)
-
-    def create_audio_mask(self):
-        # Full-length mask matches real processor output and lets the audio encoder dispatch to Flash
-        # Attention (which rejects non-null attn_masks) on `test_sdpa_can_dispatch_on_flash`.
-        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
 
     def get_audio_embeds_mask(self, audio_mask):
         # Mirrors AudioFlamingo3Encoder._get_feat_extract_output_lengths:
@@ -95,6 +93,37 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ALMModelTest, unittest.Tes
     )
     def test_inputs_embeds_matches_input_ids(self):
         pass
+
+    def test_embed_positions_loaded_in_requested_dtype(self):
+        audio_config = AudioFlamingo3EncoderConfig(
+            d_model=16,
+            encoder_layers=1,
+            encoder_attention_heads=4,
+            encoder_ffn_dim=32,
+            num_mel_bins=8,
+            max_source_positions=4,
+        )
+        text_config = Qwen2Config(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            pad_token_id=1,
+            bos_token_id=0,
+            eos_token_id=2,
+        )
+        config = AudioFlamingo3Config(audio_config=audio_config, text_config=text_config, pad_token_id=1)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model = AudioFlamingo3ForConditionalGeneration(config)
+            model.save_pretrained(tmpdirname)
+            model = AudioFlamingo3ForConditionalGeneration.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+
+            self.assertIsNone(AudioFlamingo3ForConditionalGeneration._keep_in_fp32_modules_strict)
+            self.assertNotIn("embed_positions", model._get_dtype_plan(torch.bfloat16))
+            self.assertEqual(model.model.audio_tower.embed_positions.weight.dtype, torch.bfloat16)
 
 
 @require_torch
@@ -133,7 +162,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }
@@ -176,7 +205,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
                         },
                     ],
                 }
@@ -195,7 +224,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
                         },
                     ],
                 }

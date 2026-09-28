@@ -29,9 +29,13 @@ import torch
 from torch import nn
 
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    BartConfig,
+    BartForConditionalGeneration,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
@@ -46,7 +50,7 @@ from transformers import (
     logging,
 )
 from transformers.integrations import activate_neftune
-from transformers.loss.loss_utils import ForCausalLMLoss
+from transformers.loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from transformers.testing_utils import (
     CaptureLogger,
     LoggingLevel,
@@ -69,6 +73,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import align_special_tokens
 
 from .trainer_test_utils import (
     ATOL,
@@ -221,8 +226,10 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         gas_batch_size,
         gas_steps,
         loss_tolerance,
+        grad_norm_tolerance=0.1,
         model_accepts_loss_kwargs=True,
         compute_loss_func=None,
+        label_smoothing_factor=0.0,
     ):
         """
         Train twice with the same effective batch (base_batch_size vs gas_batch_size * gas_steps)
@@ -230,6 +237,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         """
         model_name = self._ga_model_name
         args_kwargs = {"logging_steps": 1, "max_steps": 3, "learning_rate": 1e-4, "max_grad_norm": 0.0}
+        args_kwargs["label_smoothing_factor"] = label_smoothing_factor
         trainer_kwargs = {"train_dataset": self._ga_dataset, "data_collator": self._ga_data_collator}
         if compute_loss_func is not None:
             trainer_kwargs["compute_loss_func"] = compute_loss_func
@@ -263,7 +271,10 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         for step, (base_gn, gas_gn) in enumerate(zip(base_grad_norms, gas_grad_norms)):
             ratio = gas_gn / base_gn if base_gn > 0 else float("inf")
             self.assertAlmostEqual(
-                ratio, 1.0, delta=0.1, msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected"
+                ratio,
+                1.0,
+                delta=grad_norm_tolerance,
+                msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected",
             )
         loss_diff = [abs(b - g) for b, g in zip(base_callback.losses, gas_callback.losses)]
         self.assertLess(max(loss_diff), loss_tolerance, f"Loss difference {max(loss_diff)} exceeds {loss_tolerance}")
@@ -284,13 +295,17 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         itself. Grad norms and losses must still match between a large-batch
         baseline and an equivalent GAS run.
         """
-        # Looser tolerance: without num_items_in_batch each micro-batch is independently
-        # mean-reduced, so losses won't match as tightly.
+        # Looser tolerances: without num_items_in_batch each micro-batch is independently
+        # mean-reduced over its own valid label count, so regrouping the same samples into
+        # smaller micro-batches shifts both the loss and the grad norm. `DataParallel` splits
+        # every micro-batch again across replicas, which regroups them more finely still and
+        # pushes the grad norm ratio to ~1.11. A real GAS leak shows a ratio near `gas_steps`.
         self._check_gradient_accumulation(
             base_batch_size=8,
             gas_batch_size=4,
             gas_steps=2,
             loss_tolerance=0.1,
+            grad_norm_tolerance=0.2,
             model_accepts_loss_kwargs=False,
         )
 
@@ -312,6 +327,130 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             loss_tolerance=0.001,
             compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
         )
+
+    def test_gradient_accumulation_grad_norm_with_label_smoothing(self):
+        """
+        With label_smoothing_factor > 0 the Trainer computes the loss through LabelSmoother
+        instead of the model. LabelSmoother must reduce over num_items_in_batch so grad norms
+        and losses match between a large-batch baseline and an equivalent GAS run. Before the
+        fix LabelSmoother mean-reduced over the current micro-batch only, so the GAS grad norm
+        was inflated by roughly gas_steps.
+        """
+        # Tight tolerance: num_items_in_batch properly averages the smoothed loss across micro-batches
+        self._check_gradient_accumulation(
+            base_batch_size=8, gas_batch_size=1, gas_steps=8, loss_tolerance=0.001, label_smoothing_factor=0.1
+        )
+        self._check_gradient_accumulation(
+            base_batch_size=8, gas_batch_size=4, gas_steps=2, loss_tolerance=0.001, label_smoothing_factor=0.1
+        )
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_causal_lm(self):
+        """
+        For a causal LM, `_get_num_items_in_batch` must count over `labels[..., 1:]` because
+        ForCausalLMLoss shifts labels (position 0 is never a prediction target). When the
+        batch already exposes `shift_labels`, that tensor must be used as-is.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = AutoModelForCausalLM.from_pretrained(self._ga_model_name, dtype=torch.float32)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+                train_dataset=self._ga_dataset,
+                data_collator=self._ga_data_collator,
+            )
+            self.assertTrue(trainer._loss_shifts_labels)
+
+            # batch[0]: 5 valid label positions, 3 padding (-100) → 5 - 1 = 4 after the shift.
+            # batch[1]: 8 valid label positions, 0 padding         → 8 - 1 = 7 after the shift.
+            # Trainer must not count position 0 of each row → expected total = 4 + 7 = 11.
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 11)
+
+            # If the collator already pre-shifts labels (`shift_labels` present), use it as-is and
+            # do NOT slice again. Each row here has 4 valid positions → expected total = 8.
+            batch_samples = [
+                {
+                    "labels": torch.tensor([[1, 2, 3, 4, 5]]),
+                    "shift_labels": torch.tensor([[2, 3, 4, 5, -100]]),
+                },
+                {
+                    "labels": torch.tensor([[1, 2, 3, 4, 5]]),
+                    "shift_labels": torch.tensor([[2, 3, 4, 5, -100]]),
+                },
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 8)
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_non_causal_lm(self):
+        """For non-causal-LM losses, `_get_num_items_in_batch` must count the full label tensor."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = LlamaConfig(
+                vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
+            )
+            # ForTokenClassification → LOSS_MAPPING entry is not ForCausalLMLoss → no shift.
+            from transformers import LlamaForTokenClassification
+
+            model = LlamaForTokenClassification(config)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+            )
+            self.assertFalse(trainer._loss_shifts_labels)
+
+            # 5 valid + 8 valid = 13 (no shift).
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 13)
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_encoder_decoder(self):
+        """
+        Encoder-decoder LM heads compute their loss against unshifted `labels` -- their logits are aligned with
+        the targets (typically by right-shifting the decoder inputs), so the loss must not shift again. Their
+        class-name-inferred `loss_type` still maps to ForCausalLMLoss, which would drive the Trainer to count over
+        `labels[..., 1:]` and over-scale the loss; `_get_num_items_in_batch` must instead count the full label
+        tensor whenever `config.is_encoder_decoder`. Bart probes exactly that (`loss_type` -> ForCausalLMLoss,
+        `is_encoder_decoder` True) combination -- though Bart's own forward computes the aligned loss with
+        `CrossEntropyLoss` rather than routing through `ForCausalLMLoss`.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = BartConfig(
+                vocab_size=64,
+                d_model=16,
+                encoder_layers=1,
+                decoder_layers=1,
+                encoder_attention_heads=1,
+                decoder_attention_heads=1,
+                encoder_ffn_dim=16,
+                decoder_ffn_dim=16,
+                max_position_embeddings=32,
+            )
+            model = BartForConditionalGeneration(config)
+            # loss_type routes to ForCausalLMLoss, but the model is encoder-decoder -> the count must NOT shift.
+            self.assertIs(LOSS_MAPPING.get(model.loss_type), ForCausalLMLoss)
+            self.assertTrue(model.config.is_encoder_decoder)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+            )
+            self.assertFalse(trainer._loss_shifts_labels)
+
+            # 5 valid + 8 valid = 13, counted in full (no shift).
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 13)
 
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
@@ -1198,6 +1337,84 @@ class TrainerIntegrationTest(TestCasePlus):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_special_token_alignment_composite_config(self):
+        """
+        Tests that a composite model whose special tokens live on its text sub-config is left alone. The top-level
+        config does not forward attribute lookups to the sub-config, so reading it there reports a mismatch on
+        every run and rewrites the ids the model already agrees with.
+        """
+        model = AutoModelForImageTextToText.from_config(
+            AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # The ids the model already agrees with, on the text sub-config only.
+        text_config = model.config.get_text_config()
+        text_config.eos_token_id = tokenizer.eos_token_id
+        text_config.bos_token_id = tokenizer.bos_token_id
+        text_config.pad_token_id = tokenizer.pad_token_id
+        model.generation_config.eos_token_id = tokenizer.eos_token_id
+        model.generation_config.bos_token_id = tokenizer.bos_token_id
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(text_config.eos_token_id, tokenizer.eos_token_id)
+        self.assertEqual(text_config.bos_token_id, tokenizer.bos_token_id)
+        self.assertEqual(text_config.pad_token_id, tokenizer.pad_token_id)
+
+    def test_special_token_alignment_keeps_the_eos_ids_the_config_declares(self):
+        """
+        Tests that a config declaring several eos ids keeps them. The tokenizer holds a single id, so comparing it
+        against the list always reports a mismatch, and overwriting the list with it would drop the other stop
+        tokens the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # This checkpoint ships a bos and a pad the tokenizer disagrees with; align them so only eos is under test.
+        for config in (model.config, model.generation_config):
+            config.bos_token_id = tokenizer.bos_token_id
+            config.pad_token_id = tokenizer.pad_token_id
+
+        eos_token_ids = [tokenizer.eos_token_id, tokenizer.eos_token_id + 1]
+        model.config.eos_token_id = list(eos_token_ids)
+        model.generation_config.eos_token_id = list(eos_token_ids)
+
+        # The tokenizer's eos is already one of them, so there is nothing to align and nothing to report.
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, eos_token_ids)
+        self.assertEqual(model.generation_config.eos_token_id, eos_token_ids)
+
+        # A tokenizer eos the config does not declare is added to the list rather than replacing it.
+        tokenizer.eos_token = tokenizer.convert_ids_to_tokens(tokenizer.eos_token_id + 2)
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, [tokenizer.eos_token_id, *eos_token_ids])
+        self.assertEqual(model.generation_config.eos_token_id, [tokenizer.eos_token_id, *eos_token_ids])
+
+    def test_special_token_alignment_keeps_tokens_the_tokenizer_does_not_define(self):
+        """
+        Tests that a special token the tokenizer does not define is left untouched on the model configs, rather than
+        being removed from them. `_special_tokens_map` is initialized with `None` for every special token, so a
+        tokenizer that never declared one is indistinguishable from a tokenizer whose token was deliberately cleared.
+        Dropping the value in that case would silently remove an id the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        model.config.bos_token_id = 1
+        model.generation_config.bos_token_id = 1
+        tokenizer.bos_token = None
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.bos_token_id, 1)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
     def test_trainer_works_without_model_config(self):
         """

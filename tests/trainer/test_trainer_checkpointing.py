@@ -24,6 +24,7 @@ import dataclasses
 import math
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -60,7 +61,9 @@ from transformers.testing_utils import (
     backend_device_count,
     evaluate_side_effect_factory,
     get_steps_per_epoch,
+    get_torch_dist_unique_port,
     is_staging_test,
+    mockenv_context,
     require_accelerate,
     require_deepspeed,
     require_non_hpu,
@@ -69,6 +72,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_non_multi_accelerator,
     require_torch_up_to_2_accelerators,
+    require_torchvision,
     require_vision,
     run_first,
     run_test_using_subprocess,
@@ -661,6 +665,7 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             run_glue.main()
 
     @require_deepspeed
+    @require_torch_non_multi_accelerator
     def test_auto_batch_size_with_deepspeed(self):
         train_dataset = RegressionDataset(length=128)
 
@@ -687,8 +692,18 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
-        trainer.train()
+        # DeepSpeed refuses to initialize without a rank in the environment, and this test runs
+        # in-process rather than under `accelerate launch`, so stand in for the launcher.
+        dist_env_1_gpu = {
+            "MASTER_ADDR": "localhost",
+            "MASTER_PORT": str(get_torch_dist_unique_port()),
+            "RANK": "0",
+            "LOCAL_RANK": "0",
+            "WORLD_SIZE": "1",
+        }
+        with mockenv_context(**dist_env_1_gpu):
+            trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+            trainer.train()
         self.assertEqual(trainer._train_batch_size, 14)
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
@@ -981,7 +996,7 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 super().__init__()
                 self.fc = nn.Linear(10, 10, bias=False)
                 # data_order logs the order of data points seen by the model
-                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+                self.data_order = nn.Buffer(torch.empty(0, dtype=torch.long))
 
             def load_state_dict(self, state_dict, strict=True):
                 # Handle data_order buffer size mismatch during checkpoint loading
@@ -1511,6 +1526,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
         )
 
     @require_vision
+    @require_torchvision
     def test_trainer_saves_image_processor(self):
         MODEL_ID = "openai/clip-vit-base-patch32"
         image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
@@ -1545,6 +1561,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertDictEqual(feature_extractor.to_dict(), reloaded_feature_extractor.to_dict())
 
     @require_vision
+    @require_torchvision
     def test_trainer_saves_processor(self):
         MODEL_ID = "openai/clip-vit-base-patch32"
         image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
@@ -2045,6 +2062,67 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
                 self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained)
                 self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained)
+
+    def test_resume_from_checkpoint_with_stale_best_model_checkpoint(self):
+        def constant_metrics(_):
+            return {"accuracy": 0.5}
+
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir_a,
+            tempfile.TemporaryDirectory() as tmp_dir_moved,
+            tempfile.TemporaryDirectory() as tmp_dir_b,
+        ):
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir_a,
+                learning_rate=0.1,
+                eval_strategy="steps",
+                eval_steps=2,
+                save_steps=2,
+                save_total_limit=1,
+                load_best_model_at_end=True,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+                compute_metrics=constant_metrics,
+                max_steps=4,
+            )
+            trainer.train()
+
+            stale_best = trainer.state.best_model_checkpoint
+            self.assertIsNotNone(stale_best)
+            # With save_total_limit=1 only the best checkpoint survived the first run
+            checkpoints_a = [os.path.basename(str(p)) for p in Path(tmp_dir_a).glob(f"{PREFIX_CHECKPOINT_DIR}-*")]
+            self.assertEqual(checkpoints_a, [os.path.basename(stale_best)])
+
+            # Simulate the original run being deleted and its checkpoints moved elsewhere
+            moved_checkpoint = os.path.join(tmp_dir_moved, os.path.basename(stale_best))
+            shutil.move(stale_best, moved_checkpoint)
+
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir_b,
+                learning_rate=0.1,
+                eval_strategy="steps",
+                eval_steps=2,
+                save_steps=2,
+                save_total_limit=1,
+                load_best_model_at_end=True,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+                compute_metrics=constant_metrics,
+                max_steps=6,
+            )
+            with CaptureLogger(logging.get_logger()) as cl:
+                output = trainer.train(resume_from_checkpoint=moved_checkpoint)
+
+            self.assertEqual(output.global_step, 6)
+            self.assertIn("does not exist", cl.out)
+            self.assertTrue(
+                trainer.state.best_model_checkpoint is None
+                or trainer.state.best_model_checkpoint.startswith(tmp_dir_b + os.sep)
+            )
+            checkpoints_b = sorted(
+                os.path.basename(str(p)) for p in Path(tmp_dir_b).glob(f"{PREFIX_CHECKPOINT_DIR}-*")
+            )
+            self.assertEqual(checkpoints_b, [f"{PREFIX_CHECKPOINT_DIR}-6"])
 
 
 # ---------------------------------------------------------------------------

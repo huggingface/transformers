@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-12-06 and added to Hugging Face Transformers on 2022-10-05.*
+*This model was published in HF papers on 2022-12-06 and contributed to Hugging Face Transformers on 2022-10-05.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -24,12 +24,14 @@ rendered properly in your Markdown viewer.
 
 # Whisper
 
-[Whisper](https://huggingface.co/papers/2212.04356) is a encoder-decoder (sequence-to-sequence) transformer pretrained on 680,000 hours of labeled audio data. This amount of pretraining data enables zero-shot performance on audio tasks in English and many other languages. The decoder allows Whisper to map the encoders learned speech representations to useful outputs, such as text, without additional fine-tuning. Whisper just works out of the box.
+[Whisper](https://huggingface.co/papers/2212.04356) is an encoder-decoder (sequence-to-sequence) transformer pretrained on 680,000 hours of labeled audio data. This amount of pretraining data enables zero-shot performance on audio tasks in English and many other languages. The decoder allows Whisper to map the encoders learned speech representations to useful outputs, such as text, without additional fine-tuning. Whisper just works out of the box.
 
 You can find all the original Whisper checkpoints under the [Whisper](https://huggingface.co/collections/openai/whisper-release-6501bba2cf999715fd953013) collection.
 
 > [!TIP]
 > Click on the Whisper models in the right sidebar for more examples of how to apply Whisper to different audio tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to automatically transcribe speech into text with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -87,7 +89,7 @@ transcription[0]
 
 ## Notes
 
-- Whisper relies a custom [`generate`] for inference, make sure to check the docs below.
+- Whisper relies on a custom [`generate`] for inference, make sure to check the docs below.
 - The [`WhisperProcessor`] can be used for preparing audio and decoding predicted ids back into text.
 
 ## WhisperConfig
@@ -97,17 +99,6 @@ transcription[0]
 ## WhisperTokenizer
 
 [[autodoc]] WhisperTokenizer
-    - set_prefix_tokens
-    - get_special_tokens_mask
-    - save_vocabulary
-    - batch_decode
-    - decode
-    - basic_normalize
-    - normalize
-
-## WhisperTokenizerFast
-
-[[autodoc]] WhisperTokenizerFast
     - set_prefix_tokens
     - get_special_tokens_mask
     - save_vocabulary

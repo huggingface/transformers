@@ -137,6 +137,7 @@ class GraniteSpeechPlusConfig(PreTrainedConfig):
     has_lora_adapter: bool = True
     downsample_rate: int = 5
     window_size: int = 15
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):

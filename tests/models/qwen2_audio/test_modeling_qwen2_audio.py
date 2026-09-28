@@ -24,6 +24,7 @@ from transformers import (
     Qwen2AudioConfig,
     Qwen2AudioEncoderConfig,
     Qwen2AudioForConditionalGeneration,
+    Qwen2AudioModel,
     Qwen2Config,
     is_torch_available,
 )
@@ -43,6 +44,7 @@ if is_torch_available():
 
 class Qwen2AudioModelTester(ALMModelTester):
     config_class = Qwen2AudioConfig
+    base_model_class = Qwen2AudioModel
     conditional_generation_class = Qwen2AudioForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = Qwen2AudioEncoderConfig
@@ -54,12 +56,6 @@ class Qwen2AudioModelTester(ALMModelTester):
         # Encoder asserts input_features.shape[-1] == max_source_positions * conv1.stride * conv2.stride == 2 * max_source_positions.
         kwargs.setdefault("max_source_positions", kwargs["feat_seq_length"] // 2)
         super().__init__(parent, **kwargs)
-
-    def create_audio_mask(self):
-        # Deterministic full-length mask: the base default randomizes via Python's `random`, which isn't
-        # re-seeded per test call and desynchronizes the two `prepare_config_and_inputs_for_common`
-        # invocations inside generation-comparison tests (e.g. test_greedy_generate_dict_outputs).
-        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
 
     def get_audio_embeds_mask(self, audio_mask):
         # Mirrors Qwen2AudioEncoder._get_feat_extract_output_lengths: conv2 (k=3,s=2,p=1) then avg_pool (k=2,s=2).
@@ -101,7 +97,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             "Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16
         )
 
-        url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+        url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
         messages = [
             {
                 "role": "user",
@@ -152,7 +148,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3",
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -163,7 +159,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                     },
                     {"type": "text", "text": "What can you hear?"},
                 ],
@@ -176,7 +172,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac",
                     },
                     {"type": "text", "text": "What does the person say?"},
                 ],
@@ -210,7 +206,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\ncough and throat clearing.",
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe original content of this audio is: 'Mister Quiller is the apostle of the middle classes and we are glad to welcome his gospel.'",
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe person says, 'Kids are talking by the door'.",
         ]
 
         self.assertEqual(
@@ -232,7 +228,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3",
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -243,7 +239,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                     },
                     {"type": "text", "text": "How about this one?"},
                 ],

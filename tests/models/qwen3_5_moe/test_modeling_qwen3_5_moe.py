@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
+        AutoModelForImageTextToText,
         Qwen3_5MoeConfig,
         Qwen3_5MoeForCausalLM,
         Qwen3_5MoeForConditionalGeneration,
@@ -66,6 +67,13 @@ class Qwen3_5MoeTextModelTester(CausalLMModelTester):
         self.linear_value_head_dim = 16
         self.linear_num_key_heads = 4
         self.linear_num_value_heads = 8
+        self.rope_parameters = {
+            "rope_type": "default",
+            "rope_theta": 10_000,
+            "mrope_section": [2, 1, 1],
+            "mrope_interleaved": True,
+        }
+        self.head_dim = 32
 
 
 @require_torch
@@ -141,10 +149,6 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @require_causal_conv1d
     @require_flash_linear_attention
     @require_torch_gpu
@@ -206,7 +210,7 @@ class Qwen3_5MoeVisionText2TextModelTester:
             "eos_token_id": 1,
             "pad_token_id": 2,
             "hidden_act": "silu",
-            "head_dim": 8,
+            "head_dim": 32,
             "hidden_size": 32,
             "vocab_size": 99,
             "intermediate_size": 37,
@@ -216,9 +220,13 @@ class Qwen3_5MoeVisionText2TextModelTester:
             "num_hidden_layers": 2,
             "layer_types": ["full_attention", "linear_attention"],
             "num_key_value_heads": 2,
-            "rope_theta": 10000,
             "tie_word_embeddings": True,
-            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            "rope_parameters": {
+                "rope_type": "default",
+                "rope_theta": 10_000,
+                "mrope_section": [2, 1, 1],
+                "mrope_interleaved": True,
+            },
             "linear_conv_kernel_dim": 2,
             "linear_key_head_dim": 16,
             "linear_value_head_dim": 16,
@@ -266,7 +274,6 @@ class Qwen3_5MoeVisionText2TextModelTester:
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_theta = text_config["rope_theta"]
         self.rope_parameters = text_config["rope_parameters"]
         self.hidden_act = text_config["hidden_act"]
         self.max_position_embeddings = text_config["max_position_embeddings"]
@@ -371,6 +378,39 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
         self.assertIsInstance(model, Qwen3_5MoeForCausalLM)
         self.assertIsInstance(model.config, Qwen3_5MoeTextConfig)
+
+    def test_automodelforcausallm_dtype(self) -> None:
+        """`AutoModelForCausalLM` must honor a concrete `dtype`, overriding the saved composite dtype (#46459)."""
+        config = self.model_tester.get_config()
+        # The saved dtype (bf16) must differ from the requested one (fp32) to exercise the bug.
+        full_model = Qwen3_5MoeForConditionalGeneration(config).to(torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            full_model.save_pretrained(tmp_dir)
+
+            # #46459 regression: a concrete `dtype` must win over the saved bf16 composite dtype.
+            model = AutoModelForCausalLM.from_pretrained(tmp_dir, dtype=torch.float32)
+            self.assertIsInstance(model, Qwen3_5MoeForCausalLM)
+            self.assertEqual(next(model.parameters()).dtype, torch.float32)
+
+            # Default behavior is unchanged: `auto` and no dtype still load in the checkpoint's saved bf16.
+            model_auto = AutoModelForCausalLM.from_pretrained(tmp_dir, dtype="auto")
+            self.assertEqual(next(model_auto.parameters()).dtype, torch.bfloat16)
+            model_default = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            self.assertEqual(next(model_default.parameters()).dtype, torch.bfloat16)
+
+            # The legacy `torch_dtype` alias is honored the same way.
+            model_legacy = AutoModelForCausalLM.from_pretrained(tmp_dir, torch_dtype=torch.float32)
+            self.assertEqual(next(model_legacy.parameters()).dtype, torch.float32)
+
+            # Non-regression guard: loading the whole VLM already honored `dtype` (this path does not
+            # hit the text-config swap), and must keep doing so before and after the fix.
+            vlm = AutoModelForImageTextToText.from_pretrained(tmp_dir, dtype=torch.float32)
+            self.assertEqual(vlm.config.dtype, torch.float32)
+            self.assertEqual(vlm.config.text_config.dtype, torch.float32)
+            self.assertEqual(vlm.config.vision_config.dtype, torch.float32)
+            # Check the actual weights load in fp32, not just the config metadata.
+            self.assertTrue(all(param.dtype == torch.float32 for param in vlm.parameters()))
 
     @unittest.skip(
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
@@ -642,7 +682,3 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
-
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass

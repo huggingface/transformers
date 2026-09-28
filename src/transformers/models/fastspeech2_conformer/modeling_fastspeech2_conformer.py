@@ -72,14 +72,6 @@ class FastSpeech2ConformerModelOutput(ModelOutput):
 @dataclass
 class FastSpeech2ConformerWithHifiGanOutput(FastSpeech2ConformerModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Spectrogram generation loss.
-    duration_outputs (`torch.LongTensor` of shape `(batch_size, max_text_length + 1)`, *optional*):
-        Outputs of the duration predictor.
-    pitch_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
-        Outputs of the pitch predictor.
-    energy_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
-        Outputs of the energy predictor.
     waveform (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
         Speech output as a result of passing the predicted mel spectrogram through the vocoder.
     """
@@ -726,9 +718,7 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
         self.input_scale = math.sqrt(self.embed_dim)
         self.dropout = nn.Dropout(p=module_config["positional_dropout_rate"])
         self.max_len = 5000
-        self.register_buffer(
-            "pos_enc", self.extend_pos_enc(torch.tensor(0.0).expand(1, self.max_len)), persistent=False
-        )
+        self.pos_enc = nn.Buffer(self.extend_pos_enc(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
 
     def extend_pos_enc(self, x, pos_enc=None):
         """Reset the positional encodings."""
@@ -933,7 +923,7 @@ class FastSpeech2ConformerLoss(nn.Module):
             duration_mask (`torch.LongTensor`):
                 Mask used to discern which values the duration loss should be calculated for.
             spectrogram_mask (`torch.LongTensor`):
-                Mask used to discern which values the spectrogam loss should be calculated for.
+                Mask used to discern which values the spectrogram loss should be calculated for.
 
         Returns:
             `tuple(torch.FloatTensor)`: Tuple of tensors containing, in order, the L1 loss value, duration predictor
@@ -997,6 +987,7 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, nn.Linear):
             init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
             if module.bias is not None:
@@ -1006,13 +997,6 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 key = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-key, b=key)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -1409,8 +1393,8 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-        self.register_buffer("mean", torch.zeros(config.model_in_dim))
-        self.register_buffer("scale", torch.ones(config.model_in_dim))
+        self.mean = nn.Buffer(torch.zeros(config.model_in_dim))
+        self.scale = nn.Buffer(torch.ones(config.model_in_dim))
 
         # Initialize weights and apply final processing
         self.post_init()
