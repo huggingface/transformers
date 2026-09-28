@@ -108,6 +108,33 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_union_with_duplicate_types(self):
+        def fn(x: list | tuple, y: list | tuple | dict | None = None):
+            """
+            Test function
+
+            Args:
+                x: The first input
+                y: The second input
+            """
+            return x
+
+        # `list` and `tuple` both map to "array", which should appear only once in the schema
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "array", "description": "The first input"},
+                    "y": {"type": ["array", "object"], "nullable": True, "description": "The second input"},
+                },
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_optional(self):
         def fn(x: int | None):
             """
