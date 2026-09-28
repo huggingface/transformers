@@ -202,6 +202,39 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_union_of_complex_types(self):
+        def fn(x: str | list[str], y: Literal["a", "b"] | int | None = None):
+            """
+            Test function
+
+            Args:
+                x: The input
+                y: Also the input
+            """
+            return x
+
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                        "description": "The input",
+                    },
+                    "y": {
+                        "anyOf": [{"type": "string", "enum": ["a", "b"]}, {"type": "integer"}],
+                        "nullable": True,
+                        "description": "Also the input",
+                    },
+                },
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_missing_docstring(self):
         def fn(x: int):
             return x

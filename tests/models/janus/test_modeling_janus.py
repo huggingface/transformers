@@ -477,7 +477,7 @@ class JanusIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars. There are several bright stars visible, and a",
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars, and it appears to depict a constellation. The",
                 ],
             }
         )

@@ -308,6 +308,38 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         self.assertListEqual(list(position_ids.shape), [3, 1, 26])
         self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
 
+    def test_video_position_ids_fractional_seconds(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_config.tokens_per_second = 2
+        model = Qwen2_5_VLModel(config).to(torch_device)
+        input_ids = torch.tensor(
+            [[config.text_config.pad_token_id] + [config.video_token_id] * 4], device=torch_device
+        )
+        mm_token_type_ids = torch.tensor([[0, 2, 2, 2, 2]], device=torch_device)
+        video_grid_thw = torch.tensor([[4, 1, 1]], device=torch_device)
+
+        # Quantize the final positions, not seconds or the scaled temporal step.
+        for seconds, temporal_positions in [
+            (0.25, [1, 1, 2, 2]),
+            (0.5, [1, 2, 3, 4]),
+            (0.75, [1, 2, 4, 5]),
+            (1.0, [1, 3, 5, 7]),
+            (1.5, [1, 4, 7, 10]),
+        ]:
+            for as_tensor in (False, True):
+                with self.subTest(seconds=seconds, as_tensor=as_tensor):
+                    intervals = torch.tensor([seconds], device=torch_device) if as_tensor else [seconds]
+                    positions, deltas = model.get_rope_index(
+                        input_ids,
+                        mm_token_type_ids,
+                        video_grid_thw=video_grid_thw,
+                        second_per_grid_ts=intervals,
+                    )
+                    self.assertEqual(positions.dtype, torch.long)
+                    self.assertListEqual(positions[0, 0].tolist(), [0] + temporal_positions)
+                    self.assertListEqual(positions[1:, 0].tolist(), [[0, 1, 1, 1, 1]] * 2)
+                    self.assertListEqual(deltas.tolist(), [[max(temporal_positions) + 1 - 5]])
+
     def test_video_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

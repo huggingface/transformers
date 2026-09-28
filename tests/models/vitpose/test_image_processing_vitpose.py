@@ -35,80 +35,17 @@ if is_vision_available():
 
 
 class VitPoseImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_affine_transform=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"height": 20, "width": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_affine_transform = do_affine_transform
-        self.size = size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_affine_transform": self.do_affine_transform,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-        }
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = VitPoseImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_affine_transform"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 20, "width": 20})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"height": 42, "width": 42}
-            )
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+    image_processor_tester_class = VitPoseImageProcessingTester
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

@@ -41,7 +41,7 @@ The example below demonstrates how to detect text with PP-OCRv6_small_det using 
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from transformers.image_utils import load_image
@@ -81,7 +81,7 @@ Here is how you can do it with PP-OCRv6_small_det using the [`AutoModel`]:
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from transformers.image_utils import load_image

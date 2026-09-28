@@ -108,7 +108,7 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             cos = freqs.cos() * self.attention_scaling
@@ -555,7 +555,7 @@ class Glm4vMoeVisionRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded * self.inv_freq.float()
             cos = freqs.cos() * self.attention_scaling
@@ -1083,7 +1083,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         grid_thw: list[int, int, int] | torch.Tensor,
         temp_merge_size: int = 1,
         spatial_merge_size: int = 1,
-        time_interval: int = 1,
+        time_interval: float | torch.Tensor = 1.0,
         device: str | torch.device | None = None,
     ):
         """
@@ -1104,8 +1104,8 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             spatial_merge_size (`int`, *optional*):
                 Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
                 by this value. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+                Spacing factor applied before quantizing temporal position indices.
             device (`str` or `torch.device`, *optional*):
                 Device on which the resulting tensor is allocated. If `None`, uses the current default device.
 
@@ -1120,7 +1120,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
         position_height = torch.arange(llm_grid_h, device=device) + start_position
         position_width = torch.arange(llm_grid_w, device=device) + start_position
 
@@ -1544,6 +1544,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
@@ -1552,7 +1553,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Glm4vMoeForConditionalGeneration
 
@@ -1580,6 +1581,10 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
         ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1591,6 +1596,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1606,7 +1612,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             )
 
         aux_loss = None
-        if kwargs.get("output_router_logits", False):
+        if output_router_logits:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,

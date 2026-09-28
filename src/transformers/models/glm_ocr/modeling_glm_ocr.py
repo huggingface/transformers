@@ -553,7 +553,7 @@ class GlmOcrVisionRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded * self.inv_freq.float()
             cos = freqs.cos() * self.attention_scaling
@@ -702,7 +702,7 @@ class GlmOcrTextRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             cos = freqs.cos() * self.attention_scaling
@@ -847,7 +847,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
         grid_thw: list[int, int, int] | torch.Tensor,
         temp_merge_size: int = 1,
         spatial_merge_size: int = 1,
-        time_interval: int = 1,
+        time_interval: float | torch.Tensor = 1.0,
         device: str | torch.device | None = None,
     ):
         """
@@ -868,8 +868,8 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
             spatial_merge_size (`int`, *optional*):
                 Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
                 by this value. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+                Spacing factor applied before quantizing temporal position indices.
             device (`str` or `torch.device`, *optional*):
                 Device on which the resulting tensor is allocated. If `None`, uses the current default device.
 
@@ -884,7 +884,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
         position_height = torch.arange(llm_grid_h, device=device) + start_position
         position_width = torch.arange(llm_grid_w, device=device) + start_position
 
@@ -1257,7 +1257,7 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GlmOcrForConditionalGeneration
 

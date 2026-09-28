@@ -301,7 +301,7 @@ def get_balanced_memory(
     # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
     # add which is the biggest of:
     # - the size of the biggest no split block (if applicable)
-    # - the mean of the layer sizes
+    # - the biggest leaf param (e.g. usually the embedding is a huge param compared to others)
     if no_split_module_classes is None:
         no_split_module_classes = []
     elif not isinstance(no_split_module_classes, (list, tuple, set)):
@@ -311,13 +311,13 @@ def get_balanced_memory(
     # may have different sizes depending on the layer idx, even if it's the same class (e.g. if we have either mlp or moe inside
     # the DecoderLayer depending on the layer idx). For this reason, we have to find ALL layers matching the _no_split_module class
     # and take the max, not just the first layer matching the class (as it may be smaller than future layers)
-    buffer = 0
+    biggest_no_split_module = 0
     if len(no_split_module_classes) > 0:
         all_no_split_modules = {k for k, v in model.named_modules() if v.__class__.__name__ in no_split_module_classes}
-        buffer = max(module_sizes[k] for k in all_no_split_modules)
+        biggest_no_split_module = max(module_sizes[k] for k in all_no_split_modules)
 
-    mean_leaves = int(sum(leave_modules_sizes.values()) / max(len(leave_modules_sizes), 1))
-    buffer = int(1.25 * max(buffer, mean_leaves))
+    biggest_leaf = max(leave_modules_sizes.values(), default=0)
+    buffer = int(1.25 * max(biggest_no_split_module, biggest_leaf))
     per_gpu += buffer
 
     # Sorted list of GPUs id (we may have some gpu ids not included in the our max_memory list - let's ignore them)
@@ -329,7 +329,7 @@ def get_balanced_memory(
         max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
-        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        min_zero = max(0, module_sizes[""] - sum(max_memory[i] for i in range(1, num_devices)))
         max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory
@@ -738,7 +738,7 @@ def infer_auto_device_map(
 
         # Then we keep track of all the parameters that are tied to the current module, but not in the current module
         tied_params = sum(
-            [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups], []
+            ([p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups), []
         )
 
         if verbose and len(tied_params) > 0:

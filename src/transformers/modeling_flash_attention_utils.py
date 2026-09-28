@@ -28,6 +28,7 @@ from .utils import (
     is_rocm_platform,
     is_torch_cuda_available,
     is_torch_mlu_available,
+    is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -70,6 +71,24 @@ FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_4": "kernels-community/flash-attn4",
 }
 
+FLASH_ATTN_KERNEL_VERSIONS = {
+    "kernels-community/flash-attn2": 3,
+    "kernels-community/flash-attn3": 1,
+    "kernels-community/vllm-flash-attn3": 1,
+    "kernels-community/aiter-flash-attn": 2,
+    "kernels-community/flash-attn4": 0,
+    "kernels-community/metal-flash-sdpa": 1,
+}
+
+# Devices each hub flash kernel ships builds for, unlisted kernels are assumed to run everywhere
+FLASH_ATTN_KERNEL_DEVICES = {
+    "kernels-community/flash-attn2": ("cuda", "xpu"),
+    "kernels-community/flash-attn3": ("cuda",),
+    "kernels-community/vllm-flash-attn3": ("cuda",),
+    "kernels-community/aiter-flash-attn": ("rocm",),
+    "kernels-community/flash-attn4": ("cuda",),
+    "kernels-community/metal-flash-sdpa": ("mps",),
+}
 
 # Meta information on each mainline FA compatibility:
 #   1. The import structure and availability
@@ -86,6 +105,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
             (is_torch_mlu_available, "mlu"),
+            (is_torch_musa_available, "musa"),
             (is_torch_npu_available, "npu"),
             (is_torch_xpu_available, "xpu"),
         ),

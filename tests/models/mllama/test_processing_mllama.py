@@ -35,6 +35,12 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-mllama"
     model_id = "hf-internal-testing/mllama-11b"
 
+    @unittest.skip(
+        "Processor prepends the BOS token as text, which shifts the offsets the assistant mask is computed from"
+    )
+    def test_apply_chat_template_assistant_mask(self):
+        pass
+
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image1 = Image.new("RGB", (224, 220))

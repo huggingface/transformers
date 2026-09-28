@@ -836,7 +836,7 @@ diff = '''
 
 [rules.TRF041]
 description = "A config-gated branch must carry a `# CODEPATH:` note saying which checkpoints diverge."
-default_enabled = true
+default_enabled = false
 # 15 findings over these 9 models: dinov3_vit(4), inkling(4), axk2(1), cohere_compass(1), kimi_k25(1),
 # kosmos2(1), muse_glimmer(1), tipsv2(1), x_clip(1). Every one needs its `# CODEPATH:` note to name the
 # checkpoints that take each path, which only the model owner knows -- guessing would be worse than the

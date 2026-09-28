@@ -413,6 +413,7 @@ class FocalNetModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [0.2166, -0.4368, 0.2191],
                 ("cuda", 8): [0.2180, -0.4355, 0.2198],
+                ("xpu", 5): [0.2179, -0.4357, 0.2200],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

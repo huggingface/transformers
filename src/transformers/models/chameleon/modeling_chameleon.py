@@ -132,7 +132,7 @@ class ChameleonRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -1022,17 +1022,12 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
         >>> from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
         >>> import torch
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
