@@ -158,7 +158,7 @@ if is_kernels_available():
             #        version=1,
             #    )
             # },
-            # GDN fast path for GB10 and Strix Halo (no fla/causal_conv1d build there); dense and MoE share it.
+            # GB10/SM121 GDN fast path (no fla/causal_conv1d build there); dense and MoE share it.
             "Qwen3_5GatedDeltaNet": {
                 Device(
                     type="cuda",
@@ -178,7 +178,7 @@ if is_kernels_available():
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
                     revision="dff7b2f3d3bfe004a1a9b2c3dde54b47c5690511",
-                    # TODO drop once Atlas-Inference is an allow-listed trusted publisher
+                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                     trust_remote_code=True,
                 ),
             },
