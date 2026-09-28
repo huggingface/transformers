@@ -33,7 +33,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    torch_compilable_check,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -386,6 +392,10 @@ class MossTranscribeDiarizeEncoder(MossTranscribeDiarizePreTrainedModel):
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor) -> torch.LongTensor:
         """Computes the output length of the convolutional layers."""
+        # Same formula as `WhisperEncoder._get_feat_extract_output_lengths` (conv1 stride 1, conv2 stride 2,
+        # so a single halving). Redefined here, rather than relying on the inherited version, so it stays
+        # next to the identical copy `MossTranscribeDiarizeProcessor._get_audio_token_length` has to keep
+        # inline, since the processor has no `audio_tower` to call this on.
         return (input_lengths - 1) // 2 + 1
 
 

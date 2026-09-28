@@ -48,6 +48,7 @@ STATE_DICT_MAPPING = {
 
 
 # Add the original system prompt and hotword list to the system message.
+CHAT_TEMPLATE = """{%- macro render_content(content) -%}
     {%- if content is string -%}
         {{- content -}}
     {%- else -%}

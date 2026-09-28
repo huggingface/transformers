@@ -42,14 +42,14 @@ class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class MossTranscribeDiarizeProcessor(ProcessorMixin):
     r"""
-    Constructs a MOSS-Transcribe-Diarize processor which wraps [`WhisperFeatureExtractor`] and
+    Constructs a MOSS-Transcribe-Diarize processor which wraps [`MossTranscribeDiarizeFeatureExtractor`] and
     [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities.
 
     See the [`~MossTranscribeDiarizeProcessor.__call__`] for more information.
 
     Args:
-        feature_extractor (`WhisperFeatureExtractor`):
+        feature_extractor (`MossTranscribeDiarizeFeatureExtractor`):
             The feature extractor for audio processing.
         tokenizer (`Qwen2TokenizerFast`):
             The tokenizer for text processing.
@@ -58,7 +58,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
-    feature_extractor_class = "WhisperFeatureExtractor"
+    feature_extractor_class = "MossTranscribeDiarizeFeatureExtractor"
     tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
@@ -165,40 +165,14 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                     raise ValueError(f"Audio should be mono, got shape: {example.shape}")
 
     def _process_audio(self, audio: AudioInput, **kwargs) -> tuple[dict[str, torch.Tensor], list[str]]:
-        # Determine number of Whisper-window chunks per sample, and flatten
-        window_size = int(self.feature_extractor.n_samples)
+        audio_inputs = self.feature_extractor(audio, **kwargs)
 
-        per_sample_lengths: list[int] = []
-        per_sample_windows: list[int] = []
-        flat_chunks: list[np.ndarray] = []
-        for audio_el in audio:
-            waveform = np.asarray(audio_el, dtype=np.float32).squeeze()
-            n_samples = int(waveform.shape[0])
-            n_win = max(1, (n_samples + window_size - 1) // window_size)
-            per_sample_lengths.append(n_samples)
-            per_sample_windows.append(n_win)
-
-            time_cap = min(n_samples, n_win * window_size)
-            for i in range(n_win):
-                start = i * window_size
-                end = min((i + 1) * window_size, time_cap)
-                flat_chunks.append(waveform[start:end])
-
-        kwargs["padding"] = "max_length"
-        kwargs["return_attention_mask"] = True
-        audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
-        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
-
-        # `input_features_mask` alone can't tell chunks apart at a window boundary, so `padding_mask` records
-        # each sample's raw length instead; the model recovers `audio_chunk_mapping` from it via `audio_chunk_size`.
-        padding_mask = torch.zeros(len(audio), max(per_sample_lengths), dtype=torch.long)
-        for idx, length in enumerate(per_sample_lengths):
-            padding_mask[idx, :length] = 1
-        audio_inputs["padding_mask"] = padding_mask
-
-        audio_chunk_mapping = torch.repeat_interleave(
-            torch.arange(len(audio), dtype=torch.long), torch.tensor(per_sample_windows, dtype=torch.long)
-        )
+        # Derive how many Whisper-window chunks each sample was split into from its raw length in
+        # `padding_mask`, the same way the model derives `audio_chunk_mapping` via `config.audio_chunk_size`.
+        window_size = self.feature_extractor.n_samples
+        per_sample_lengths = audio_inputs["padding_mask"].sum(-1)
+        per_sample_windows = ((per_sample_lengths + window_size - 1) // window_size).clamp(min=1).to(torch.long)
+        audio_chunk_mapping = torch.repeat_interleave(torch.arange(len(audio), dtype=torch.long), per_sample_windows)
 
         # Based on `WhisperEncoder._get_feat_extract_output_lengths` (conv stride 2 only), so the placeholder
         # token count matches `get_audio_features` from the same mask.

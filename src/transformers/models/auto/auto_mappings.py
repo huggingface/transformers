@@ -1054,6 +1054,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("gemma4_unified", "Gemma4UnifiedAudioFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
+        ("moss_transcribe_diarize", "MossTranscribeDiarizeFeatureExtractor"),
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("nemotron_asr_streaming", "NemotronAsrStreamingFeatureExtractor"),
         ("neucodec", "NeuCodecFeatureExtractor"),
