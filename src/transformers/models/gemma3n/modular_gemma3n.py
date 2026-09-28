@@ -1160,15 +1160,16 @@ class Gemma3nAudioConformerAttention(nn.Module):
         super().__init__()
         self.config = config
         self.post_in_features = self.config.hidden_size
-        self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = self.config.gradient_clipping
         self.pre_attn_norm = Gemma3nRMSNorm(self.config.hidden_size)
         self.attn = Gemma3nAudioAttention(config)
         self.post = nn.Linear(self.post_in_features, self.config.hidden_size, bias=False)
         self.post_norm = Gemma3nRMSNorm(self.config.hidden_size)
 
     def forward(self, audio_encodings: torch.Tensor, audio_mel_mask: torch.BoolTensor) -> torch.Tensor:
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(audio_encodings.dtype).max)
         audio_encodings_input_to_attn = audio_encodings
-        audio_encodings = torch.clamp(audio_encodings, -self.gradient_clipping, self.gradient_clipping)
+        audio_encodings = torch.clamp(audio_encodings, -gradient_clipping, gradient_clipping)
         audio_encodings_norm = self.pre_attn_norm(audio_encodings)
         # Output of self.attn is [B, T, NumHeads, HeadDim]
         audio_encodings_attn_out = self.attn(audio_encodings_norm, audio_mel_mask)
@@ -1179,7 +1180,7 @@ class Gemma3nAudioConformerAttention(nn.Module):
         audio_encodings_reshaped = audio_encodings_attn_out.reshape(b, t, num_heads * head_dim)
 
         audio_encodings = self.post(audio_encodings_reshaped)
-        audio_encodings = torch.clamp(audio_encodings, -self.gradient_clipping, self.gradient_clipping)
+        audio_encodings = torch.clamp(audio_encodings, -gradient_clipping, gradient_clipping)
         return audio_encodings_input_to_attn + self.post_norm(audio_encodings)
 
 
@@ -1188,7 +1189,7 @@ class Gemma3nAudioConformerFeedForward(nn.Module):
         super().__init__()
         self.config = config
 
-        self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = self.config.gradient_clipping
 
         self.pre_layer_norm = Gemma3nRMSNorm(self.config.hidden_size)
         self.ffw_layer_1 = nn.Linear(self.config.hidden_size, self.config.hidden_size * 4, bias=False)
@@ -1197,13 +1198,14 @@ class Gemma3nAudioConformerFeedForward(nn.Module):
         self.post_layer_scale = self.config.conf_residual_weight
 
     def forward(self, audio_encodings: torch.Tensor) -> torch.Tensor:
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(audio_encodings.dtype).max)
         residual = audio_encodings
-        audio_encodings = torch.clamp(audio_encodings, -self.gradient_clipping, self.gradient_clipping)
+        audio_encodings = torch.clamp(audio_encodings, -gradient_clipping, gradient_clipping)
         audio_encodings = self.pre_layer_norm(audio_encodings)
         audio_encodings: torch.Tensor = self.ffw_layer_1(audio_encodings)
         audio_encodings = nn.functional.silu(audio_encodings)
         audio_encodings: torch.Tensor = self.ffw_layer_2(audio_encodings)
-        audio_encodings = torch.clamp(audio_encodings, -self.gradient_clipping, self.gradient_clipping)
+        audio_encodings = torch.clamp(audio_encodings, -gradient_clipping, gradient_clipping)
         audio_encodings = self.post_layer_norm(audio_encodings)
         return residual + (audio_encodings * self.post_layer_scale)
 
@@ -1224,13 +1226,14 @@ class Gemma3nAudioConformerLightConv1d(nn.Module):
             groups=self.config.hidden_size,  # Depthwise
             bias=False,
         )
-        self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = self.config.gradient_clipping
         self.conv_norm = Gemma3nRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
         self.linear_end = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
 
         self.causal_padding = self.config.conf_conv_kernel_size - 1
 
     def forward(self, audio_encodings: torch.Tensor) -> torch.Tensor:
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(audio_encodings.dtype).max)
         audio_encodings_residual = audio_encodings  # Save for residual connection
 
         audio_encodings = self.pre_layer_norm(audio_encodings)
@@ -1243,7 +1246,7 @@ class Gemma3nAudioConformerLightConv1d(nn.Module):
         audio_encodings = self.depthwise_conv1d(audio_encodings_permuted_padded)
         # Permute back: [B, D, T_out] -> [B, T_out, D]
         audio_encodings = audio_encodings.permute(0, 2, 1)
-        audio_encodings = torch.clamp(audio_encodings, -self.gradient_clipping, self.gradient_clipping)
+        audio_encodings = torch.clamp(audio_encodings, -gradient_clipping, gradient_clipping)
         audio_encodings = self.conv_norm(audio_encodings)
         audio_encodings = nn.functional.silu(audio_encodings)
         audio_encodings = self.linear_end(audio_encodings)
@@ -1260,10 +1263,11 @@ class Gemma3nAudioConformerBlock(nn.Module):
         self.attention = Gemma3nAudioConformerAttention(self.config)
         self.lconv1d = Gemma3nAudioConformerLightConv1d(self.config)
         self.ffw_layer_end = Gemma3nAudioConformerFeedForward(self.config)
-        self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = self.config.gradient_clipping
         self.norm = Gemma3nRMSNorm(self.config.hidden_size)
 
     def forward(self, audio_encodings: torch.Tensor, audio_mel_mask: torch.BoolTensor) -> torch.Tensor:
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(audio_encodings.dtype).max)
         audio_encodings = self.ffw_layer_start(audio_encodings)
         audio_encodings = self.attention(audio_encodings, audio_mel_mask)
         validity_mask_for_lconv = ~audio_mel_mask  # True for valid
@@ -1273,7 +1277,7 @@ class Gemma3nAudioConformerBlock(nn.Module):
         audio_encodings = self.lconv1d(audio_encodings_for_lconv_input)
 
         audio_encodings = self.ffw_layer_end(audio_encodings)
-        audio_encodings = torch.clamp(audio_encodings, -self.gradient_clipping, self.gradient_clipping)
+        audio_encodings = torch.clamp(audio_encodings, -gradient_clipping, gradient_clipping)
         output = self.norm(audio_encodings)
         return output
 
@@ -1682,9 +1686,6 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
                 curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
-
-        if hasattr(module, "gradient_clipping"):
-            init.constant_(module.gradient_clipping, self.config.gradient_clipping)
 
     def get_per_layer_input_embeddings(self):
         return self.base_model.embed_tokens_per_layer
