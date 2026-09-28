@@ -522,7 +522,11 @@ class TensorParallelTesterMixin(ABC):
         text_config = config.get_text_config()
         remainder = text_config.vocab_size % self.tensor_parallel_size
         if remainder:
-            text_config.vocab_size += self.tensor_parallel_size - remainder
+            padding = self.tensor_parallel_size - remainder
+            # Inputs are drawn from the padded `vocab_size`; keep tables sized like it (e.g. Gemma 4 per-layer inputs) in sync
+            if getattr(text_config, "vocab_size_per_layer_input", None) == text_config.vocab_size:
+                text_config.vocab_size_per_layer_input += padding
+            text_config.vocab_size += padding
         if tie_word_embeddings is not None:
             if hasattr(text_config, "tie_word_embeddings"):
                 text_config.tie_word_embeddings = tie_word_embeddings

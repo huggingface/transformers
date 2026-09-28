@@ -653,7 +653,6 @@ class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _is_stateful = True
 
-    _tp_plan = AttributeError()
     _pp_plan = AttributeError()
 
     def __init__(self, config, **kwargs):
