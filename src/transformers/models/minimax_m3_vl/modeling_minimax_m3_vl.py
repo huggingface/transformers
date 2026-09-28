@@ -993,11 +993,7 @@ class MiniMaxM3VLVisionEmbeddings(nn.Module):
 
 
 class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
-    """
-    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
-    pre-computed using `head-dim//4` which is later used to concat H and W positions.
-    The final angles rotate over the whole head dim, no partial rotation involved.
-    """
+    """Partial 3D RoPE with equal frequency bands for temporal, height and width coordinates."""
 
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MiniMaxM3VLVisionConfig, device=None):
@@ -1015,9 +1011,7 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
-    def compute_axial_rope_parameters(
-        config: MiniMaxM3VLVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -1027,17 +1021,16 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        # Each axis occupies an even number of dimensions; the remaining head dimensions pass through.
+        axis_dim = 2 * ((head_dim // 3) // 2)
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        spatial_dim = dim // 2
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, axis_dim, 2, dtype=torch.float32, device=device) / axis_dim))
+        return inv_freq, 1.0
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (tokens, 3), with temporal, height and width coordinates.
         position_ids_expanded = position_ids[..., None].float()
         device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
@@ -1053,9 +1046,9 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        # get_vision_position_ids(include_temporal=True) supplies (tokens, 3) in T/H/W order.
+        frequencies = freq.flatten(1)
+        return torch.cat([frequencies, frequencies], dim=-1)
 
 
 def apply_rotary_pos_emb_vision(

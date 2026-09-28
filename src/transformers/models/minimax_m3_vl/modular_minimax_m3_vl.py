@@ -756,8 +756,25 @@ class MiniMaxM3VLVisionEmbeddings(Qwen2_5_VisionPatchEmbed):
 
 
 class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
+    """Partial 3D RoPE with equal frequency bands for temporal, height and width coordinates."""
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_axial_rope_parameters(config, device=None, **kwargs):
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        # Each axis occupies an even number of dimensions; the remaining head dimensions pass through.
+        axis_dim = 2 * ((head_dim // 3) // 2)
+        base = config.rope_parameters["rope_theta"]
+        inv_freq = 1.0 / (base ** (torch.arange(0, axis_dim, 2, dtype=torch.float32, device=device) / axis_dim))
+        return inv_freq, 1.0
+
+    def recomposition_frequencies(self, freq):
+        # get_vision_position_ids(include_temporal=True) supplies (tokens, 3) in T/H/W order.
+        frequencies = freq.flatten(1)
+        return torch.cat([frequencies, frequencies], dim=-1)
+
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (tokens, 3), with temporal, height and width coordinates.
         position_ids_expanded = position_ids[..., None].float()
         device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
