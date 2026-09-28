@@ -1014,9 +1014,16 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
 
         hidden_states = transformer_outputs[0]
         # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        if isinstance(logits_to_keep, int):
+            slice_indices = slice(-logits_to_keep, None)
+            hidden_states = hidden_states[:, slice_indices, :]
+        elif logits_to_keep.dtype == torch.bool:
+            hidden_states = hidden_states[logits_to_keep]
+        else:
+            hidden_states = hidden_states[:, logits_to_keep, :]
+
         outputs = self.pred_layer(
-            hidden_states[:, slice_indices, :],
+            hidden_states,
             labels,
         )  # (loss, logits) or (logits,) depending on if labels are provided.
 

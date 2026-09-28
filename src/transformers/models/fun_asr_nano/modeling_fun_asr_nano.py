@@ -604,8 +604,15 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if isinstance(logits_to_keep, int):
+            slice_indices = slice(-logits_to_keep, None)
+            hidden_states = hidden_states[:, slice_indices, :]
+        elif logits_to_keep.dtype == torch.bool:
+            hidden_states = hidden_states[logits_to_keep]
+        else:
+            hidden_states = hidden_states[:, logits_to_keep, :]
+
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
