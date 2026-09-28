@@ -2062,6 +2062,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
 
+            # Skip models that do not list the requested flash implementation
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
+
             config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
             inputs_dict = {}
             for input_name, input_data in original_inputs_dict.items():
@@ -2179,6 +2184,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention.")
 
+            # Skip models that do not list the requested flash implementation
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and "flash_attention_2" not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
@@ -2279,6 +2289,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         for model_class in self.all_generative_model_classes:
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
+            # Skip models that do not list the requested flash implementation
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
 
             # can't infer if new attn mask API is supported by assume that only model with attention backend support it
             if not model_class._supports_attention_backend:

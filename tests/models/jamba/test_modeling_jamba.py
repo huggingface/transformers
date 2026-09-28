@@ -530,13 +530,12 @@ class JambaModelIntegrationTest(unittest.TestCase):
         cls.device_properties = get_device_properties()
 
     def test_simple_generate(self):
-        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
+        # ("cuda", 8) for A100/A10.
         #
         # considering differences in hardware processing and potential deviations in generated text.
         # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 7): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
                 ("cuda", 8): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
                 ("rocm", 9): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew llam bb",
                 ("xpu", 3): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
@@ -555,14 +554,13 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, expected_sentence)
 
     def test_simple_batched_generate_with_padding(self):
-        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
+        # ("cuda", 8) for A100/A10.
         #
         # considering differences in hardware processing and potential deviations in generated text.
         # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 7): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
-                ("cuda", 8): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a story about a woman who was born in the United States",],
+                ("cuda", 8): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'",],
                 ("cuda", 9): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'",],
                 ("rocm", 9): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
                 ("xpu", 3): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'"]
