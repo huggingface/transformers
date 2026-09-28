@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     cleanup,
     get_device_properties,
     require_bitsandbytes,
+    require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
@@ -321,7 +322,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, expected_text)
 
-    @require_deterministic_for_xpu
+    @require_deterministic_for_accelerator
     def test_model_7b_fp16_static_cache(self):
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 7:
             self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU (OOM).")
@@ -338,11 +339,6 @@ class GemmaIntegrationTest(unittest.TestCase):
         )
         EXPECTED_TEXTS = expectations.get_expectation()
 
-        # Static cache triggers torch.compile which uses the Triton autotuner. The autotuner
-        # benchmarks multiple kernel configs based on GPU timing, which is non-deterministic and
-        # can flip a logit near a decision boundary. use_deterministic_algorithms forces a single
-        # deterministic kernel path, making the output stable across runs and machines.
-        torch.use_deterministic_algorithms(True)
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16).to(torch_device)
 
         model.generation_config.cache_implementation = "static"
