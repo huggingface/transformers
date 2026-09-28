@@ -168,7 +168,6 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         if is_torch_available()
         else {}
     )
-    _is_composite = True
     model_split_percents = [0.5, 0.85, 0.9]  # it tries to offload everything with the default value
 
     def setUp(self):

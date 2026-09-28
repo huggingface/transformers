@@ -178,8 +178,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         else ()
     )
 
-    _is_composite = True
-
     def setUp(self):
         self.model_tester = PerceptionLMVisionText2TextModelTester(self)
         common_properties = [

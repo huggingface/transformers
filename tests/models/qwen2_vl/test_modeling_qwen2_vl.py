@@ -187,7 +187,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         "image-text-to-text": Qwen2VLForConditionalGeneration,
         "any-to-any": Qwen2VLForConditionalGeneration,
     }
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Qwen2VLVisionText2TextModelTester(self)

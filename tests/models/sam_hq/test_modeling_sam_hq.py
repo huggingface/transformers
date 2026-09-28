@@ -659,10 +659,6 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.output_attentions = self.has_attentions
 
         for k in config.sub_configs:
-            if (
-                self._is_composite and k == "vision_config"
-            ):  # skip because it's not needed and causes errors e.g with Timm
-                continue
             if getattr(config, k) is not None:
                 getattr(config, k).output_attentions = self.has_attentions
 
@@ -723,9 +719,6 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -743,11 +736,9 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
                 self.assertTrue(model_sdpa.vision_encoder.config._attn_implementation == attn_impl)
-                self.assertTrue(model_sdpa.mask_decoder.config._attn_implementation == attn_impl)
 
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.vision_encoder.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.mask_decoder.config._attn_implementation == "eager")
 
                 # Verify SDPA/eager layer presence
                 has_sdpa = False

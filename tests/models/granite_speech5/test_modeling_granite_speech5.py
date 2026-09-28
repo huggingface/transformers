@@ -219,7 +219,6 @@ class GraniteSpeech5ForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
     has_attentions = False
     test_resize_embeddings = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = GraniteSpeech5ForCTCModelTester(self)

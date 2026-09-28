@@ -181,7 +181,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     skip_test_image_features_output_shape = True
 
     test_resize_embeddings = True
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Idefics2VisionText2TextModelTester(self)

@@ -228,8 +228,6 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     # LightOnOcr uses a PixtralVisionModel, which merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
     skip_test_image_features_output_shape = True
 
-    _is_composite = True
-
     def setUp(self):
         self.model_tester = LightOnOcrVisionText2TextModelTester(self)
         common_properties = ["image_token_id", "spatial_merge_size"]

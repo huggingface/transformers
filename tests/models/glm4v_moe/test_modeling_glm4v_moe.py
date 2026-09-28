@@ -192,7 +192,6 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     all_model_classes = (Glm4vMoeModel, Glm4vMoeForConditionalGeneration) if is_torch_available() else ()
 
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Glm4vMoeVisionText2TextModelTester(self)

@@ -269,7 +269,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
     # FIXME @raushan Omni tests take ages because the model is big. Try to make it even smaller
     pipeline_model_mapping = {}
     skip_test_audio_features_output_shape = True  # Qwen2_5Omni merges batch_size and audio_output_lengths in index 0
-    _is_composite = True
     model_split_percents = [0.5, 0.9]
 
     def setUp(self):
@@ -313,9 +312,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

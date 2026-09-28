@@ -303,7 +303,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    _is_composite = True
 
     def is_pipeline_test_to_skip(
         self,

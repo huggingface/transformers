@@ -655,7 +655,6 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": VideoLlama3ForConditionalGeneration}
-    _is_composite = True
     test_torch_exportable = (
         False  # data-dependent per-image `pixel_unshuffle` loop with per-image `merge_size` reshapes
     )

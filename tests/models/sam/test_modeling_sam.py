@@ -492,7 +492,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    _is_composite = True
 
     # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
     def is_pipeline_test_to_skip(
@@ -627,9 +626,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

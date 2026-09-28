@@ -161,8 +161,6 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
 
-    _is_composite = True
-
     def setUp(self):
         self.model_tester = Cohere2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Cohere2VisionConfig, has_text_modality=False)

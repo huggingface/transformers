@@ -373,7 +373,6 @@ class Tipsv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     has_attentions = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Tipsv2ModelTester(self)

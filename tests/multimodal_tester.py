@@ -231,7 +231,6 @@ class MultiModalModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     pipeline_model_mapping = None
 
     # Multimodal models are always composite
-    _is_composite = True
 
     def setUp(self):
         if self.model_tester_class is None:

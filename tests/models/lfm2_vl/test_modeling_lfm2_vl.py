@@ -158,7 +158,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     )
 
     model_tester_class = Lfm2VlModelTester
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Lfm2VlModelTester(self)

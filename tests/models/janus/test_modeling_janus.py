@@ -198,7 +198,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
         if is_torch_available()
         else {}
     )
-    _is_composite = True
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):

@@ -1225,7 +1225,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             # TODO: raushan, fix for composite models after making VLMs support new attn API
-            if not model_class._supports_flex_attn or self._is_composite:
+            if not model_class._supports_flex_attn:
                 self.skipTest(reason="This model does not support flex attention")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1541,7 +1541,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             # TODO: raushan, fix for composite models after making VLMs support new attn API
-            if not model_class._supports_flex_attn or self._is_composite:
+            if not model_class._supports_flex_attn:
                 self.skipTest(reason="This model does not support flex attention")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

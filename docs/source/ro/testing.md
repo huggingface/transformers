@@ -114,7 +114,7 @@ class YoutuModelTester(CausalLMModelTester):
 
 ## VLMModelTest
 
-`VLMModelTest` este clasa de bază pentru modelele vizual-lingvistice. Moștenește din trei mixin-uri (`ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin`) și setează `_is_composite = True` ca să gestioneze mai multe sub-modele.
+`VLMModelTest` este clasa de bază pentru modelele vizual-lingvistice. Moștenește din trei mixin-uri (`ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin`). Testele pentru modele compuse rulează automat, deoarece configurația de nivel superior are sub-configurații.
 
 ```py
 import unittest
@@ -425,7 +425,6 @@ class MyModelTest(CausalLMModelTest, unittest.TestCase):
 | `test_all_params_have_gradient` | `True` | Toți parametrii primesc gradienți (setează `False` când nu toți parametrii sunt activați în fiecare forward pass, cum ar fi experții MoE) |
 | `is_encoder_decoder` | `False` | Teste specifice encoder-decoder |
 | `has_attentions` | `True` | Teste de ieșire attention |
-| `_is_composite` | `False` | Gestionarea modelelor compuse/multimodale |
 | `model_split_percents` | `[0.5, 0.7, 0.9]` | Procentaje de split pentru testele de model parallelism |
 
 ## Pașii următori

@@ -465,7 +465,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Blip2ForConditionalGenerationDecoderOnlyModelTester(self)
@@ -529,9 +528,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -825,7 +821,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    _is_composite = True
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -912,9 +907,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

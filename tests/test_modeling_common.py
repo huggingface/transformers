@@ -162,6 +162,11 @@ TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION = [
 ] + [("fp32_pad_left_output_attentions", "fp32", "left", True, True, False)]
 
 
+def has_sub_configs(config) -> bool:
+    """Whether `config` holds at least one sub-config, i.e. whether the model is composed of several sub-models."""
+    return any(getattr(config, key, None) is not None for key in config.sub_configs)
+
+
 def _test_eager_matches_sdpa_inference(
     self,
     name,
@@ -740,7 +745,6 @@ class ModelTesterMixin(ExportTesterMixin):
     test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
-    _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
 
     # Note: for all mixins that utilize the Hub in some way, we should ensure that
@@ -2033,8 +2037,7 @@ class ModelTesterMixin(ExportTesterMixin):
         """Helper function to recursively set a config attr to a given value"""
         for k in config.sub_configs:
             if (
-                self._is_composite
-                and attribute_name == "output_attentions"
+                attribute_name == "output_attentions"
                 and k == "vision_config"
                 and "Timm" in getattr(config, k).__class__.__name__
             ):  # skip because it's not needed and causes errors e.g with Timm
@@ -3741,10 +3744,9 @@ class ModelTesterMixin(ExportTesterMixin):
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_model_classes:
-            if not self._is_composite:
-                self.skipTest("Model is not a composite model.")
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if not has_sub_configs(config):
+                self.skipTest("Model is not a composite model.")
 
             # set eager as it will be the one supported in all models
             # we just need to test if passing 'attn_implementation' as a dict fails or not
@@ -3773,10 +3775,13 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # Set the attention to default `None` but the text config to `eager`
             # The model should load encoders in SDPA but not the text attention
+            # (skipped when `get_text_config` returns a detached copy, e.g. models with only a vision backbone)
             config._attn_implementation = None
-            config.get_text_config(decoder=True)._attn_implementation = "eager"
-            model = model_class(config)
-            self.assertTrue(model.config.get_text_config(decoder=True)._attn_implementation == "eager")
+            text_config = config.get_text_config(decoder=True)
+            if text_config is config.get_text_config(decoder=True):
+                text_config._attn_implementation = "eager"
+                model = model_class(config)
+                self.assertTrue(model.config.get_text_config(decoder=True)._attn_implementation == "eager")
 
             # Test that using `dict` attention implementation works with `from_pretrained`
             #  Set all backbones to "eager" because "eager" attention is always available
@@ -3800,7 +3805,7 @@ class ModelTesterMixin(ExportTesterMixin):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if not self.all_model_classes[0]._supports_sdpa or self._is_composite:
+        if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
@@ -3843,8 +3848,9 @@ class ModelTesterMixin(ExportTesterMixin):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        if not has_sub_configs(config):
+            self.skipTest("Model is not a composite model.")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3864,9 +3870,18 @@ class ModelTesterMixin(ExportTesterMixin):
                     "audio_model",
                 }
                 language_model_names = {"language_model", "model", "text_model"}
-                modality_tower_name = [name for name in modality_tower_names if hasattr(model_sdpa, name)]
+                # Only consider sub-modules that are standalone sub-models, i.e. with their own config
+                modality_tower_name = [
+                    name
+                    for name in modality_tower_names
+                    if isinstance(getattr(model_sdpa, name, None), PreTrainedModel)
+                ]
                 modality_tower_name = modality_tower_name[0] if len(modality_tower_name) > 0 else None
-                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
+                language_model_name = [
+                    name
+                    for name in language_model_names
+                    if isinstance(getattr(model_sdpa, name, None), PreTrainedModel)
+                ]
                 language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
                 if language_model_name is None or modality_tower_name is None:
                     self.skipTest(
@@ -4095,9 +4110,9 @@ class ModelTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-            if not self._is_composite:
+            if not has_sub_configs(config):
                 self.skipTest("This model is not a composite model!")
+            model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -4789,7 +4804,7 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             if not model_class._can_set_attn_implementation():
                 self.skipTest(reason="This model does not support setting its attention dynamically")
-            if not self._is_composite:
+            if not has_sub_configs(config):
                 self.skipTest(reason="This model is not composite")
 
             # Need to deepcopy here to avoid changing the _attn_implementation in-place
@@ -4810,8 +4825,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 if isinstance(submodule, PreTrainedModel)
             ):
                 self.skipTest(reason="Parts of this model cannot set attention dynamically")
+            if not model_class._supports_sdpa:
+                self.skipTest(reason="This model does not support sdpa")
 
-            # Now, set only top-most to sdpa (should support it if it supports the dynamic switch)
+            # Now, set only top-most to sdpa
             model.set_attn_implementation({"": "sdpa"})
 
             # Check only top-most was correctly changed

@@ -386,7 +386,6 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Aimv2ModelTester(self)

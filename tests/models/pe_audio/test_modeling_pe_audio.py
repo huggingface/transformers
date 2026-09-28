@@ -133,7 +133,6 @@ class PeAudioEncoderTester:
 class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeAudioEncoder,)
     test_resize_embeddings = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = PeAudioEncoderTester(self)
@@ -283,7 +282,6 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["input_values", "padding_mask"]
     test_resize_embeddings = False
     has_attentions = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = PeAudioModelTester(self)

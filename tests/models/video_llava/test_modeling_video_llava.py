@@ -205,7 +205,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     # VideoLlava merges batch_size and num_frames in the first output dimension
     skip_test_video_features_output_shape = True
     test_resize_embeddings = True
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = VideoLlavaVisionText2TextModelTester(self)

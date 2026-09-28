@@ -133,7 +133,6 @@ class PeVideoEncoderTester:
 class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeVideoEncoder,)
     test_resize_embeddings = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = PeVideoEncoderTester(self)
@@ -318,7 +317,6 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
     test_resize_embeddings = False
     has_attentions = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = PeVideoModelTester(self)

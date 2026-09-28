@@ -170,8 +170,6 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     pipeline_model_mapping = {"image-text-to-text": FastVlmForConditionalGeneration} if is_torch_available() else {}
     skip_test_image_features_output_shape = True  # FastVLM uses index -3 for hidden_size instead of -1
 
-    _is_composite = True
-
     def setUp(self):
         self.model_tester = FastVlmVisionText2TextModelTester(self)
         common_properties = ["image_token_id"]

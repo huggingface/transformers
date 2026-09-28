@@ -180,7 +180,6 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     pipeline_model_mapping = {"image-text-to-text": VipLlavaForConditionalGeneration} if is_torch_available() else {}
 
     test_resize_embeddings = True
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)

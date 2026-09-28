@@ -533,7 +533,6 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Siglip2ModelTester(self)
@@ -649,7 +648,6 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Siglip2ForImageClassificationModelTester(self)

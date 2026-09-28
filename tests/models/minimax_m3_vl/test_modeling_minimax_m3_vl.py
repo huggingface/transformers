@@ -202,7 +202,6 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         if is_torch_available()
         else {}
     )
-    _is_composite = True
     # The vision tower packs every image's (and video frame's) patches into a single sequence
     # (batch dim 1), so ``last_hidden_state`` does not carry a per-item batch axis to shape-check.
     skip_test_image_features_output_shape = True

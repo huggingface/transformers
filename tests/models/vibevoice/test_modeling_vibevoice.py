@@ -228,7 +228,6 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         if is_torch_available()
         else {}
     )
-    _is_composite = True
     test_resize_embeddings = False
 
     def setUp(self):

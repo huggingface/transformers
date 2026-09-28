@@ -172,8 +172,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         else {}
     )
 
-    _is_composite = True
-
     def setUp(self):
         self.model_tester = AyaVisionVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AyaVisionConfig, has_text_modality=False)

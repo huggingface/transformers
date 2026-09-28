@@ -114,7 +114,7 @@ class YoutuModelTester(CausalLMModelTester):
 
 ## VLMModelTest
 
-`VLMModelTest` is the base class for vision-language models. It inherits from three mixins (`ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin`) and sets `_is_composite = True` to handle multiple sub-models.
+`VLMModelTest` is the base class for vision-language models. It inherits from three mixins (`ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin`). Composite-model tests run automatically because the top-level config has sub-configs.
 
 ```py
 import unittest
@@ -435,7 +435,6 @@ class MyModelTest(CausalLMModelTest, unittest.TestCase):
 | `test_all_params_have_gradient` | `True` | All parameters receive gradients (set `False` when not all parameters are activated in every forward pass, such as MoE experts) |
 | `is_encoder_decoder` | `False` | Encoder-decoder specific tests |
 | `has_attentions` | `True` | Attention output tests |
-| `_is_composite` | `False` | Composite/multimodal model handling |
 | `model_split_percents` | `[0.5, 0.7, 0.9]` | Split percentages for model parallelism tests |
 
 ## Next steps

@@ -268,7 +268,6 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
         else {}
     )
 
-    _is_composite = True
     test_mismatched_shapes = False
     skip_test_image_features_output_shape = True  # ModernVBert merges batch_size with num_images in index 0
     model_split_percents = [0.5, 0.8, 0.9]

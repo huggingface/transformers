@@ -532,7 +532,6 @@ class VideoPrismClipModelTester:
 
 @require_vision
 class VideoPrismClipModelTest(VideoPrismModelTest, unittest.TestCase):
-    _is_composite = True
     test_attention_outputs = False
     additional_model_inputs = ["input_ids", "attention_mask"]
     test_resize_embeddings = False

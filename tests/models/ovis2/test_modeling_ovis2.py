@@ -179,7 +179,6 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     # Ovis2 post-processes the last_hidden_state to hidden_size * hidden_stride**2
     skip_test_image_features_output_shape = True
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Ovis2VisionText2TextModelTester(self)

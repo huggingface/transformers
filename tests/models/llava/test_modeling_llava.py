@@ -189,8 +189,6 @@ class LlavaForConditionalGenerationModelTest(
         else {}
     )
 
-    _is_composite = True
-
     def setUp(self):
         self.model_tester = LlavaVisionText2TextModelTester(self)
         common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]

@@ -484,7 +484,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(self)
@@ -719,9 +718,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

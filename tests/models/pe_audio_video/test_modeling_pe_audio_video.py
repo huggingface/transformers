@@ -209,7 +209,6 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeAudioVideoEncoder,)
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
     test_resize_embeddings = False
-    _is_composite = True
     test_torch_exportable = False  # data-dependent audio-video alignment
 
     def setUp(self):

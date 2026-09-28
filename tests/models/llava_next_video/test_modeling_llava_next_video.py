@@ -211,8 +211,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     # LlavaNextVideo merges batch_size and num_frames in the first output dimension
     skip_test_video_features_output_shape = True
 
-    _is_composite = True
-
     def setUp(self):
         self.model_tester = LlavaNextVideoVisionText2TextModelTester(self)
         common_properties = ["image_token_index", "video_token_index", "vision_feature_layer", "image_seq_length"]

@@ -250,7 +250,6 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     test_resize_embeddings = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = Sam3TrackerModelTester(self)
@@ -337,9 +336,6 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

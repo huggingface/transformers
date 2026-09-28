@@ -224,7 +224,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_resize_embeddings = False
     is_encoder_decoder = True
     # Indicates VLMs usually but there are many audio models which are also composite
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = DiaModelTester(self)

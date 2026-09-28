@@ -159,7 +159,6 @@ class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_attention_outputs = False
     test_resize_embeddings = False
-    _is_composite = True
     # The FastConformer encoder is reused as-is from NemotronAsr and built via AutoModel; this RNN-T model
     # does not re-expose the encoder's attentions/hidden_states through its own output recorder, so the
     # attention-dependent parity tests (which would otherwise re-test the reused encoder) do not apply.
@@ -251,9 +250,6 @@ class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()

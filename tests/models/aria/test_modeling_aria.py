@@ -188,8 +188,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     all_model_classes = (AriaModel, AriaForConditionalGeneration) if is_torch_available() else ()
 
-    _is_composite = True
-
     def setUp(self):
         self.model_tester = AriaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)

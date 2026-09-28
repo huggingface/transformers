@@ -113,7 +113,6 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
     has_attentions = False
-    _is_composite = True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)

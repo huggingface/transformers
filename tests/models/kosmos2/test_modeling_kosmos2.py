@@ -271,7 +271,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    _is_composite = True
 
     # TODO: Tiny model needs fixing for `image-text-to-text` (latent_query_num=3 not compatible with num_image_tokens=64).
     def is_pipeline_test_to_skip(
