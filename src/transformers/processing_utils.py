@@ -1646,10 +1646,10 @@ class ProcessorMixin(PushToHubMixin):
         # 7): flat, not modality-specific processor attributes
         for key in self.valid_processor_kwargs.__annotations__:
             if key != "common_kwargs" and key not in default_kwargs:
-                default_kwargs.update(copy.copy(getattr(self, key)))
+                default_kwargs[key] = copy.copy(getattr(self, key))
 
         # get defaults from set model processor kwargs if they exist
-        for modality in default_kwargs:
+        for modality in map_preprocessor_kwargs:
             # 7): modality-specific processor attributes
             default_kwargs[modality].update(common_kwargs.copy())
             default_kwargs[modality].update(getattr(self, modality, {}).copy())
@@ -1689,12 +1689,13 @@ class ProcessorMixin(PushToHubMixin):
         # 3): Explicit common_kwargs override
         common_kwargs.update(kwargs.get("common_kwargs", {}))
         if common_kwargs:
-            for kwarg in output_kwargs.values():
-                kwarg.update(common_kwargs)
+            for modality in map_preprocessor_kwargs:
+                output_kwargs[modality].update(common_kwargs)
 
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
-        for modality, output_kwarg in output_kwargs.items():
+        for modality in map_preprocessor_kwargs:
+            output_kwarg = output_kwargs[modality]
             modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
             if modality in map_preprocessor_kwargs:
                 preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
@@ -1730,25 +1731,36 @@ class ProcessorMixin(PushToHubMixin):
 
         # Determine if kwargs is a flat dictionary or contains nested dictionaries
         if any(key in default_kwargs for key in kwargs):
-            # kwargs is dictionary-based, and some keys match modality names
-            for modality, subdict in kwargs.items():
-                if modality in default_kwargs:
-                    for subkey, subvalue in subdict.items():
+            # Preserve processor-level kwargs and merge nested modality kwargs.
+            for key, value in kwargs.items():
+                if key in map_preprocessor_kwargs:
+                    for subkey, subvalue in value.items():
                         if subkey not in used_keys:
-                            output_kwargs[modality][subkey] = subvalue
+                            output_kwargs[key][subkey] = subvalue
                             used_keys.add(subkey)
+                elif key in default_kwargs:
+                    output_kwargs[key] = value
+                    used_keys.add(key)
         else:
             # kwargs is a flat dictionary
-            for key, kwarg in kwargs.items():
+            for key in kwargs:
                 if key not in used_keys and key not in possible_modality_keywords:
                     logger.warning_once(
                         f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                     )
 
+        # Validate flat kwargs
+        flat_kwargs = {
+            key: value
+            for key, value in output_kwargs.items()
+            if key not in map_preprocessor_kwargs and key != "common_kwargs"
+        }
+        validate_typed_dict(ModelProcessorKwargs, flat_kwargs)
+
+        # Validate modality-specific kwargs
         for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
-            if key == "common_kwargs":
-                # output_kwargs never contains "common_kwargs" as they have been merged into
-                # the modality-specific kwargs.
+            if key == "common_kwargs" or key in flat_kwargs:
+                # common_kwargs has been merged into modality-specific dicts
                 continue
             if key in map_preprocessor_kwargs:
                 preprocessor = getattr(self, map_preprocessor_kwargs[key], None)
