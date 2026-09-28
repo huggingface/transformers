@@ -58,47 +58,35 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     projector_hidden_act: str = "silu"
     projector_bias: bool = True
     keys_to_ignore_at_inference = ["past_key_values"]
-
-    _default_text_config_kwargs = {
-        "hidden_size": 1024,
-        "intermediate_size": 3072,
-        "num_hidden_layers": 28,
-        "num_attention_heads": 16,
-        "num_key_value_heads": 8,
-        "max_position_embeddings": 131_072,
-        "rope_theta": 1_000_000.0,
-    }
-
-    _default_audio_config_kwargs = {
-        "num_mel_bins": 80,
-        "d_model": 1024,
-        "encoder_layers": 24,
-        "encoder_attention_heads": 16,
-        "encoder_ffn_dim": 4096,
-        "max_source_positions": 1500,
-        "dropout": 0.0,
-        "attention_dropout": 0.0,
-        "activation_dropout": 0.0,
-        "activation_function": "gelu",
-        "encoder_layerdrop": 0.0,
-        "scale_embedding": False,
-    }
     audio_merge_size: int = 4
     audio_chunk_size: int = 480_000
-    # Not declared on `AudioFlamingo3Config`; needed so `PreTrainedModel.get_expanded_tied_weights_keys` actually
-    # ties `lm_head.weight` per `MossTranscribeDiarizeForConditionalGeneration._tied_weights_keys`.
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config = CONFIG_MAPPING["whisper"](**self.audio_config)
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "whisper")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["whisper"](**self._default_audio_config_kwargs)
+            self.audio_config = CONFIG_MAPPING["whisper"](
+                d_model=1024,
+                encoder_layers=24,
+                encoder_attention_heads=16,
+                encoder_ffn_dim=4096,
+            )
 
         if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING["qwen3"](**{**self._default_text_config_kwargs, **self.text_config})
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
+            self.text_config = CONFIG_MAPPING["qwen3"](
+                hidden_size=1024,
+                intermediate_size=3072,
+                num_hidden_layers=28,
+                num_attention_heads=16,
+                num_key_value_heads=8,
+                max_position_embeddings=131_072,
+                rope_theta=1_000_000.0,
+            )
 
         super().__post_init__(**kwargs)
 

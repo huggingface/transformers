@@ -38,12 +38,6 @@ class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
-# Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
-_SEGMENT_PATTERN = re.compile(
-    r"\[(?P<start>[^\[\]]+)\]\[S(?P<speaker>\d+)\](?P<content>.*?)\[(?P<end>[^\[\]]+)\]", re.DOTALL
-)
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class MossTranscribeDiarizeProcessor(ProcessorMixin):
@@ -104,6 +98,10 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
         self.time_marker_every_seconds = time_marker_every_seconds
+        # Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
+        self._segment_pattern = re.compile(
+            r"\[(?P<start>[^\[\]]+)\]\[S(?P<speaker>\d+)\](?P<content>.*?)\[(?P<end>[^\[\]]+)\]", re.DOTALL
+        )
 
     @auto_docstring
     def __call__(
@@ -353,7 +351,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                     "Speaker": int(match["speaker"]),
                     "Content": match["content"].strip(),
                 }
-                for match in _SEGMENT_PATTERN.finditer(t)
+                for match in self._segment_pattern.finditer(t)
             ]
 
             if not segments:

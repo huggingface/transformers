@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch moss_transcribe_diarize model."""
 
+import copy
 import json
 import unittest
 from pathlib import Path
@@ -46,7 +47,6 @@ class MossTranscribeDiarizeModelTester(ALMModelTester):
     conditional_generation_class = MossTranscribeDiarizeForConditionalGeneration
     text_config_class = Qwen3Config
     audio_config_class = WhisperConfig
-    audio_mask_key = None
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("feat_seq_length", 128)
@@ -107,9 +107,52 @@ class MossTranscribeDiarizeForConditionalGenerationModelTest(ALMModelTest, unitt
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="MossTranscribeDiarize uses input_features_mask and padding_mask instead of audio masks.")
+    # Overridden because MossTranscribeDiarize describes audio chunks via `input_features_mask`/`padding_mask`
+    # instead of a single `audio_mask_key`, so the two extra keys must be resized together with `input_features`.
     def test_mismatching_num_audio_tokens(self):
-        pass
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        audio_keys = ("input_features", "input_features_mask", "padding_mask")
+        audio_token_id = self.model_tester.audio_token_id
+        dup_idx = int((input_dict["input_ids"] == audio_token_id).sum(-1).argmax().item())
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            curr_input_dict = copy.deepcopy(input_dict)
+            _ = model(**curr_input_dict)  # successful forward with no modifications
+
+            # Test 1: remove one audio chunk but leave the audio tokens in the text
+            curr_input_dict = copy.deepcopy(input_dict)
+            for key in audio_keys:
+                curr_input_dict[key] = curr_input_dict[key][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 2: add one audio chunk but leave the audio tokens in the text
+            curr_input_dict = copy.deepcopy(input_dict)
+            for key in audio_keys:
+                curr_input_dict[key] = torch.cat(
+                    [curr_input_dict[key], curr_input_dict[key][dup_idx : dup_idx + 1, ...]], dim=0
+                )
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 3: duplicate the text along the seq dim so each prompt has twice as many
+            # audio tokens, while leaving the audio features unchanged -> mismatch
+            curr_input_dict = copy.deepcopy(input_dict)
+            curr_input_dict["input_ids"] = torch.cat([curr_input_dict["input_ids"]] * 2, dim=1)
+            curr_input_dict["attention_mask"] = torch.cat([curr_input_dict["attention_mask"]] * 2, dim=1)
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 4: multi-chunk valid case. Duplicating input_ids along the seq dim and the audio
+            # chunks along the batch dim must forward successfully.
+            curr_input_dict = copy.deepcopy(input_dict)
+            curr_input_dict["input_ids"] = torch.cat([curr_input_dict["input_ids"]] * 2, dim=1)
+            curr_input_dict["attention_mask"] = torch.cat([curr_input_dict["attention_mask"]] * 2, dim=1)
+            for key in audio_keys:
+                curr_input_dict[key] = torch.cat([curr_input_dict[key]] * 2, dim=0)
+            _ = model(**curr_input_dict)
 
 
 @require_torch
@@ -119,91 +162,77 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
         cleanup(torch_device, gc_collect=True)
         cls.checkpoint = "itazap/MOSS-Transcribe-Diarize-HF"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
+        cls.model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
+            cls.checkpoint, device_map=torch_device, dtype="auto"
+        )
 
     @classmethod
     def tearDownClass(cls):
+        del cls.model
         cleanup(torch_device, gc_collect=True)
+
+    def setUp(self):
+        # Fixture files are named after the test they belong to, e.g. `test_single_batch_sub_30`
+        # loads `expected_results_single_batch_sub_30.json`.
+        fixture_name = self._testMethodName.removeprefix("test_")
+        path = (
+            Path(__file__).parent.parent.parent
+            / "fixtures/moss_transcribe_diarize"
+            / f"expected_results_{fixture_name}.json"
+        )
+        with open(path, "r", encoding="utf-8") as f:
+            self.expected_outputs = json.load(f)
 
     @slow
     def test_single_batch_sub_30(self):
         """
         reproducer: https://gist.github.com/itazap/6045ee5b1c4737c5623d5701de68081a
         """
-        path = (
-            Path(__file__).parent.parent.parent
-            / "fixtures/moss_transcribe_diarize/expected_results_single_batch_sub_30.json"
-        )
-        with open(path, "r", encoding="utf-8") as f:
-            expected_outputs = json.load(f)
-
-        model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
-            self.checkpoint, device_map=torch_device, dtype="auto"
-        )
-
         inputs = self.processor.apply_transcription_request(
             "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
-        ).to(model.device, dtype=model.dtype)
-        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(expected_outputs["input_ids"]))
+        ).to(self.model.device, dtype=self.model.dtype)
+        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(self.expected_outputs["input_ids"]))
 
-        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        outputs = self.model.generate(**inputs, do_sample=False, max_new_tokens=500)
         generated_ids = outputs[:, inputs.input_ids.shape[1] :]
-        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(expected_outputs["generated_ids"]))
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(self.expected_outputs["generated_ids"]))
 
         decoded_outputs = self.processor.decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(decoded_outputs, expected_outputs["transcriptions"])
+        self.assertEqual(decoded_outputs, self.expected_outputs["transcriptions"])
 
     @slow
     def test_single_batch_over_30(self):
         """
         reproducer: https://gist.github.com/itazap/e551c66d2d928be5027c2aa832bc8123
         """
-        path = (
-            Path(__file__).parent.parent.parent
-            / "fixtures/moss_transcribe_diarize/expected_results_single_batch_over_30.json"
-        )
-        with open(path, "r", encoding="utf-8") as f:
-            expected_outputs = json.load(f)
-
-        model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
-            self.checkpoint, device_map=torch_device, dtype="auto"
-        )
-
         inputs = self.processor.apply_transcription_request(
             "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
-        ).to(model.device, dtype=model.dtype)
-        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(expected_outputs["input_ids"]))
+        ).to(self.model.device, dtype=self.model.dtype)
+        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(self.expected_outputs["input_ids"]))
 
-        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        outputs = self.model.generate(**inputs, do_sample=False, max_new_tokens=500)
         generated_ids = outputs[:, inputs.input_ids.shape[1] :]
-        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(expected_outputs["generated_ids"]))
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(self.expected_outputs["generated_ids"]))
 
         decoded_outputs = self.processor.decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(decoded_outputs, expected_outputs["transcriptions"])
+        self.assertEqual(decoded_outputs, self.expected_outputs["transcriptions"])
 
     @slow
     def test_batched(self):
         """
         reproducer: https://gist.github.com/itazap/549d040019a61b735ae4099da3d7ad1c
         """
-        path = Path(__file__).parent.parent.parent / "fixtures/moss_transcribe_diarize/expected_results_batched.json"
-        with open(path, "r", encoding="utf-8") as f:
-            expected_outputs = json.load(f)
-
-        model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
-            self.checkpoint, device_map=torch_device, dtype="auto"
-        )
-
         inputs = self.processor.apply_transcription_request(
             [
                 "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
                 "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
             ],
-        ).to(model.device, dtype=model.dtype)
-        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(expected_outputs["input_ids"]))
+        ).to(self.model.device, dtype=self.model.dtype)
+        torch.testing.assert_close(inputs.input_ids.cpu(), torch.tensor(self.expected_outputs["input_ids"]))
 
-        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        outputs = self.model.generate(**inputs, do_sample=False, max_new_tokens=500)
         generated_ids = outputs[:, inputs.input_ids.shape[1] :]
-        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(expected_outputs["generated_ids"]))
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor(self.expected_outputs["generated_ids"]))
 
         decoded_outputs = self.processor.decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(decoded_outputs, expected_outputs["transcriptions"])
+        self.assertEqual(decoded_outputs, self.expected_outputs["transcriptions"])
