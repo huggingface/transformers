@@ -716,9 +716,11 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
+                ("rocm", (9, 4)): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
             }
         )
         expected_output = expected_outputs.get_expectation()
+        print(expected_output)
 
         self.assertEqual(decoded_output, expected_output)
 

@@ -214,6 +214,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             {
                 (None, None): "R\\&D",
                 ("xpu", 5): "R\\&D",
+                ("rocm", (9, 4)): "\\title{\nR",
             }
         ).get_expectation()
         self.assertEqual(decoded_output, expected_output)
