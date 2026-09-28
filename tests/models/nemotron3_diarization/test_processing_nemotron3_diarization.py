@@ -169,6 +169,8 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
         processor = self.get_processor()
         for mode in self.LATENCIES:
             processor.set_streaming_mode(mode)
+            # The last offline frame reaches past the audio when `length % hop_length < n_fft // 2 - hop_length`
+            # (96 here): 64000 loses that frame without end padding, 64100 does not.
             for length in (64000, 64100):
                 with self.subTest(mode=mode, length=length):
                     audio = np.random.RandomState(length).randn(length).astype(np.float32)
@@ -203,7 +205,7 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
                     streamed = torch.cat(parts, dim=1)
                     num_frames = int(full.attention_mask.sum())
                     self.assertEqual(streamed.shape[1], num_frames)
-                    torch.testing.assert_close(streamed, full.input_features[:, :num_frames], atol=1e-4, rtol=1e-4)
+                    torch.testing.assert_close(streamed, full.input_features[:, :num_frames], atol=1e-5, rtol=1e-5)
 
     def test_feature_extractor_end_padding_matches_offline_for_batched_audio(self):
         processor = self.get_processor()
@@ -219,12 +221,13 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
         for index in range(len(audio)):
             expected_frames = int(full.attention_mask[index].sum()) - step
             self.assertEqual(int(padded.attention_mask[index].sum()), expected_frames)
+            # Only the 64000-sample tail loses its last frame without end padding
             self.assertEqual(int(unpadded.attention_mask[index].sum()), expected_frames - (index == 0))
             torch.testing.assert_close(
                 padded.input_features[index, :expected_frames],
                 full.input_features[index, step : step + expected_frames],
-                atol=1e-4,
-                rtol=1e-4,
+                atol=1e-5,
+                rtol=1e-5,
             )
 
     def test_single_chunk_marked_last_matches_offline(self):
@@ -235,4 +238,6 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
         valid_frames = int(full.attention_mask.sum())
         self.assertEqual(streamed.input_features.shape[1], valid_frames)
         self.assertEqual(int(streamed.attention_mask.sum()), valid_frames)
-        torch.testing.assert_close(streamed.input_features, full.input_features[:, :valid_frames])
+        torch.testing.assert_close(
+            streamed.input_features, full.input_features[:, :valid_frames], atol=1e-5, rtol=1e-5
+        )
