@@ -70,7 +70,6 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
-    require_kernels,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -1182,6 +1181,18 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
 
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
+
+    def flexible_flash_skip(self, attn_implementation: str) -> None:
+        """Skip the test if Flash Attention 2 or 3 is required but not available."""
+        is_fa2 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
+        if is_fa2 and not is_flash_attn_2_available(kernels_fallback_ok=True):
+            self.skipTest("Flash Attention 2 is not available, as a package or through `kernels`. Skipping test.")
+
+        is_fa3 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=3)
+        if is_fa3 and not is_flash_attn_3_available(kernels_fallback_ok=True):
+            self.skipTest("Flash Attention 3 is not available, as a package or through `kernels`. Skipping test.")
+
+
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #
@@ -1198,10 +1209,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
-        # Skip the test if Flash Attention is required but not available
-        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
-        if is_fa and not is_flash_attn_2_available(kernels_fallback_ok=True):
-            self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
+        # Skip the test if Flash Attention 2 or 3 is required but not available.
+        self.flexible_flash_skip(attn_implementation)
         # Skip the test if cuda graph is on but the device is not CUDA
         if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
             self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
@@ -2051,13 +2060,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
-    @require_kernels
+    @require_flash_attn
     def test_flash_attn_with_kvcache_parity(self, use_cuda_graph: bool, use_async: bool) -> None:
         """Test that paged flash_attn3 (flash_attn_with_kvcache path) produces same outputs as varlen."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        tokenizer, model = get_tokenizer_and_model(
-            model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
-        )
+        tokenizer, model = get_tokenizer_and_model(model_id, "flash_attention_2", torch_device, torch.bfloat16)
         user_messages = _DEFAULT_USER_MESSAGES[:]
         input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
@@ -2094,15 +2101,16 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")
 
+    @parameterized.expand([("flash_attention_2",), ("flash_attention_3",)])
     @slow
-    @require_kernels
-    def test_decode_fast_path_wide_batch_parity(self) -> None:
+    def test_decode_fast_path_wide_batch_parity(self, attn_implementation: str) -> None:
         """Decode-fast-path output must match varlen when more requests decode concurrently than
         `max_blocks_per_request` (regression test for the `pad_to_pow2` cap truncating the decode batch)."""
+        # Skip the test if Flash Attention 2 or 3 is required but not available.
+        self.flexible_flash_skip(attn_implementation)
+
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        tokenizer, model = get_tokenizer_and_model(
-            model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
-        )
+        tokenizer, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, torch.bfloat16)
         # 12 requests but only 4 blocks per request: the decode batch is wider than max_blocks_per_request
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
