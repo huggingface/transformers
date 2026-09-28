@@ -911,24 +911,37 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         if (kernel := _load_tdt_kernel()) is not None:
             backends["kernel"] = kernel
 
+        # Forward in eval mode — check loss matches NeMo. This fixture was generated with an HF-style "mean"
+        # reduction (per-sample / target_length, then averaged), not NeMo's native reduction, so pass
+        # `reduction="mean"` to match it (the loss default is "mean_volume"). TODO: regenerate this fixture from
+        # NeMo's native `model.loss` (mean_volume), like reproducer_rnnt_loss.py does, and drop this override.
+        model.eval()
+        for backend, kernel in backends.items():
+            with (
+                self.subTest(backend=backend),
+                patch("transformers.loss.loss_tdt._load_tdt_kernel", return_value=kernel),
+                torch.no_grad(),
+            ):
+                outputs = model(**inputs, reduction="mean")
+                self.assertIsNotNone(outputs.loss, "Loss must be computed when labels are provided")
+                self.assertEqual(outputs.logits.dim(), 4, "Training logits must be 4D (B, T, U+1, V+D)")
+                torch.testing.assert_close(outputs.loss.cpu(), EXPECTED_MEAN_LOSS, rtol=1e-3, atol=1e-3)
+        del outputs
+        torch.cuda.empty_cache()
+
+        # Backward — verify gradients flow. Done after all the eval checks, since train mode updates the BatchNorm
+        # running statistics.
+        model.train()
         for backend, kernel in backends.items():
             with (
                 self.subTest(backend=backend),
                 patch("transformers.loss.loss_tdt._load_tdt_kernel", return_value=kernel),
             ):
-                # Forward in eval mode — check loss matches NeMo. This fixture was generated with an HF-style
-                # "mean" reduction (per-sample / target_length, then averaged), not NeMo's native reduction, so
-                # pass `reduction="mean"` to match it (the loss default is "mean_volume"). TODO: regenerate this
-                # fixture from NeMo's native `model.loss` (mean_volume), like reproducer_rnnt_loss.py does, and
-                # drop this override.
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(**inputs, reduction="mean")
-                self.assertIsNotNone(outputs.loss, "Loss must be computed when labels are provided")
-                self.assertEqual(outputs.logits.dim(), 4, "Training logits must be 4D (B, T, U+1, V+D)")
-                torch.testing.assert_close(outputs.loss.cpu(), EXPECTED_MEAN_LOSS, rtol=1e-3, atol=1e-3)
-
-                # Backward — verify gradients flow
+                model.zero_grad()
+                outputs = model(**inputs)
+                outputs.loss.backward()
+                n_with_grad = sum(1 for p in model.parameters() if p.grad is not None)
+                self.assertGreater(n_with_grad, 0, "No gradients after backward")
                 del outputs
                 torch.cuda.empty_cache()
                 model.train()
