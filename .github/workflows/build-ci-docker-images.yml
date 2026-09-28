@@ -61,16 +61,36 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      # Two steps for one build, because only the publishing path needs the scan and the
+      # scanning action always pushes. The condition is the one that used to sit in
+      # `push:`.
       -
         name: Build ${{ matrix.file }}.dockerfile
+        if: ${{ !(contains(github.event.head_commit.message, 'ci-image]') || github.event_name == 'schedule') }}
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: ./docker
           build-args: |
             REF=${{ github.sha }}
           file: "./docker/${{ matrix.file }}.dockerfile"
-          push: ${{ contains(github.event.head_commit.message, 'ci-image]') ||  github.event_name == 'schedule' }}
+          push: false
           tags: ${{ env.TAG }}
+      -
+        name: Build, scan and push ${{ matrix.file }}.dockerfile
+        if: ${{ contains(github.event.head_commit.message, 'ci-image]') || github.event_name == 'schedule' }}
+        uses: huggingface/wiz-image-action/build-push@v1
+        with:
+          image: ${{ env.TAG }}
+          context: ./docker
+          build-args: |
+            REF=${{ github.sha }}
+          file: "./docker/${{ matrix.file }}.dockerfile"
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
+          # Report findings without holding the push back. These images carry the CVEs of
+          # a base we do not choose, and the clusters only require that a scan exists, not
+          # that it passed.
+          enforcement: audit
 
   notify:
     permissions: {}
