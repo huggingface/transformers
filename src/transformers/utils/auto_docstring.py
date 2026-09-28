@@ -1687,6 +1687,24 @@ class ConfigArgs:
     """,
     }
 
+    interpolation_mode = {
+        "description": """
+    Interpolation mode the vision embedding resamples its learned position-embedding grid with.
+    """,
+    }
+
+    interpolation_padding = {
+        "description": """
+    Padding mode used when resampling the learned position-embedding grid.
+    """,
+    }
+
+    interpolation_align_corners = {
+        "description": """
+    Whether the learned position-embedding grid is resampled with aligned corners.
+    """,
+    }
+
     vision_start_token_id = {
         "description": """
     Token ID that marks the start of a visual segment in the multimodal input sequence.
