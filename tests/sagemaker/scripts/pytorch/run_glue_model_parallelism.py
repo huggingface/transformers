@@ -487,7 +487,7 @@ def main():
 
             output_test_file = os.path.join(training_args.output_dir, f"test_results_{task}.txt")
             if trainer.is_world_process_zero():
-                with open(output_test_file, "w") as writer:
+                with open(output_test_file, "w", encoding="utf-8") as writer:
                     logger.info(f"***** Test results {task} *****")
                     writer.write("index\tprediction\n")
                     for index, item in enumerate(predictions):

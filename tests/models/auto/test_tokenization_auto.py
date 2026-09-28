@@ -688,7 +688,7 @@ class AutoTokenizerTest(unittest.TestCase):
                     os.path.exists(os.path.join(tmp_dir, "tokenization.py"))
                 )  # Assert we saved tokenizer code
                 self.assertEqual(reloaded_tokenizer._auto_class, "AutoTokenizer")
-                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "r") as f:
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "r", encoding="utf-8") as f:
                     tokenizer_config = json.load(f)
                 # Assert we're pointing at local code and not another remote repo
                 self.assertEqual(
@@ -821,11 +821,11 @@ class NopConfig(PreTrainedConfig):
             os.makedirs(fake_repo)
 
             tokenizer_src_file = os.path.join(fake_repo, "tokenizer.py")
-            with open(tokenizer_src_file, "w") as wfp:
+            with open(tokenizer_src_file, "w", encoding="utf-8") as wfp:
                 wfp.write(nop_tokenizer_code)
 
             model_config_src_file = os.path.join(fake_repo, "config.py")
-            with open(model_config_src_file, "w") as wfp:
+            with open(model_config_src_file, "w", encoding="utf-8") as wfp:
                 wfp.write(nop_config_code)
 
             config = {
@@ -834,7 +834,7 @@ class NopConfig(PreTrainedConfig):
             }
 
             config_file = os.path.join(fake_repo, "config.json")
-            with open(config_file, "w") as wfp:
+            with open(config_file, "w", encoding="utf-8") as wfp:
                 json.dump(config, wfp, indent=2)
 
             tokenizer_config = {
@@ -847,7 +847,7 @@ class NopConfig(PreTrainedConfig):
             }
 
             tokenizer_config_file = os.path.join(fake_repo, "tokenizer_config.json")
-            with open(tokenizer_config_file, "w") as wfp:
+            with open(tokenizer_config_file, "w", encoding="utf-8") as wfp:
                 json.dump(tokenizer_config, wfp, indent=2)
 
             prev_dir = os.getcwd()
@@ -909,11 +909,11 @@ class NopConfig(PreTrainedConfig):
             os.makedirs(fake_repo)
 
             tokenizer_src_file = os.path.join(fake_repo, "tokenizer.py")
-            with open(tokenizer_src_file, "w") as wfp:
+            with open(tokenizer_src_file, "w", encoding="utf-8") as wfp:
                 wfp.write(nop_tokenizer_code)
 
             model_config_src_file = os.path.join(fake_repo, "config.py")
-            with open(model_config_src_file, "w") as wfp:
+            with open(model_config_src_file, "w", encoding="utf-8") as wfp:
                 wfp.write(nop_config_code)
 
             config = {
@@ -922,7 +922,7 @@ class NopConfig(PreTrainedConfig):
             }
 
             config_file = os.path.join(fake_repo, "config.json")
-            with open(config_file, "w") as wfp:
+            with open(config_file, "w", encoding="utf-8") as wfp:
                 json.dump(config, wfp, indent=2)
 
             tokenizer_config = {
@@ -936,7 +936,7 @@ class NopConfig(PreTrainedConfig):
             }
 
             tokenizer_config_file = os.path.join(fake_repo, "tokenizer_config.json")
-            with open(tokenizer_config_file, "w") as wfp:
+            with open(tokenizer_config_file, "w", encoding="utf-8") as wfp:
                 json.dump(tokenizer_config, wfp, indent=2)
 
             prev_dir = os.getcwd()

@@ -295,7 +295,7 @@ class BenchmarkResults:
             "attn_impl": self.attn_impl,
             "entries": [asdict(e) for e in self.entries],
         }
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
         print(f"\nResults saved to {filename}")
         return filename

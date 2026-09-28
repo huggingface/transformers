@@ -403,7 +403,7 @@ class IdeficsRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -1238,6 +1238,12 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
 
         if image_attention_mask is not None and inputs_embeds is None:
             seq_length = model_inputs["input_ids"].shape[1]
+            padding_length = seq_length - image_attention_mask.shape[1]
+            if padding_length > 0:
+                image_attention_mask = torch.cat(
+                    [image_attention_mask, image_attention_mask[:, -1:].expand(-1, padding_length, -1)],
+                    dim=1,
+                )
             model_inputs["image_attention_mask"] = image_attention_mask[:, -seq_length:]
 
         return model_inputs

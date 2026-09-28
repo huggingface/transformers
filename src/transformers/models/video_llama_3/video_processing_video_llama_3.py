@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+import warnings
 from typing import Optional
 
 import torch
@@ -131,7 +132,13 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         **kwargs,
     ) -> dict:
         if min_pixels is not None or max_pixels is not None:
-            size_dict = dict(size) if isinstance(size, dict) else {}
+            warnings.warn(
+                "Passing `min_pixels` and `max_pixels` to a processor call is deprecated and will be removed in v5.23. "
+                "Pass in `size={'longest_edge': xxx, 'shortest_edge': xxx} to override the target size.`",
+                FutureWarning,
+            )
+
+            size_dict = dict(size) if isinstance(size, (dict, SizeDict)) else {}
             if min_pixels is not None:
                 size_dict["shortest_edge"] = min_pixels
             if max_pixels is not None:
@@ -375,20 +382,25 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             videos_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the video processor.
         Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+            `int`: Number of video patches per video.
         """
-        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        size = videos_kwargs.get("size", None) or self.size
+        size = {
+            "shortest_edge": size["shortest_edge"],
+            "longest_edge": size["longest_edge"] // num_frames,
+        }  # diff from Qwen!
+        videos_kwargs = {**videos_kwargs, "size": size}
+        size = videos_kwargs.get("size") or self.size
+        patch_size = videos_kwargs.get("patch_size") or self.patch_size
+        merge_size = videos_kwargs.get("merge_size") or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size") or self.temporal_patch_size
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        grid_t = num_frames // temporal_patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
         return grid_t * grid_h * grid_w
 
     def _get_compression_mask(
