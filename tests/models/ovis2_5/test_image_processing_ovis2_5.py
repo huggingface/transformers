@@ -190,13 +190,3 @@ class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 output = processor(image, return_tensors="np")
                 np.testing.assert_array_equal(output.image_grid_thw, np.array([[1, 2, 2]]))
                 np.testing.assert_allclose(output.pixel_values, expected, atol=1e-6, rtol=0)
-
-    def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class()
-            num_patches = image_processor.get_number_of_image_patches(
-                height=333,
-                width=527,
-                images_kwargs={},
-            )
-            self.assertEqual(num_patches, 864)

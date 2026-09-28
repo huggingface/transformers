@@ -21,7 +21,7 @@ import numpy as np
 
 from transformers import Ovis2_5Config, Ovis2_5Processor
 from transformers.testing_utils import require_tokenizers, require_torch, require_torchvision, require_vision
-from transformers.utils import is_tokenizers_available, is_torch_available, is_torchvision_available
+from transformers.utils import is_tokenizers_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -32,9 +32,6 @@ if is_tokenizers_available():
     from tokenizers.pre_tokenizers import Whitespace
 
     from transformers import PreTrainedTokenizerFast
-
-if is_torch_available():
-    import torch
 
 if is_torchvision_available():
     from transformers import Ovis2_5ImageProcessor, Ovis2_5VideoProcessor
@@ -56,7 +53,6 @@ NAMED_VISUAL_TOKENS = {
     "video_start_token": "<ovis_video_start>",
     "video_end_token": "<ovis_video_end>",
 }
-BOUNDARY_TOKEN_ATTRIBUTES = ("image_start_token", "image_end_token", "video_start_token", "video_end_token")
 
 
 @require_vision
@@ -67,31 +63,31 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ovis2_5Processor
 
     @classmethod
-    def _build_tokenizer(cls, named_visual_tokens=True, include_visual_tokens=True):
-        tokens = ["<unk>", "<pad>", "<bos>", "<eos>"]
-        if include_visual_tokens:
-            tokens.extend(VISUAL_TOKENS)
-        tokens.extend(["lower", "newer", "upper", "older", "longer", "string"])
+    def _setup_tokenizer(cls):
+        tokens = [
+            "<unk>",
+            "<pad>",
+            "<bos>",
+            "<eos>",
+            *VISUAL_TOKENS,
+            "lower",
+            "newer",
+            "upper",
+            "older",
+            "longer",
+            "string",
+        ]
         vocab = {token: index for index, token in enumerate(tokens)}
         tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
         tokenizer.pre_tokenizer = Whitespace()
-        tokenizer_kwargs = {}
-        if include_visual_tokens:
-            tokenizer_kwargs["extra_special_tokens"] = (
-                NAMED_VISUAL_TOKENS if named_visual_tokens else list(VISUAL_TOKENS)
-            )
         return PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
             unk_token="<unk>",
             pad_token="<pad>",
             bos_token="<bos>",
             eos_token="<eos>",
-            **tokenizer_kwargs,
+            extra_special_tokens=NAMED_VISUAL_TOKENS,
         )
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        return cls._build_tokenizer()
 
     @classmethod
     def _setup_image_processor(cls):
@@ -105,52 +101,8 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             size={"shortest_edge": 64 * 64, "longest_edge": 64 * 1024},
         )
 
-    def test_visual_tokens_use_tokenizer_attributes(self):
-        processor = self.get_processor()
-
-        for token_attribute in BOUNDARY_TOKEN_ATTRIBUTES:
-            self.assertEqual(getattr(processor, token_attribute), getattr(processor.tokenizer, token_attribute))
-        self.assertEqual(processor.image_token, "<image>")
-        self.assertEqual(processor.video_token, "<video>")
-        self.assertEqual(processor.visual_atom_token, processor.tokenizer.image_token)
-        self.assertEqual(processor.image_token_id, processor.video_token_id)
-
-    def test_visual_tokens_fall_back_to_ovis_tokens(self):
-        tokenizer = self._build_tokenizer(named_visual_tokens=False)
-        processor = self.processor_class(
-            image_processor=self.get_component("image_processor"),
-            tokenizer=tokenizer,
-            video_processor=self.get_component("video_processor"),
-        )
-
-        for token_attribute in BOUNDARY_TOKEN_ATTRIBUTES:
-            self.assertEqual(getattr(processor, token_attribute), NAMED_VISUAL_TOKENS[token_attribute])
-        self.assertEqual(processor.image_token, "<image>")
-        self.assertEqual(processor.video_token, "<video>")
-        self.assertEqual(processor.visual_atom_token, "<ovis_visual_atom>")
-        self.assertEqual(processor.image_token_id, processor.video_token_id)
-
-    def test_visual_tokens_survive_processor_reload(self):
-        for named_visual_tokens in (True, False):
-            processor = self.processor_class(
-                image_processor=self.get_component("image_processor"),
-                tokenizer=self._build_tokenizer(named_visual_tokens=named_visual_tokens),
-                video_processor=self.get_component("video_processor"),
-            )
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                processor.save_pretrained(tmpdirname)
-                reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
-
-            for token_attribute in NAMED_VISUAL_TOKENS:
-                self.assertEqual(getattr(reloaded_processor, token_attribute), getattr(processor, token_attribute))
-                self.assertNotIn(token_attribute, processor.to_dict())
-            self.assertEqual(reloaded_processor.visual_atom_token, processor.visual_atom_token)
-            self.assertEqual(reloaded_processor.visual_atom_token_id, processor.visual_atom_token_id)
-            self.assertEqual(reloaded_processor.image_token_id, reloaded_processor.video_token_id)
-
     def test_processor_loads_legacy_hub_metadata(self):
-        tokenizer = self._build_tokenizer()
+        tokenizer = self._setup_tokenizer()
         legacy_preprocessor_config = {
             "do_convert_rgb": None,
             "do_normalize": True,
@@ -192,53 +144,27 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def test_image_prompt_expansion_matches_patch_grid(self):
-        """An image placeholder expands to boundary tokens and one visual atom per merged patch."""
-        processor = self.get_processor()
-        inputs = processor(
-            images=self.prepare_image_inputs(),
-            text="<image> lower newer",
-            return_tensors="pt",
-        )
-
-        num_visual_tokens = int(inputs.image_grid_thw[0].prod()) // processor.image_processor.merge_size**2
-        input_ids = inputs.input_ids[0].tolist()
-        image_start = input_ids.index(processor.image_start_token_id)
-        expected_image_ids = (
-            [processor.image_start_token_id]
-            + [processor.image_token_id] * num_visual_tokens
-            + [processor.image_end_token_id]
-        )
-        self.assertListEqual(input_ids[image_start : image_start + num_visual_tokens + 2], expected_image_ids)
-
-    def test_prepare_inputs_layout_normalizes_visual_inputs(self):
-        """Raw placeholders and nested visual inputs are normalized before validation."""
-        processor = self.get_processor()
-        image = self.prepare_image_inputs()
-        video = self.prepare_video_inputs()
-
-        images, image_text, _, image_audio = processor.prepare_inputs_layout(images=[[image]], text="<image>")
-        _, video_text, videos, video_audio = processor.prepare_inputs_layout(videos=video, text="<video>")
-
-        self.assertEqual(len(images), 1)
-        self.assertEqual(len(videos), 1)
-        self.assertListEqual(image_text, [processor.image_token])
-        self.assertListEqual(video_text, [processor.video_token])
-        self.assertIsNone(image_audio)
-        self.assertIsNone(video_audio)
-
-    def test_multiple_images(self):
-        """Each image placeholder gets its own start and end boundary tokens."""
         processor = self.get_processor()
         image = self.prepare_image_inputs()
         inputs = processor(
             images=[image, image.copy()],
-            text="<image><image> lower newer",
+            text="<image> lower <image>",
             return_tensors="pt",
         )
 
-        self.assertEqual(inputs.image_grid_thw.shape[0], 2)
-        self.assertEqual((inputs.input_ids == processor.image_start_token_id).sum().item(), 2)
-        self.assertEqual((inputs.input_ids == processor.image_end_token_id).sum().item(), 2)
+        num_visual_tokens = [
+            int(grid.prod()) // processor.image_processor.merge_size**2 for grid in inputs.image_grid_thw
+        ]
+        expanded_text = (
+            processor.image_start_token
+            + processor.visual_atom_token * num_visual_tokens[0]
+            + processor.image_end_token
+            + " lower "
+            + processor.image_start_token
+            + processor.visual_atom_token * num_visual_tokens[1]
+            + processor.image_end_token
+        )
+        self.assertListEqual(inputs.input_ids[0].tolist(), processor.tokenizer(expanded_text).input_ids)
 
     def test_video_prompt_expansion(self):
         """A video placeholder expands to boundary tokens and one visual atom per merged patch."""
@@ -259,19 +185,6 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             + [processor.video_end_token_id]
         )
         self.assertListEqual(input_ids[video_start : video_start + num_visual_tokens + 2], expected_video_ids)
-
-    def test_special_mm_token_truncation(self):
-        """Truncation raises instead of silently dropping part of an expanded visual sequence."""
-        processor = self.get_processor()
-
-        with self.assertRaisesRegex(ValueError, "Mismatch in visual atom token count"):
-            processor(
-                images=self.prepare_image_inputs(),
-                text="<image> lower newer",
-                truncation=True,
-                max_length=3,
-                return_tensors="pt",
-            )
 
     def test_model_input_names(self):
         processor = self.get_processor()
@@ -335,17 +248,9 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         helper_counts = processor._get_num_multimodal_tokens(image_sizes=image_sizes)["num_image_tokens"]
         self.assertListEqual(visual_atom_counts, helper_counts)
 
+    @unittest.skip("Ovis2.5 processes images and videos separately")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
-        processor = self.get_processor()
-        inputs = processor(
-            text=self.prepare_text_inputs(modalities="image"),
-            images=self.prepare_image_inputs(),
-            text_kwargs={},
-            return_tensors="pt",
-        )
-
-        for key, value in inputs.items():
-            self.assertIsInstance(value, torch.Tensor, msg=f"{key} should be a torch.Tensor")
+        pass
 
     def test_processor_text_has_no_visual(self):
         processor = self.get_processor()

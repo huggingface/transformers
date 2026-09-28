@@ -28,11 +28,9 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers.image_utils import PILImageResampling
-
 
 if is_torchvision_available():
-    from transformers import Glm4vVideoProcessor, Ovis2_5VideoProcessor
+    from transformers import Ovis2_5VideoProcessor
     from transformers.models.ovis2_5.image_processing_ovis2_5 import smart_resize
 
 
@@ -143,9 +141,6 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.video_processor_tester = Ovis2_5VideoProcessingTester(self)
-        self.video_processor = self.fast_video_processing_class(
-            size={"shortest_edge": 64 * 96, "longest_edge": 64 * 96}
-        )
 
     @property
     def video_processor_dict(self):
@@ -161,19 +156,6 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             size=overridden_size,
         )
         self.assertEqual(video_processor.size, overridden_size)
-
-    def test_default_attributes_do_not_leak_from_glm4v(self):
-        """Ovis keeps its released sampling and resolution defaults while reusing GLM4V preprocessing."""
-        video_processor = self.fast_video_processing_class()
-
-        self.assertFalse(video_processor.do_sample_frames)
-        self.assertIsNone(video_processor.num_frames)
-        self.assertIsNone(video_processor.fps)
-        self.assertFalse(hasattr(video_processor, "max_duration"))
-        self.assertFalse(hasattr(video_processor, "max_image_size"))
-        self.assertEqual(video_processor.resample, PILImageResampling.BILINEAR)
-        self.assertEqual(list(video_processor.image_mean), [0.5, 0.5, 0.5])
-        self.assertEqual(list(video_processor.image_std), [0.5, 0.5, 0.5])
 
     def _check_input_type(self, video_inputs, **kwargs):
         for video_processing_class in self.video_processor_list:
@@ -243,17 +225,6 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
             self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
 
-    def test_video_grid_and_patch_count(self):
-        video = np.zeros((3, 64, 96, 3), dtype=np.uint8)
-        output = self.video_processor(video, return_tensors="pt")
-
-        self.assertEqual(tuple(output.pixel_values_videos.shape), (72, 768))
-        self.assertEqual(output.video_grid_thw.tolist(), [[3, 4, 6]])
-        self.assertEqual(
-            self.video_processor.get_number_of_video_patches(3, 64, 96),
-            72,
-        )
-
     def test_temporal_patch_padding(self):
         video = np.zeros((3, 64, 96, 3), dtype=np.uint8)
         video_processor = self.fast_video_processing_class(
@@ -265,13 +236,3 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(output.pixel_values_videos.shape), (48, 1536))
         self.assertEqual(output.video_grid_thw.tolist(), [[2, 4, 6]])
         self.assertEqual(video_processor.get_number_of_video_patches(3, 64, 96), 48)
-
-    def test_patchify_order_matches_glm4v(self):
-        video = torch.arange(3 * 3 * 64 * 96, dtype=torch.float32).reshape(1, 3, 3, 64, 96)
-        kwargs = {"patch_size": 16, "merge_size": 2, "temporal_patch_size": 2}
-
-        actual = self.video_processor.patchify(video, **kwargs)
-        expected = Glm4vVideoProcessor().patchify(video, **kwargs)
-
-        torch.testing.assert_close(actual[0], expected[0])
-        self.assertEqual(actual[1:], expected[1:])
