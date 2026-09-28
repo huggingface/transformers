@@ -134,6 +134,17 @@ class TDTLossTest(unittest.TestCase):
         self.assertFalse(torch.all(inputs["token_logits"].grad == 0))
         self.assertFalse(torch.all(inputs["duration_logits"].grad == 0))
 
+    def test_tdt_loss_kernel_load_failure(self):
+        """A kernel that cannot be loaded (e.g. the Hub is unreachable) falls back to the PyTorch implementation."""
+        from transformers.integrations import hub_kernels
+
+        with (
+            patch.object(hub_kernels, "lazy_load_kernel", side_effect=OSError("Hub unreachable")),
+            patch.dict(hub_kernels._KERNEL_MODULE_MAPPING),
+        ):
+            self.assertIsNone(_load_tdt_kernel())
+            self.assertIsNone(hub_kernels._KERNEL_MODULE_MAPPING["tdt-loss"])
+
 
 @require_torch
 @require_torch_gpu
@@ -926,8 +937,8 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
                 self.assertIsNotNone(outputs.loss, "Loss must be computed when labels are provided")
                 self.assertEqual(outputs.logits.dim(), 4, "Training logits must be 4D (B, T, U+1, V+D)")
                 torch.testing.assert_close(outputs.loss.cpu(), EXPECTED_MEAN_LOSS, rtol=1e-3, atol=1e-3)
-        del outputs
-        torch.cuda.empty_cache()
+                del outputs
+                torch.cuda.empty_cache()
 
         # Backward — verify gradients flow. Done after all the eval checks, since train mode updates the BatchNorm
         # running statistics.
@@ -942,15 +953,6 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
                 outputs.loss.backward()
                 n_with_grad = sum(1 for p in model.parameters() if p.grad is not None)
                 self.assertGreater(n_with_grad, 0, "No gradients after backward")
-                del outputs
-                torch.cuda.empty_cache()
-                model.train()
-                model.zero_grad()
-                outputs = model(**inputs)
-                outputs.loss.backward()
-                n_with_grad = sum(1 for p in model.parameters() if p.grad is not None)
-                self.assertGreater(n_with_grad, 0, "No gradients after backward")
-
                 del outputs
                 torch.cuda.empty_cache()
 

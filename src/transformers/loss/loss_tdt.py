@@ -22,9 +22,15 @@ logger = logging.get_logger(__name__)
 
 def _load_tdt_kernel():
     """Load the `kernels-community/tdt-loss` CUDA kernel from the Hub, or return `None` if it is unavailable."""
-    from ..integrations.hub_kernels import lazy_load_kernel
+    from ..integrations.hub_kernels import _KERNEL_MODULE_MAPPING, lazy_load_kernel
 
-    return lazy_load_kernel("tdt-loss")
+    try:
+        return lazy_load_kernel("tdt-loss")
+    except Exception as e:
+        # e.g. the Hub is unreachable: fall back to the PyTorch implementation, and don't retry on every call
+        logger.warning_once(f"Could not load the tdt-loss kernel, using the PyTorch implementation: {e}")
+        _KERNEL_MODULE_MAPPING["tdt-loss"] = None
+        return None
 
 
 def tdt_loss(
