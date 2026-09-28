@@ -947,7 +947,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForCondi
         super().__init__(config)
         # Exaone uses an underscored model class, while Ovis exposes `Ovis2_5Model`.
         self.model = Ovis2_5Model(config)
-        self.post_init()
 
     def _get_image_nums_and_video_nums(
         self,
