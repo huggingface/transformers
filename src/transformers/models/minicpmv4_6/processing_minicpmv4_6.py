@@ -32,7 +32,6 @@ class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": True,
             "padding_side": "left",
-            "return_text_replacement_offsets": False,
         },
     }
 

@@ -776,7 +776,6 @@ class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
             "padding": True,
             "padding_side": "left",
             "return_mm_token_type_ids": True,
-            "return_text_replacement_offsets": False,
         },
     }
 

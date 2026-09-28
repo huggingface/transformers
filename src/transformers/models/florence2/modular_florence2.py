@@ -160,7 +160,6 @@ class Florence2ProcessorKwargs(LlavaProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": False,
-            "return_text_replacement_offsets": False,
         },
     }
 

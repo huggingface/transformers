@@ -24,11 +24,7 @@ from ...utils import auto_docstring, logging
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "return_text_replacement_offsets": False,
-        },
-    }
+    _defaults = {}
 
 
 logger = logging.get_logger(__name__)

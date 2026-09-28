@@ -36,7 +36,6 @@ class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": "longest",
-            "return_text_replacement_offsets": False,
         },
         "images_kwargs": {
             "data_format": "channels_first",

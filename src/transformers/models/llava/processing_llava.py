@@ -28,9 +28,7 @@ logger = logging.get_logger(__name__)
 
 
 class LlavaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"return_text_replacement_offsets": False},
-    }
+    pass
 
 
 @auto_docstring
