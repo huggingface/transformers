@@ -866,6 +866,37 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
+    def _get_window_index(self, grid_thw: torch.LongTensor, kwargs: dict) -> tuple[torch.Tensor, torch.Tensor]:
+        return get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+
+    def _reorder_vision_tokens(self, hidden_states: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
+        sequence_length = hidden_states.shape[0]
+        spatial_merge_unit = self.spatial_merge_size**2
+        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+        return hidden_states[index].reshape(sequence_length, -1)
+
+    def _run_vision_layers(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_kwargs_by_type: dict[str, dict[str, torch.Tensor | int | None]],
+        **kwargs,
+    ) -> torch.Tensor:
+        for layer_index, layer in enumerate(self.layers):
+            hidden_states = layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                **attention_kwargs_by_type[self.config.layer_types[layer_index]],
+                **kwargs,
+            )
+        return hidden_states
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -881,37 +912,29 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         """
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
-        window_index, cu_window_seqlens = get_vision_window_index(
-            grid_thw,
-            spatial_merge_size=self.spatial_merge_size,
-            window_size=self.window_size,
-            patch_size=self.patch_size,
-            kwargs=kwargs,
-        )
+        window_index, cu_window_seqlens = self._get_window_index(grid_thw, kwargs)
 
         inputs_embeds = self.patch_embedder(pixel_values, grid_thw, **kwargs)
         hidden_states = self.ln_pre(inputs_embeds)
-        hidden_states = hidden_states[window_index, :]
+        hidden_states = self._reorder_vision_tokens(hidden_states, window_index)
 
         # Add `1` because ref implementation's position offset is `1`!
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
         position_ids = position_ids.flip(-1) + 1
-        position_ids = position_ids[window_index, :]
+        position_ids = self._reorder_vision_tokens(position_ids, window_index)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        cu_seqlens_mapping = {
-            "full_attention": cu_seqlens,
-            "window_attention": cu_window_seqlens,
-        }
-        for i, block in enumerate(self.layers):
-            hidden_states = block(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                cu_seqlens=cu_seqlens_mapping[self.config.layer_types[i]],
-            )
+        hidden_states = self._run_vision_layers(
+            hidden_states,
+            position_embeddings,
+            {
+                "full_attention": {"cu_seqlens": cu_seqlens},
+                "window_attention": {"cu_seqlens": cu_window_seqlens},
+            },
+        )
 
         reverse_indices = torch.argsort(window_index)
-        hidden_states = hidden_states[reverse_indices, :]
+        hidden_states = self._reorder_vision_tokens(hidden_states, reverse_indices)
 
         hidden_states = self.ln_post(hidden_states)
         hidden_states = self.pixel_shuffle(hidden_states, grid_thw, **kwargs)
