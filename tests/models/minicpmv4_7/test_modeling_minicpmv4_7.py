@@ -615,7 +615,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "openbmb/MiniCPM-V-4_7"
+    model_id = "openbmb/MiniCPM-V-4.7"
 
     @slow
     def test_small_model_logits(self):
