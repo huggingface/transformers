@@ -720,7 +720,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             }
         )
         expected_output = expected_outputs.get_expectation()
-        print(expected_output)
 
         self.assertEqual(decoded_output, expected_output)
 
