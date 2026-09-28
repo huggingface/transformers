@@ -438,8 +438,6 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
 
     def __init__(self, config: MossTranscribeDiarizeConfig):
         super().__init__(config)
-        # `AutoModel.from_config(config.audio_config)` would resolve a plain `WhisperConfig` to the full
-        # `WhisperModel` (encoder + decoder); this model only ever needs the encoder, so build it directly.
         self.audio_tower = MossTranscribeDiarizeEncoder(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.multi_modal_projector = MossTranscribeDiarizeMultiModalProjector(config)
@@ -466,10 +464,6 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         """
         device = input_features.device
 
-        # `WhisperEncoder` does not support masking `input_features` (silence in the padded log-mel region is
-        # ignored by convention), so only the post-hoc lengths are needed to trim the encoder's output below.
-        # It also doesn't cast `input_features` to its own dtype/device internally (unlike `Qwen2AudioEncoder`),
-        # so that has to happen here.
         merge_size = self.config.audio_merge_size
         conv_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(device=device))
         input_features = input_features.to(
@@ -483,9 +477,12 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         # matching `_get_audio_token_length`. This happens before concatenation, so a >30s audio's
         # trailing Whisper window doesn't lose frames or leak them into a neighboring chunk's merge group.
         padded_lengths = ((conv_lengths + merge_size - 1) // merge_size) * merge_size
-        keep_mask = torch.arange(audio_embeds.shape[1], device=device)[None, :] < padded_lengths[:, None]
+        keep_mask = (
+            torch.arange(audio_embeds.shape[1], device=audio_embeds.device)[None, :]
+            < padded_lengths.to(audio_embeds.device)[:, None]
+        )
 
-        valid_frames = audio_embeds[keep_mask.to(audio_embeds.device)]
+        valid_frames = audio_embeds[keep_mask]
 
         hidden_size = valid_frames.shape[-1]
         merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
@@ -532,6 +529,12 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
             `input_features`. Used to compute each chunk's valid encoder-output length.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
+            `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
+            and filled with the audio embeddings.
         padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`, *optional*):
             Mask marking each audio sample's valid raw-audio length. Used with `config.audio_chunk_size` to
             recover `audio_chunk_mapping`.
@@ -604,6 +607,12 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
             `input_features`. Used to compute each chunk's valid encoder-output length.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
+            `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
+            and filled with the audio embeddings.
         padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`, *optional*):
             Mask marking each audio sample's valid raw-audio length. Used with `config.audio_chunk_size` to
             recover `audio_chunk_mapping`.

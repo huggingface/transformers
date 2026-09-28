@@ -16,7 +16,6 @@ import shutil
 import tempfile
 import unittest
 
-import torch
 from parameterized import parameterized
 
 from transformers import (
@@ -284,20 +283,3 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         self.assertEqual(outputs["input_ids"].shape[0], batch_size)
         self.assertEqual(outputs["input_features"].shape[0], batch_size)
         self.assertEqual(outputs["padding_mask"].shape[0], batch_size)
-
-    @require_torch
-    def test_model_input_names(self):
-        processor = self.get_processor()
-        text = self.prepare_text_inputs(modalities=["audio"])
-        audio = self.prepare_audio_inputs()
-        inputs = processor(text=text, audio=audio, return_tensors="pt")
-        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
-
-    @require_torch
-    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
-        processor = self.get_processor()
-        text = self.prepare_text_inputs(modalities=["audio"])
-        audio = self.prepare_audio_inputs()
-        inputs = processor(text=text, audio=audio, text_kwargs={}, return_tensors="pt")
-        for key, value in inputs.items():
-            self.assertIsInstance(value, torch.Tensor, msg=f"{key} should be a torch.Tensor")

@@ -49,11 +49,6 @@ from ..whisper.modeling_whisper import WhisperEncoder
 
 logger = logging.get_logger(__name__)
 
-# Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
-_SEGMENT_PATTERN = re.compile(
-    r"\[(?P<start>[^\[\]]+)\]\[S(?P<speaker>\d+)\](?P<content>.*?)\[(?P<end>[^\[\]]+)\]", re.DOTALL
-)
-
 
 @auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
 @strict
@@ -82,49 +77,37 @@ class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
     model_type = "moss_transcribe_diarize"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    _default_text_config_kwargs = {
-        "hidden_size": 1024,
-        "intermediate_size": 3072,
-        "num_hidden_layers": 28,
-        "num_attention_heads": 16,
-        "num_key_value_heads": 8,
-        "max_position_embeddings": 131_072,
-        "rope_theta": 1_000_000.0,
-    }
-
-    _default_audio_config_kwargs = {
-        "num_mel_bins": 80,
-        "d_model": 1024,
-        "encoder_layers": 24,
-        "encoder_attention_heads": 16,
-        "encoder_ffn_dim": 4096,
-        "max_source_positions": 1500,
-        "dropout": 0.0,
-        "attention_dropout": 0.0,
-        "activation_dropout": 0.0,
-        "activation_function": "gelu",
-        "encoder_layerdrop": 0.0,
-        "scale_embedding": False,
-    }
-
     audio_token_id: int = 151671
     audio_merge_size: int = 4
     projector_hidden_act: str = "silu"
     audio_chunk_size: int = 480_000
-    # Not declared on `AudioFlamingo3Config`; needed so `PreTrainedModel.get_expanded_tied_weights_keys` actually
-    # ties `lm_head.weight` per `MossTranscribeDiarizeForConditionalGeneration._tied_weights_keys`.
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config = CONFIG_MAPPING["whisper"](**self.audio_config)
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "whisper")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["whisper"](**self._default_audio_config_kwargs)
+            self.audio_config = CONFIG_MAPPING["whisper"](
+                d_model=1024,
+                encoder_layers=24,
+                encoder_attention_heads=16,
+                encoder_ffn_dim=4096,
+            )
 
         if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING["qwen3"](**{**self._default_text_config_kwargs, **self.text_config})
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
+            self.text_config = CONFIG_MAPPING["qwen3"](
+                hidden_size=1024,
+                intermediate_size=3072,
+                num_hidden_layers=28,
+                num_attention_heads=16,
+                num_key_value_heads=8,
+                max_position_embeddings=131_072,
+                rope_theta=1_000_000.0,
+            )
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
@@ -199,6 +182,10 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
         self.time_marker_every_seconds = time_marker_every_seconds
+        # Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
+        self._segment_pattern = re.compile(
+            r"\[(?P<start>[^\[\]]+)\]\[S(?P<speaker>\d+)\](?P<content>.*?)\[(?P<end>[^\[\]]+)\]", re.DOTALL
+        )
 
     @auto_docstring
     def __call__(
@@ -409,7 +396,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
                     "Speaker": int(match["speaker"]),
                     "Content": match["content"].strip(),
                 }
-                for match in _SEGMENT_PATTERN.finditer(t)
+                for match in self._segment_pattern.finditer(t)
             ]
 
             if not segments:
@@ -501,9 +488,12 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         # matching `_get_audio_token_length`. This happens before concatenation, so a >30s audio's
         # trailing Whisper window doesn't lose frames or leak them into a neighboring chunk's merge group.
         padded_lengths = ((conv_lengths + merge_size - 1) // merge_size) * merge_size
-        keep_mask = torch.arange(audio_embeds.shape[1], device=device)[None, :] < padded_lengths[:, None]
+        keep_mask = (
+            torch.arange(audio_embeds.shape[1], device=audio_embeds.device)[None, :]
+            < padded_lengths.to(audio_embeds.device)[:, None]
+        )
 
-        valid_frames = audio_embeds[keep_mask.to(audio_embeds.device)]
+        valid_frames = audio_embeds[keep_mask]
 
         hidden_size = valid_frames.shape[-1]
         merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
@@ -526,6 +516,12 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
             `input_features`. Used to compute each chunk's valid encoder-output length.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
+            `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
+            and filled with the audio embeddings.
         padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`, *optional*):
             Mask marking each audio sample's valid raw-audio length. Used with `config.audio_chunk_size` to
             recover `audio_chunk_mapping`.
@@ -589,6 +585,12 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
             `input_features`. Used to compute each chunk's valid encoder-output length.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
+            `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
+            and filled with the audio embeddings.
         padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`, *optional*):
             Mask marking each audio sample's valid raw-audio length. Used with `config.audio_chunk_size` to
             recover `audio_chunk_mapping`.

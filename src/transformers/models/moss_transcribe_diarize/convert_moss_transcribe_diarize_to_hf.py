@@ -47,6 +47,127 @@ STATE_DICT_MAPPING = {
 # fmt: on
 
 
+# Add the original system prompt and hotword list to the system message.
+    {%- if content is string -%}
+        {{- content -}}
+    {%- else -%}
+        {%- set ns = namespace(has_audio=false, text=none) -%}
+        {%- set keyword_namespace = namespace(items=[]) -%}
+        {%- for item in content -%}
+            {%- if item.type == 'audio' or 'audio' in item or 'audio_url' in item -%}
+                {{- '<|audio_start|><|audio_pad|><|audio_end|>\n' -}}
+                {%- set ns.has_audio = true -%}
+            {%- elif item.type == 'text' and ns.text is none -%}
+                {%- set ns.text = item.text -%}
+            {%- elif item.type == 'keywords' -%}
+                {%- set keyword_namespace.items = keyword_namespace.items + item.keywords -%}
+            {%- endif -%}
+        {%- endfor -%}
+        {%- if ns.has_audio -%}
+            {%- if ns.text -%}
+                {{- '补充信息：' + ns.text + '\n\n' -}}
+            {%- endif -%}
+            {%- if keyword_namespace.items -%}
+                {{- '热词列表：[' + keyword_namespace.items|join(', ') + ']\n\n' -}}
+            {%- endif -%}
+            {{- '请将音频转写为文本，每一段需以起始时间戳和说话人编号（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，并在段末标注结束时间戳，以清晰标明该段语音范围。' -}}
+        {%- elif ns.text -%}
+            {{- ns.text -}}
+        {%- endif -%}
+    {%- endif -%}
+{%- endmacro -%}
+{%- if tools %}
+    {{- '<|im_start|>system\n' }}
+    {%- if messages[0].role == 'system' %}
+        {{- render_content(messages[0].content) + '\n\n' }}
+    {%- else %}
+        {{- 'You are a helpful assistant.\n\n' }}
+    {%- endif %}
+    {{- "# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>" }}
+    {%- for tool in tools %}
+        {{- "\n" }}
+        {{- tool | tojson }}
+    {%- endfor %}
+    {{- "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
+{%- else %}
+    {%- if messages[0].role == 'system' %}
+        {{- '<|im_start|>system\n' + render_content(messages[0].content) + '<|im_end|>\n' }}
+    {%- else %}
+        {{- '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}
+    {%- endif %}
+{%- endif %}
+{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}
+{%- for message in messages[::-1] %}
+    {%- set index = (messages|length - 1) - loop.index0 %}
+    {%- set content = render_content(message.content) %}
+    {%- if ns.multi_step_tool and message.role == "user" and content is string and not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}
+        {%- set ns.multi_step_tool = false %}
+        {%- set ns.last_query_index = index %}
+    {%- endif %}
+{%- endfor %}
+{%- for message in messages %}
+    {%- set content = render_content(message.content) %}
+    {%- if (message.role == "user") or (message.role == "system" and not loop.first) %}
+        {{- '<|im_start|>' + message.role + '\n' + content + '<|im_end|>\n' }}
+    {%- elif message.role == "assistant" %}
+        {%- set reasoning_content = '' %}
+        {%- if message.reasoning_content is string %}
+            {%- set reasoning_content = message.reasoning_content %}
+        {%- else %}
+            {%- if '</think>' in content %}
+                {%- set reasoning_content = content.split('</think>')[0].rstrip('\n').split('<think>')[-1].lstrip('\n') %}
+                {%- set content = content.split('</think>')[-1].lstrip('\n') %}
+            {%- endif %}
+        {%- endif %}
+        {%- if loop.index0 > ns.last_query_index %}
+            {%- if loop.last or (not loop.last and reasoning_content) %}
+                {{- '<|im_start|>' + message.role + '\n<think>\n' + reasoning_content.strip('\n') + '\n</think>\n\n' + content.lstrip('\n') }}
+            {%- else %}
+                {{- '<|im_start|>' + message.role + '\n' + content }}
+            {%- endif %}
+        {%- else %}
+            {{- '<|im_start|>' + message.role + '\n' + content }}
+        {%- endif %}
+        {%- if message.tool_calls %}
+            {%- for tool_call in message.tool_calls %}
+                {%- if (loop.first and content) or (not loop.first) %}
+                    {{- '\n' }}
+                {%- endif %}
+                {%- if tool_call.function %}
+                    {%- set tool_call = tool_call.function %}
+                {%- endif %}
+                {{- '<tool_call>\n{"name": "' }}
+                {{- tool_call.name }}
+                {{- '", "arguments": ' }}
+                {%- if tool_call.arguments is string %}
+                    {{- tool_call.arguments }}
+                {%- else %}
+                    {{- tool_call.arguments | tojson }}
+                {%- endif %}
+                {{- '}\n</tool_call>' }}
+            {%- endfor %}
+        {%- endif %}
+        {{- '<|im_end|>\n' }}
+    {%- elif message.role == "tool" %}
+        {%- if loop.first or (messages[loop.index0 - 1].role != "tool") %}
+            {{- '<|im_start|>user' }}
+        {%- endif %}
+        {{- '\n<tool_response>\n' }}
+        {{- content }}
+        {{- '\n</tool_response>' }}
+        {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}
+            {{- '<|im_end|>\n' }}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+    {%- if enable_thinking is defined and enable_thinking is false %}
+        {{- '<think>\n\n</think>\n\n' }}
+    {%- endif %}
+{%- endif %}"""
+
+
 def map_old_key_to_new(old_key: str) -> str:
     new_key = old_key
     for pattern, replacement in STATE_DICT_MAPPING.items():
@@ -96,6 +217,7 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
     original_state_dict = load_original_state_dict(checkpoint_dir)
     config = MossTranscribeDiarizeConfig.from_pretrained(checkpoint_dir)
     processor = MossTranscribeDiarizeProcessor.from_pretrained(checkpoint_dir)
+    processor.chat_template = CHAT_TEMPLATE
 
     processor.tokenizer.padding_side = "left"
     processor.tokenizer.init_kwargs["padding_side"] = "left"

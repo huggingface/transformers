@@ -49,11 +49,11 @@ string, the parsed segments as a list of dicts (`return_format="parsed"`), or ju
 (`return_format="transcription_only"`).
 
 ```python
-from transformers import AutoProcessor, MossTranscribeDiarizeForConditionalGeneration
+from transformers import AutoProcessor, AutoModel
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/podcast_sample.wav"
 inputs = processor.apply_transcription_request(audio_url)
@@ -99,11 +99,11 @@ passed alongside it for additional context.
 Below we transcribe an audio clip that mentions "Yorùbá", comparing with and without passing it as a keyword.
 
 ```python
-from transformers import AutoProcessor, MossTranscribeDiarizeForConditionalGeneration
+from transformers import AutoProcessor, AutoModel
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/languages_sample.wav"
 
@@ -133,11 +133,11 @@ The above examples use `apply_transcription_request`, which is a convenience fun
 the chat template. It is equivalent to a user turn that contains only audio:
 
 ```python
-from transformers import AutoProcessor, MossTranscribeDiarizeForConditionalGeneration
+from transformers import AutoProcessor, AutoModel
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav"
 conversation = [
@@ -170,11 +170,12 @@ Pass a list of audio, and optionally a matching list of prompts and/or keywords,
 Set an entry to `None` to skip it for that sample.
 
 ```python
-from transformers import AutoProcessor, MossTranscribeDiarizeForConditionalGeneration
+from transformers import AutoProcessor, AutoModel
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+# `from_pretrained` is used here for convenience, the model can also be built from a config directly.
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 
 audio = [
     "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav",
@@ -197,11 +198,11 @@ conversation with the audio in the user turn and the target transcription as the
 out with `-100`).
 
 ```python
-from transformers import AutoProcessor, MossTranscribeDiarizeForConditionalGeneration
+from transformers import AutoProcessor, AutoModel
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 model.train()
 
 conversation = [
@@ -247,13 +248,13 @@ On a B200, we observed a speed-up of ~2.1x for a batch size of 4.
 
 ```python
 import torch
-from transformers import AutoProcessor, MossTranscribeDiarizeForConditionalGeneration
+from transformers import AutoProcessor, AutoModel
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 num_warmup = 3
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda")
+model = AutoModel.from_pretrained(model_id).to("cuda")
 
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav"
 inputs = processor.apply_transcription_request([audio_url] * 4).to(model.device, torch.bfloat16)
@@ -284,8 +285,8 @@ with torch.no_grad():
     - forward
     - get_audio_features
 
-## MossTranscribeDiarizeForConditionalGeneration
+## AutoModel
 
-[[autodoc]] MossTranscribeDiarizeForConditionalGeneration
+[[autodoc]] AutoModel
     - forward
     - get_audio_features
