@@ -45,7 +45,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, _prepare_config_headdim
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -67,7 +67,7 @@ if is_vision_available():
 
 
 def _prepare_qformer_config_headdim(config, requested_dim):
-    config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+    config = _prepare_config_headdim(config, requested_dim)
     config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
     return config
 

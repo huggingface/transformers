@@ -316,7 +316,7 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Gemma2PreTrainedModel(GemmaPreTrainedModel):
-    pass
+    _incompatible_flash_implementations = ["flash_attention_torch"]  # softcapping
 
 
 class Gemma2Model(GemmaModel):
