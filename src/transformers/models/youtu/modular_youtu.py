@@ -64,6 +64,8 @@ class YoutuConfig(DeepseekV3Config):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    # Dense model: drop the expert-parallel plan inherited from DeepSeek V3
+    base_model_ep_plan = AttributeError()
     attribute_map = {}
 
     vocab_size: int = 128256

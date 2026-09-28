@@ -107,9 +107,10 @@ class InklingTextConfig(PreTrainedConfig):
 
     model_type = "inkling_text"
     base_config_key = "text_config"
+    # `embed_tokens` stays replicated: its forward applies `embed_norm` to the lookup, which a vocab-sharded
+    # (`embedding_rowwise`) lookup only produces after the all-reduce that follows the module.
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "colwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
@@ -126,10 +127,9 @@ class InklingTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {
