@@ -300,6 +300,10 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         self._all_special_ids = self._get_all_special_ids()
         self._all_special_tokens = self.convert_ids_to_tokens(self.all_special_ids)
 
+        # Set backend to "mistral_common" if not already set
+        if "backend" not in kwargs:
+            kwargs["backend"] = "mistral_common"
+
         super().__init__(
             truncation_side=truncation_side,
             padding_side=padding_side,
