@@ -262,12 +262,15 @@ def _patch_byte_group_hash(original):
 
 @register_patch("onnx", "torch.histc")
 @register_patch("openvino", "torch.histc")
+@register_patch("executorch", "torch.histc")
 def _patch_histc(original):
     """Replace `torch.histc` with a statically-shaped, deterministic `zeros` + `scatter_add_`.
 
     torchlib's `aten_histc` rejects integer input and casting to float calls the nondeterministic
-    `_histc_cuda`; OV has no `aten.histc` lowering at all. `bincount`, the obvious replacement, has
-    an unbacked SymInt output that trips downstream meta-shape guards (grouped_mm's `offs` check).
+    `_histc_cuda`; OV has no `aten.histc` lowering at all, and ExecuTorch has no kernel for it (it is not in
+    the core ATen opset). `bincount`, the obvious replacement, has an unbacked SymInt output that trips
+    downstream meta-shape guards (grouped_mm's `offs` check). Values outside `[min, max]` are not counted, as
+    in `histc` — the MoE paths rely on that to drop their sentinel expert ids.
     """
 
     def patch(input, bins=100, min=0, max=0, *, out=None):
@@ -279,10 +282,12 @@ def _patch_histc(original):
             min_val = torch.tensor(float(min), device=flat.device)
             max_val = torch.tensor(float(max), device=flat.device)
         bin_width = (max_val - min_val) / bins
-        idx = ((flat.float() - min_val) / bin_width).long().clamp_(0, bins - 1)
+        values = flat.float()
+        idx = ((values - min_val) / bin_width).long().clamp_(0, bins - 1)
         out_dtype = input.dtype if input.is_floating_point() else torch.float
+        counted = ((values >= min_val) & (values <= max_val)).to(out_dtype)
         counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
-        return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
+        return counts.scatter_add_(0, idx, counted)
 
     return patch
 

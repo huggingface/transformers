@@ -273,6 +273,15 @@ def keep_backed_symbols_symbolic(exported_program: ExportedProgram):
         del shape_env._set_replacement
 
 
+def _has_layout_copies(exported_program: ExportedProgram) -> bool:
+    """Whether the graph holds a dim-order copy (`_fix_convolution_input_layout`'s), which only the `dim_order_ops`
+    variants can express: with them skipped, the copy lowers to a `_to_copy` that keeps its input's layout."""
+    target = getattr(getattr(torch.ops, "dim_order_ops", None), "_to_dim_order_copy", None)
+    return target is not None and any(
+        node.target is target.default for node in exported_program.graph.nodes if node.op == "call_function"
+    )
+
+
 def _uses_channels_last(exported_program: ExportedProgram) -> bool:
     """Whether any tensor in the graph carries a channels-last layout — the case the `dim_order_ops` variants
     exist to represent, and the one graph shape that cannot be lowered without them.
@@ -333,7 +342,7 @@ def _get_edge_compile_config(exported_program: ExportedProgram, backend: str) ->
         # them ("Tensor has a memory_format that is unsupported") — so those graphs keep them.
         # ET-version-sensitive, like every internals patch here: revisit when the dim-order schemas learn
         # `SymInt[]`.
-        _skip_dim_order=not _uses_channels_last(exported_program),
+        _skip_dim_order=not (_uses_channels_last(exported_program) or _has_layout_copies(exported_program)),
         _core_aten_ops_exception_list=[
             torch.ops.aten._embedding_bag_forward_only.default,
             torch.ops.aten._fft_c2c.default,
@@ -443,7 +452,8 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], e
     model.requires_grad_(False)
     model = model.to(device="cpu")
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
-    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+    # Dispatched to every submodel with experts, a composite's included; one without them is left as is.
+    if isinstance(model, PreTrainedModel):
         model.set_experts_implementation("batched_mm")
     # Withholding a config leaves its ops to the portable kernels and keeps the rest delegated: XNNPACK
     # can claim a partition its compiler then refuses over a single op pattern (`ViewCopyConfig` for
@@ -517,7 +527,8 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], exclu
     model.requires_grad_(False)
     model = model.to(device="cpu")
     # MLX does not support grouped MoE kernels.
-    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+    # Dispatched to every submodel with experts, a composite's included; one without them is left as is.
+    if isinstance(model, PreTrainedModel):
         model.set_experts_implementation("batched_mm")
     partitioner = [MLXPartitioner()]
     return model, _make_contiguous(sample_inputs), partitioner
@@ -623,12 +634,18 @@ def _patch_dim_order_from_stride(original):
     return dim_order_from_stride
 
 
+# An unbacked size with no finite bound: large, so a size derived from it by floor division stays nonzero.
+_UNBOUNDED_STAND_IN = 2**20
+
+
 def _compare_assuming_nonempty(left, right) -> int:
-    """`left` against `right` (-1, 0, 1) with every data-dependent size in it taken to be 2.
+    """`left` against `right` (-1, 0, 1) with every data-dependent size in it taken at its upper bound.
 
     What `guard_size_oblivious` used to answer, written out because it is deprecated in favour of explicit
-    unbacked handling. Two is the size-oblivious convention: the symbol is a size, and the cases that make
-    an ordering question unanswerable are the degenerate 0 and 1. Substituting rather than guarding also
+    unbacked handling: the cases that make an ordering question unanswerable are the degenerate small
+    sizes, so take the symbol large. Its upper bound rather than size-oblivious 2, because a stride
+    often holds a size *derived* from the symbol: hiera's masked token count `u42` enters as `u42 // 104`,
+    which a 2 floors to a zero stride that then sorts innermost. Substituting rather than guarding also
     keeps the lowering's shape environment untouched, which is the point of `keep_backed_symbols_symbolic`.
     """
 
@@ -638,12 +655,20 @@ def _compare_assuming_nonempty(left, right) -> int:
             return int(side)
         expression = node.expr
         # A stride mixes both kinds of symbol: a backed one stands for a real traced size and has a hint to
-        # put in its place, an unbacked one has none and takes the 2. Leaving either symbolic would make the
-        # comparison unanswerable again, and an unanswerable comparison is what puts two operands of one op
-        # in different dim orders — which ExecuTorch's kernels reject at run time (`0x12`).
+        # put in its place, an unbacked one has none and takes its upper bound. Leaving either symbolic would
+        # make the comparison unanswerable again, and an unanswerable comparison is what puts two operands of
+        # one op in different dim orders — which ExecuTorch's kernels reject at run time (`0x12`).
         shape_env = getattr(node, "shape_env", None)
         hints = getattr(shape_env, "backed_var_to_val", None) or getattr(shape_env, "var_to_val", None) or {}
-        return int(expression.xreplace({symbol: hints.get(symbol, 2) for symbol in expression.free_symbols}))
+        ranges = getattr(shape_env, "var_to_range", {})
+
+        def stand_in(symbol):
+            if symbol in hints:
+                return hints[symbol]
+            bound = ranges.get(symbol)
+            return max(2, _as_int(bound.upper, _UNBOUNDED_STAND_IN)) if bound is not None else _UNBOUNDED_STAND_IN
+
+        return int(expression.xreplace({symbol: stand_in(symbol) for symbol in expression.free_symbols}))
 
     try:
         left_value, right_value = concrete(left), concrete(right)
@@ -658,28 +683,29 @@ def _compare_assuming_nonempty(left, right) -> int:
 
 @register_patch("executorch", "torch.split", "torch.Tensor.split")
 def _patch_unbacked_split(original):
-    """Keep a split whose *sizes are data-dependent* out of the graph.
+    """Cut a split whose *sizes are data-dependent* into slices rather than a `split_with_sizes`.
 
     A grid VLM cuts its flat vision output back into per-image runs with
     `(grid_thw.prod(-1) // merge**2).tolist()`, i.e. sizes read off a tensor. Under export those are
     unbacked symbols, and `split_with_sizes_copy` with unbacked sizes is the one thing ExecuTorch's
-    verifier cannot lower ("Could not extract specialized integer") — it fails every variant of every
-    such model, ~17 of them. Both consumers in this position immediately concatenate the pieces again
-    (the model's own `torch.cat(image_features, dim=0)`, and `ModalityEncoder.forward`), so handing back
-    the tensor whole is the same value with nothing for the verifier to choke on. A consumer that really
-    wanted the pieces indexes past the end of a 1-tuple, which fails loudly rather than quietly.
+    verifier cannot lower ("Could not extract specialized integer"). A chain of `narrow`s at running
+    offsets is the same pieces, which it lowers — and a consumer that uses them one by one (hunyuan_vl's
+    patch merger, sized per image) still gets each piece.
 
     The test is for an *unbacked* size, not merely "not a Python int": `aten.split.Tensor`'s own
     decomposition rewrites a constant chunk size into a size list whose last element is a backed-symbolic
-    expression of the split dim, then re-enters this same public `torch.split`. Short-circuiting there
-    hands the base tensor back from inside a view op's decomposition, which autograd rejects with "View
-    operation returned a tensor that is the same as the input base tensor" — that would fail every
-    `.split(int)` / `.chunk()` taken over a dynamic dim (qwen3_omni_moe chunks its audio conv that way).
+    expression of the split dim, then re-enters this same public `torch.split` — which is left to the
+    original, as every `.split(int)` / `.chunk()` over a dynamic dim is (qwen3_omni_moe chunks its audio conv
+    that way).
     """
 
     def patch(input, split_size_or_sections, dim=0):
         if _has_unbacked_sizes(split_size_or_sections):
-            return (input,)
+            pieces, start = [], 0
+            for size in split_size_or_sections:
+                pieces.append(input.narrow(dim, start, size))
+                start = start + size
+            return tuple(pieces)
         return original(input, split_size_or_sections, dim)
 
     return patch
@@ -1191,6 +1217,11 @@ def _patch_eval_upper_bound(original):
             return maybe_symint
         result = original(maybe_symint)
         hint = eval_expr(maybe_symint)
+        # A data-dependent size (the rows a boolean mask keeps) has no hint to scale; its finite bound comes from
+        # torch's own constraints on it (at most the mask's size), which is the one to plan for — capping it at the
+        # floor under-plans it (hiera's pre-training mask: bound 26624, capped to 1024, needed 6656).
+        if not isinstance(hint, int) and isinstance(result, int) and result <= _MAX_UNBOUNDED_PRODUCT:
+            return result
         cap = max(hint * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR) if isinstance(hint, int) else _MAX_DIM_FLOOR
         return min(result, cap) if isinstance(result, int) else cap
 
@@ -1814,6 +1845,116 @@ if is_torch_available():
         torch.ops.aten.add.Tensor,
         torch.ops.aten.remainder.Scalar,
     )
+
+
+@register_fx_node_fix("executorch")
+def _fix_max_values_keepdim(gm, node):
+    """Take the values of an ``aten.max.dim`` as ``amax(keepdim=True)`` squeezed, where only the values are read.
+
+    The lowering decomposes ``max.dim`` into ``amax`` with the caller's ``keepdim=False``, which XNNPACK's
+    partitioner claims and its own preprocess then refuses (``amax.default only supports keep_dim == True``).
+    Keeping the reduced axis and squeezing it after is the same value in the form it takes.
+    """
+    if node.target is not torch.ops.aten.max.dim or len(node.args) < 2:
+        return False
+    keepdim = node.args[2] if len(node.args) > 2 else node.kwargs.get("keepdim", False)
+    users = list(node.users)
+    if keepdim or any(user.target is not operator.getitem for user in users):
+        return False
+    # The trace keeps both outputs of a multi-output op; an indices output nothing reads is not a use.
+    if any(user.args[1] != 0 and user.users for user in users):
+        return False
+    values_users = [user for user in users if user.args[1] == 0]
+    if not values_users:
+        return False
+    source, dim = node.args[0], node.args[1]
+    with gm.graph.inserting_before(node):
+        kept = gm.graph.call_function(torch.ops.aten.amax.default, args=(source, [dim], True))
+        values = gm.graph.call_function(torch.ops.aten.squeeze.dims, args=(kept, [dim]))
+    val = node.meta.get("val")
+    if val is not None:
+        values.meta["val"] = val[0]
+        kept.meta["val"] = val[0].unsqueeze(dim)
+    for user in users:
+        if user.args[1] == 0:
+            user.replace_all_uses_with(values)
+        gm.graph.erase_node(user)
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("executorch")
+def _fix_convolution_input_layout(gm, node):
+    """Hand a convolution its input in the default layout when the trace left it transposed.
+
+    The portable ``convolution`` kernel accepts only the default and channels-last dim orders, and a convolution
+    XNNPACK does not claim runs there — so an audio tower's ``conv1d`` over ``features.transpose(1, 2)`` reaches it
+    with dim order ``(0, 2, 1)`` and is refused (``tensor_is_default_or_channels_last_dim_order``, 0x12).
+    """
+    convolutions = (
+        torch.ops.aten.convolution.default,
+        torch.ops.aten.conv1d.default,
+        torch.ops.aten.conv2d.default,
+        torch.ops.aten.conv3d.default,
+    )
+    if node.target not in convolutions or getattr(node, "_layout_fixed", False):
+        return False
+    from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode
+
+    source = node.args[0]
+    val = getattr(source, "meta", {}).get("val")
+    if not isinstance(val, torch.Tensor) or val.dim() not in (3, 4, 5):
+        return False
+    try:
+        if val.is_contiguous() or val.is_contiguous(
+            memory_format=torch.channels_last if val.dim() == 4 else torch.contiguous_format
+        ):
+            return False
+    except GuardOnDataDependentSymNode:
+        return False
+    # A dim-order copy, not a contiguous `clone`: the portable `clone` keeps its input's dim order.
+    import executorch.exir.passes.dim_order_ops_registry  # noqa: F401  (registers `dim_order_ops`)
+
+    with gm.graph.inserting_before(node):
+        contiguous = gm.graph.call_function(
+            torch.ops.dim_order_ops._to_dim_order_copy.default,
+            args=(source,),
+            kwargs={"dim_order": list(range(val.dim()))},
+        )
+        contiguous.meta["val"] = val.contiguous()
+    node.replace_input_with(source, contiguous)
+    node._layout_fixed = True
+    return True
+
+
+@register_fx_node_fix("executorch")
+def _fix_empty_like(gm, node):
+    """Allocate an ``aten.empty_like`` buffer as an explicit ``aten.empty`` of the input's shape.
+
+    The lowering decomposes ``empty_like`` of a non-contiguous tensor into ``empty_permuted``, which ExecuTorch has
+    no kernel for (it is outside the core ATen opset). The buffer is uninitialised either way; the input's stride
+    order is only a layout hint, which the lowering re-plans.
+    """
+    if node.target is not torch.ops.aten.empty_like.default:
+        return False
+    source = node.args[0]
+    val = getattr(source, "meta", {}).get("val")
+    if val is None:
+        return False
+    with gm.graph.inserting_before(node):
+        sizes = [
+            size if isinstance(size, int) else gm.graph.call_function(torch.ops.aten.sym_size.int, args=(source, axis))
+            for axis, size in enumerate(val.shape)
+        ]
+        empty = gm.graph.call_function(
+            torch.ops.aten.empty.memory_format,
+            args=(sizes,),
+            kwargs={"dtype": node.kwargs.get("dtype") or val.dtype, "device": node.kwargs.get("device") or val.device},
+        )
+        empty.meta.update(node.meta)
+    node.replace_all_uses_with(empty)
+    gm.graph.erase_node(node)
+    return True
 
 
 @register_fx_node_fix("executorch")

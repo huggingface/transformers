@@ -12,40 +12,117 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .auto import (
-    EXPORT_BACKENDS,
-    AutoExportConfig,
-    AutoExportedModel,
-    AutoHfExporter,
-    ExportBackend,
-    export_backend,
-    get_hf_exporter,
-    register_export_config,
-    register_exporter,
-    register_runner,
-)
-from .base import ExportArtifacts, ExportedModel, HfExporter, ModelRunner
-from .components import Component, ComponentRole, ExportedComponent
-from .configs import (
-    AotiConfig,
-    DynamoConfig,
-    ExecutorchConfig,
-    ExportConfigMixin,
-    ExportFormat,
-    OnnxConfig,
-    OpenVINOConfig,
-    TensorrtConfig,
-)
-from .exporter_aoti import AotiExporter
-from .exporter_dynamo import DynamoExporter
-from .exporter_executorch import ExecutorchExporter
-from .exporter_onnx import OnnxExporter
-from .exporter_openvino import OpenVINOExporter
-from .exporter_tensorrt import TensorrtExporter
-from .generator import ExportedGenerator, Modality
-from .runner_aoti import AotiModelRunner
-from .runner_dynamo import DynamoModelRunner
-from .runner_executorch import ExecutorchModelRunner
-from .runner_onnx import OnnxModelRunner
-from .runner_openvino import OpenVINOModelRunner
-from .runner_tensorrt import TensorrtModelRunner
+from typing import TYPE_CHECKING
+
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+
+
+_import_structure = {
+    "configs": [
+        "AotiConfig",
+        "DynamoConfig",
+        "ExecutorchConfig",
+        "ExportConfigMixin",
+        "ExportFormat",
+        "OnnxConfig",
+        "OpenVINOConfig",
+        "TensorrtConfig",
+    ],
+}
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["auto"] = [
+        "EXPORT_BACKENDS",
+        "AutoExportConfig",
+        "AutoExportedModel",
+        "AutoHfExporter",
+        "ExportBackend",
+        "export_backend",
+        "get_hf_exporter",
+        "register_export_config",
+        "register_exporter",
+        "register_runner",
+    ]
+    _import_structure["base"] = [
+        "ExportArtifacts",
+        "ExportedModel",
+        "HfExporter",
+        "ModelRunner",
+    ]
+    _import_structure["components"] = [
+        "Component",
+        "ComponentRole",
+        "ExportedComponent",
+    ]
+    _import_structure["exporter_aoti"] = ["AotiExporter"]
+    _import_structure["exporter_dynamo"] = ["DynamoExporter"]
+    _import_structure["exporter_executorch"] = ["ExecutorchExporter"]
+    _import_structure["exporter_onnx"] = ["OnnxExporter"]
+    _import_structure["exporter_openvino"] = ["OpenVINOExporter"]
+    _import_structure["exporter_tensorrt"] = ["TensorrtExporter"]
+    _import_structure["generator"] = [
+        "ExportedGenerator",
+        "Modality",
+    ]
+    _import_structure["runner_aoti"] = ["AotiModelRunner"]
+    _import_structure["runner_dynamo"] = ["DynamoModelRunner"]
+    _import_structure["runner_executorch"] = ["ExecutorchModelRunner"]
+    _import_structure["runner_onnx"] = ["OnnxModelRunner"]
+    _import_structure["runner_openvino"] = ["OpenVINOModelRunner"]
+    _import_structure["runner_tensorrt"] = ["TensorrtModelRunner"]
+
+
+if TYPE_CHECKING:
+    from .configs import (
+        AotiConfig,
+        DynamoConfig,
+        ExecutorchConfig,
+        ExportConfigMixin,
+        ExportFormat,
+        OnnxConfig,
+        OpenVINOConfig,
+        TensorrtConfig,
+    )
+
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .auto import (
+            EXPORT_BACKENDS,
+            AutoExportConfig,
+            AutoExportedModel,
+            AutoHfExporter,
+            ExportBackend,
+            export_backend,
+            get_hf_exporter,
+            register_export_config,
+            register_exporter,
+            register_runner,
+        )
+        from .base import ExportArtifacts, ExportedModel, HfExporter, ModelRunner
+        from .components import Component, ComponentRole, ExportedComponent
+        from .exporter_aoti import AotiExporter
+        from .exporter_dynamo import DynamoExporter
+        from .exporter_executorch import ExecutorchExporter
+        from .exporter_onnx import OnnxExporter
+        from .exporter_openvino import OpenVINOExporter
+        from .exporter_tensorrt import TensorrtExporter
+        from .generator import ExportedGenerator, Modality
+        from .runner_aoti import AotiModelRunner
+        from .runner_dynamo import DynamoModelRunner
+        from .runner_executorch import ExecutorchModelRunner
+        from .runner_onnx import OnnxModelRunner
+        from .runner_openvino import OpenVINOModelRunner
+        from .runner_tensorrt import TensorrtModelRunner
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

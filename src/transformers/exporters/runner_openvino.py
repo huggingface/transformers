@@ -65,7 +65,7 @@ class OpenVINOModelRunner(ModelRunner):
         # Per input port, its names with the leaf each stands for and the type it declares — fixed once
         # compiled, so the per-step feed does not ask the plugin again.
         self._input_ports = [
-            ([(name, leaf_name(name)) for name in port.get_names()], port.get_element_type())
+            (port, [(name, leaf_name(name)) for name in port.get_names()], port.get_element_type())
             for port in self._compiled.inputs
         ]
         # OpenVINO hands back host tensors whichever plugin ran the graph.
@@ -89,20 +89,21 @@ class OpenVINOModelRunner(ModelRunner):
         leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(kwargs).items()}
         batch = _feed_batch(leaves)
 
-        feed = {}
-        for names, element_type in self._input_ports:
+        feed = []
+        for port, names, element_type in self._input_ports:
             # A passthrough tensor carries both an input and an output name, so every alias is tried.
             for name, leaf in names:
                 if leaf in leaves:
-                    feed[name] = _as_ov(_as_element_type(leaves[leaf], element_type))
+                    value = _as_ov(_as_element_type(leaves[leaf], element_type))
                 elif name == "beam_idx":
                     # Greedy decoding reorders nothing, and the fused `Gather` reads this every step.
-                    feed[name] = np.arange(batch, dtype=np.int32)
+                    value = np.arange(batch, dtype=np.int32)
                 elif name in kwargs:
                     # A scalar the trace baked as a port of its own (`max_seqlen`, a feature layer index).
-                    feed[name] = np.array(kwargs[name])
+                    value = np.array(kwargs[name])
                 else:
                     continue
+                feed.append((port, _as_port_tensor(value, element_type)))
                 break
 
         self._prime_state(leaves)
@@ -118,9 +119,11 @@ class OpenVINOModelRunner(ModelRunner):
             None,
         )
         query_length = text.shape[1] if text is not None and text.dim() > 1 else 0
-        # `share_inputs`: the feed tensors outlive the call here, so OpenVINO can read them in place
-        # instead of copying each one into its own buffer.
-        results = self._request.infer(feed, share_inputs=True)
+        # Bound per port rather than handed over as a name-keyed dict, which the request resolves port by port
+        # on every call; each tensor shares the feed's memory, which outlives the call.
+        for port, tensor in feed:
+            self._request.set_tensor(port, tensor)
+        self._request.infer()
 
         # The trace's own names first, positionally: a port the rename could not reach keeps an internal
         # name (`embedding_0:0` for a component whose output is a bare tensor), and the graph's output order
@@ -128,7 +131,10 @@ class OpenVINOModelRunner(ModelRunner):
         recorded = self.export_metadata.output_names
         names = recorded if len(recorded) == len(self._compiled.outputs) else None
         outputs = {
-            (names[index] if names else leaf_name(_port_name(port))): _as_torch(results[port])
+            # Copied: the request writes its next outputs into the same buffers.
+            (names[index] if names else leaf_name(_port_name(port))): _as_torch(
+                self._request.get_tensor(port).data.copy()
+            )
             for index, port in enumerate(self._compiled.outputs)
         }
         # The state is deliberately not among them. It stays in the plugin, which is what makes a stateful
@@ -244,6 +250,19 @@ def _as_ov(tensor):
     if tensor.dtype == torch.bfloat16:
         return openvino.Tensor(tensor.view(torch.uint16).numpy(), list(tensor.shape), openvino.Type.bf16)
     return tensor.numpy()
+
+
+def _as_port_tensor(value, element_type):
+    """`value` as an `openvino.Tensor` of the port's type, sharing its memory where the types already agree.
+
+    A tensor set on a port is not converted the way a dict feed is, so an integer input that reached here in
+    another width (an `int64` mask on an `i32` port) is cast first."""
+    if isinstance(value, openvino.Tensor):
+        return value
+    wanted = element_type.to_dtype() if element_type.is_static() else value.dtype
+    # `asarray` rather than `ascontiguousarray`, which turns a rank-0 scalar (`logits_to_keep`) into `[1]`.
+    array = np.asarray(value, dtype=wanted)
+    return openvino.Tensor(array if array.flags.c_contiguous else array.copy(), shared_memory=True)
 
 
 def _as_element_type(tensor, element_type):

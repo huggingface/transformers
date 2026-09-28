@@ -510,9 +510,36 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "duplicated by the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the "
             "shared target once and raises `KeyError` on the next copy while stripping delegated params."
         ),
+        "Deimv2Model": (
+            "Same as the ONNX `DFineModel` entry: the encoder's `topk` picks the decoder's queries from scores "
+            "that all tie on the tiny test model, and which of them a kernel keeps is arbitrary — ExecuTorch's "
+            "pick differs from eager's on the DINOv3 variant, so the decoder is built from other queries."
+        ),
+        "Deimv2ForObjectDetection": "Same as `Deimv2Model`.",
+        "PPDocLayoutV2ForObjectDetection": "Same as `Deimv2Model`.",
     },
     "executorch.generate": {},
     "executorch.dynamic": {
+        "Qwen3NextModel": (
+            "The dynamic lowering exceeds the 1000s test timeout even run alone (measured on CPU with ExecuTorch "
+            "1.5.1, one test per process): every class re-traces the gated-delta-rule linear attention and its "
+            "conv state for XNNPACK. The static variant exports and runs."
+        ),
+        "Qwen3NextForQuestionAnswering": "Same timeout as `Qwen3NextModel`.",
+        "Qwen3NextForSequenceClassification": "Same timeout as `Qwen3NextModel`.",
+        "Qwen3NextForTokenClassification": "Same timeout as `Qwen3NextModel`.",
+        "Qwen3_5Model": (
+            "Same timeout as `Qwen3NextModel` (it shares the gated-delta-rule layers), and before it the XNNPACK "
+            "delegate refuses one of its partitions at execute time (`CALL_DELEGATE execute failed ... 0x1`)."
+        ),
+        "Qwen3_5ForConditionalGeneration": "Same as `Qwen3_5Model`.",
+        "Qwen3_5ForSequenceClassification": "Same as `Qwen3_5Model`.",
+        "Qwen3_5ForTokenClassification": "Same as `Qwen3_5Model`.",
+        "OneFormerModel": (
+            "The dynamic lowering exceeds the 1000s test timeout even run alone, after a first class already fails "
+            "in the lowering with `KeyError: 'zero'`. The static variant exports and runs."
+        ),
+        "OneFormerForUniversalSegmentation": "Same as `OneFormerModel`.",
         "MaskFormerForInstanceSegmentation": (
             "Lowering does not finish: >1000s inside sympy / `symbolic_shapes`, measured on an idle machine "
             "(so not sweep contention). The time is symbolic-shape reasoning over the graph's dynamic axes, "
@@ -689,8 +716,8 @@ EXECUTORCH_PARTITION_EXCLUDE: dict[str, dict[str, tuple[str, ...]]] = {
 
 
 EXECUTORCH_DISABLE_PARTITION: dict[str, dict[str, str]] = {
-    # Static shapes only — the dynamic variants lower and run delegated.
-    "static": {
+    # Both shape variants: under ExecuTorch 1.5.1 the dynamic one no longer runs delegated either.
+    "all": {
         "PerceiverForMultimodalAutoencoding": (
             "The only entry left that no per-op exclusion reaches: withholding all 52 partitioner configs "
             "still does not get this program running, because what it needs is a kernel ExecuTorch does not "
