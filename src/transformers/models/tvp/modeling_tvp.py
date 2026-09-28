@@ -745,9 +745,7 @@ class TvpModel(TvpPreTrainedModel):
         if attention_mask is not None:
             # (batch_size, visual_sequence_length)
             visual_attention_mask = attention_mask.new_ones(visual_embedding_output.shape[:2])
-            pt_mask = torch.ones(attention_mask.shape[0], 10).to(
-                device=attention_mask.device, dtype=attention_mask.dtype
-            )
+            pt_mask = torch.ones(attention_mask.shape[0], 10, device=attention_mask.device, dtype=attention_mask.dtype)
             attention_mask = torch.cat([pt_mask, attention_mask, visual_attention_mask], dim=-1)
 
         text_prompt = self.text_prompt.expand(text_embedding_output.shape[0], -1, -1)

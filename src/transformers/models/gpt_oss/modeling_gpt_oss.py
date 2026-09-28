@@ -37,7 +37,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_rocm_platform
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -389,18 +389,17 @@ class GptOssPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),
         "hidden_states": GptOssDecoderLayer,
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
-    _compatible_flash_implementations = [
-        "kernels-community/vllm-flash-attn3",
-        "flash_attention_4",
-        "kernels-community/metal-flash-sdpa",
-    ]
+    _compatible_flash_implementations = (
+        ["kernels-community/aiter-flash-attn"]
+        if is_rocm_platform()
+        else ["kernels-community/vllm-flash-attn3", "flash_attention_4", "kernels-community/metal-flash-sdpa"]
+    )
 
     @torch.no_grad()
     def _init_weights(self, module):

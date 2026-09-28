@@ -13,6 +13,8 @@ permissions:
 
 jobs:
   check_links:
+    permissions:
+      contents: read
     name: Check documentation links
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -50,12 +52,14 @@ jobs:
 
   # Satisfy required check in merge queue without actually building docs
   skip_merge_queue:
+    permissions: {}
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - run: echo "Skipping doc build in merge queue"
 
   doc_build_status_check:
+    permissions: {}
     needs: [build, check_links, skip_merge_queue]
     if: always()
     runs-on: ubuntu-latest

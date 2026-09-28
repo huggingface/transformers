@@ -25,54 +25,15 @@ if is_vision_available():
 
 
 class FuyuImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_pad=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        patch_size=None,
-    ):
-        size = size if size is not None else {"height": 180, "width": 360}
-        patch_size = patch_size if patch_size is not None else {"height": 30, "width": 30}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = 30
-        self.max_resolution = 360
-        self.do_resize = do_resize
-        self.size = size
-        self.do_pad = do_pad
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.patch_size = patch_size
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("max_resolution", 360)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_pad": self.do_pad,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "patch_size": self.patch_size,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 180, "width": 360})
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Prepares a batch of images for testing"""
@@ -112,10 +73,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
     # Skip tests that expect pixel_values output
     test_cast_dtype = None
 
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = FuyuImageProcessingTester(self)
-        self.image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = FuyuImageProcessingTester
 
     def test_call_pil(self):
         """Override to handle Fuyu's custom output structure"""
@@ -226,19 +184,6 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         self._assert_tensors_equivalence(
             output_eager.images[0][0], output_compiled.images[0][0], atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_resize"))
-            self.assertTrue(hasattr(image_processor, "size"))
-            self.assertTrue(hasattr(image_processor, "do_pad"))
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "image_mean"))
-            self.assertTrue(hasattr(image_processor, "image_std"))
-            self.assertTrue(hasattr(image_processor, "do_rescale"))
-            self.assertTrue(hasattr(image_processor, "rescale_factor"))
-            self.assertTrue(hasattr(image_processor, "patch_size"))
 
     def test_patches(self):
         """Test that patchify_image produces the expected number of patches."""

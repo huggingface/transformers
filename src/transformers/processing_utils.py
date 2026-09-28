@@ -2099,6 +2099,7 @@ class ProcessorMixin(PushToHubMixin):
                 processor_kwargs["return_offsets_mapping"] = (
                     True  # force offset mapping so we can infer token boundaries
                 )
+                processor_kwargs["return_text_replacement_offsets"] = True
 
         # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
         audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
@@ -2259,26 +2260,25 @@ class ProcessorMixin(PushToHubMixin):
                     assistant_masks = []
                     offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]
+                    # We do some corrections here to ensure the assistant masks aren't
+                    # misaligned when we expand up image tokens
+                    replacement_offsets = out.pop("text_replacement_offsets", None)
+                    if replacement_offsets is None or len(replacement_offsets) == 0:
+                        replacement_offsets = [[]] * len(input_ids)
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        offsets = offset_mapping[i]
-                        offset_starts = [start for start, end in offsets]
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
-                            end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
-
-                            if not (
-                                start_pos >= 0
-                                and start_pos < len(offsets)
-                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
-                            ):
-                                # start_token is out of bounds maybe due to truncation.
-                                continue
-                            # Ensure end_pos is also within bounds
-                            if end_pos > len(input_ids[i]):
-                                end_pos = len(input_ids[i])
-                            for token_id in range(start_pos, end_pos or len(input_ids[i])):
-                                current_mask[token_id] = 1
+                        placeholder_ends = [r["span"][1] for r in replacement_offsets[i]]
+                        chars_gained = [0] + [r["new_span"][1] - r["span"][1] for r in replacement_offsets[i]]
+                        for span in generation_indices[i]:
+                            # Shift the span past any placeholders that were expanded before it
+                            start_char, end_char = (
+                                char + chars_gained[bisect.bisect_right(placeholder_ends, char)] for char in span
+                            )
+                            # Mask every token overlapping the span. Zero-width tokens (padding, added specials) never
+                            # match, and a span truncated away simply matches nothing
+                            for pos, (token_start, token_end) in enumerate(offset_mapping[i]):
+                                if token_start < end_char and token_end > start_char:
+                                    current_mask[pos] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
                     out.convert_to_tensors(tensor_type=return_tensors)

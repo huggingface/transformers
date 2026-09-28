@@ -7,11 +7,13 @@ on:
 env:
   SLACK_CHANNEL_ID: '#transformers-gh-ci-central'
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   get-python-versions:
+    permissions:
+      contents: read
     name: Get supported Python versions
     runs-on: ubuntu-latest
     outputs:
@@ -35,6 +37,8 @@ jobs:
           echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
 
   test-extras:
+    permissions:
+      contents: read
     name: Test extras on Python ${{ matrix.python-version }}
     needs: get-python-versions
     runs-on: ubuntu-latest
@@ -119,6 +123,7 @@ jobs:
           if-no-files-found: ignore
 
   precheck-slack:
+    permissions: {}
     name: Check Slack token availability
     runs-on: ubuntu-latest
     outputs:
@@ -135,6 +140,8 @@ jobs:
           fi
 
   notify-failures:
+    permissions:
+      contents: read
     name: Notify failures to Slack
     needs: [test-extras, precheck-slack]
     runs-on: ubuntu-latest
