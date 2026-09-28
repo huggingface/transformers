@@ -940,7 +940,7 @@ def retrieve_artifact(artifact_path: str, gpu: str | None):
         files = os.listdir(artifact_path)
         for file in files:
             try:
-                with open(os.path.join(artifact_path, file)) as f:
+                with open(os.path.join(artifact_path, file), encoding="utf-8") as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
                 raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
@@ -1398,7 +1398,7 @@ if __name__ == "__main__":
     if job_name == "run_models_gpu":
         if "warnings_in_ci" in available_artifacts:
             directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
-            with open(os.path.join(directory, "selected_warnings.json")) as fp:
+            with open(os.path.join(directory, "selected_warnings.json"), encoding="utf-8") as fp:
                 selected_warnings = json.load(fp)
 
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
@@ -1422,7 +1422,7 @@ if __name__ == "__main__":
         # Get the path to the file on the runner that contains the full event webhook payload.
         event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
         # Load the event payload
-        with open(event_payload_path) as fp:
+        with open(event_payload_path, encoding="utf-8") as fp:
             event_payload = json.load(fp)
             # The event that triggers the original `workflow_run`.
             if "workflow_run" in event_payload:
@@ -1506,9 +1506,16 @@ if __name__ == "__main__":
     other_workflow_run_ids = []
 
     if is_scheduled_ci_run:
+        print(
+            f"[DEBUG notification_service] is_scheduled_ci_run=True, is_nvidia_daily_ci_workflow={is_nvidia_daily_ci_workflow}"
+        )
+        print(
+            f"[DEBUG notification_service] GITHUB_RUN_ID={os.getenv('GITHUB_RUN_ID')!r}, workflow_id={workflow_id!r}"
+        )
         prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
             token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=workflow_id
         )
+        print(f"[DEBUG notification_service] prev_workflow_run_id={prev_workflow_run_id!r}")
         # For a scheduled run that is not the Nvidia's scheduled daily CI, add Nvidia's scheduled daily CI run as a target to compare.
         if not is_nvidia_daily_ci_workflow:
             # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
@@ -1516,6 +1523,9 @@ if __name__ == "__main__":
             # We need to get the Nvidia's scheduled daily CI run that match the current run (i.e. run with the same commit SHA)
             other_workflow_run_id = get_last_daily_ci_workflow_run_id(
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id, commit_sha=ci_sha
+            )
+            print(
+                f"[DEBUG notification_service] other_workflow_run_id={other_workflow_run_id!r} (other_workflow_id={other_workflow_id!r}, ci_sha={ci_sha!r})"
             )
             other_workflow_run_ids.append(other_workflow_run_id)
     else:
@@ -1570,7 +1580,7 @@ if __name__ == "__main__":
 
             report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
 
-            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w", encoding="utf-8") as fp:
                 fp.write(report)
 
             # upload

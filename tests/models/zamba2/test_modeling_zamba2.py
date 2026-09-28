@@ -381,10 +381,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -661,3 +657,33 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-3,
             atol=6e-3 if device == "cpu" else 1e-3,
         )
+
+    @slow
+    def test_num_mem_blocks_2_official_checkpoint(self):
+        # Regression test for #47994: every published `num_mem_blocks=2` checkpoint (Zamba2-2.7B and
+        # Zamba2-7B) raised at construction, before any weight was read, because `block_id` followed
+        # the global layer index while the weight-tie cycle follows hybrid-layer order. This checkpoint
+        # is the one to test because its hybrid layers `[6, 12, 18, 24, 30, 36, 42, 47, 51]` are not
+        # all congruent modulo `num_mem_blocks`; an evenly spaced layout constructs fine without the fix.
+        model_id = "Zyphra/Zamba2-2.7B-instruct"
+        model, loading_info = Zamba2ForCausalLM.from_pretrained(
+            model_id, dtype=torch.bfloat16, output_loading_info=True
+        )
+        self.assertSetEqual(set(loading_info["missing_keys"]), set())
+        self.assertSetEqual(set(loading_info["unexpected_keys"]), set())
+        model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        messages = [{"role": "user", "content": "Hey how are you doing on this lovely evening?"}]
+        inputs = tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(torch_device)
+        out = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        output_sentence = tokenizer.decode(out[0, :])
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                (None, None): "<|im_start|> user\nHey how are you doing on this lovely evening?<|im_end|> \n<|im_start|> assistant\nHello! I'm just a computer program, so I don't have feelings or experiences,",
+            }
+        )  # fmt: skip
+        self.assertEqual(output_sentence, EXPECTED_TEXTS.get_expectation())

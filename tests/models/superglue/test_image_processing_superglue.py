@@ -26,7 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -43,36 +43,15 @@ def random_tensor(size):
     return torch.rand(size)
 
 
-class SuperGlueImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=6,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_grayscale=True,
-    ):
-        size = size if size is not None else {"height": 480, "width": 640}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_grayscale = do_grayscale
+class SuperGlueImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 6)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_grayscale": self.do_grayscale,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 480, "width": 640})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return 2, self.num_channels, self.size["height"], self.size["width"]
@@ -119,13 +98,7 @@ class SuperGlueImageProcessingTester:
 @require_torch
 @require_vision
 class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.image_processor_tester = SuperGlueImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = SuperGlueImageProcessingTester
 
     def test_image_processing(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -135,16 +108,6 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_rescale"))
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_grayscale"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 480, "width": 640})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"height": 42, "width": 42}
-            )
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     @unittest.skip(reason="SuperPointImageProcessor is always supposed to return a grayscaled image")
     def test_call_numpy_4_channels(self):

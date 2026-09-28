@@ -464,6 +464,7 @@ class SmolVLMImageProcessor(TorchvisionBackend):
                 len(processed_images),
                 max_num_images,
                 *(max_height, max_width),
+                dtype=torch.int64,
                 device=device,
             )
             for i, images in enumerate(processed_images):

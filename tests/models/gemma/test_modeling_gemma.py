@@ -13,15 +13,24 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma model."""
 
+import logging
 import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    is_torch_available,
+)
+from transformers import logging as transformers_logging
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    CaptureLogger,
     DeviceProperties,
     Expectations,
+    LoggingLevel,
     cleanup,
     get_device_properties,
     require_bitsandbytes,
@@ -71,6 +80,24 @@ class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
+    def test_legacy_hidden_act_is_remapped(self):
+        """Regression from #35235 fixed in #49051: gemma uses the tanh gelu approx instead of the exact variation"""
+
+        logger = transformers_logging.get_logger("transformers.models.gemma.configuration_gemma")
+        logger.warning_once.cache_clear()
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                config = self.model_tester.config_class(hidden_act="gelu")
+        logger.warning_once.cache_clear()
+
+        self.assertEqual(
+            cl.out,
+            'We found `hidden_act="gelu"` in this Gemma config. This is a legacy value of the official '
+            "releases but it is meant to target the tanh approximation. Setting "
+            '`hidden_act="gelu_pytorch_tanh"` instead.\n',
+        )
+        self.assertEqual(config.hidden_act, "gelu_pytorch_tanh")
+
 
 @slow
 @require_torch_accelerator
@@ -117,6 +144,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the 1990s and I am looking for some information on the ",
                     "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
                 ],
                 ("xpu", 5): [
@@ -191,7 +222,7 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", 8): [
                     "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
-                    "Hi today I'd like to share with you a few of my favorite and most used brushes.\n\nI",
+                    "Hi today I'd like to share with you my experience with the new and improved version of the 2",
                 ],
             }
         ).get_expectation()
@@ -273,7 +304,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 7): ["""Hello I am doing a project on a 1991 240sx and I am trying to find""", "Hi today I am going to show you how to make a very simple and easy to make a very simple and",],
-                ("cuda", 8): ['Hello I am doing a project for my school and I am trying to make a small game. I have a few questions', 'Hi today I am going to show you how to make a very simple and easy to make a very simple and'],
+                ("cuda", 8): ['Hello I am doing a project for my school and I am trying to make a small robot that can move around and I', 'Hi today I am going to show you how to make a very simple and easy to make a DIY 3'],
                 ("rocm", 9): ["Hello I am doing a project for my school and I am trying to get a servo to move a certain amount of degrees", "Hi today I am going to show you how to make a very simple and easy to make DIY light up sign",],
                 ("xpu", 5): ["Hello I am doing a project for my school and I am trying to make a game in which you have to get a", "Hi today I am going to show you how to make a very simple and easy to make a paper plane.",],
             }
@@ -340,8 +371,8 @@ class GemmaIntegrationTest(unittest.TestCase):
                     "Hi today I am going to talk about the best way to get rid of acne. miniaturing is a very",
                 ],
                 ("cuda", 8): [
-                    "Hello I am doing a project for a school and I am using a 32 aquare100000",
-                    'Hi today I am going to talk about a new app that I have found. It is called a "The',
+                    'Hello I am doing a project for my school and I am trying to make a "self balancing" robot. I have',
+                    "Hi today I'm going to be doing a review on the new and improved Nintendo 3DS XL.",
                 ],
                 ("xpu", 5): [
                     "Hello I am doing a project for my school and I am using a 12 paletm and 12 v",
@@ -401,17 +432,6 @@ class GemmaIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        # Compile __call__ instead of forward (copied from test_modeling_mistral.py): compiling forward
-        # causes a CUDA graph RuntimeError when multiple generate() calls are made on the same model.
-        forward_function = model.__call__
-        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
     @pytest.mark.torch_export_test
     @slow

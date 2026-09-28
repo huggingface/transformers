@@ -50,7 +50,7 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
-    "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
+    "finegrained_fp8": ["FP8Embedding", "FP8Linear", "replace_with_fp8_embedding", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
     "gemma_quant": [
         "QuantizedEmbedding",
@@ -61,10 +61,7 @@ _import_structure = {
     "ggml": [
         "GGUF_CONFIG_DEFAULTS_MAPPING",
         "GGUF_CONFIG_MAPPING",
-        "GGUF_TOKENIZER_MAPPING",
         "_gguf_parse_value",
-        "load_dequant_gguf_tensor",
-        "load_gguf",
     ],
     "higgs": [
         "HiggsLinear",
@@ -210,7 +207,7 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
-    from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
+    from .finegrained_fp8 import FP8Embedding, FP8Linear, replace_with_fp8_embedding, replace_with_fp8_linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .gemma_quant import (
         QuantizedEmbedding,
@@ -221,10 +218,7 @@ if TYPE_CHECKING:
     from .ggml import (
         GGUF_CONFIG_DEFAULTS_MAPPING,
         GGUF_CONFIG_MAPPING,
-        GGUF_TOKENIZER_MAPPING,
         _gguf_parse_value,
-        load_dequant_gguf_tensor,
-        load_gguf,
     )
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear

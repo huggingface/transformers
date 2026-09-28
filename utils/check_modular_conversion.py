@@ -85,11 +85,11 @@ def convert_and_run_ruff(modular_file_path: str) -> dict[str, str]:
             ".py", f"_temp_pattern__{file_name_suffix}.py"
         )
         # Write the file only temporarily
-        with open(temp_file_name, "w") as f:
+        with open(temp_file_name, "w", encoding="utf-8") as f:
             f.write(generated_modeling_content[file_type])
         # Run ruff on the new file (with similar name pattern as the original one)
         run_ruff(temp_file_name)
-        with open(temp_file_name, "r") as f:
+        with open(temp_file_name, "r", encoding="utf-8") as f:
             generated_modeling_content[file_type] = f.read()
         # delete file
         os.remove(temp_file_name)
@@ -267,7 +267,7 @@ if __name__ == "__main__":
                         is_changed_flags.append(result)
                     except Exception as individual_error:
                         console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
-                        is_changed_flags.append(0)  # Mark as no change to continue processing
+                        is_changed_flags.append(1)  # Mark as changed to let it raise a proper Error
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):

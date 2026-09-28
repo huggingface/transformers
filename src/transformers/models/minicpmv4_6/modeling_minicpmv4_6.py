@@ -609,6 +609,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         pixel_values: torch.FloatTensor,
         target_sizes: torch.IntTensor,
         downsample_mode: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         target_sizes (`torch.IntTensor` of shape `(num_images, 2)`):
@@ -625,6 +626,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             pixel_values,
             target_sizes=target_sizes,
             use_vit_merger=use_vit_merger,
+            **kwargs,
         )
 
         if use_vit_merger:
@@ -738,6 +740,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(1, channels, patch_size, seq_len)`):
@@ -755,9 +758,15 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             1, pixel_values_videos.shape[1], pixel_values_videos.shape[2], -1
         )
         target_sizes = target_sizes_videos.repeat(num_frames, 1)
-        return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
+        return self.get_image_features(
+            pixel_values,
+            target_sizes,
+            downsample_mode=downsample_mode,
+            **kwargs,
+        )
 
 
+@auto_docstring
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
@@ -818,7 +827,9 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,

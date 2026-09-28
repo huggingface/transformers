@@ -104,7 +104,7 @@ from optimum.onnxruntime import ORTModelForCausalLM
 from transformers import AutoTokenizer
 
 ort_model = ORTModelForCausalLM.from_pretrained("Qwen/Qwen3-8b", export=True)
-tokenizer = AutoTokenizer.from_pretrained("onnx/")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-8b")
 
 ort_model.save_pretrained("onnx/")
 tokenizer.save_pretrained("onnx/")

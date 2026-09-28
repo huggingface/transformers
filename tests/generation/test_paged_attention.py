@@ -86,7 +86,7 @@ class TestBatchGeneration(unittest.TestCase):
 
         cb_config = ContinuousBatchingConfig(
             num_blocks=num_blocks,
-            block_size=block_size,
+            page_size=block_size,
             max_batch_tokens=max_batch_tokens,
         )
         generation_config = GenerationConfig(
@@ -131,7 +131,7 @@ class TestBatchGeneration(unittest.TestCase):
 
         cb_config = ContinuousBatchingConfig(
             num_blocks=num_blocks,
-            block_size=block_size,
+            page_size=block_size,
             max_batch_tokens=max_batch_tokens,
         )
         generation_config = GenerationConfig(

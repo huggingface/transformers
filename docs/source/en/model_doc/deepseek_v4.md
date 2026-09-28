@@ -26,6 +26,9 @@ token-id → expert-id hash table.
 This implementation covers `DeepSeek-V4-Flash`, `DeepSeek-V4-Pro`, and their `-Base` pretrained siblings. All four
 share the same architecture; they differ only in width / depth / expert count and weights.
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 ## Architecture (paper §2)
 
 ### Hybrid attention (§2.3)

@@ -99,7 +99,6 @@ class EsmcTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # and AutoTokenizer must resolve to EsmcTokenizer.
         seq = "ACDEFGHIKLMNPQRSTVWY"
         built = self.get_tokenizer()
-        # TEMP: revert to "biohub/ESMC-6B" once the regenerated tokenizer lands on the BioHub repo.
-        auto = AutoTokenizer.from_pretrained("Rocketknight1/ESMC-6B-temp")
+        auto = AutoTokenizer.from_pretrained("biohub/ESMC-6B-hf")
         self.assertIsInstance(auto, EsmcTokenizer)
         self.assertListEqual(built(seq)["input_ids"], auto(seq)["input_ids"])

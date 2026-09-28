@@ -43,6 +43,12 @@ from ..distributed.tensor_parallel import (
     replace_layer_number_by_wildcard,
     verify_tp_plan,
 )
+from ..distributed.utils import initialize_tensor_parallelism
+
+
+RouterParallel = EpRouterParallel
+MoeIdentityExpertParallel = MoeIdentityParallel
+MoeTensorParalellExperts = MoeExpertsParallel
 
 
 def shard_and_distribute_module(*args, **kwargs):
@@ -59,6 +65,10 @@ def shard_and_distribute_module(*args, **kwargs):
 
 __all__ = [
     "ALL_PARALLEL_STYLES",
+    "MoeIdentityExpertParallel",
+    "MoeTensorParalellExperts",
+    "RouterParallel",
+    "initialize_tensor_parallelism",
     "AllReduceParallel",
     "ColwiseParallel",
     "EpRouterParallel",

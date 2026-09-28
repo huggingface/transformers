@@ -26,6 +26,9 @@ rendered properly in your Markdown viewer.
 
 [Qwen3](https://huggingface.co/papers/2505.09388) is the dense model architecture in the Qwen3 family, available in sizes from 0.6B to 32B parameters. It supports both thinking mode (multi-step reasoning) and non-thinking mode, with seamless switching between the two. Qwen3 was trained on approximately 36T tokens covering 119 languages. See also the MoE variant [Qwen3MoE](qwen3_moe).
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
 <hfoptions id="usage">

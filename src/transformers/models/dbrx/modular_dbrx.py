@@ -175,7 +175,7 @@ class DbrxExperts(nn.Module):
 
         next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -202,7 +202,7 @@ class DbrxRouter(nn.Module):
         self.moe_jitter_eps = config.moe_jitter_eps
         self.layer = nn.Linear(self.hidden_size, config.moe_num_experts, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.training and self.moe_jitter_eps is not None:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps
@@ -232,7 +232,7 @@ class DbrxFFN(nn.Module):
             )
         return router_top_value, router_indices
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_logits = self.router(hidden_states)
         top_k_weights, top_k_index = self.route_tokens_to_experts(router_logits)
         output = self.experts(hidden_states, top_k_index, top_k_weights)
@@ -479,11 +479,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

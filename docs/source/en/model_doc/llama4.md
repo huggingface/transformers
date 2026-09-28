@@ -88,18 +88,17 @@ from transformers import AutoTokenizer, Llama4ForConditionalGeneration
 model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = Llama4ForConditionalGeneration.from_pretrained(
+    model_id,
+    device_map="auto",
+)
 
 messages = [
     {"role": "user", "content": "Who are you?"},
 ]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
-model = Llama4ForConditionalGeneration.from_pretrained(
-    model_id,
-    device_map="auto",
-)
-
-outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
+outputs = model.generate(**inputs, max_new_tokens=100)
 outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])
 print(outputs[0])
 ```
@@ -227,19 +226,19 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 messages = [
     {"role": "user", "content": f"Look at the following texts: [{very_long_text}]\n\n\n\nWhat are the books, and who wrote them? Make me a nice list."},
 ]
-input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
-torch_device_module = getattr(torch, device, torch.cuda)
+torch_device_module = getattr(torch, model.device.type, torch.cuda)
 torch_device_module.synchronize()
 start = time.time()
 out = model.generate(
-    input_ids.to(model.device),
+    **inputs,
     prefill_chunk_size=2048*8,
     max_new_tokens=300,
     cache_implementation="hybrid",
 )
 print(time.time()-start)
-print(tokenizer.batch_decode(out[:, input_ids.shape[-1]:]))
+print(tokenizer.batch_decode(out[:, inputs["input_ids"].shape[-1]:]))
 print(f"{torch_device_module.max_memory_allocated(model.device) / 1024**3:.2f} GiB")
 ```
 

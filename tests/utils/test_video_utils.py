@@ -342,7 +342,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
 class LoadVideoTester(unittest.TestCase):
     def test_load_video_url(self):
         video, _ = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
         )
         self.assertEqual(video.shape, (243, 360, 640, 3))  # 243 frames is the whole video, no sampling applied
 
@@ -364,13 +364,13 @@ class LoadVideoTester(unittest.TestCase):
     @require_cv2
     def test_load_video_backend_url(self):
         video, _ = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
             backend="decord",
         )
         self.assertEqual(video.shape, (243, 360, 640, 3))
 
         video, _ = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
             backend="torchcodec",
         )
         self.assertEqual(video.shape, (243, 3, 360, 640))
@@ -378,7 +378,7 @@ class LoadVideoTester(unittest.TestCase):
         # Can't use certain backends with url
         with self.assertRaises(ValueError):
             video, _ = load_video(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
                 backend="opencv",
             )
 
@@ -414,7 +414,7 @@ class LoadVideoTester(unittest.TestCase):
         # Can't use the `torchvision` backend with a url
         with self.assertRaises(ValueError):
             load_video(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
                 backend="torchvision",
             )
 
@@ -432,32 +432,32 @@ class LoadVideoTester(unittest.TestCase):
 
     def test_load_video_num_frames(self):
         video, _ = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
             num_frames=16,
         )
         self.assertEqual(video.shape, (16, 360, 640, 3))
 
         video, _ = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
             num_frames=22,
         )
         self.assertEqual(video.shape, (22, 360, 640, 3))
 
     def test_load_video_fps(self):
         video, _ = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4", fps=1
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4", fps=1
         )
         self.assertEqual(video.shape, (9, 360, 640, 3))
 
         video, _ = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4", fps=2
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4", fps=2
         )
         self.assertEqual(video.shape, (19, 360, 640, 3))
 
         # `num_frames` is mutually exclusive with `video_fps`
         with self.assertRaises(ValueError):
             video, _ = load_video(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
                 fps=1,
                 num_frames=10,
             )

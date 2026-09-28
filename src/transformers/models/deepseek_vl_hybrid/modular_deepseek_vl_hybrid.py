@@ -364,12 +364,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DeepseekVLHybridCausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -407,7 +401,7 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
         falls below this value after resizing.
-     high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
+    high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
         Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
         method.
     high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):

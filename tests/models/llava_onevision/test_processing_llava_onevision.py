@@ -20,7 +20,7 @@ import torch
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
@@ -31,26 +31,7 @@ if is_vision_available():
 @require_torch
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        vocab_tokens = [
-            ("<unk>", 0.0),
-            ("<s>", 0.0),
-            ("</s>", 0.0),
-            ("[PAD]", 0.0),
-            ("<image>", 0.0),
-            ("<video>", 0.0),
-            ("Hello", 0.0),
-            ("world", 0.0),
-        ]
-        vocab = {token: index for index, (token, _) in enumerate(vocab_tokens)}
-        tokenizer = tokenizer_class(vocab=vocab, add_bos_token=True, add_eos_token=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = "[PAD]"
-        return tokenizer
+    model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -69,6 +50,15 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "num_image_tokens": 6,
             "vision_feature_select_strategy": "default"
         }  # fmt: skip
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+            {"num_frames": None, "fps": 16, "expected_dim": 1, "output_length": 5},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+        ]
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
@@ -124,49 +114,3 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
-
-    @require_torch
-    def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor()
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
-
-        # Choose an fps high enough to avoid rounding down to zero sampled frames on short dummy videos
-        fps = 4
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-            return_tensors="pt",
-        )
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
