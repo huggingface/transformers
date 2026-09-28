@@ -82,7 +82,7 @@ tokenizer.decode(predictions).split()
     input_ids = tokenizer.encode("This is a sentence from [MASK] training data", return_tensors="pt").to(model.device)
     mlm_labels = tokenizer.encode("This is a sentence from the training data", return_tensors="pt").to(model.device)
     loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
-    ```
+  ```
 
 ## LongformerConfig
 

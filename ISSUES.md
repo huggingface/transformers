@@ -74,7 +74,7 @@ You are not required to read the following guidelines before opening an issue. H
      File "/transformers/src/transformers/utils/import_utils.py", line 40, in <module>
        from tqdm.auto import tqdm
     ModuleNotFoundError: No module named 'tqdm.auto'
-    ```
+   ```
 
    and it typically includes a traceback, so that we can see the full stack of calls the program made before it fails. This gives us the context to know why the program failed.
 
@@ -82,7 +82,7 @@ You are not required to read the following guidelines before opening an issue. H
 
    ```python
     ModuleNotFoundError: No module named 'tqdm.auto'
-    ```
+   ```
 
     And now we can use it to do the searching on your favorite search engine:
 

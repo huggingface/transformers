@@ -306,6 +306,7 @@ checkpoint = "NousResearch/Hermes-2-Pro-Llama-3-8B"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype=torch.bfloat16, device_map="auto")
 
+```
 ```python
 messages = [
   {"role": "system", "content": "You are a bot that responds to weather queries. You should reply with the unit used in the queried location."},

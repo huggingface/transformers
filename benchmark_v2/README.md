@@ -69,6 +69,7 @@ python run_benchmarks.py --include llama
 
 # Exclude specific benchmarks
 python run_benchmarks.py --exclude old_benchmark
+```
 
 ## Output Format
 

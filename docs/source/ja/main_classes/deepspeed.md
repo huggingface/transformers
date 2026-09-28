@@ -1876,7 +1876,7 @@ SW: Model with 2783M total params, 65M largest layer params.
     python -c 'import torch; print(f"torch: {torch.__version__}")'
     python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
     python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
-    ```
+   ```
 
 4. 可能であれば、問題を再現できる Google Colab ノートブックへのリンクを含めてください。これを使えます
    [ノートブック](https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb) として

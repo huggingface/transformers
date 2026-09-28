@@ -323,11 +323,11 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 1. [`PreTrainedModel`]または[`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)から始めます：
 
-    ```py
+   ```py
     >>> from transformers import AutoModelForSequenceClassification
 
     >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-    ```
+   ```
 
 2. [`TrainingArguments`]には、変更できるモデルのハイパーパラメータが含まれており、学習率、バッチサイズ、トレーニングエポック数などが変更できます。指定しない場合、デフォルト値が使用されます：
 
@@ -341,7 +341,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ...     per_device_eval_batch_size=8,
    ...     num_train_epochs=2,
    ... )
-    ```
+   ```
 
 3. トークナイザ、画像プロセッサ、特徴量抽出器、またはプロセッサのような前処理クラスをロードします：
 
@@ -349,7 +349,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    >>> from transformers import AutoTokenizer
 
    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
-    ```
+   ```
 
 4. データセットをロードする:
 
@@ -357,7 +357,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    >>> from datasets import load_dataset
 
    >>> dataset = load_dataset("rotten_tomatoes")  # doctest: +IGNORE_RESULT
-    ```
+   ```
 
 5. データセットをトークン化するための関数を作成します：
 
@@ -368,9 +368,9 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
     その後、[`~datasets.Dataset.map`]を使用してデータセット全体に適用します：
 
-    ```python
+   ```python
     >>> dataset = dataset.map(tokenize_dataset, batched=True)
-    ```
+   ```
 
 6. データセットからの例のバッチを作成するための [`DataCollatorWithPadding`]：
 
