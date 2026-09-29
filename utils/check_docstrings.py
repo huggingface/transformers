@@ -65,15 +65,7 @@ from transformers.utils.auto_docstring import (
 CHECKER_CONFIG = {
     "name": "docstrings",
     "label": "Docstring formatting",
-    # Approximate: at runtime the checker also introspects the live transformers module for
-    # @auto_docstring-decorated objects. These globs cover the files it reads via glob.glob().
-    "cache_globs": [
-        "src/transformers/models/**/modeling_*.py",
-        "src/transformers/models/**/modular_*.py",
-        "src/transformers/models/**/configuration_*.py",
-        "src/transformers/models/**/processing_*.py",
-        "src/transformers/models/**/image_processing_*_fast.py",
-    ],
+    "cache_globs": ["src/transformers/**/*.py"],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }
@@ -864,10 +856,9 @@ def _extract_function_args(func_node: ast.FunctionDef | ast.AsyncFunctionDef) ->
     return [a.arg for a in all_args if a.arg != "self"]
 
 
-def find_matching_model_files(check_all: bool = False):
+def find_matching_docstring_files(check_all: bool = False):
     """
-    Find all model files in the transformers repo that should be checked for @auto_docstring,
-    excluding files with certain substrings.
+    Find Python source files to check for @auto_docstring, optionally restricted to the diff.
     Returns:
         List of file paths.
     """
@@ -877,38 +868,23 @@ def find_matching_model_files(check_all: bool = False):
         repo = Repo(PATH_TO_REPO)
         # Diff from index to unstaged files
         for modified_file_diff in repo.index.diff(None):
-            if modified_file_diff.a_path.startswith("src/transformers"):
+            if modified_file_diff.a_path.startswith("src/transformers/") and modified_file_diff.a_path.endswith(".py"):
                 module_diff_files.add(os.path.join(PATH_TO_REPO, modified_file_diff.a_path))
         # Diff from index to `main`
         for modified_file_diff in repo.index.diff(repo.refs.main.commit):
-            if modified_file_diff.a_path.startswith("src/transformers"):
+            if modified_file_diff.a_path.startswith("src/transformers/") and modified_file_diff.a_path.endswith(".py"):
                 module_diff_files.add(os.path.join(PATH_TO_REPO, modified_file_diff.a_path))
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return None
+        matching_files = module_diff_files
+    else:
+        matching_files = glob.iglob(os.path.join(PATH_TO_TRANSFORMERS, "**", "*.py"), recursive=True)
+        
+    return sorted(
+        file for file in matching_files if os.path.isfile(file)
+    )
 
-    autodoc_files_regex = [
-        "modeling_**",
-        "image_processing_*_fast.py",
-        "image_processing_pil_*.py",
-        "video_processing_*.py",
-        "processing_*.py",
-        "configuration_*.py",
-    ]
-    potential_files = []
-    for pattern in autodoc_files_regex:
-        glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**", pattern)
-        potential_files += glob.glob(glob_pattern)
-
-    matching_files = []
-    for file_path in potential_files:
-        if os.path.isfile(file_path):
-            matching_files.append(file_path)
-    if not check_all:
-        # intersect with module_diff_files
-        matching_files = sorted([file for file in matching_files if file in module_diff_files])
-
-    return matching_files
 
 
 def find_files_with_auto_docstring(matching_files, decorator="@auto_docstring"):
@@ -1968,8 +1944,8 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
             To speed up auto-docstring detection if it was previously called on a file, the cache of all previously
             computed results.
     """
-    # 1. Find all model files to check
-    matching_files = find_matching_model_files(check_all)
+    # 1. Find Python source files to check
+    matching_files = find_matching_docstring_files(check_all)
     if matching_files is None:
         return
     # 2. Find files that contain the @auto_docstring decorator
