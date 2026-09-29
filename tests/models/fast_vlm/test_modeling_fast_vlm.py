@@ -257,7 +257,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20)
         expected_decoded_texts = Expectations(
             {
-                (None, None): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, you should be cautious of the following:\n\n1. **Weather Conditions**:",
+                (None, None): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **",
                 ("rocm", (9, 4)): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this serene place, there are a few things you should be cautious about:\n\n1.",
             }
         )  # fmt: skip

@@ -450,7 +450,7 @@ class Sam3ViTRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded * self.inv_freq.float()
             cos = freqs.cos() * self.attention_scaling
@@ -2242,7 +2242,7 @@ class Sam3Model(Sam3PreTrainedModel):
         ```python
         >>> from transformers import Sam3Model, Sam3Processor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = Sam3Model.from_pretrained("facebook/sam3")
@@ -2280,7 +2280,7 @@ class Sam3Model(Sam3PreTrainedModel):
         ```python
         >>> from transformers import Sam3Model, Sam3Processor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = Sam3Model.from_pretrained("facebook/sam3")
@@ -2330,7 +2330,7 @@ class Sam3Model(Sam3PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

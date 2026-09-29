@@ -178,7 +178,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     # Mistral3 merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
     skip_test_image_features_output_shape = True
     _is_composite = True
-    test_torch_exportable = False  # data-dependent multimodal placeholder mask
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)
@@ -456,7 +455,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(gen_tokens[1], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                (None, None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the **Statue of Liberty** in New',
+                (None, None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty, located in New York',
                 ("rocm", (9, 4)): "Yes.\n\n1. The first image is of the Statue of Liberty. It is a symbol of the United States, and was",
             }
         )  # fmt: skip

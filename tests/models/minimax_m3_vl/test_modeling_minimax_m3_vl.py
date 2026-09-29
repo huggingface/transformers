@@ -429,7 +429,7 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 )
             self.assertIsNotNone(outputs)
             self.assertIsNotNone(outputs.video_hidden_states)
-            self.assertEqual(outputs.video_hidden_states.shape[0], batch_size * tokens_per_video)
+            self.assertEqual(torch.cat(outputs.video_hidden_states, dim=0).shape[0], batch_size * tokens_per_video)
 
     def test_mismatching_num_video_tokens(self):
         """VLMs must raise when the number of videos doesn't match the number of video tokens in the text."""
@@ -497,7 +497,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         image_processor = MiniMaxM3VLImageProcessorFast.from_pretrained(self.model_id)
         video_processor = MiniMaxM3VLVideoProcessor.from_pretrained(self.model_id)
-        with open(cached_file(self.model_id, "chat_template.jinja")) as f:
+        with open(cached_file(self.model_id, "chat_template.jinja"), encoding="utf-8") as f:
             chat_template = f.read()
         return MiniMaxM3VLProcessor(
             image_processor=image_processor,

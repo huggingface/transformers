@@ -1172,7 +1172,7 @@ class Emu3RotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -1296,7 +1296,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -1394,9 +1394,7 @@ class Emu3Model(Emu3PreTrainedModel):
         ]
         bpe_tokens = torch.cat(bpe_tokens_list)
         image_embeddings = self.get_input_embeddings()(bpe_tokens)
-        image_features = torch.split(image_embeddings, split_sizes)
-        vqmodel_outputs.pooler_output = image_features
-
+        vqmodel_outputs.pooler_output = torch.split(image_embeddings, split_sizes)
         return vqmodel_outputs
 
     @torch.no_grad()
@@ -1454,6 +1452,7 @@ class Emu3Model(Emu3PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -1467,12 +1466,18 @@ class Emu3Model(Emu3PreTrainedModel):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_sizes).pooler_output
-            image_features = torch.cat(image_features, dim=0)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_sizes)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -1532,6 +1537,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -1539,17 +1545,13 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
             [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
             [`Emu3ImageProcessor`] for processing images).
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -1584,13 +1586,14 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ```"""
         outputs = self.model(
             input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            pixel_values=pixel_values,
+            image_sizes=image_sizes,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

@@ -62,6 +62,11 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         self.idx_keys = idx_k if self.idx_keys is None else torch.cat([self.idx_keys, idx_k], dim=-2)
         return self.idx_keys
 
+    def reset(self) -> None:
+        super().reset()
+        # Dropped rather than zeroed, as `update_index` grows them by concatenation, like the main states
+        self.idx_keys = None
+
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
         if self.idx_keys is not None:
@@ -314,7 +319,7 @@ class MiniMaxM3VLRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -897,11 +902,6 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1039,7 +1039,7 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded * self.inv_freq.float()
             cos = freqs.cos() * self.attention_scaling
@@ -1262,11 +1262,14 @@ class MiniMaxM3VLModelOutputWithPast(BaseModelOutputWithPast):
     video_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_video_patches, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
     image_hidden_states: torch.FloatTensor | None = None
 
     video_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -1292,6 +1295,10 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
     video_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_video_patches, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed):
+        Load-balancing auxiliary loss for the sparse modules.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
     loss: torch.FloatTensor | None = None
@@ -1302,6 +1309,8 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
     video_hidden_states: torch.FloatTensor | None = None
+    aux_loss: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
@@ -1330,7 +1339,9 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         # attentions) while stashing the projected + spatially-merged features —
         # ready to scatter into the text embeddings — in `pooler_output`.
         vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
-        vision_outputs.pooler_output = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        split_sizes = (image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(image_features, split_sizes)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1387,33 +1398,48 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values, image_grid_thw=image_grid_thw
-            ).pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
 
-        video_features = None
-        if pixel_values_videos is not None:
-            video_features = self.get_video_features(
-                pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw
-            ).pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
 
-        image_mask, video_mask = self.get_placeholder_mask(
-            input_ids, inputs_embeds, image_features=image_features, video_features=video_features
-        )
-        if image_features is not None:
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-        if video_features is not None:
-            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_features)
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -1428,8 +1454,9 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=getattr(outputs, "hidden_states", None),
             attentions=getattr(outputs, "attentions", None),
-            image_hidden_states=image_features,
-            video_hidden_states=video_features,
+            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
+            video_hidden_states=mm_encoder_outputs["video"].pooler_output if mm_encoder_outputs.get("video") else None,
+            router_logits=getattr(outputs, "router_logits", None),
         )
 
     @merge_with_config_defaults
@@ -1445,9 +1472,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
     ) -> BaseModelOutputWithPooling:
         # Video frames flow through the same vision pipeline as images (the tower is
         # grid-agnostic); only the placeholder token they scatter into differs.
-        vision_outputs = self.vision_tower(pixel_values=pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        vision_outputs.pooler_output = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
-        return vision_outputs
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
@@ -1482,20 +1507,17 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MiniMaxM3SparseForConditionalGeneration
 
@@ -1514,6 +1536,10 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1524,6 +1550,8 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -1536,9 +1564,22 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.config.text_config.num_experts,
+                self.config.text_config.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(loss.device)
+
         return MiniMaxM3VLCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
+            router_logits=outputs.router_logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

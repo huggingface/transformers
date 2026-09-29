@@ -221,7 +221,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. They",
+                ("cuda", (8, 6)): "The image features two striped cats lying down on a couch, both appearing to be",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
                 ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }
@@ -300,7 +300,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. The",
+                ("cuda", (8, 6)): "The image features two striped cats lying down on a couch, both appearing to be",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
                 ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }

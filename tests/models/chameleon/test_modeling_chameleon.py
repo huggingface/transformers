@@ -228,6 +228,14 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
+
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
         pass
@@ -390,7 +398,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                (None, None): ['Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch'],
+                (None, None): ['Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch'],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()

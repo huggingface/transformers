@@ -21,9 +21,9 @@ import pickle
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, SwinConfig
@@ -68,7 +68,7 @@ def get_maskformer_config(model_name: str):
         config.num_labels = 65
         filename = "mapillary-vistas-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     return config

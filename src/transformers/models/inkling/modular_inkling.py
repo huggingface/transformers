@@ -715,6 +715,15 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class InklingNormedEmbedding(nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_norm = InklingRMSNorm(embedding_dim, eps=norm_eps)
+
+    def forward(self, input_ids: torch.Tensor):
+        return self.embed_norm(super().forward(input_ids))
+
+
 @auto_docstring
 class InklingPreTrainedModel(PreTrainedModel):
     config_class = InklingConfig
@@ -774,12 +783,13 @@ class InklingTextModel(InklingPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = InklingNormedEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
+        )
         self.layers = nn.ModuleList(
             [InklingDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = InklingRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.embed_norm = InklingRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -803,8 +813,6 @@ class InklingTextModel(InklingPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        # The norm needs to be outside the `if` in case `input_embeds` are given explicitly
-        inputs_embeds = self.embed_norm(inputs_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -1159,8 +1167,8 @@ class InklingModel(InklingPreTrainedModel):
         that the placeholder token count matches the length of `features`. If the lengths differ, an error is raised.
         """
         if input_ids is None:
-            special_mask = inputs_embeds == self.language_model.embed_norm(
-                self.get_input_embeddings()(torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device))
+            special_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_mask = special_mask.all(-1)
         else:
@@ -1187,25 +1195,21 @@ class InklingModel(InklingPreTrainedModel):
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InklingModelOutputWithPast:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`, *optional*):
             Batch of (padded) discretized dMel bin tokens produced by [`InklingProcessor`].
         audio_input_ids_mask (`torch.Tensor` of shape `(num_audios, max_num_frames)`, *optional*):
             Mask marking valid (non-padding) audio frames in `audio_input_ids`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
 
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
@@ -1227,19 +1231,22 @@ class InklingModel(InklingPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        # The norm need to be outside the `if` in case `input_embeds` are given explicitly
-        inputs_embeds = self.language_model.embed_norm(inputs_embeds)
 
-        # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds, image_features, self.config.image_token_id
+                input_ids, inputs_embeds, image_embeds, self.config.image_token_id
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
 
         # Merge text and audio
         audio_features = None
@@ -1273,7 +1280,7 @@ class InklingModel(InklingPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return InklingModelOutputWithPast(
@@ -1281,7 +1288,7 @@ class InklingModel(InklingPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
         )
 
 
@@ -1325,6 +1332,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InklingCausalLMOutputWithPast:
         r"""
@@ -1341,7 +1349,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
@@ -1386,7 +1394,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            labels=labels,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

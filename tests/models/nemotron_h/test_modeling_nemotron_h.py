@@ -156,7 +156,6 @@ class NemotronHModelTester:
             max_position_embeddings=self.max_position_embeddings,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             ssm_state_size=self.ssm_state_size,
             mamba_num_heads=self.mamba_num_heads,
             mamba_n_groups=self.mamba_n_groups,
@@ -835,7 +834,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = f"{tmpdir}/config.json"
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(legacy_config, f)
 
             # Load the config

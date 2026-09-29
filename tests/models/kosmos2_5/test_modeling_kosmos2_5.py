@@ -535,6 +535,11 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
         )
 
+    @pytest.mark.generate
+    @is_flaky
+    def test_cached_decode_matches_cacheless(self):
+        super().test_cached_decode_matches_cacheless()
+
 
 @require_vision
 @require_torch

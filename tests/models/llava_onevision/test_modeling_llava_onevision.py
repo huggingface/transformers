@@ -402,6 +402,9 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             torch_device, torch.float16
         )
 
+        video_features = model.get_video_features(inputs.pixel_values_videos).pooler_output
+        self.assertEqual(video_features.shape[1], (inputs.input_ids == model.config.video_token_id).sum().item())
+
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
         EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this video?\nassistant\nA child wearing a light blue sleeveless top and pink pants is seen sitting on a bed, engrossed in reading a book.'  # fmt: skip

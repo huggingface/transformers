@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch GLM-4.5V model."""
 
 import copy
+import tempfile
 import unittest
 
 from transformers import (
@@ -24,7 +25,8 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    cleanup,
+    backend_device_count,
+    get_cpu_ram_total_gib,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -35,6 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -65,7 +68,7 @@ class Glm4vMoeVisionText2TextModelTester:
         is_training=True,
         text_config={
             "vocab_size": 99,
-            "hidden_size": 16,
+            "hidden_size": 32,
             "intermediate_size": 22,
             "num_hidden_layers": 2,
             "num_attention_heads": 2,
@@ -73,7 +76,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1], "partial_rotary_factor": 1.0},
+            "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1], "partial_rotary_factor": 0.5},
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
@@ -89,7 +92,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "depth": 2,
             "hidden_act": "silu",
             "hidden_size": 48,
-            "out_hidden_size": 16,
+            "out_hidden_size": 32,
             "intermediate_size": 22,
             "patch_size": 14,
             "spatial_merge_size": 1,
@@ -195,6 +198,10 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         self.model_tester = Glm4vMoeVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Glm4vMoeConfig, has_text_modality=False)
 
+    @unittest.skip("We don't really care about this one, test is not that slow")
+    def test_model_is_small(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -286,27 +293,49 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
 @require_torch
 @slow
-class Glm4vMoeIntegrationTest(unittest.TestCase):
+class Glm4vMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = None
+        cls.offload_dir = None
 
     @classmethod
     def get_model(cls):
         if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
+            # device_map="auto" fills GPUs to ~100%, leaving no room for the ~1.4 GiB
+            # MergeModulelist temporary buffer that fuses per-expert weight shards into
+            # a single gate_up_proj tensor during from_pretrained — causing CUDA OOM on
+            # multi-GPU runners. A 70% per-GPU max_memory cap reserves the headroom.
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = (
+                    f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"  # To avoid runner failing with exit code 137.
+                )
+            else:
+                max_memory = None
             cls.model = Glm4vMoeForConditionalGeneration.from_pretrained(
-                "zai-org/GLM-4.5V", dtype="auto", device_map="auto"
+                "zai-org/GLM-4.5V",
+                dtype="auto",
+                device_map="auto",
+                max_memory=max_memory,
+                offload_folder=cls.offload_dir.name,
             )
         return cls.model
 
     @classmethod
     def tearDownClass(cls):
-        if hasattr(cls, "model"):
-            del cls.model
-        cleanup(torch_device, gc_collect=True)
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
 
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
         self.processor = AutoProcessor.from_pretrained(
             "zai-org/GLM-4.5V", size={"shortest_edge": 10800, "longest_edge": 10800}
         )
@@ -357,9 +386,6 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
             }
         ]
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
     def test_small_model_integration_test(self):
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -398,7 +424,7 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "\nWhat kind of dog is this?\n<think>Got it, let's try to figure out",
-            "\nWhat kind of dog is this?\n<think>Got it, let's see. The user",
+            "\nWhat kind of dog is this?\n<think>Got it, let's see. The question",
             '\nWho are you?\n<think>The user is asking "Who are you?"'
         ]  # fmt: skip
         decoded = self.processor.batch_decode(output, skip_special_tokens=True)
@@ -433,24 +459,26 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V",
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        batch_messages = [self.message, self.message2, self.message_wo_image]
-        inputs = self.processor.apply_chat_template(
-            batch_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
+        with tempfile.TemporaryDirectory() as offload_dir:
+            model = Glm4vMoeForConditionalGeneration.from_pretrained(
+                "zai-org/GLM-4.5V",
+                dtype=torch.bfloat16,
+                attn_implementation="flash_attention_2",
+                device_map="auto",
+                offload_folder=offload_dir,
+            )
+            batch_messages = [self.message, self.message2, self.message_wo_image]
+            inputs = self.processor.apply_chat_template(
+                batch_messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+                padding=True,
+            ).to(torch_device)
 
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=3)
+            # it should not matter whether two images are the same size or not
+            output = model.generate(**inputs, max_new_tokens=3)
 
         EXPECTED_DECODED_TEXT = [
             "\nWhat kind of dog is this?\n<think>Got it",

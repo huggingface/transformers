@@ -92,7 +92,7 @@ This guide shows you how to implement a model in Transformers that works as a ba
 
 ## Multimodal models
 
-Multimodal models require additional changes beyond the [vision language model contribution checklist](../contributing#vision-language-model-contribution-checklist). These changes ensure multimodal inputs are properly processed.
+Multimodal models require additional changes beyond the [vision language model contribution guidelines](../add_vision_processing_components). These changes ensure multimodal inputs are properly processed.
 
 1. The [`ProcessorMixin`] class must include the `self.image_token` and `self.image_token_ids` attributes. These placeholder tokens indicate image positions in the input. The same token appears in the input prompt for images and in the model code to scatter image features.
 

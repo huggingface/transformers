@@ -477,7 +477,7 @@ class JanusIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars. There are several bright stars visible, and a",
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars, and it appears to depict a constellation. The",
                 ],
             }
         )
@@ -555,10 +555,11 @@ class JanusIntegrationTest(unittest.TestCase):
                     897, 4044, 1762, 4676
                 ],
                 ("cuda", None): [
-                    2567, 6155, 6155, 250, 15131, 15797, 15453, 12190, 3351, 10803, 10673, 3096, 14485, 5335, 6677,
-                    13743, 9574, 8228, 3679, 11495, 11495, 15342, 11209, 1389, 15628, 6841, 15490, 10301, 12841, 3930,
-                    3396, 10037, 7779, 4517, 3824, 3673, 14408, 4791, 14109, 4929, 2342, 4817, 15531, 4320, 1923, 9530,
-                    13086, 5212, 14575, 4212
+                    2567,  6155,  6155,   250,   250, 15797,  8221, 12190,   900, 12131,
+                    13146,  4475,  6910,  2250, 13615,  1665,  8932,  7101,  1151, 13915,
+                    250,  7311,  4015,  2016, 15628,  4462, 14906, 10046, 10046, 10395,
+                    9145,  8760, 14030,  1284,  2039,  7372,  3298, 12529,   138, 12590,
+                    1037,  4580,  7523, 12611,  8631,  6099, 13139,  8548,  4930,  8310
                 ],
                 ("xpu", None): [
                     4484, 4015, 15750, 376, 2300, 13791, 3609, 2509, 2418, 6347, 7372, 1006, 14519, 6126, 11908, 14968,
