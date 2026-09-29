@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 _SENTINEL = object()
+_MISSING = object()
 _GLOBAL_ONLY_ATTRIBUTES = {
     "_attn_implementation",
     "_attn_implementation_internal",
@@ -314,13 +315,16 @@ class HeterogeneousConfigMixin:
     """
 
     def __setattr__(self, key: str, value: Any) -> None:
+        previous_value = self._getattr_without_heterogeneous_validation(key, _MISSING)
         super().__setattr__(key, value)
-        if (
-            key in ("_attn_implementation_internal", "_experts_implementation_internal", "_is_quantized")
-            and self.generic_modeling_applied
-        ):
-            # Propagate the changed settings to the configs by the layers
-            for layer_config in self._heterogeneity_spec.model_layer_configs.values():
+
+        # After a model is built with generic heterogeneous modeling, pass global changes on to its layer configs.
+        if key == "skip" or not self.generic_modeling_applied:
+            return
+
+        # Only update layers that still have the old global value; layers with a value of their own keep it.
+        for layer_config in self._heterogeneity_spec.model_layer_configs.values():
+            if getattr(layer_config, key, _MISSING) == previous_value:
                 setattr(layer_config, key, value)
 
     def __getattribute__(self, key: str) -> Any:

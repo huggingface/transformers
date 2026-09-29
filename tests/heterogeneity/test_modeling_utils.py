@@ -160,40 +160,25 @@ class TestHeterogeneousModeling(unittest.TestCase):
         for layer in model.model.layers:
             self.assertEqual(layer.self_attn.config._attn_implementation, expected_attn_implementation)
 
-    @parameterized.expand(
-        [
-            ("llama", "attn_implementation", "sdpa", "self_attn"),
-            ("gpt_oss", "experts_implementation", "batched_mm", "mlp.experts"),
-        ]
-    )
-    def test_backend_setters_update_layer_configs(self, name, backend, implementation, module_name):
-        factory, model_cls = {
-            "llama": (tiny_llama_config, LlamaForCausalLM),
-            "gpt_oss": (tiny_gpt_oss_config, GptOssForCausalLM),
-        }[name]
-        attribute = f"_{backend}"
-        config = factory(
-            per_layer_config={1: {"intermediate_size": 64}},
-            **{backend: "eager"},
-        )
-        model = build_model(config, model_cls)
-        layer_configs = [layer.get_submodule(module_name).config for layer in model.model.layers]
-
-        for requested in (implementation, "eager"):
-            getattr(model, f"set_{backend}")(requested)
-            self.assertEqual(getattr(config, attribute), requested)
-            for layer_config in layer_configs:
-                self.assertEqual(getattr(layer_config, attribute), requested)
-
-    def test_quantized_flag_propagates_to_layer_configs(self):
-        config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
+    def test_global_config_changes_propagate_to_layer_configs(self):
+        config = tiny_llama_config(per_layer_config={1: {"attention_dropout": 0.1}})
         model = build_model(config, LlamaForCausalLM)
+        layer_configs = [layer.self_attn.config for layer in model.model.layers]
+        # Changes made directly on one layer's config after the model is built
+        layer_configs[3].attention_dropout = 0.3
+        layer_configs[3].rope_parameters = {"rope_type": "default", "rope_theta": 1234.0}
 
-        # Quantizers set this after construction; attention reads it from its layer config.
-        model.config._is_quantized = True
+        # Change the global config after the model is built
+        model.config.is_causal = False
+        model.config.attention_dropout = 0.2
+        # `rope_scaling` is a property that sets `rope_parameters` under the hood
+        model.config.rope_scaling = {"rope_type": "default", "rope_theta": 9999.0}
 
-        for layer in model.model.layers:
-            self.assertTrue(getattr(layer.self_attn.config, "_is_quantized", False))
+        self.assertEqual([c.is_causal for c in layer_configs], [False, False, False, False])
+        # Layer 1 overrides `attention_dropout` and layer 3 was changed directly, so they keep their own values
+        self.assertEqual([c.attention_dropout for c in layer_configs], [0.2, 0.1, 0.2, 0.3])
+        # Layer 3 was changed directly, so it keeps its own `rope_parameters`
+        self.assertEqual([c.rope_parameters["rope_theta"] for c in layer_configs], [9999.0, 9999.0, 9999.0, 1234.0])
 
     def test_inherited_init_finalizes_layer_configs(self):
         config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
