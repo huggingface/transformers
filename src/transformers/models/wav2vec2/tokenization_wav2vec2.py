@@ -201,8 +201,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         # id that now belongs to an unrelated vocabulary token
         for token_id in list(self._added_tokens_decoder.keys()):
             if token_id in self.decoder:
-                token = self._added_tokens_decoder.pop(token_id)
-                self._added_tokens_encoder.pop(token.content, None)
+                self._added_tokens_encoder.pop(self._added_tokens_decoder.pop(token_id).content, None)
 
         # make sure that tokens made of several
         # characters are not split at tokenization

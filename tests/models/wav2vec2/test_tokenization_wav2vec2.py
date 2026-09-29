@@ -518,13 +518,14 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # decodes to an unrelated vocabulary token.
         nested_vocab = {"eng": {"<pad>": 0, "a": 1, "b": 2}, "spa": {"<pad>": 0, "c": 1, "d": 2, "e": 3}}
         with tempfile.TemporaryDirectory() as tempdir:
-            with open(os.path.join(tempdir, "vocab.json"), "w") as f:
+            with open(os.path.join(tempdir, "vocab.json"), "w", encoding="utf-8") as f:
                 json.dump(nested_vocab, f)
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(tempdir, target_lang="eng")
 
         tokenizer.add_tokens(["<xx>"])
-        conflicting_id = tokenizer.get_added_vocab()["<xx>"]
+        conflicting_id = tokenizer._added_tokens_encoder["<xx>"]
         tokenizer.vocab["spa"]["f"] = conflicting_id
         tokenizer.set_target_lang("spa")
-        self.assertNotIn("<xx>", tokenizer.get_added_vocab())
-        self.assertEqual(set(tokenizer.get_added_vocab()), set(tokenizer.added_tokens_encoder))
+        self.assertNotIn("<xx>", tokenizer._added_tokens_encoder)
+        self.assertNotIn(conflicting_id, tokenizer._added_tokens_decoder)
+        self.assertEqual(tokenizer._added_tokens_encoder, tokenizer.added_tokens_encoder)

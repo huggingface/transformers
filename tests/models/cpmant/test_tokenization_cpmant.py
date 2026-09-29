@@ -65,9 +65,11 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # leave them in the `_added_tokens_encoder` cache, so `convert_tokens_to_ids` returned ids that no longer
         # existed in the decoder.
         tokenizer = CpmAntTokenizer(self.vocab_file)
-        self.assertEqual(set(tokenizer.get_added_vocab()), set(tokenizer.added_tokens_encoder))
+        decoder_contents = [token.content for token in tokenizer._added_tokens_decoder.values()]
         for marker in ["</_>", "</n>"]:
-            self.assertNotIn(marker, tokenizer.get_added_vocab())
+            self.assertNotIn(marker, tokenizer._added_tokens_encoder)
+            self.assertNotIn(marker, decoder_contents)
+        self.assertEqual(tokenizer._added_tokens_encoder, tokenizer.added_tokens_encoder)
 
     @tooslow
     def test_pre_tokenization(self):
