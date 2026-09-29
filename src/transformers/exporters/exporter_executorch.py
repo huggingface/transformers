@@ -233,9 +233,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 
     model.requires_grad_(False)
     model = model.to(device="cpu")
-    # Force MoE experts to `batched_mm`: on this CPU fp32 trace the "grouped_mm" implementation
-    # dispatches to the opaque `transformers.grouped_mm_fallback` custom op, which has no ExecuTorch
-    # lowering (`aten._grouped_mm` itself is bf16-only at trace time).
+    # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
     partitioner = [XnnpackPartitioner()]
