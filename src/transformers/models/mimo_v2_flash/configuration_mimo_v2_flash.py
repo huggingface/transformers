@@ -127,7 +127,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
-        # Hub `sliding_window_size` excludes the query token, `sliding_window` includes it.
+        # The reference SGLang implementation attends to `sliding_window_size` previous tokens plus the query.
         if kwargs.get("sliding_window_size") is not None:
             self.sliding_window = kwargs["sliding_window_size"] + 1
 
