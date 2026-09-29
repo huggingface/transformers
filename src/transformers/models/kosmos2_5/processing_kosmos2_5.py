@@ -33,11 +33,12 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
             "return_token_type_ids": False,
             "stride": 0,
             "truncation": True,
+            "return_tensors": "pt",
         },
         "images_kwargs": {
             "max_patches": 4096,
+            "return_tensors": "pt",
         },
-        "common_kwargs": {"return_tensors": "pt"},
     }
 
 

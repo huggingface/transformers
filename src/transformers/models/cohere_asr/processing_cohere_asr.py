@@ -36,13 +36,9 @@ class CohereAsrProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "padding": "longest",
             "return_attention_mask": True,
+            "return_tensors": "pt",
         },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
+        "text_kwargs": {"padding": True, "padding_side": "right", "add_special_tokens": False, "return_tensors": "pt"},
     }
 
 

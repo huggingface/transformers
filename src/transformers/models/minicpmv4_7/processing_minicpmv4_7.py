@@ -30,13 +30,17 @@ from ...video_utils import VideoInput, make_batched_videos
 
 class MiniCPMV4_7ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "common_kwargs": {
+        "images_kwargs": {
+            "return_tensors": "pt",
+        },
+        "videos_kwargs": {
             "return_tensors": "pt",
         },
         "text_kwargs": {
             "padding": True,
             "padding_side": "left",
             "return_mm_token_type_ids": True,
+            "return_tensors": "pt",
         },
     }
 

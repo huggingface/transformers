@@ -49,11 +49,7 @@ class CsmAudioKwargs(AudioKwargs, total=False):
 class CsmProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: CsmAudioKwargs
     _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-        },
+        "text_kwargs": {"padding": True, "padding_side": "left", "add_special_tokens": False, "return_tensors": "pt"},
         "audio_kwargs": {
             "encoded_length_kwargs": {
                 "kernel_sizes": [7, 3, 1, 8, 3, 1, 10, 3, 1, 12, 3, 1, 16, 3, 4],
@@ -62,8 +58,8 @@ class CsmProcessorKwargs(ProcessingKwargs, total=False):
                 "use_causal_conv": True,
             },
             "sampling_rate": 24000,
+            "return_tensors": "pt",
         },
-        "common_kwargs": {"return_tensors": "pt"},
     }
 
 

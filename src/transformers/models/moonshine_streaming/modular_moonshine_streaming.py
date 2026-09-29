@@ -51,8 +51,9 @@ class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "pad_to_multiple_of": 80,
             "padding": True,
+            "return_tensors": "pt",
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "text_kwargs": {"return_tensors": "pt"},
     }
 
 

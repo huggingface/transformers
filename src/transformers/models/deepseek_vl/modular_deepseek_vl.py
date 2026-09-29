@@ -161,7 +161,8 @@ class DeepseekVLImageProcessor(JanusImageProcessor):
 
 class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "common_kwargs": {"return_tensors": "pt"},
+        "images_kwargs": {"return_tensors": "pt"},
+        "text_kwargs": {"return_tensors": "pt"},
     }
 
 

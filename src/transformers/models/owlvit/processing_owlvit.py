@@ -49,10 +49,11 @@ class OwlViTImagesKwargs(ImagesKwargs, total=False):
 class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: OwlViTImagesKwargs
     _defaults = {
+        "images_kwargs": {
+            "return_tensors": "pt",
+        },
         "text_kwargs": {
             "padding": "max_length",
-        },
-        "common_kwargs": {
             "return_tensors": "pt",
         },
     }

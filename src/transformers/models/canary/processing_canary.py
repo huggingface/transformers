@@ -60,10 +60,11 @@ LANGUAGE_CODE_TO_NAME = {
 
 class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
     _defaults = {
+        "text_kwargs": {
+            "return_tensors": "pt",
+        },
         "audio_kwargs": {
             "sampling_rate": 16000,
-        },
-        "common_kwargs": {
             "return_tensors": "pt",
         },
     }

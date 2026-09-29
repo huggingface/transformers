@@ -24,7 +24,13 @@ from ...utils import auto_docstring
 
 class VideoLlavaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "common_kwargs": {
+        "images_kwargs": {
+            "return_tensors": "pt",
+        },
+        "videos_kwargs": {
+            "return_tensors": "pt",
+        },
+        "text_kwargs": {
             "return_tensors": "pt",
         },
     }

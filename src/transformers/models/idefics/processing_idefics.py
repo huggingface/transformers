@@ -58,8 +58,11 @@ class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
             "add_special_tokens": False,
             "padding": "longest",
             "add_eos_token": False,
+            "return_tensors": "pt",
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "images_kwargs": {
+            "return_tensors": "pt",
+        },
     }
 
 

@@ -21,8 +21,11 @@ class KyutaiSpeechToTextProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 24000,
+            "return_tensors": "pt",
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "text_kwargs": {
+            "return_tensors": "pt",
+        },
     }
 
 

@@ -333,6 +333,7 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": True,
             "padding_side": "left",
+            "return_tensors": "pt",
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -340,8 +341,8 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
             "truncation": False,
             "return_attention_mask": True,
             "n_window": 50,  # should match config.n_window
+            "return_tensors": "pt",
         },
-        "common_kwargs": {"return_tensors": "pt"},
     }
 
 

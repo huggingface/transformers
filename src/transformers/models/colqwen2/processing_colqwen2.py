@@ -34,13 +34,8 @@ if is_torch_available():
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-        },
-        "common_kwargs": {"return_tensors": "pt"},
+        "text_kwargs": {"padding": "longest", "return_tensors": "pt"},
+        "images_kwargs": {"data_format": "channels_first", "return_tensors": "pt"},
     }
 
 

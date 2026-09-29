@@ -1584,7 +1584,7 @@ class ProcessorMixin(PushToHubMixin):
                 class MyProcessingKwargs(ProcessingKwargs, total=False):
                     _defaults = {
                         # Common kwargs are passed to all modality-specific processors. They have priority over
-                        # modality-specific defaults like "text_kwargs" or "image_kwargs".
+                        # modality-specific defaults like "text_kwargs" or "images_kwargs".
                         "common_kwargs": {
                             "return_tensors": "pt",
                         },

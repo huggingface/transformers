@@ -26,12 +26,16 @@ logger = logging.get_logger(__name__)
 
 class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "common_kwargs": {
+        "images_kwargs": {
+            "return_tensors": "pt",
+        },
+        "videoss_kwargs": {
             "return_tensors": "pt",
         },
         "text_kwargs": {
             "padding": True,
             "padding_side": "left",
+            "return_tensors": "pt",
         },
     }
 

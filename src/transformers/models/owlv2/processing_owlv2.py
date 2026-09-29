@@ -49,10 +49,11 @@ class Owlv2ImagesKwargs(ImagesKwargs, total=False):
 class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Owlv2ImagesKwargs
     _defaults = {
+        "images_kwargs": {
+            "return_tensors": "np",
+        },
         "text_kwargs": {
             "padding": "max_length",
-        },
-        "common_kwargs": {
             "return_tensors": "np",
         },
     }

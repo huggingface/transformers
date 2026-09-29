@@ -35,12 +35,7 @@ logger = logging.get_logger(__name__)
 
 class PI0ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 48,
-            "padding_side": "right",
-        },
-        "common_kwargs": {"return_tensors": "pt"},
+        "text_kwargs": {"padding": "max_length", "max_length": 48, "padding_side": "right", "return_tensors": "pt"},
     }
 
 

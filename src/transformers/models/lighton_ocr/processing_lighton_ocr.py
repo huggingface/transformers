@@ -30,11 +30,10 @@ class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_tensors": "pt",
         },
         "images_kwargs": {
             "do_pad": True,
-        },
-        "common_kwargs": {
             "return_tensors": "pt",
         },
     }

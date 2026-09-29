@@ -64,6 +64,7 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
             "padding_side": "right",
             "add_special_tokens": False,
+            "return_tensors": "pt",
         },
         "audio_kwargs": {
             "eos_token_id": 1024,
@@ -72,8 +73,6 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
             "delay_pattern": [0, 8, 9, 10, 11, 12, 13, 14, 15],
             "generation": True,
             "sampling_rate": 44100,
-        },
-        "common_kwargs": {
             "return_tensors": "pt",
         },
     }

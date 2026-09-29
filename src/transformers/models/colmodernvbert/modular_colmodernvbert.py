@@ -74,14 +74,8 @@ class ColModernVBertConfig(ColQwen2Config):
 
 class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-            "data_format": "channels_first",
-        },
-        "common_kwargs": {"return_tensors": "pt"},
+        "text_kwargs": {"padding": "longest", "return_tensors": "pt"},
+        "images_kwargs": {"return_row_col_info": True, "data_format": "channels_first", "return_tensors": "pt"},
     }
 
 
