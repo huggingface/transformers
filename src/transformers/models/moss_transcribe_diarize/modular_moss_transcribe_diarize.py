@@ -433,7 +433,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
 
         conversations = []
         for audio_item, prompt_text, keyword_list in zip(audio_items, prompts, keyword_batches):
-            content = make_audio_chat_template_content(audio_item, prompt_text)
+            content = [make_audio_chat_template_content(audio_item)]
+            if prompt_text is not None:
+                content.append({"type": "text", "text": prompt_text})
             if keyword_list:
                 content.append({"type": "keywords", "keywords": keyword_list})
             conversations.append([{"role": "user", "content": content}])
