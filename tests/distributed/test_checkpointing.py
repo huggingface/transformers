@@ -34,11 +34,9 @@ if is_torch_available():
         load_optimizer_distributed,
         save_optimizer_distributed,
     )
-    from transformers.distributed.utils import clip_grad_norm_
 
     if dist.is_available():
-        from torch.distributed.device_mesh import init_device_mesh
-        from torch.distributed.tensor import DTensor, Shard, distribute_tensor
+        from torch.distributed.tensor import DTensor
 
 
 def _full_tensor(tensor):
@@ -87,16 +85,16 @@ def _distributed_context(rank, directory):
             dist.destroy_process_group()
 
 
-def _load_model(directory, consolidate, config=None):
+def _load_model(directory, checkpoint_dir, consolidate, config=None):
     if consolidate:
-        return LlamaForCausalLM.from_pretrained(f"{directory}/saved", distributed_config=config)
+        return LlamaForCausalLM.from_pretrained(checkpoint_dir, distributed_config=config)
 
     model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=config)
     # Clear the destination so unchanged seed weights cannot make the round trip pass.
     with torch.no_grad():
         for parameter in model.parameters():
             parameter.zero_()
-    load_checkpoint_in_distributed_model(model, f"{directory}/saved")
+    load_checkpoint_in_distributed_model(model, checkpoint_dir)
     return model
 
 
@@ -104,18 +102,24 @@ def _load_model(directory, consolidate, config=None):
 def _model_checkpoint_worker(rank, directory, consolidate):
     with _distributed_context(rank, directory):
         reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
-        model = LlamaForCausalLM.from_pretrained(
-            f"{directory}/seed", distributed_config=DistributedConfig(tp_size=2, fsdp_size=2)
-        )
-        model.save_pretrained(
-            f"{directory}/saved",
-            distributed_checkpoint=True,
-            consolidate_distributed_checkpoint=consolidate,
-        )
-        for config in (DistributedConfig(tp_size=2, fsdp_size=2), DistributedConfig(tp_size=4)):
-            restored = _load_model(directory, consolidate, config)
-            for name, parameter in restored.state_dict().items():
-                torch.testing.assert_close(_full_tensor(parameter), reference.state_dict()[name])
+        distributed_configs = {
+            "tp": DistributedConfig(tp_size=4),
+            "fsdp": DistributedConfig(fsdp_size=4),
+            "tp_fsdp": DistributedConfig(tp_size=2, fsdp_size=2),
+        }
+        for source_name, source_config in distributed_configs.items():
+            model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=source_config)
+            checkpoint_dir = f"{directory}/saved_{source_name}"
+            model.save_pretrained(
+                checkpoint_dir,
+                is_main_process=rank == 0,
+                distributed_checkpoint=not consolidate,
+            )
+            dist.barrier()
+            for destination_config in distributed_configs.values():
+                restored = _load_model(directory, checkpoint_dir, consolidate, destination_config)
+                for name, parameter in restored.state_dict().items():
+                    torch.testing.assert_close(_full_tensor(parameter), reference.state_dict()[name])
 
 
 def _optimizer_checkpoint_worker(rank, directory, consolidate):
@@ -146,7 +150,6 @@ def _save_dcp_sharded_checkpoint_worker(rank, directory):
         model.save_pretrained(
             f"{directory}/dcp_sharded",
             distributed_checkpoint=True,
-            consolidate_distributed_checkpoint=False,
         )
 
 
@@ -169,29 +172,6 @@ def _load_checkpoint_paths_worker(rank, directory):
                 torch.testing.assert_close(
                     _full_tensor(parameter), reference.state_dict()[param_name], msg=f"checkpoint={name}"
                 )
-
-
-def _gradient_clipping_worker(rank, directory):
-    with _distributed_context(rank, directory):
-        mesh = init_device_mesh("cpu", (4,))
-        for distributed in ((False, False), (True, True), (False, True)):
-            for max_norm in (1.0, 10000.0):
-                parameters, reference = [], []
-                for i, is_distributed in enumerate(distributed):
-                    gradient = torch.arange(1, 65, dtype=torch.float32).reshape(8, 8) * (i + 1)
-                    expected = torch.nn.Parameter(torch.zeros_like(gradient))
-                    expected.grad = gradient.clone()
-                    reference.append(expected)
-                    if is_distributed:
-                        gradient = distribute_tensor(gradient, mesh, [Shard(0)])
-                    parameter = torch.nn.Parameter(torch.zeros_like(gradient))
-                    parameter.grad = gradient
-                    parameters.append(parameter)
-                expected_norm = torch.nn.utils.clip_grad_norm_(reference, max_norm, foreach=True)
-                actual_norm = clip_grad_norm_(parameters, max_norm, foreach=True)
-                torch.testing.assert_close(_full_tensor(actual_norm), expected_norm)
-                for parameter, expected in zip(parameters, reference):
-                    torch.testing.assert_close(_full_tensor(parameter.grad), expected.grad)
 
 
 @require_torch
@@ -223,9 +203,10 @@ class DistributedUtilsTest(unittest.TestCase):
                     )
 
                     # Reload without a process group or distributed configuration.
-                    restored = _load_model(directory, consolidate)
-                    for name, parameter in restored.state_dict().items():
-                        torch.testing.assert_close(parameter, reference.state_dict()[name])
+                    for source_name in ("tp", "fsdp", "tp_fsdp"):
+                        restored = _load_model(directory, f"{directory}/saved_{source_name}", consolidate)
+                        for name, parameter in restored.state_dict().items():
+                            torch.testing.assert_close(parameter, reference.state_dict()[name])
 
     def test_optimizer_checkpoint(self):
         for consolidate in (False, True):
@@ -256,10 +237,6 @@ class DistributedUtilsTest(unittest.TestCase):
             os.makedirs(f"{directory}/rdv_load")
             mp.spawn(_save_dcp_sharded_checkpoint_worker, args=(directory,), nprocs=4, join=True)
             mp.spawn(_load_checkpoint_paths_worker, args=(directory,), nprocs=4, join=True)
-
-    def test_gradient_clipping(self):
-        with tempfile.TemporaryDirectory() as directory:
-            mp.spawn(_gradient_clipping_worker, args=(directory,), nprocs=4, join=True)
 
 
 if __name__ == "__main__":

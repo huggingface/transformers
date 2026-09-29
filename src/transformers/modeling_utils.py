@@ -3300,7 +3300,7 @@ class PreTrainedModel(
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
-                When saving a distributed model, write safetensors with distributed checkpointing (DCP) instead of
+                When saving an FSDP- or TP-sharded model, write safetensors with distributed checkpointing (DCP) instead of
                 gathering weights to CPU first. Every rank must call this method.
                 When `False`, weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
                 It is only intended to save and resume training, set it to `False` if you want full `save_pretrained`

@@ -18,11 +18,11 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_greater_or_equal, logging
+from ..utils import _check_distributed_checkpointing_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .checkpoint import save_model_checkpoint_distributed
 from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .fsdp import apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_tp_plan_styles,
@@ -213,12 +213,14 @@ class DistributedMixin:
         token: str | bool | None = None,
         create_pr: bool = False,
     ) -> None:
-        """Save an FSDP-wrapped model as safetensors via DCP and optionally push to the Hub."""
-        if not is_torch_greater_or_equal("2.7"):
+        """Save an FSDP- or TP-sharded model as safetensors via DCP and optionally push to the Hub."""
+        if not _check_distributed_checkpointing_available(raise_if_not=False):
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
-        if not is_fsdp_managed_module(model_to_save):
+
+        distributed_config = getattr(model_to_save.config, "distributed_config", None)
+        if distributed_config is None or (distributed_config.tp_size <= 1 and distributed_config.fsdp_size <= 1):
             raise ValueError(
-                "save_pretrained(..., distributed_checkpoint=True) is only supported for FSDP-wrapped models."
+                "save_pretrained(..., distributed_checkpoint=True) requires an FSDP- or TP-sharded model."
             )
         if getattr(model_to_save, "_device_mesh", None) is None:
             raise ValueError(
