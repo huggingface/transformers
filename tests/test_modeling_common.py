@@ -3074,7 +3074,12 @@ class ModelTesterMixin(ExportTesterMixin):
             with torch.no_grad():
                 model(**inputs)[0]
 
-    def test_inputs_embeds_matches_input_ids(self):
+    def test_inputs_embeds_matches_input_ids(self, **model_specific_kwargs):
+        """
+        Specific model testing classes can override and pass custom kwargs, these
+        are forwarded to model as is. For example: some models prepare position ids
+        differently with input IDs or embeds, so passing prepared positions is needed.
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -3089,9 +3094,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 self.skipTest(reason="This model doesn't use `inputs_embeds`")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 1
-            )
+            inputs.update(**model_specific_kwargs)
 
             # Some models prepare position IDs based on input IDs, and skip if embeddings
             # are used. Precompute in that case to force matching
@@ -3101,10 +3104,6 @@ class ModelTesterMixin(ExportTesterMixin):
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
-                # some models infer position ids/attn mask differently when input ids
-                # by check if pad_token let's make sure no padding is in input ids
-                not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
-                input_ids[input_ids == pad_token_id] = not_pad_token_id
                 del inputs["input_ids"]
                 inputs_embeds = wte(input_ids)
                 with torch.no_grad():
@@ -3113,8 +3112,6 @@ class ModelTesterMixin(ExportTesterMixin):
             else:
                 encoder_input_ids = inputs["input_ids"]
                 decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-                decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
                 del inputs["input_ids"]
                 inputs.pop("decoder_input_ids", None)
                 inputs_embeds = wte(encoder_input_ids)

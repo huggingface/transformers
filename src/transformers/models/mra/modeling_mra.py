@@ -567,7 +567,10 @@ class MraSelfAttention(nn.Module):
         )
 
         # revert changes made by float mask
-        attention_mask = 1.0 + attention_mask / 10000.0
+        if attention_mask.ndim == 4 and attention_mask.is_floating_point():
+            # (B, 1, Q, K) additive -> (B, K) with 1 = real-token, 0 = pad
+            attention_mask = (attention_mask[:, 0, -1, :] == 0).int()
+
         attention_mask = (
             attention_mask.squeeze()
             .repeat(1, self.num_attention_heads, 1)
