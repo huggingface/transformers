@@ -43,7 +43,6 @@ from ...utils.generic import (
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
-    split_attention_implementation,
 )
 from ...utils.output_capturing import capture_outputs
 from .configuration_hrm_text import HrmTextConfig
@@ -331,8 +330,7 @@ class HrmTextPreTrainedModel(PreTrainedModel):
         self, attn_implementation: str | None, is_init_check: bool = False, allow_all_kernels: bool = False
     ) -> str:
         if attn_implementation is not None and self.config.prefix_lm:
-            _, base_implementation = split_attention_implementation(attn_implementation)
-            if is_flash_attention_requested(requested_attention_implementation=base_implementation):
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 raise ValueError(
                     f"`attn_implementation={attn_implementation!r}` is not supported when "
                     "`config.prefix_lm=True`: FlashAttention cannot represent the PrefixLM 4-D mask "

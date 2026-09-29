@@ -1,23 +1,21 @@
+import warnings
+
 import torch
 
-from ..generation.continuous_batching.cache import PagedAttentionCache
+from .sdpa_attention import repeat_kv as repeat_kv_
+from .sdpa_attention import sdpa_attention_forward
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+    """Deprecated helper for the sdpa_attention_paged_forward."""
+    warnings.warn(
+        "repeat_kv is deprecated and will be removed in v5.23. Use repeat_kv from the sdpa_attention module instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
+    return repeat_kv_(hidden_states, n_rep)
 
 
-# Compile is disabled because the cache update mutates in place aliased views of the cache tensor, which compile's
-# functionalization handles by making a copy of the full cache for every layer.
-@torch.compiler.disable
 def sdpa_attention_paged_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -28,41 +26,20 @@ def sdpa_attention_paged_forward(
     scaling: float | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    # Add KV cache to the key and value tensors
-    cache: PagedAttentionCache | None = kwargs.pop("cache", None)
-    if cache is None:
-        raise ValueError(
-            "`paged|sdpa` was called without a paged attention cache. This implementation expects the packed "
-            "inputs and the 4D mask that continuous batching prepares; on a standard forward it would attend "
-            "bidirectionally. Use `sdpa` for a standard forward."
-        )
-    # Paged cache update uses the same format as the regular Cache update so that one day they can be unified.
-    key, value = cache.update(
-        key_states=key,
-        value_states=value,
-        layer_idx=module.layer_idx,
-        kwargs=kwargs,
+    """Deprecated function that used to be the way to compute attention with SDPA + paged cache. Please use
+    sdpa_attention_forward instead."""
+    warnings.warn(
+        "sdpa_attention_paged_forward is deprecated and will be removed in v5.23. Use sdpa_attention_forward instead.",
+        FutureWarning,
+        stacklevel=2,
     )
-
-    # Repeat the key and value tensors for each group of key-value heads
-    if hasattr(module, "num_key_value_groups"):
-        key = repeat_kv(key, module.num_key_value_groups)
-        value = repeat_kv(value, module.num_key_value_groups)
-
-    # Run the actual attention
-    query = query.contiguous()
-    key = key.contiguous()
-    value = value.contiguous()
-    attn_output = torch.nn.functional.scaled_dot_product_attention(
-        query,
-        key,
-        value,
-        attn_mask=attention_mask,
-        dropout_p=dropout,
-        scale=scaling,
-        # Packed sequence format is used for input, so that it can never be causal.
-        is_causal=False,
+    return sdpa_attention_forward(
+        module=module,
+        query=query,
+        key=key,
+        value=value,
+        attention_mask=attention_mask,
+        dropout=dropout,
+        scaling=scaling,
+        **kwargs,
     )
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, None

@@ -32,9 +32,8 @@ _MSA_KERNEL = None
 def load_and_register_msa_kernel(attn_implementation: str):
     """Load the MSA hub kernel once and verify the expected callables are present.
 
-    The ``attn_implementation`` string may carry a ``paged|`` prefix and/or an ``@<revision>`` pin
-    (e.g. ``kernels-staging/msa@v0``); the build currently lives on the repo's ``v0`` branch. The
-    loaded module is cached in a module-level global so registration happens once, not per call.
+    The `attn_implementation` string can have a `@<revision>` pin (e.g. `kernels-staging/msa@v0`); the build currently
+    lives on the repo's `v0` branch. The loaded module is cached in a module-level global so registration happens once.
     """
     global _MSA_KERNEL
     if _MSA_KERNEL is not None:
