@@ -18,7 +18,7 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
-from ..utils import _check_distributed_checkpointing_available, is_torch_greater_or_equal, logging
+from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .checkpoint import save_model_checkpoint_distributed
 from .configuration_utils import DistributedConfig
@@ -30,6 +30,7 @@ from .tensor_parallel import (
     gather_state_dict_for_save,
 )
 from .utils import (
+    _check_distributed_checkpointing_available,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,

@@ -3415,7 +3415,7 @@ class PreTrainedModel(
             self.save_distributed_checkpoint(
                 model_to_save,
                 save_directory,
-                # Use the `distributed_checkpoint=False` path to consolidate.
+                # Native DCP checkpoints remain sharded, use `distributed_checkpoint=False` for an interoperable checkpoint.
                 consolidate=False,
                 push_to_hub=push_to_hub,
                 save_on_this_rank=save_on_this_rank,
