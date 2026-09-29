@@ -515,9 +515,7 @@ class MossTranscribeDiarizePreTrainedModel(AudioFlamingo3PreTrainedModel):
 
 
 class MossTranscribeDiarizeEncoder(WhisperEncoder):
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor) -> torch.LongTensor:
-        """Computes the output length of the convolutional layers."""
-        return (input_lengths - 1) // 2 + 1
+    pass
 
 
 @auto_docstring
@@ -538,6 +536,8 @@ class MossTranscribeDiarizeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWi
 class MossTranscribeDiarizeModel(AudioFlamingo3Model):
     def __init__(self, config: MossTranscribeDiarizeConfig):
         super().__init__(config)
+        # Bypasses `AutoModel` (used by `AudioFlamingo3Model`), which would otherwise resolve
+        # `config.audio_config`'s "whisper" `model_type` to the full `WhisperModel` instead of just the encoder.
         self.audio_tower = MossTranscribeDiarizeEncoder(config.audio_config)
         self.post_init()
 
@@ -563,7 +563,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         device = input_features.device
 
         merge_size = self.config.audio_merge_size
-        conv_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(device=device))
+        conv_lengths = (input_features_mask.sum(-1).to(device=device) - 1) // 2 + 1
         input_features = input_features.to(
             device=self.audio_tower.conv1.weight.device, dtype=self.audio_tower.conv1.weight.dtype
         )
