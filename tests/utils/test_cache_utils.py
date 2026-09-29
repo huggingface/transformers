@@ -817,9 +817,9 @@ class CacheHardIntegrationTest(unittest.TestCase):
         _ = model(**inputs)
         _ = model.generate(**inputs, max_new_tokens=2, cache_implementation="hybrid")
 
-    @slow
     @require_torch_accelerator
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
+    @slow
     def test_cache_gptj_model(self, cache_implementation):
         """Tests caches with GPT-J model. Regression test for https://github.com/huggingface/transformers/pull/34799"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
