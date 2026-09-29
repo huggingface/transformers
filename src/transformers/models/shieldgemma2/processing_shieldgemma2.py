@@ -56,8 +56,7 @@ class ShieldGemma2Processor(Gemma3Processor):
     # Because this processor incorrectly inherits from Gemma3Processor and didn't assign
     # valid_processor_kwargs it applied defaults from Gemma3ProcessorKwargs._defaults.
     # With the new refactoring those defaults are now empty and the class attribute defaults
-    # below are applied instead.
-    # Q: Do we want to fix it or keep BC compat?
+    # below are applied instead. # Q: Do we want to fix it or keep BC compat?
     text_kwargs = {
         "padding": True,
     }
