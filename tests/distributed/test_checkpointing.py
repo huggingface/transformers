@@ -18,6 +18,8 @@ from contextlib import contextmanager
 from datetime import timedelta
 from unittest.mock import patch
 
+from parameterized import parameterized
+
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -36,36 +38,21 @@ if is_torch_available():
     )
 
     if dist.is_available():
-        from torch.distributed.tensor import DTensor
+        from torch.distributed.checkpoint.state_dict import (
+            StateDictOptions,
+            get_model_state_dict,
+            get_optimizer_state_dict,
+        )
 
 
-def _full_tensor(tensor):
-    return tensor.full_tensor() if isinstance(tensor, DTensor) else tensor
+PARALLEL_CONFIGS = {
+    "tp": {"tp_size": 4},
+    "fsdp": {"fsdp_size": 4},
+    "tp_fsdp": {"tp_size": 2, "fsdp_size": 2},
+}
 
-
-def _optimizer(model):
-    # foreach requires homogeneous groups when TP leaves some parameters unsharded.
-    groups = [
-        [p for p in model.parameters() if isinstance(p, DTensor) == distributed] for distributed in (False, True)
-    ]
-    return torch.optim.AdamW([{"params": group} for group in groups if group], lr=0.003, foreach=True)
-
-
-def _step(model, optimizer):
-    for parameter in model.parameters():
-        parameter.grad = parameter.detach().clone()
-    optimizer.step()
-    optimizer.zero_grad(set_to_none=True)
-
-
-def _check_optimizer(model, optimizer, reference, reference_optimizer):
-    for parameter, expected in zip(model.parameters(), reference.parameters()):
-        actual_state = optimizer.state[parameter]
-        expected_state = reference_optimizer.state[expected]
-        assert actual_state.keys() == expected_state.keys()
-        for key in expected_state:
-            torch.testing.assert_close(_full_tensor(actual_state[key]), expected_state[key])
-    assert all(group["lr"] == reference_optimizer.param_groups[0]["lr"] for group in optimizer.param_groups)
+# The distributed format remains sharded. The consolidated format uses the regular save_pretrained path.
+CHECKPOINT_MODES = {"distributed": True, "consolidated": False}
 
 
 @contextmanager
@@ -85,93 +72,69 @@ def _distributed_context(rank, directory):
             dist.destroy_process_group()
 
 
-def _load_model(directory, checkpoint_dir, consolidate, config=None):
-    if consolidate:
-        return LlamaForCausalLM.from_pretrained(checkpoint_dir, distributed_config=config)
-
-    model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=config)
-    # Clear the destination so unchanged seed weights cannot make the round trip pass.
-    with torch.no_grad():
-        for parameter in model.parameters():
-            parameter.zero_()
-    load_checkpoint_in_distributed_model(model, checkpoint_dir)
-    return model
-
-
 # Workers stay at module scope so multiprocessing.spawn can pickle them.
-def _model_checkpoint_worker(rank, directory, consolidate):
+def _test_save_and_from_pretrained(rank, directory, source_config, destination_config, distributed_checkpoint):
     with _distributed_context(rank, directory):
+        # Both models start from the same seed checkpoint so their weights match on every rank.
         reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
-        distributed_configs = {
-            "tp": DistributedConfig(tp_size=4),
-            "fsdp": DistributedConfig(fsdp_size=4),
-            "tp_fsdp": DistributedConfig(tp_size=2, fsdp_size=2),
-        }
-        for source_name, source_config in distributed_configs.items():
-            model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=source_config)
-            checkpoint_dir = f"{directory}/saved_{source_name}"
-            model.save_pretrained(
-                checkpoint_dir,
-                is_main_process=rank == 0,
-                distributed_checkpoint=not consolidate,
-            )
-            dist.barrier()
-            for destination_config in distributed_configs.values():
-                restored = _load_model(directory, checkpoint_dir, consolidate, destination_config)
-                for name, parameter in restored.state_dict().items():
-                    torch.testing.assert_close(_full_tensor(parameter), reference.state_dict()[name])
+        distributed = LlamaForCausalLM.from_pretrained(
+            f"{directory}/seed", distributed_config=DistributedConfig(**source_config)
+        )
+
+        # Distributed checkpoint: `from_pretrained` detects it and loads it with DCP.
+        # Consolidated checkpoint: `from_pretrained` loads it and converts it to a distributed model.
+        # Either way, it is resharded when the destination configuration differs from the source one.
+        distributed.save_pretrained(f"{directory}/saved", distributed_checkpoint=distributed_checkpoint)
+        restored = LlamaForCausalLM.from_pretrained(
+            f"{directory}/saved", distributed_config=DistributedConfig(**destination_config)
+        )
+        full_state_dict = get_model_state_dict(restored, options=StateDictOptions(full_state_dict=True))
+        torch.testing.assert_close(full_state_dict, reference.state_dict())
 
 
-def _optimizer_checkpoint_worker(rank, directory, consolidate):
+def _test_load_checkpoint_in_distributed_model(rank, directory):
     with _distributed_context(rank, directory):
         reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
         model = LlamaForCausalLM.from_pretrained(
             f"{directory}/seed", distributed_config=DistributedConfig(tp_size=2, fsdp_size=2)
         )
-        optimizer, reference_optimizer = _optimizer(model), _optimizer(reference)
-        _step(model, optimizer)
-        _step(reference, reference_optimizer)
-        save_optimizer_distributed(model, optimizer, f"{directory}/saved", consolidate=consolidate)
-        checkpoint = f"{directory}/saved/optimizer.pt" if consolidate else f"{directory}/saved"
-        for config in (DistributedConfig(tp_size=2, fsdp_size=2), DistributedConfig(tp_size=4)):
-            restored = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=config)
-            restored_optimizer = _optimizer(restored)
-            load_optimizer_distributed(restored, restored_optimizer, checkpoint)
-            _check_optimizer(restored, restored_optimizer, reference, reference_optimizer)
+        model.save_pretrained(f"{directory}/dcp", distributed_checkpoint=True)
+        model.save_pretrained(f"{directory}/safetensors", distributed_checkpoint=False, max_shard_size="4KB")
 
-
-def _save_dcp_sharded_checkpoint_worker(rank, directory):
-    # A distinct rendezvous subdirectory: reusing the same file:// store as another
-    # mp.spawn call would hang, since the previous process group already tore it down.
-    with _distributed_context(rank, f"{directory}/rdv_save"):
-        model = LlamaForCausalLM.from_pretrained(
-            f"{directory}/seed", distributed_config=DistributedConfig(tp_size=2, fsdp_size=2)
-        )
-        model.save_pretrained(
-            f"{directory}/dcp_sharded",
-            distributed_checkpoint=True,
-        )
-
-
-def _load_checkpoint_paths_worker(rank, directory):
-    with _distributed_context(rank, f"{directory}/rdv_load"):
-        reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
-        config = DistributedConfig(tp_size=2, fsdp_size=2)
-        checkpoints = {
-            "dcp_sharded": f"{directory}/dcp_sharded",
-            "hf_sharded": f"{directory}/hf_sharded",
-            "single_file": f"{directory}/single_file",
-        }
-        for name, checkpoint_dir in checkpoints.items():
-            model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=config)
+        for checkpoint in ("dcp", "safetensors"):
+            # Zero the weights so the check below only passes if the checkpoint was actually loaded.
             with torch.no_grad():
                 for parameter in model.parameters():
                     parameter.zero_()
-            load_checkpoint_in_distributed_model(model, checkpoint_dir)
-            for param_name, parameter in model.state_dict().items():
-                torch.testing.assert_close(
-                    _full_tensor(parameter), reference.state_dict()[param_name], msg=f"checkpoint={name}"
-                )
+            load_checkpoint_in_distributed_model(model, f"{directory}/{checkpoint}")
+            full_state_dict = get_model_state_dict(model, options=StateDictOptions(full_state_dict=True))
+            torch.testing.assert_close(full_state_dict, reference.state_dict(), msg=f"checkpoint={checkpoint}")
+
+
+def _test_optimizer_checkpoint(rank, directory, consolidate):
+    with _distributed_context(rank, directory):
+        full_state_dict = StateDictOptions(full_state_dict=True)
+        model = LlamaForCausalLM.from_pretrained(
+            f"{directory}/seed", distributed_config=DistributedConfig(tp_size=2, fsdp_size=2)
+        )
+        optimizer = torch.optim.AdamW(model.parameters())
+        for parameter in model.parameters():
+            parameter.grad = parameter.detach().clone()
+        optimizer.step()
+        expected = get_optimizer_state_dict(model, optimizer, options=full_state_dict)
+        save_optimizer_distributed(model, optimizer, f"{directory}/saved", consolidate=consolidate)
+        if rank == 0:
+            torch.save(expected, f"{directory}/expected.pt")
+
+        # Load into the same layout and into a different one.
+        checkpoint = f"{directory}/saved/optimizer.pt" if consolidate else f"{directory}/saved"
+        for config in (DistributedConfig(tp_size=2, fsdp_size=2), DistributedConfig(tp_size=4)):
+            restored = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=config)
+            restored_optimizer = torch.optim.AdamW(restored.parameters())
+            load_optimizer_distributed(restored, restored_optimizer, checkpoint)
+            actual = get_optimizer_state_dict(restored, restored_optimizer, options=full_state_dict)
+            torch.testing.assert_close(actual["state"], expected["state"])
+            assert actual["param_groups"] == expected["param_groups"]
 
 
 @require_torch
@@ -189,54 +152,50 @@ class DistributedUtilsTest(unittest.TestCase):
             num_key_value_heads=4,
         )
 
-    def test_model_checkpoint(self):
-        for consolidate in (False, True):
-            with self.subTest(consolidate=consolidate):
-                with tempfile.TemporaryDirectory() as directory:
-                    reference = LlamaForCausalLM(self.config)
-                    reference.save_pretrained(f"{directory}/seed")
-                    mp.spawn(
-                        _model_checkpoint_worker,
-                        args=(directory, consolidate),
-                        nprocs=4,
-                        join=True,
-                    )
-
-                    # Reload without a process group or distributed configuration.
-                    for source_name in ("tp", "fsdp", "tp_fsdp"):
-                        restored = _load_model(directory, f"{directory}/saved_{source_name}", consolidate)
-                        for name, parameter in restored.state_dict().items():
-                            torch.testing.assert_close(parameter, reference.state_dict()[name])
-
-    def test_optimizer_checkpoint(self):
-        for consolidate in (False, True):
-            with self.subTest(consolidate=consolidate), tempfile.TemporaryDirectory() as directory:
-                reference = LlamaForCausalLM(self.config)
-                reference.save_pretrained(f"{directory}/seed")
-                mp.spawn(_optimizer_checkpoint_worker, args=(directory, consolidate), nprocs=4, join=True)
-
-                # Reload without a process group or distributed configuration.
-                reference_optimizer = _optimizer(reference)
-                _step(reference, reference_optimizer)
-                restored = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
-                restored_optimizer = _optimizer(restored)
-                checkpoint = f"{directory}/saved/optimizer.pt" if consolidate else f"{directory}/saved"
-                load_optimizer_distributed(restored, restored_optimizer, checkpoint)
-                _check_optimizer(restored, restored_optimizer, reference, reference_optimizer)
-
-    def test_load_checkpoint_paths(self):
+    @parameterized.expand(
+        [
+            (f"{source_name}_to_{destination_name}_{checkpoint_mode}", source, destination, distributed_checkpoint)
+            for source_name, source in PARALLEL_CONFIGS.items()
+            for destination_name, destination in PARALLEL_CONFIGS.items()
+            for checkpoint_mode, distributed_checkpoint in CHECKPOINT_MODES.items()
+        ]
+    )
+    def test_save_and_from_pretrained(self, _, source_config, destination_config, distributed_checkpoint):
         with tempfile.TemporaryDirectory() as directory:
             reference = LlamaForCausalLM(self.config)
             reference.save_pretrained(f"{directory}/seed")
+            mp.spawn(
+                _test_save_and_from_pretrained,
+                args=(directory, source_config, destination_config, distributed_checkpoint),
+                nprocs=4,
+                join=True,
+            )
 
-            # Non-distributed checkpoints, no process group required.
-            reference.save_pretrained(f"{directory}/hf_sharded", max_shard_size="4KB")
-            reference.save_pretrained(f"{directory}/single_file")
+            # Reload without a process group or distributed configuration.
+            torch.testing.assert_close(
+                LlamaForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
+            )
 
-            os.makedirs(f"{directory}/rdv_save")
-            os.makedirs(f"{directory}/rdv_load")
-            mp.spawn(_save_dcp_sharded_checkpoint_worker, args=(directory,), nprocs=4, join=True)
-            mp.spawn(_load_checkpoint_paths_worker, args=(directory,), nprocs=4, join=True)
+    def test_load_checkpoint_in_distributed_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            LlamaForCausalLM(self.config).save_pretrained(f"{directory}/seed")
+            mp.spawn(_test_load_checkpoint_in_distributed_model, args=(directory,), nprocs=4, join=True)
+
+    @parameterized.expand([("dcp", False), ("consolidated", True)])
+    def test_optimizer_checkpoint(self, _, consolidate):
+        with tempfile.TemporaryDirectory() as directory:
+            LlamaForCausalLM(self.config).save_pretrained(f"{directory}/seed")
+            mp.spawn(_test_optimizer_checkpoint, args=(directory, consolidate), nprocs=4, join=True)
+
+            # Reload without a process group or distributed configuration.
+            restored = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
+            restored_optimizer = torch.optim.AdamW(restored.parameters())
+            checkpoint = f"{directory}/saved/optimizer.pt" if consolidate else f"{directory}/saved"
+            load_optimizer_distributed(restored, restored_optimizer, checkpoint)
+            actual = get_optimizer_state_dict(restored, restored_optimizer)
+            expected = torch.load(f"{directory}/expected.pt")
+            torch.testing.assert_close(actual["state"], expected["state"])
+            assert actual["param_groups"] == expected["param_groups"]
 
 
 if __name__ == "__main__":
