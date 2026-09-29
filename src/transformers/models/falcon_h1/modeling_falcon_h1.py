@@ -804,14 +804,12 @@ class FalconH1Mixer(nn.Module):
         projected_states = projected_states * self.mup_vector
 
         if self.training and cache_params is None:
-            A = -torch.exp(self.A_log.float())
-            fused_kwargs = kwargs | {"dt_limit": self.time_step_limit}
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 self.dt_bias,
-                A,
+                A=-torch.exp(self.A_log.float()),
                 D=self.D,
                 chunk_size=self.chunk_size,
                 activation=self.activation,
@@ -823,7 +821,8 @@ class FalconH1Mixer(nn.Module):
                 ngroups=self.n_groups,
                 norm_before_gate=False,
                 return_final_states=False,
-                **fused_kwargs,
+                dt_limit=self.time_step_limit,
+                **kwargs,
             )
 
             # Only kernels can use this shortcircuit, fallback to normal torch otherwise
