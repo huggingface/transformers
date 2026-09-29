@@ -56,6 +56,7 @@ from transformers.utils.auto_docstring import (
     ModelArgs,
     ModelOutputArgs,
     ProcessorArgs,
+    VideoProcessorArgs,
     get_args_doc_from_source,
     parse_docstring,
     set_min_indent,
@@ -880,11 +881,10 @@ def find_matching_docstring_files(check_all: bool = False):
         matching_files = module_diff_files
     else:
         matching_files = glob.iglob(os.path.join(PATH_TO_TRANSFORMERS, "**", "*.py"), recursive=True)
-        
-    return sorted(
-        file for file in matching_files if os.path.isfile(file)
-    )
 
+    return sorted(
+        file for file in matching_files if not os.path.basename(file).startswith("modular_") and os.path.isfile(file)
+    )
 
 
 def find_files_with_auto_docstring(matching_files, decorator="@auto_docstring"):
@@ -1153,7 +1153,7 @@ def generate_new_docstring_for_signature(
     arg_indent="    ",
     output_docstring_indent=8,
     custom_args_dict={},
-    source_args_doc=[ModelArgs, ImageProcessorArgs],
+    source_args_doc=[ModelArgs, ImageProcessorArgs, VideoProcessorArgs],
     is_model_output=False,
 ):
     """
@@ -1291,9 +1291,9 @@ def generate_new_docstring_for_function(
 
     # Use ProcessorArgs for processor methods
     if item.is_processor:
-        source_args_doc = [ModelArgs, ImageProcessorArgs, ProcessorArgs]
+        source_args_doc = [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
     else:
-        source_args_doc = [ModelArgs, ImageProcessorArgs]
+        source_args_doc = [ModelArgs, ImageProcessorArgs, VideoProcessorArgs]
 
     return generate_new_docstring_for_signature(
         lines,
@@ -1325,9 +1325,9 @@ def generate_new_docstring_for_class(
         output_docstring_indent = 8
         # Add ProcessorArgs for Processor classes
         if item.is_processor:
-            source_args_doc = [ModelArgs, ImageProcessorArgs, ProcessorArgs]
+            source_args_doc = [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
         else:
-            source_args_doc = [ModelArgs, ImageProcessorArgs]
+            source_args_doc = [ModelArgs, ImageProcessorArgs, VideoProcessorArgs]
     elif item.is_model_output:
         # ModelOutput class - extract args from dataclass attributes
         current_line_end = item.def_line - 1  # Convert to 0-based
@@ -1393,7 +1393,7 @@ def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[Deco
                 var_to_string[node.target.id] = node.value.value
     # Second pass: find all @auto_docstring decorated functions/classes
     # First, identify processor classes to track method context (only top-level classes)
-    processor_classes: set[str] = set()
+    processor_classes: set[str] = {"ProcessorMixin"}
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
             for base in node.bases:
@@ -1443,6 +1443,7 @@ def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[Deco
             if parent_class_name and parent_class_name in processor_classes:
                 is_processor = True
         elif isinstance(node, ast.ClassDef):
+            is_processor = node.name in processor_classes
             # For classes, look for __init__ method and check if it's a ModelOutput or Processor
             # Check if class inherits from ModelOutput, ProcessorMixin, or PreTrainedConfig
             for base in node.bases:
@@ -1552,7 +1553,9 @@ def _find_typed_dict_classes(source: str, tree: ast.Module | None = None) -> lis
     # Get standard args that are already documented in source classes
     standard_args = set()
     try:
-        standard_args.update(get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]).keys())
+        standard_args.update(
+            get_args_doc_from_source([ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]).keys()
+        )
     except Exception as e:
         logger.debug(f"Could not get standard args from source: {e}")
 
@@ -1656,7 +1659,7 @@ def _process_typed_dict_docstrings(
         return [], [], []
 
     # Get source args for comparison
-    source_args_doc = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
+    source_args_doc = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs])
 
     missing_warnings = []
     fill_warnings = []
