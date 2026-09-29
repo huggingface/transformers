@@ -258,6 +258,7 @@ def build_config(
         audio_config=audio_config,
         tie_word_embeddings=bool(text_config.get("tie_word_embeddings", False)),
     )
+    config.dtype = config.text_config.dtype or torch.bfloat16
     # `model.save_pretrained` would stamp this from the model class; the converter streams shards without
     # instantiating the model, so it must set the entrypoint itself for `AutoModel` resolution
     config.architectures = [Apertus1p5ForConditionalGeneration.__name__]
@@ -363,9 +364,7 @@ def verify_composite(composite_dir: str, max_new_tokens: int = 12):
     """Load a composite checkpoint and run configuration, dtype, processor, generation, and modality smoke checks."""
     failed_checks = []
 
-    model, loading_info = Apertus1p5ForConditionalGeneration.from_pretrained(
-        composite_dir, dtype=torch.bfloat16, output_loading_info=True
-    )
+    model, loading_info = Apertus1p5ForConditionalGeneration.from_pretrained(composite_dir, output_loading_info=True)
     model = model.eval()
     config = model.config
     loading_problems = {kind: keys for kind, keys in loading_info.items() if keys}
@@ -398,11 +397,15 @@ def verify_composite(composite_dir: str, max_new_tokens: int = 12):
         "audio_tokenizer": next(model.model.audio_tokenizer.parameters()).dtype,
         "lm_head": model.lm_head.weight.dtype,
     }
-    # this is the `_keep_in_fp32_modules_strict` guard itself: the tokenizers must survive a bf16 load
-    tokenizers_fp32 = dtypes["vision_tokenizer"] == torch.float32 and dtypes["audio_tokenizer"] == torch.float32
-    if not tokenizers_fp32:
+    dtypes_ok = (
+        dtypes["language_model"] == dtypes["lm_head"] == config.dtype
+        and dtypes["vision_tokenizer"] == dtypes["audio_tokenizer"] == torch.float32
+    )
+    if not dtypes_ok:
         failed_checks.append("dtypes")
-    print(f"[{'PASS' if tokenizers_fp32 else 'FAIL'}] dtypes (tokenizers must stay fp32 in a bf16 load): {dtypes}")
+    print(
+        f"[{'PASS' if dtypes_ok else 'FAIL'}] dtypes (backbone and LM head: {config.dtype}; tokenizers: float32): {dtypes}"
+    )
 
     # --- LM head size: Apertus 1.5 checkpoints are expected to ship a pruned, text-only head ----------------
     output_vocab_size = getattr(config.text_config, "output_vocab_size", None)

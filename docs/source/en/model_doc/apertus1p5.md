@@ -39,11 +39,10 @@ Use the processor's chat template to prepare a conversation with images and audi
 media, resamples audio, and constructs the model inputs automatically.
 
 ```python
-import torch
 from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
 
 model = Apertus1p5ForConditionalGeneration.from_pretrained(
-    "swiss-ai/Apertus-v1.5-8B", dtype=torch.bfloat16, device_map="auto"
+    "swiss-ai/Apertus-v1.5-8B", device_map="auto"
 )
 processor = AutoProcessor.from_pretrained("swiss-ai/Apertus-v1.5-8B")
 
