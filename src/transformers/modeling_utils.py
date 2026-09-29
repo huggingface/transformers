@@ -4044,14 +4044,15 @@ class PreTrainedModel(
                 safetensors files are read with `pread` instead of being memory-mapped. When `False`, the
                 default memory-mapped loader is always used.
             prefetch (`bool`, *optional*):
-                Read the checkpoint directly into GPU memory, in the background, instead of going through CPU
-                memory first. Loading is faster and the weights don't need extra memory once on the GPU, since
-                parameters use the loaded memory as is (unless their dtype changes). `None` (default) uses it
+                Load safetensors checkpoints with safetensors' prefetch loader: files are read in the background, in
+                large chunks on several threads, and copied straight to the GPU while the model's weights load.
+                This is faster than the default memory-mapped loader, especially for large checkpoints (see
+                `integrations/safetensors_prefetch.py` for how it works). `None` (default) uses it
                 whenever it can, which currently means: safetensors >= 0.9.0rc1, Linux, a CUDA device in
                 `device_map` (weights going elsewhere load as usual), safetensors checkpoint files, and no
-                on-the-fly quantization. `False` always uses the default loader. That GPU memory is allocated by
-                safetensors, not torch's caching allocator: `torch.cuda.memory_allocated` doesn't count it and
-                `torch.cuda.empty_cache` doesn't release it, so set `False` if you rely on either.
+                on-the-fly quantization. `False` always uses the default loader. The loaded weights live in GPU memory
+                allocated by safetensors, not torch's caching allocator: `torch.cuda.memory_allocated` doesn't count
+                it and `torch.cuda.empty_cache` doesn't release it, so set `False` if you rely on either.
             fusion_config (`dict[str, bool | dict[str, Any]]`, *optional*):
                 Optional fusion configuration applied before model instantiation. Each key enables a fusion family and
                 its value can either be `True` to enable that fusion with default options or a dictionary of

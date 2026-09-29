@@ -11,31 +11,42 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Load checkpoints straight into GPU memory with safetensors' prefetch loader.
+"""Load checkpoints on device with safetensors' prefetch loader.
 
-The default loader memory-maps each checkpoint file and copies tensors to the GPU one at a time, as weights are
-assigned. With prefetch, safetensors reads the files into GPU memory in the background, in large chunks, while
-the weights are being assigned. Loading is faster, and parameters use that GPU memory directly instead of a
-second copy. `from_pretrained` uses it by default when it applies (see `should_prefetch`); `prefetch=False`
-turns it off.
+The default mmap loader lazily loads weights when `__getitem__` (`tensor[...]`) is called, and the pipeline looks
+like so:
 
-What happens, in each process (one per GPU under tensor parallelism):
+    mmapped disk region
+      -> page fault I/O
+      -> kernel & user shared buffer (the page cache, mapped into the process)
+      -> `.to(device)`
+           -> the CUDA driver copies it to its own pinned RAM buffer
+           -> `cudaMemcpy` from pinned host buffer to device buffer
 
-1. `from_pretrained` opens every checkpoint file with `safe_open` and works out, for every tensor, which
-   parameter it goes to, on which device, in which dtype, and which rows this process keeps
-   (`TensorLoad` in `core_model_loading.py`).
-2. `attach_prefetch` groups the tensors going to a CUDA device by checkpoint file. Each file gets a
-   `FilePrefetch`, which plans one prefetch loader per device with exactly those tensors, and just the rows this
-   process keeps when they are contiguous.
-3. The loader's worker threads then take tensors in parameter order. The first take from a file starts its
-   prefetch loaders (`safe_open(...).prefetch(plan, device=...)`): they read the file with their own threads,
-   outside the GIL, and copy it to the GPU. A take only waits if its bytes haven't arrived yet. Files start in
-   the order the loader reaches them, and several are read at once.
-4. A taken tensor is a view of GPU memory allocated by safetensors, not a copy. That memory is freed once every
-   tensor in the same allocation (a range of neighbouring tensors, 256 MiB or more) has been taken and dropped.
+The new prefetch loader, instead of lazily loading when slicing the tensor, loads in the background. Calls to
+`take` yield the bytes or wait for them to be loaded, but the rest of loading keeps going while bytes load. You
+can precisely define which tensors, and which rows of them, you want when you call `prefetch` on the `safe_open`
+handle. The prefetch pipeline looks like so:
 
-Tensors that don't go to a CUDA device, and every tensor of a file whose prefetch loaders fail to start, are read
-the usual way from the same handle.
+    chunked disk `pread`
+      -> page cache
+      -> copy to a process-wide shared pinned memory slab
+      -> `cudaMemcpyAsync`
+      -> device buffer
+
+The copies are the same, but the bytes move differently: large reads (16 MiB chunks) on several threads, with
+several files in flight, instead of page faults as each tensor is sliced. The other thing that makes this really
+fast is the fact that the disk read part is decoupled from the device copy. Both happen concurrently, which makes
+sure that the disk read part of the pipeline is never waiting for bytes to have finished copying before reading.
+
+Calling `take` on a prefetch loader either returns instantly if the bytes are loaded on device or waits until
+loading for that given tensor/slice is finished.
+
+How transformers uses it: `from_pretrained` first works out, for every checkpoint tensor, which of the model's
+weights it becomes, on which device, and which rows this process keeps (one process per GPU under tensor
+parallelism). Each checkpoint file then gets a `FilePrefetch`, which starts one prefetch loader per device with
+exactly those tensors and rows, the first time one of them is needed. Tensors that don't go to a CUDA device, and
+every tensor of a file whose loaders fail to start, are read the usual way from the same handle.
 """
 
 import sys
@@ -119,8 +130,8 @@ def attach_prefetch(loads, handles: dict, copy_full: bool) -> list["FilePrefetch
 class FilePrefetch:
     """The prefetch loaders of one checkpoint file, one per CUDA device its tensors go to.
 
-    They start on the file's first take (see the module docstring). If they fail to start, the file's tensors are
-    read as usual.
+    They start the first time one of the file's tensors is taken, so files start in the order the loader needs
+    them. If they fail to start, the file's tensors are read as usual.
 
     With `copy_full` (tensor parallelism), every take is a copy rather than a view of safetensors' memory. That
     memory is freed per range of neighbouring tensors once no view of it is left, and a process under tensor
