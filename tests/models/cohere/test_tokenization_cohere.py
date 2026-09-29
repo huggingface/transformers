@@ -212,7 +212,7 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
             original_cwd = os.getcwd()
             os.chdir(d)
             try:
-                repo_id = "CohereLabs/tiny-aya-earth"
+                repo_id = "coherelabs/tiny-aya-earth"
                 os.makedirs(repo_id, exist_ok=True)
 
                 with open(os.path.join(repo_id, "tokenizer_config.json"), "w", encoding="utf-8") as f:
