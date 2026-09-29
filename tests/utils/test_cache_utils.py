@@ -64,9 +64,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         """Tests caches with GPT-J model. Regression test for https://github.com/huggingface/transformers/pull/34799"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
-        # Use a dedicated safetensors repo to avoid Xet chunk corruption that affects pytorch_model.bin
-        # (corruption is intermittent but causes wrong wte.weight values and wrong golden outputs)
-        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM-for-CacheHardIntegrationTest"
+        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
         pipe = pipeline("text-generation", model=model_id, dtype=torch.bfloat16)
         pipe.model.config.sliding_window = (
             256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
