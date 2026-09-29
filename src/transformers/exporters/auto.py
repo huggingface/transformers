@@ -22,19 +22,15 @@ from dataclasses import dataclass
 from ..models.auto import AutoConfig
 from ..utils import logging
 from .base import EXPORT_CONFIG_NAME, ExportedModel, HfExporter, ModelRunner
-from .configs import AotiConfig, ExportConfigMixin, ExportFormat, TensorrtConfig
-from .exporter_aoti import AotiExporter
+from .configs import ExportConfigMixin, ExportFormat
 from .exporter_dynamo import DynamoConfig, DynamoExporter
 from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from .exporter_onnx import OnnxConfig, OnnxExporter
 from .exporter_openvino import OpenVINOConfig, OpenVINOExporter
-from .exporter_tensorrt import TensorrtExporter
-from .runner_aoti import AotiModelRunner
 from .runner_dynamo import DynamoModelRunner
 from .runner_executorch import ExecutorchModelRunner
 from .runner_onnx import OnnxModelRunner
 from .runner_openvino import OpenVINOModelRunner
-from .runner_tensorrt import TensorrtModelRunner
 
 
 @dataclass
@@ -56,8 +52,6 @@ EXPORT_BACKENDS: dict[str, ExportBackend] = {
     "executorch": ExportBackend(ExecutorchConfig, ExecutorchExporter, ExecutorchModelRunner),
     "dynamo": ExportBackend(DynamoConfig, DynamoExporter, DynamoModelRunner),
     "onnx": ExportBackend(OnnxConfig, OnnxExporter, OnnxModelRunner),
-    "aoti": ExportBackend(AotiConfig, AotiExporter, AotiModelRunner),
-    "tensorrt": ExportBackend(TensorrtConfig, TensorrtExporter, TensorrtModelRunner),
     "openvino": ExportBackend(OpenVINOConfig, OpenVINOExporter, OpenVINOModelRunner),
 }
 

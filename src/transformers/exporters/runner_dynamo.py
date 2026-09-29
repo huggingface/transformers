@@ -72,17 +72,11 @@ class DynamoModelRunner(ModelRunner):
         payload = extra_files.get(EXPORT_METADATA_KEY)
         if payload:
             exported_program.graph_module.meta[EXPORT_METADATA_KEY] = json.loads(payload)
-        module = exported_program.module()
-        if device is not None:
-            module = module.to(device)
-        return cls(module, export_metadata=export_metadata, **kwargs)
+        return cls.from_artifact(exported_program, export_metadata=export_metadata, device=device, **kwargs)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         # The module rejects kwargs it wasn't traced with — e.g. a prefill graph whose capture predates the
         # cache (models that create it inside the first forward); its cache still rides out on the outputs.
         if "past_key_values" not in self.input_names:
             kwargs.pop("past_key_values", None)
-        output = self._module(**kwargs)
-        if isinstance(output, torch.Tensor):
-            return {"output": output}
-        return get_leaf_tensors(output)
+        return get_leaf_tensors(self._module(**kwargs))

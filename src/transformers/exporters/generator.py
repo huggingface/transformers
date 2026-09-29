@@ -339,7 +339,7 @@ class ExportedGenerator(GenerationMixin):
         # The scatter path applies when a graph takes embeddings where a plain model's takes token ids: the
         # decode graph (decoder-only VLMs) or the encoder graph (a multi-modal encoder-decoder like
         # florence2, whose decode then reads the merged features through `encoder_outputs`). Otherwise it
-        # runs as a plain generator even when an embed graph was exported_artifacts.
+        # runs as a plain generator even when an embed graph was exported.
         takes_embeds = text_input(runners["decode"]) == "inputs_embeds" or (
             "encoder" in runners and "inputs_embeds" in runners["encoder"].input_names
         )
@@ -594,7 +594,9 @@ class ExportedGenerator(GenerationMixin):
         # handed us a single tensor, build the dict here, keyed the way the config declares its layers.
         mask_ranks = runner.export_metadata.mask_ranks
         if mask_ranks and not isinstance(attention_mask, dict):
-            padding_mask = attention_mask if getattr(attention_mask, "dim", lambda: 0)() == 2 else None
+            padding_mask = (
+                attention_mask if isinstance(attention_mask, torch.Tensor) and attention_mask.dim() == 2 else None
+            )
             attention_mask = {
                 layer_type: padding_mask if rank == 2 else None for layer_type, rank in mask_ranks.items()
             }
@@ -608,11 +610,8 @@ class ExportedGenerator(GenerationMixin):
                 else self._causal_mask(position_ids, cache_len)
                 for layer_type, mask in attention_mask.items()
             }
-            # Mixed full/sliding models: ONNX declares one input per attention type
-            # (`attention_mask.<type>`, flattened by the exporter); dynamo takes the whole dict as a single
-            # `attention_mask` pytree kwarg.
-            # ONNX flattens the dict into one input per type. Feed exactly the names it declares: keying
-            # off our own layer types instead offers ones the graph never took and omits ones it needs.
+            # ONNX flattens the dict into one input per attention type (`attention_mask.<type>`), where dynamo
+            # takes it whole. Feed exactly the names the graph declares, not our own layer types.
             if declared := [name for name in mask_inputs(runner) if name != "attention_mask"]:
                 fallback = None
                 feed = {}

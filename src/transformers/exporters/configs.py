@@ -28,11 +28,9 @@ class ExportFormat(Enum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
 
     EXECUTORCH = "executorch"
-    TENSORRT = "tensorrt"
     OPENVINO = "openvino"
     DYNAMO = "dynamo"
     ONNX = "onnx"
-    AOTI = "aoti"
 
 
 @dataclass
@@ -114,53 +112,6 @@ class DynamoConfig(ExportConfigMixin):
 
 
 @dataclass
-class AotiConfig(DynamoConfig):
-    """
-    Configuration class for compiling models ahead of time with AOTInductor.
-
-    Takes everything [`DynamoConfig`] does — the trace is the same one — plus:
-
-    Args:
-        inductor_configs (`dict[str, Any]`, *optional*):
-            Inductor settings for the compilation, as `torch._inductor.aoti_compile_and_package` takes
-            them (`{"max_autotune": True}` and the rest). The exporter adds the package's metadata entry
-            to whatever is passed here.
-    """
-
-    export_format: ExportFormat = ExportFormat.AOTI
-    inductor_configs: dict[str, Any] | None = None
-
-
-@dataclass
-class TensorrtConfig(DynamoConfig):
-    """
-    Configuration class for compiling models with TensorRT, through Torch-TensorRT.
-
-    Takes everything [`DynamoConfig`] does — the trace is the same one — plus:
-
-    Args:
-        min_block_size (`int`, *optional*, defaults to 5):
-            The smallest run of convertible ops that becomes an engine. Below it the ops are left to
-            torch, on the grounds that an engine that small costs more to enter than it saves.
-        truncate_double (`bool`, *optional*, defaults to `True`):
-            Whether to run float64 work as float32. TensorRT has no float64, so the alternative to
-            truncating is leaving every subgraph that touches one to torch.
-        torch_executed_ops (`set[str]`, *optional*):
-            Ops to leave to torch instead of converting. Defaults to the ones Torch-TensorRT cannot take
-            from these graphs — see `DEFAULT_TORCH_EXECUTED_OPS`. Pass an empty set to convert everything
-            and see what breaks.
-        compiler_options (`dict[str, Any]`, *optional*):
-            The rest of `torch_tensorrt.dynamo.compile`'s settings, passed through as given.
-    """
-
-    export_format: ExportFormat = ExportFormat.TENSORRT
-    min_block_size: int = 5
-    truncate_double: bool = True
-    torch_executed_ops: set[str] | None = None
-    compiler_options: dict[str, Any] | None = None
-
-
-@dataclass
 class OnnxConfig(DynamoConfig):
     """
     Configuration class for exporting models to ONNX via `torch.onnx.export`.
@@ -221,8 +172,9 @@ class ExecutorchConfig(DynamoConfig):
             caller's tensor rather than an arena copy.
         alloc_graph_output (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph outputs. When `False`,
-            the caller must bind output buffers at runtime (`Method::set_output_data_ptr`); binding an
-            output to its mutated input's buffer avoids the copy-out roundtrip.
+            the caller binds output buffers at runtime (`Method::set_output_data_ptr`, `Method.set_output`
+            from Python); binding an output to its mutated input's buffer avoids the copy-out roundtrip,
+            which [`ExecutorchModelRunner`] does for the cache when the runtime supports it.
         alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
             state). Passed through to the `MemoryPlanningPass`.

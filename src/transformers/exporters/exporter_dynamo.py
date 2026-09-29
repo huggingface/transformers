@@ -97,6 +97,7 @@ class DynamoExporter(HfExporter):
     """
 
     export_format = ExportFormat.DYNAMO
+    config_class = DynamoConfig
     artifact_suffix = ".pt2"
 
     required_packages = ["torch"]
@@ -109,10 +110,7 @@ class DynamoExporter(HfExporter):
         sample_inputs: MutableMapping[str, Any],
         config: DynamoConfig | dict[str, Any],
     ) -> ExportedProgram:
-        if isinstance(config, dict):
-            config = DynamoConfig(**config)
-        elif not isinstance(config, DynamoConfig):
-            raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
+        config = self._as_config(config)
 
         model, sample_inputs, output_flags = prepare_for_export(model, sample_inputs)
 

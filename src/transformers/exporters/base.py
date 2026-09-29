@@ -299,13 +299,14 @@ class HfExporter(ABC):
 
     To add a backend, subclass and implement its two halves: [`~HfExporter.export_artifact`] to trace one
     graph, and [`~HfExporter.save_artifact`] to write one out. The public [`~HfExporter.export`] and
-    [`~HfExporter.export`] build an [`ExportArtifacts`] on top of them.
+    [`~HfExporter.export_for_generation`] build an [`ExportArtifacts`] on top of them.
     """
 
-    # What this backend is, and what its artifacts are called on disk. Both required of a concrete
-    # exporter: one that can trace a graph can name the file it writes.
+    # What this backend is, what its artifacts are called on disk, and the config it takes. Required of a
+    # concrete exporter.
     export_format: ExportFormat
     artifact_suffix: str
+    config_class: type
 
     # What it needs installed to run.
     required_packages: list[str] = []
@@ -320,6 +321,14 @@ class HfExporter(ABC):
 
     def __init__(self):
         self.validate_environment()
+
+    def _as_config(self, config):
+        """`config` as this exporter's `config_class`, built from a dict when handed one."""
+        if isinstance(config, dict):
+            return self.config_class(**config)
+        if not isinstance(config, self.config_class):
+            raise TypeError(f"Expected config to be a {self.config_class.__name__} or dict, got {type(config)}")
+        return config
 
     def validate_environment(self, *args, **kwargs):
         """Check `required_packages` are installed and warn on version drift from `tested_versions`."""
@@ -583,9 +592,8 @@ class ModelRunner(ABC):
         """Where this graph runs, and so where its outputs land.
 
         A runner whose handle knows assigns `self.device` instead, which seeds this — a `torch.export`
-        program is a module and its weights say where they are. A compiled artifact has no weights left to
-        ask (AOTInductor bakes them into the package, TensorRT folds them into its engines), so it falls
-        back to what the export recorded, and to CPU only when nothing recorded anything."""
+        program is a module and its weights say where they are. Otherwise it is what the export recorded,
+        and CPU when nothing recorded anything."""
         return self.export_metadata.device or torch.device("cpu")
 
     @functools.cached_property

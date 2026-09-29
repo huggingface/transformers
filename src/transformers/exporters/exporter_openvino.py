@@ -105,6 +105,7 @@ class OpenVINOExporter(DynamoExporter):
     required_packages = ["torch", "openvino"]
     tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
     export_format = ExportFormat.OPENVINO
+    config_class = OpenVINOConfig
     artifact_suffix = ".xml"
     # A variable's `ReadValue` computes the cross-attention cache on a sequence's first step and keeps it.
     decoder_writes_cross_cache = True
@@ -115,10 +116,7 @@ class OpenVINOExporter(DynamoExporter):
         sample_inputs: MutableMapping[str, Any],
         config: OpenVINOConfig | dict[str, Any],
     ) -> tuple[openvino.Model, dict]:
-        if isinstance(config, dict):
-            config = OpenVINOConfig(**config)
-        elif type(config) is not OpenVINOConfig:
-            raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
+        config = self._as_config(config)
 
         # ``torch.no_grad()``: with grad enabled, every modeling-internal ``torch.no_grad()``
         # region (frozen towers, VQ-VAEs) traces as a ``wrap_with_set_grad_enabled``

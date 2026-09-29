@@ -36,8 +36,6 @@ Every exporter returns an [`~exporters.ExportArtifacts`]; `artifact` is the back
 | Exporter               | `artifact`                 | Runtime                                    |
 | ---------------------- | -------------------------- | ------------------------------------------ |
 | [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation       |
-| [`AotiExporter`]       | `bytes` (a `.pt2` package) | PyTorch, compiled ahead of time            |
-| [`TensorrtExporter`]   | `ExportedProgram`          | NVIDIA GPUs, through TensorRT engines      |
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)       |
 | [`OpenVINOExporter`]   | `openvino.Model`           | OpenVINO runtime (Intel CPU/GPU/NPU)       |
@@ -70,20 +68,6 @@ Install the dependencies for the backend you plan to export to.
 
 ```bash
 pip install transformers "torch==2.12.0"
-```
-
-</hfoption>
-<hfoption id="AOTInductor">
-
-```bash
-pip install transformers "torch==2.12.0"   # plus a C++ toolchain: Inductor compiles the package it writes
-```
-
-</hfoption>
-<hfoption id="TensorRT">
-
-```bash
-pip install transformers torch torch-tensorrt   # the two are released in matched pairs
 ```
 
 </hfoption>
@@ -245,53 +229,6 @@ outputs = exported_model(**inputs)
 > Loading refuses a directory whose manifest has no recorded metadata rather than falling back to
 > inference, because a runner that guesses the precision or the cache layout still runs — and produces
 > quietly wrong numbers. Re-save with `save_pretrained` if you hit this.
-
-## Compile ahead of time
-
-[`AotiExporter`] compiles the same graph [`DynamoExporter`] traces. A `torch.export` program replays its
-ATen graph through the ordinary eager kernels, so tracing buys you a portable graph but not speed;
-handing that graph to AOTInductor generates and compiles kernels for it and packages them as a `.pt2`,
-which loads with no warm-up to pay.
-
-```python
-from transformers.exporters import AotiExporter, AotiConfig
-
-exported_artifacts = AotiExporter().export(model, inputs, config=AotiConfig(dynamic=True))
-exported_artifacts.save_pretrained("qwen3-compiled")
-```
-
-Everything else is unchanged: the package loads through [`AutoExportedModel`] like any other export, and a
-generative model decomposes and runs exactly as it does on the other backends.
-
-A package holds machine code for the device it was compiled on, so it cannot be moved afterwards — export
-again for another kind of device.
-
-```python
-AotiConfig(dynamic=True, inductor_configs={"max_autotune": True})   # tuning knobs go straight to Inductor
-```
-
-## Compile with TensorRT
-
-[`TensorrtExporter`] hands the same graph to TensorRT, through Torch-TensorRT's `dynamo` frontend. What
-comes back is still an `ExportedProgram`, with each engine sitting in the graph as a `tensorrt.execute_engine`
-call — so it saves, loads and runs like any other export, and the runtime drives it unchanged.
-
-```python
-from transformers.exporters import TensorrtConfig, TensorrtExporter
-
-exported_artifacts = TensorrtExporter().export_for_generation(
-    model, inputs, config=TensorrtConfig(dynamic=False), generation_config=generation_config
-)
-```
-
-Conversion is partial by nature: TensorRT takes the subgraphs it can build engines for and leaves the rest
-as torch ops, so a converted model is engines with torch segments between them rather than one engine.
-`min_block_size` decides how small a run of ops is still worth an engine, and `torch_executed_ops` names the
-ones to leave alone — a cache write (`index_put`) is there by default, because the converter cannot build it.
-
-Export against a **static cache** (`cache_implementation="static"`). TensorRT holds its engines to the shape
-range they were built for, where `torch.export` treats that range as advisory, and a growing cache asks the
-decode graph to take a length it never traced — zero, at the first step, which TensorRT refuses outright.
 
 ## Dynamic shapes
 
@@ -684,12 +621,9 @@ in-place write can land in the caller's own tensor (see the reference for what e
   )
   ```
 
-  > [!NOTE]
-  > The zero-copy in-place write also needs the caller to bind output buffers at runtime via
-  > `Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
-  > exposes only `execute`/`set_inputs`/`get_outputs`). The flags above set it up, but the in-place
-  > write is a **C++-only** path. From Python, read the updated cache back from the method outputs each
-  > step.
+[`ExecutorchModelRunner`] then binds each cache output to the cache tensor it updates. That needs an ExecuTorch
+runtime whose `Method` has `set_output`; on an older one the runner reads the updated cache back from the
+outputs each step instead.
 
 ### Generate from an export
 
@@ -735,33 +669,6 @@ were traced against, so a load that guessed a different one would build the wron
 This covers decoder-only text, VLMs (including the multi-axis M-RoPE position ids, which the runtime
 builds by running the model class's own `get_rope_index` on the saved config, with no weights loaded),
 and encoder-decoder models.
-
-<details>
-
-<summary>Driving the steps yourself</summary>
-
-For a loop you write yourself — custom serving, speculative decoding, anything `generate` does not cover —
-build the runners and assemble them: `load_export_runners` opens a saved export into `{component: runner}`,
-and [`~exporters.ExportedGenerator.from_runners`] turns those into a runtime. Each runner takes and returns
-named tensors whatever the backend produced it, so a step can be driven directly.
-
-```python
-from transformers.exporters.base import load_export_runners
-
-runners, manifest = load_export_runners("qwen3-generate")
-outputs = runners["decode"](input_ids=..., attention_mask=..., position_ids=..., past_key_values=...)
-logits = outputs["logits"]
-```
-
-The cache is whatever the graphs were traced against — a `StaticCache` for `torch.export`, device buffers
-for ONNX Runtime, caller arrays in C++ for ExecuTorch.
-
-> [!NOTE]
-> ExecuTorch's zero-copy in-place cache write needs `Method::set_output_data_ptr`, which its Python runtime
-> does not expose (`executorch.runtime.Method` offers only `execute`/`set_inputs`/`get_outputs`), so from
-> Python read the updated cache back from the method outputs each step. The in-place path is C++-only.
-
-</details>
 
 ## Limitations and workarounds
 

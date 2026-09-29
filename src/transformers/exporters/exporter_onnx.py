@@ -125,6 +125,7 @@ class OnnxExporter(DynamoExporter):
     """
 
     export_format = ExportFormat.ONNX
+    config_class = OnnxConfig
     artifact_suffix = ".onnx"
 
     required_packages = ["torch", "onnx", "onnxscript"]
@@ -136,10 +137,7 @@ class OnnxExporter(DynamoExporter):
         sample_inputs: MutableMapping[str, Any],
         config: OnnxConfig | dict[str, Any],
     ) -> ONNXProgram:
-        if isinstance(config, dict):
-            config = OnnxConfig(**config)
-        elif type(config) is not OnnxConfig:
-            raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
+        config = self._as_config(config)
 
         with apply_patches("onnx"), patch_model_outputs(model) as (inputs_names, outputs_names):
             exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)

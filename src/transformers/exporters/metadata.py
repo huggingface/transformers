@@ -173,16 +173,11 @@ def _traced_cache_layout(module) -> dict[int, dict[str, int]]:
 
 @dataclass(frozen=True)
 class ExportMetadata:
-    """What the exporter recorded about one graph (`build_export_metadata`), parsed.
+    """What the exporter recorded about one graph (`build_export_metadata`), parsed: the trace's account of
+    what the artifact's inputs and outputs mean, which every runner accessor reads.
 
-    The artifact itself only says what its inputs are *called* and what shape they were traced at; this is
-    the trace's own account of what they mean, and it is what every runner accessor reads. Build it from
-    whatever the backend carries the payload as — JSON text for ONNX (a `metadata_props` entry) and
-    ExecuTorch (a constant method), the dict itself for a dynamo program, which *is* the program.
-
-    Empty for an artifact written before the metadata existed, or by another tool: every accessor then
-    answers `None`/empty and each runner falls back to what its declared tensors say, which is what all of
-    them used to do.
+    Empty for an artifact without it (another tool's): every accessor then answers `None`/empty and the
+    runner falls back to what its declared tensors say.
     """
 
     raw: Mapping[str, Any] = field(default_factory=dict)
@@ -206,17 +201,6 @@ class ExportMetadata:
 
     def __bool__(self) -> bool:
         return bool(self.raw)
-
-    @property
-    def schema_version(self) -> int | None:
-        """Version of the payload's own schema, so a reader can tell what to expect of it."""
-        version = self.raw.get("schema_version")
-        return version if isinstance(version, int) else None
-
-    @property
-    def architecture(self) -> str | None:
-        """What was exported. Provenance only — nothing reads it to decide behaviour."""
-        return self.raw.get("architecture")
 
     @property
     def input_names(self) -> tuple[str, ...]:
@@ -270,27 +254,16 @@ class ExportMetadata:
 
     @property
     def mask_rank(self) -> int | None:
-        """The rank the graph's `attention_mask` was traced with, `None` when it takes none.
-
-        `generate` upgrades a 2-D padding mask to the 4-D causal mask for any compileable cache, assuming
-        the model's forward wants one — but an exported graph starts *after* whatever mask building its
-        model does, so only the trace can say which it took. An alibi model (bloom) reads the 2-D padding
-        mask directly and compares its width to the cache length, so a 4-D mask fails a guard rather than
-        mismatching a shape. Recorded in kwarg space, not read off an artifact's declared shapes — those
-        are a different fact and gave this a different answer per backend."""
+        """The rank the graph's `attention_mask` was traced with, `None` when it takes none. Only the trace
+        can say: the graph starts after the model's own mask building, and a model reading the 2-D mask
+        directly (bloom's alibi) fails a guard when handed the 4-D one `generate` builds."""
         return self.kwargs.get("attention_mask", {}).get("rank")
 
     @property
     def position_axes(self) -> int | None:
-        """How many rows the graph's M-RoPE `position_ids` was traced with, `None` when it took the plain
-        2-D `[batch, positions]` (or none at all).
-
-        Where the modality axes sit is per architecture, and the count is not derivable from the config:
-        qwen2_vl's `get_rope_index` lays out the 3 vision axes and its model prepends the text row, while
-        hunyuan_vl's lays out every axis its `mrope_section` declares and prepends nothing. Both return as
-        many rows as their config states sections, so only the trace can say how many the graph takes —
-        and feeding one row too many fails a guard rather than broadcasting.
-        """
+        """How many rows the graph's M-RoPE `position_ids` was traced with, `None` for plain 2-D positions (or
+        none). Not derivable from the config: qwen2_vl prepends a text row to its vision axes, hunyuan_vl
+        does not."""
         shape = self.kwargs.get("position_ids", {}).get("shape")
         return shape[0] if isinstance(shape, list) and len(shape) == 3 else None
 
@@ -317,16 +290,21 @@ class ExportMetadata:
         return {name: leaf.get("rank") for name, leaf in leaves.items()} if leaves else None
 
     @property
+    def _cache_layers(self) -> list[dict]:
+        """What the metadata recorded about each traced cache layer, in layer order."""
+        return (self.raw.get("cache") or {}).get("layers") or []
+
+    @property
     def cache_lengths(self) -> dict[int, int]:
         """`{layer index: length}` for the traced cache's fixed-size layers; empty for a growing cache."""
-        layers = (self.raw.get("cache") or {}).get("layers") or []
+        layers = self._cache_layers
         return {index: layer["length"] for index, layer in enumerate(layers) if "length" in layer}
 
     @property
     def indexer_layers(self) -> dict[int, bool]:
         """`{layer index: whether the traced layer carried an indexer tensor}`, for the layers whose class
         keeps one at all. A layer absent here was not traced with an indexer slot to speak of."""
-        layers = (self.raw.get("cache") or {}).get("layers") or []
+        layers = self._cache_layers
         return {index: layer["indexer"] for index, layer in enumerate(layers) if "indexer" in layer}
 
     @property
@@ -335,7 +313,7 @@ class ExportMetadata:
 
         A layer whose state is not keys-and-values (a recurrent layer's conv / SSM buffers) has no geometry
         and is absent, which is what the caller checks."""
-        layers = (self.raw.get("cache") or {}).get("layers") or []
+        layers = self._cache_layers
         return {
             index: (layer["heads"], layer["key_dim"], layer["value_dim"])
             for index, layer in enumerate(layers)
@@ -346,56 +324,27 @@ class ExportMetadata:
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
 ) -> dict[str, Any]:
-    """The facts about a graph that its runner would otherwise have to infer from names and shapes.
-
-    A loaded artifact says what its inputs are *called* — after each backend has mangled the names, ONNX
-    prefixing mutated ones with `input.` and ExecuTorch flattening pytrees to `<kwarg>_<leaf>` — and what
-    shape they were traced at, but nothing about what they mean. So every runner ended up guessing: the
-    compute precision off whichever tensor happened to be floating point, the mask layout off name
-    prefixes, the cache kwarg by trying `past_key_values` then `cache_params`. Each guess has been wrong at
-    least once, and feeding an fp32 cache to a half-precision program was read as a backend limitation and
-    hid a bug across every MoE model.
-
-    What goes in is deliberately generic — the precision, and the kwargs as *traced*, with each one's rank,
-    dtype and container. Nothing here names a model family or a component role: which of those kwargs is a
-    mask, and which mask a causal one belongs in, stays with the generation layer that already knows, and it
-    can now ask about un-mangled names. Anything a runner reads straight off its own handle (declared
-    shapes, input order) stays there too.
+    """The facts about a graph that its runner would otherwise infer from backend-mangled names and shapes:
+    the precision, the kwargs as traced (rank, dtype, container), the flat input and output order, and the
+    cache layout. Deliberately generic — which kwarg is a mask stays with the generation layer.
     """
     metadata = {
-        # Version of this payload's own schema, so a reader can tell what to expect of it.
+        # Provenance, for the day the artifact outlives this environment.
         "schema_version": 1,
         "architecture": type(model).__name__,
-        # And what wrote it, for the day the artifact outlives this environment. The architecture is
-        # provenance too — it names what was exported, and nothing reads it to decide behaviour.
         "packages": _package_versions(packages),
-        # Precision the graph computes in, from the model's own parameters rather than from whichever tensor
-        # happens to be floating point: integer ids and masks say nothing about it, and a cache fed at the
-        # wrong dtype is refused outright when the method binds its inputs. Read the parameters the way
-        # `PreTrainedModel.dtype` does rather than asking for that property, because a component split out
-        # of a multi-modal or encoder-decoder model is a plain `nn.Module` and does not carry it (`FSMTEncoder`).
+        # The precision the graph computes in, off the parameters (a split-out component is a plain
+        # `nn.Module` with no `.dtype`): a cache fed at another dtype is refused when the method binds it.
         "dtype": str(
             next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
         ).removeprefix("torch."),
-        # Where it was exported, for the backends whose artifact cannot say. A `torch.export` program keeps
-        # its weights and a runner reads the device off them, but a *compiled* one has none left to read —
-        # AOTInductor bakes them into the package and TensorRT folds them into its engines, and a runner
-        # that then assumed CPU had the generation loop building a CPU cache for a CUDA graph.
+        # Where it was exported, for a runner whose handle cannot say.
         "device": str(next((p.device for p in model.parameters()), torch.device("cpu"))),
         "kwargs": {name: _traced_kwarg(value) for name, value in inputs.items()},
     }
-    # What the *graph* is, as the trace saw it. Each backend used to rebuild these its own way — ExecuTorch
-    # baking bespoke constant methods, ONNX matching cache input names with a regex and reading the geometry
-    # back off their shapes — so they now come from one place: the flat input order (a `.pte` binds inputs
-    # positionally and carries no names), the output leaf names and how many of the outputs are the model's
-    # own (a lowering emits its mutated-input copies first), and the cache's per-layer geometry, which no
-    # artifact states — shapes alone don't say which leaf is a layer's keys.
     graph_signature = exported_program.graph_signature
-    # Every user input, in the order the program binds them, including the ones carrying no tensor: a `None`
-    # kwarg the trace kept as a slot (a mask *dict* whose `full_attention` entry was `None` — `None` is a
-    # pytree leaf, so the slot counts) is a `ConstantArgument`, which `graph_signature.user_inputs` reports as
-    # `None` rather than a name. Read the specs instead, which name every argument kind: drop one and a
-    # positional backend binds every later input a slot early.
+    # Every user input in binding order, including a `None` slot the trace kept (a `ConstantArgument`, which
+    # `graph_signature.user_inputs` reports as `None`): drop one and a positional backend binds a slot early.
     user_inputs = [spec.arg for spec in graph_signature.input_specs if spec.kind.name == "USER_INPUT"]
     metadata["input_names"] = [arg.name for arg in user_inputs]
     # What those valueless slots hold, so a positional backend can fill them rather than skip them.
@@ -408,23 +357,14 @@ def build_export_metadata(
         module = exported_program.module()
     except Exception:  # a program that cannot be unlifted describes neither
         module = None
-    # The cache the graph was traced against, layer by layer: the class names say what *kind* of state each
-    # layer keeps — growing or fixed-size, windowed, cross-attention — which is the question the runtime
-    # otherwise has to put to whatever cache object it happens to hold, and a `DynamicSlidingWindowLayer`
-    # answers it misleadingly (it grows, yet reports its window as a maximum length). The geometry comes
-    # from the graph's own cache inputs, because a config cannot always give it.
+    # The cache the graph was traced against, layer by layer: what kind of state each keeps, its geometry and
+    # the length it was sized for, which the runtime builds to rather than re-deriving.
     layout = _traced_cache_layout(module) if module is not None else {}
     cache = next((value for value in inputs.values() if isinstance(value, Cache)), None)
     layers = _self_attention_layers(cache)
     if cache is not None:
         metadata["cache"] = {
             "class": type(cache).__name__,
-            "layers": [
-                # Plus the layer's own state: its geometry, and the length it was sized for. The runtime
-                # builds to that rather than re-deriving a size, because `generate` sizes a fixed cache
-                # from the prompt in front of it, and a graph carries its cache's sizes in the input spec.
-                {"class": type(layer).__name__, **layout.get(index, {})}
-                for index, layer in enumerate(layers)
-            ],
+            "layers": [{"class": type(layer).__name__, **layout.get(index, {})} for index, layer in enumerate(layers)],
         }
     return metadata

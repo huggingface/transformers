@@ -25,7 +25,7 @@ Add a workaround by writing one function and registering it with a decorator. Ea
 
 To add a whole backend rather than a workaround, subclass [`HfExporter`] and implement its two hooks —
 `export_artifact`, which traces one graph and returns it with the metadata describing it, and
-`save_artifact`, which writes one out — then declare `export_format` and `artifact_suffix`. The public
+`save_artifact`, which writes one out — then declare `export_format`, `artifact_suffix` and `config_class`. The public
 `export` / `export_for_generation` entry points, the [`~exporters.ExportArtifacts`] they return, and
 loading it back are built on those two and need no per-backend code.
 
@@ -34,12 +34,11 @@ Pair it with a [`~exporters.ModelRunner`], which is what runs the artifact back:
 Register the config, the exporter and the runner under one format name with `@register_export_config`,
 `@register_exporter` and `@register_runner`, and every auto class and loader finds them.
 
-[`AotiExporter`] is the smallest worked example in the tree: it subclasses [`DynamoExporter`], compiles
-the program that one traces, and pairs with a runner that loads the result — a working backend in about
-150 lines across
-[exporter_aoti.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_aoti.py)
+The smallest pair in the tree is [`DynamoExporter`] and [`DynamoModelRunner`], in
+[exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)
 and
-[runner_aoti.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/runner_aoti.py).
+[runner_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/runner_dynamo.py);
+every other backend subclasses that exporter and lowers the program it traces.
 
 ## Patches and fixes
 

@@ -128,6 +128,7 @@ class ExecutorchExporter(DynamoExporter):
     """
 
     export_format = ExportFormat.EXECUTORCH
+    config_class = ExecutorchConfig
     artifact_suffix = ".pte"
 
     required_packages = ["torch", "executorch"]
@@ -140,10 +141,7 @@ class ExecutorchExporter(DynamoExporter):
         config: ExecutorchConfig | dict[str, Any],
     ) -> ExecutorchProgramManager:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        if isinstance(config, dict):
-            config = ExecutorchConfig(**config)
-        elif type(config) is not ExecutorchConfig:
-            raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
+        config = self._as_config(config)
 
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
@@ -179,9 +177,8 @@ class ExecutorchExporter(DynamoExporter):
 
     @classmethod
     def save_artifact(cls, artifact, path) -> None:
-        """The metadata is a constant method inside the program (`_patch_metadata_method`), so it is already
-        part of the serialized `.pte`. Streamed rather than taken through `.buffer`, which materializes the
-        whole program as bytes first."""
+        """Write the `.pte`, whose metadata already rides inside it as a constant method. Streamed rather than
+        taken through `.buffer`, which materializes the whole program as bytes first."""
         with open(path, "wb") as file:
             artifact.write_to_file(file)
 
@@ -228,6 +225,13 @@ def canonicalize_size_one_dim_orders(executorch_program) -> None:
                 tensor.dim_order = type(dim_order)(range(len(sizes)))
 
 
+def _backed_var_to_val(shape_env) -> dict:
+    """The hints of `shape_env`'s backed symbols: `backed_var_to_val`, or `var_to_val` on an older torch (the old
+    name now warns)."""
+    values = getattr(shape_env, "backed_var_to_val", None)
+    return shape_env.var_to_val if values is None else values
+
+
 @contextlib.contextmanager
 def keep_backed_symbols_symbolic(exported_program: ExportedProgram):
     """Selective: keep *backed* symbols symbolic through the lowering, let everything else proceed.
@@ -255,11 +259,7 @@ def keep_backed_symbols_symbolic(exported_program: ExportedProgram):
         return
     original = shape_env._set_replacement
 
-    # `var_to_val` was renamed `backed_var_to_val` (the old name warns); both hold exactly the backed
-    # symbols, which is the distinction this wrapper turns on.
-    backed_values = getattr(shape_env, "backed_var_to_val", None)
-    if backed_values is None:
-        backed_values = shape_env.var_to_val
+    backed_values = _backed_var_to_val(shape_env)
 
     def selective(symbol, replacement, *args, **kwargs):
         if symbol in backed_values and getattr(replacement, "is_number", False):
@@ -420,12 +420,8 @@ def _get_backend_config(config):
 
 
 # ── Stage 1: Backend preparation ──────────────────────────────────────────────
-# Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
-# and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
-# - Move the model to the target device.
-# - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
-# - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
-# To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
+# Each `prepare_for_<backend>` puts the model and sample inputs where and how the backend needs them (device,
+# dtype) and returns `(model, sample_inputs, partitioners)`. A new backend adds one to `_BACKEND_PREPARE`.
 
 
 def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
@@ -659,7 +655,7 @@ def _compare_assuming_nonempty(left, right) -> int:
         # make the comparison unanswerable again, and an unanswerable comparison is what puts two operands of
         # one op in different dim orders — which ExecuTorch's kernels reject at run time (`0x12`).
         shape_env = getattr(node, "shape_env", None)
-        hints = getattr(shape_env, "backed_var_to_val", None) or getattr(shape_env, "var_to_val", None) or {}
+        hints = _backed_var_to_val(shape_env) if shape_env is not None else {}
         ranges = getattr(shape_env, "var_to_range", {})
 
         def stand_in(symbol):
@@ -1694,11 +1690,7 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
         if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
             shape_env = val.fake_mode.shape_env
             range_dicts.append(shape_env.var_to_range)
-            # `is None`, not `or`: an empty backed mapping is falsy and would fall through to the
-            # deprecated name.
-            var_to_val = getattr(shape_env, "backed_var_to_val", None)
-            if var_to_val is None:
-                var_to_val = shape_env.var_to_val
+            var_to_val = _backed_var_to_val(shape_env)
             break  # all nodes share the same shape_env, so we only need one
 
     floor = _dim_floor(len({sym for rd in range_dicts for sym, vr in rd.items() if isinstance(vr.upper, IntInfinity)}))

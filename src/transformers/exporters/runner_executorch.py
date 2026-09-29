@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..utils.import_utils import is_torch_available
 from .base import ModelRunner
-from .cache import _cache_tensors
+from .cache import _cache_tensors, _read_cache_entry
 from .metadata import (
     EXPORT_METADATA_KEY,
     ExportMetadata,
@@ -65,22 +65,13 @@ def _baked_export_metadata(program) -> str | None:
 
 
 class ExecutorchModelRunner(ModelRunner):
-    """`ModelRunner` backed by a loaded ExecuTorch runtime program
-    (`Runtime.get().load_program(...)`). Unlike ONNX, a `.pte` carries no `input.`/`output.` convention:
-    inputs are **positional** (in the source graph's flat order) and `execute` returns the lowering's
-    mutated-input copies first, the model's own outputs last. A loaded method's metadata carries only counts
-    and tensor shapes, so the exporter bakes the input names and the user-output count into the `.pte`
-    itself as one metadata constant method (`build_export_metadata`) — the program is self-describing, exactly
-    like an ONNX session or a `torch.export` module, and this runner needs nothing else. Cache inputs are
-    the `past_key_values*` ones, each named by its flat leaf index; the model's outputs are
-    `[logits, *cache_updates]`, in cache-input order.
+    """`ModelRunner` backed by a loaded ExecuTorch program (`Runtime.get().load_program(...)`).
 
-    Multi-token decode works: XNNPACK needs a *bounded* dynamic sequence dim, which `_fix_range_constraints`
-    already supplies (it caps unbounded `Dim.AUTO` extents), so one graph serves prefill and decode.
+    A `.pte` binds its inputs positionally and returns the lowering's mutated-input copies before the model's
+    own outputs, reporting only counts and shapes; the names and the user-output count come from the metadata
+    the exporter baked in as a constant method. Cache inputs are named by flat leaf index
+    (`past_key_values_<N>`), and outputs come back under the names the trace recorded.
     """
-
-    # Cache inputs are matched by name; the model's own outputs come back under the names the trace recorded
-    # (`logits`, `past_key_values.layers.0.keys`, …), the same mapping the other backends return.
 
     def __init__(self, program, export_metadata=None):
         self._method = program.load_method("forward")
@@ -95,41 +86,51 @@ class ExecutorchModelRunner(ModelRunner):
         recorded_user_outputs = self.export_metadata.num_user_outputs
         num_user_outputs = total_outputs if recorded_user_outputs is None else recorded_user_outputs
         self._user_output_indices = range(total_outputs - num_user_outputs, total_outputs)
-        # Per cache kwarg, the leaf inputs it declares. Matched exactly (`<kwarg>_<N>`) rather than by
-        # prefix, so two caches whose names share one cannot claim each other's leaves.
         # What the method declares, for choosing among the names a pytree kwarg could go in under.
         self._session_input_names = set(self.input_names)
+        # Per cache kwarg, the leaf inputs it declares, matched exactly (`<kwarg>_<N>`) so two caches whose
+        # names share a prefix cannot claim each other's leaves.
         self._cache_names = {
             cache_input: [name for name in self.input_names if re.fullmatch(rf"{re.escape(cache_input)}_\d+", name)]
             for cache_input in self.cache_inputs
         }
-        # Same contract as the other runners': a graph that took a *dict* of masks declares one input per
-        # attention type, so the generation loop has the ranks to build it rather than assuming a single mask.
+        # The model's cache outputs (`past_key_values.layers.0.keys`), by their leaf path in the cache, where the
+        # runtime lets us point them at our own tensors: the export left them unplanned (`alloc_graph_output=False`)
+        # and the runtime can bind them (`Method.set_output`).
+        can_bind = hasattr(self._method, "set_output")
+        self._cache_outputs = [
+            (index, kwarg, path.split("."))
+            for index, name in zip(self._user_output_indices, self._output_names)
+            for kwarg, _, path in [name.partition(".")]
+            if can_bind and path and kwarg in self.cache_inputs and not _is_memory_planned(self._method, index)
+        ]
 
     @classmethod
     def from_artifact(cls, artifact, export_metadata=None, device=None, **kwargs) -> ExecutorchModelRunner:
-        """Load an in-memory `ExecutorchProgramManager` through its serialized buffer, which is what the
-        runtime accepts — there is no path to hand it."""
-        from executorch.runtime import Runtime, Verification
-
-        program = Runtime.get().load_program(artifact.buffer, verification=Verification.Minimal)
-        return cls(program, export_metadata=export_metadata, **kwargs)
+        """Load an in-memory `ExecutorchProgramManager` through its serialized buffer — the runtime takes no
+        program object."""
+        return cls._load(artifact.buffer, export_metadata, **kwargs)
 
     @classmethod
     def from_pretrained(cls, path, export_metadata=None, device=None, **kwargs) -> ExecutorchModelRunner:
-        """Load a saved `.pte` into the ExecuTorch runtime. `Verification.Minimal` matches what the export
-        tests load with — full verification walks the whole program and buys nothing here, since the file
-        was just written by us."""
+        """Load a saved `.pte`."""
+        return cls._load(Path(path), export_metadata, **kwargs)
+
+    @classmethod
+    def _load(cls, source, export_metadata, **kwargs) -> ExecutorchModelRunner:
         from executorch.runtime import Runtime, Verification
 
-        program = Runtime.get().load_program(Path(path), verification=Verification.Minimal)
+        # Minimal verification, as the export tests load with: a full walk of a program we just wrote buys nothing.
+        program = Runtime.get().load_program(source, verification=Verification.Minimal)
         return cls(program, export_metadata=export_metadata, **kwargs)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
+        caches = {}
         for cache_input, declared in self._cache_names.items():
             cache = kwargs.pop(cache_input, None)
             if cache is None:
                 continue
+            caches[cache_input] = cache
             # Cache inputs are named by flat leaf index (`<kwarg>_<N>`) — index rather than zip,
             # since the lowering may have pruned leaves it left unused (sliding caches' scalars).
             leaves = _cache_tensors(cache)
@@ -153,6 +154,7 @@ class ExecutorchModelRunner(ModelRunner):
             _executorch_constant(constants[name]) if name in constants else kwargs[name].contiguous()
             for name in self.input_names
         )
+        self._bind_cache_outputs(caches)
         try:
             outputs = self._method.execute(feed)
         except RuntimeError as error:
@@ -161,3 +163,22 @@ class ExecutorchModelRunner(ModelRunner):
                 raise
             raise RuntimeError(f"{error}\nFed inputs the method does not accept:\n" + "\n".join(mismatches)) from error
         return dict(zip(self._output_names, (outputs[i] for i in self._user_output_indices)))
+
+    def _bind_cache_outputs(self, caches: dict) -> None:
+        """Point each of the model's cache outputs at the cache tensor it updates, so the step writes the cache
+        where it lives and hands back those very tensors, leaving the generation loop nothing to copy. The
+        runtime keeps a mutated input's own write-back on the fed tensor by itself; the model's copy of it is
+        a separate output, matched here by its leaf path the way ONNX matches `output.<name>`."""
+        for index, kwarg, path in self._cache_outputs:
+            tensor = _read_cache_entry(caches[kwarg], path) if kwarg in caches else None
+            if isinstance(tensor, torch.Tensor) and tensor.is_contiguous():
+                self._method.set_output(tensor, index)
+
+
+def _is_memory_planned(method, index: int) -> bool:
+    """Whether output `index` lives in the method's planned arena, where no caller tensor can be bound. A
+    non-tensor output has no tensor metadata and counts as planned."""
+    try:
+        return method.metadata.output_tensor_meta(index).is_memory_planned()
+    except Exception:
+        return True
