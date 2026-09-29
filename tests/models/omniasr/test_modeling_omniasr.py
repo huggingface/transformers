@@ -183,6 +183,7 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
     def setUp(cls):
         cls.checkpoint_name = "bezzam/omniasr-ctc-300m-v2"
         cls.dtype = torch.float32
+        cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr"
         cls.processor = AutoProcessor.from_pretrained("bezzam/omniasr-ctc-300m-v2")
 
     def tearDown(self):
@@ -207,8 +208,7 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer_ctc-py
         """
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_single.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(self.fixtures_path / "expected_results_single.json", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["pred_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
@@ -228,8 +228,7 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer_ctc_batch-py
         """
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_batch.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(self.fixtures_path / "expected_results_batch.json", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["pred_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
@@ -256,6 +255,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(cls):
         cls.checkpoint_name = "bezzam/omniasr-llm-300m-v2"
         cls.dtype = torch.float32
+        cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr"
         cls.processor = AutoProcessor.from_pretrained("bezzam/omniasr-llm-300m-v2")
 
     def tearDown(self):
@@ -280,8 +280,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer_llm-py
         """
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_single_llm.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(self.fixtures_path / "expected_results_single_llm.json", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["pred_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
@@ -310,8 +309,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer_llm_batch-py
         """
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_batch_llm.json"
-        with open(RESULTS_PATH, "r") as f:
+        with open(self.fixtures_path / "expected_results_batch_llm.json", encoding="utf-8") as f:
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = raw_data["pred_ids"]
         EXPECTED_HYPOTHESIS_LENS = raw_data["hypothesis_lens"]

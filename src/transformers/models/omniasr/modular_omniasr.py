@@ -153,6 +153,7 @@ class OmniASREncoderModelOutput(ParakeetEncoderModelOutput):
     pass
 
 
+@auto_docstring(custom_intro="""Outputs of OmniASR CTC model generation.""")
 @dataclass
 class OmniASRCTCGenerateOutput(ParakeetCTCGenerateOutput):
     pass

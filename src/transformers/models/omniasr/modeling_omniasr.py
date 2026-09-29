@@ -350,6 +350,7 @@ class OmniASREncoderModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.Tensor | None = None
 
 
+@auto_docstring(custom_intro="""Outputs of OmniASR CTC model generation.""")
 @dataclass
 class OmniASRCTCGenerateOutput(ModelOutput):
     """
