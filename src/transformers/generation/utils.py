@@ -37,6 +37,7 @@ from ..cache_utils import (
 )
 from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
+from ..distributed.tensor_parallel import _get_parameter_tp_plan
 from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
     check_python_requirements,
@@ -2138,6 +2139,13 @@ class GenerationMixin(ContinuousMixin):
         num_heads, head_dim = get_head_shapes(text_config)
         tp_size = getattr(self, "_tp_size", None) or 1
         if tp_size == 1:
+            return num_heads, head_dim
+        key_param_name = next((name for name, _ in self.named_parameters() if name.endswith("k_proj.weight")), None)
+        if key_param_name is None:
+            # No key projection: unknown whether the plan shards the heads
+            return None
+        if _get_parameter_tp_plan(key_param_name, self.tp_plan) != "colwise":
+            # Unsharded heads: no plan, a gathered output, or experts only
             return num_heads, head_dim
         layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
         if any(heads % tp_size for heads in layer_heads):
