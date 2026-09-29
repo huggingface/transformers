@@ -62,6 +62,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "rope_theta": entropy_model_params.get("rope_theta", 10000.0),
         "attn_impl": entropy_model_params.get("attn_impl", "sdpa"),
         "attn_bias_type": entropy_model_params.get("attn_bias_type", "causal"),
+        "sliding_window": entropy_model_params.get("sliding_window"),
         "intermediate_size": patcher_intermediate_size,
     }
 

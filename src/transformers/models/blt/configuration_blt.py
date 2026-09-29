@@ -149,6 +149,7 @@ class BltPatcherConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
+    sliding_window: int | None = 512
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
