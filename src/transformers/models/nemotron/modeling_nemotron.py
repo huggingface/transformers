@@ -72,7 +72,7 @@ class NemotronLayerNorm1P(nn.LayerNorm):
         super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
 
     def forward(self, input: Tensor) -> Tensor:
-        device_type = input.device.type if input.device.type != "mps" else "cpu"
+        device_type = input.device.type
         args = _cast_if_autocast_enabled(
             device_type, input, self.normalized_shape, self.weight + 1.0, self.bias, self.eps
         )
