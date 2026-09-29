@@ -21,8 +21,8 @@ from parameterized import parameterized
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
+    MossTranscribeDiarizeFeatureExtractor,
     MossTranscribeDiarizeProcessor,
-    WhisperFeatureExtractor,
 )
 from transformers.testing_utils import require_librosa, require_torch
 
@@ -73,7 +73,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
 
         self.assertEqual(reloaded.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(reloaded.feature_extractor, WhisperFeatureExtractor)
+        self.assertIsInstance(reloaded.feature_extractor, MossTranscribeDiarizeFeatureExtractor)
         self.assertEqual(reloaded.time_marker_every_seconds, processor.time_marker_every_seconds)
 
     @require_torch
