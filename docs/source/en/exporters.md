@@ -36,6 +36,7 @@ in the modeling code.
 | [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation       |
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)       |
+| [`OpenVINOExporter`]   | `openvino.Model`           | OpenVINO runtime (Intel CPU/GPU/NPU)       |
 
 [`AutoHfExporter`] picks the right exporter from a config, and [`AutoExportConfig`] picks the
 right config class from a dict. Both follow the same auto-class pattern in Transformers, which
@@ -75,10 +76,35 @@ pip install transformers "torch==2.12.0" "onnx==1.21.0" "onnxscript==0.7.0" onnx
 ```
 
 </hfoption>
-<hfoption id="ExecuTorch">
+<hfoption id="ExecuTorch XNNPACK">
 
 ```bash
 pip install transformers "torch==2.12.0" "executorch==1.3.1"
+```
+
+</hfoption>
+<hfoption id="ExecuTorch MLX">
+
+Requires macOS 14 or later on Apple Silicon. MLX is included in the macOS ARM64 ExecuTorch
+nightly wheels; it is not a separate package or extra. The following nightly pair was validated
+with the MLX exporter tests. Install it from the standard ExecuTorch nightly registry:
+
+```bash
+pip install transformers
+pip install \
+  "executorch==1.6.0.dev20260924" \
+  "torch==2.15.0.dev20260924" \
+  --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+```
+
+Install `torch` explicitly because nightly ExecuTorch wheels do not declare it as a dependency.
+For source builds, see the [MLX installation guide](https://docs.pytorch.org/executorch/main/backends/mlx/mlx-overview.html).
+
+</hfoption>
+<hfoption id="OpenVINO">
+
+```bash
+pip install transformers "torch==2.12.0" "openvino==2026.3.1"
 ```
 
 </hfoption>
@@ -137,7 +163,10 @@ outputs = session.run(None, ort_inputs)
 </hfoption>
 <hfoption id="ExecuTorch">
 
-[`~exporters.ExecutorchConfig#backend`] defaults to `xnnpack` which targets the CPU and works on CPU-only installations. `cuda` targets the GPU and requires a CUDA-enabled environment. Requesting it without CUDA raises a `RuntimeError`.
+[`~exporters.ExecutorchConfig#backend`] selects the target: `xnnpack` (the default) for CPU,
+`mlx` for Apple Silicon GPU, or `cuda` for a CUDA-enabled GPU. Choose the corresponding
+[installation option](#installation). MLX execution requires the MLX delegate and its Metal libraries;
+requesting CUDA without a CUDA-enabled environment raises a `RuntimeError`.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -148,7 +177,7 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 
 exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 et_program = exporter.export(model, inputs, config=config)
 
 # save for on-device deployment
@@ -160,6 +189,30 @@ from executorch.runtime import Runtime
 program = Runtime.get().load_program("model.pte")
 method = program.load_method("forward")
 outputs = method.execute(list(inputs.values()))
+```
+
+</hfoption>
+<hfoption id="OpenVINO">
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters import OpenVINOExporter, OpenVINOConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = tokenizer("Hello, world!", return_tensors="pt")
+
+exporter = OpenVINOExporter()
+config = OpenVINOConfig(dynamic=True)
+ov_model = exporter.export(model, inputs, config=config)
+
+ov_model.save("model.xml")
+
+# compile and run on CPU (or "GPU" / "NPU" if available)
+import openvino as ov
+compiled = ov.Core().compile_model(ov_model, "CPU")
+ov_inputs = {k: v.numpy() for k, v in inputs.items()}
+outputs = compiled(ov_inputs)
 ```
 
 </hfoption>
@@ -245,7 +298,7 @@ seq = torch.export.Dim("seq", min=1, max=2048)
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(
-    backend="xnnpack",
+    backend="xnnpack",  # Use "mlx" on Apple Silicon.
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
     # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
     # guard wouldn't hold across the explicit symbolic range. Most LLMs need this under fine-grained
@@ -254,6 +307,33 @@ config = ExecutorchConfig(
     prefer_deferred_runtime_asserts_over_guards=True,
 )
 et_program = exporter.export(model, inputs, config=config)
+```
+
+</hfoption>
+<hfoption id="OpenVINO">
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters import OpenVINOExporter, OpenVINOConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt")
+
+batch = torch.export.Dim("batch", min=1, max=32)
+seq = torch.export.Dim("seq", min=1, max=2048)
+
+exporter = OpenVINOExporter()
+config = OpenVINOConfig(
+    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
+    # guard wouldn't hold across the explicit symbolic range — most LLMs need this under fine-grained
+    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
+    # infers shape relations instead of verifying them against user-stated bounds.
+    prefer_deferred_runtime_asserts_over_guards=True,
+)
+ov_model = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -329,9 +409,28 @@ text = processor.apply_chat_template(messages, add_generation_prompt=True, token
 inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
 exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config)
 # components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
+```
+
+</hfoption>
+<hfoption id="OpenVINO">
+
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.exporters import OpenVINOExporter, OpenVINOConfig
+
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
+text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
+
+exporter = OpenVINOExporter()
+config = OpenVINOConfig(dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config)
+# components = {"image_encoder": openvino.Model, "language_model": openvino.Model, "lm_head": openvino.Model, "decode": openvino.Model}
 ```
 
 </hfoption>
@@ -412,7 +511,7 @@ components = exporter.export_for_generation(model, inputs, config=config, multi_
 from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 exporter = ExecutorchExporter()
-config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
 # components["decode"] now accepts a variable number of query tokens
 ```
@@ -426,6 +525,10 @@ cache below — the merged decode writes each step's tokens into the fixed-size 
 cache handles where they land internally.
 
 ### Static KV cache
+
+> [!NOTE]
+> The ExecuTorch examples in this section, including zero-copy updates and the decode loop,
+> are **XNNPACK-only**. The MLX exporter rejects `StaticCache`; use `DynamicCache` with MLX.
 
 `generate()` grows a `DynamicCache` by default, reallocating as the sequence extends — a moving target
 for an exported graph. A **static** cache is a fixed-size buffer, allocated once and written in place at
@@ -464,7 +567,7 @@ components = exporter.export_for_generation(
 ```
 
 </hfoption>
-<hfoption id="ExecuTorch">
+<hfoption id="ExecuTorch XNNPACK">
 
 ```python
 from transformers import GenerationConfig
@@ -499,7 +602,7 @@ own arena. What that takes is the only per-backend part left:
   each pair to one device buffer, so the cache is read and updated in place across the loop with no host
   round-trips.
 
-- **ExecuTorch** — turn off the memory-planning allocations on [`ExecutorchConfig`] so the in-place
+- **ExecuTorch (XNNPACK)** — turn off the memory-planning allocations on [`ExecutorchConfig`] so the in-place
   write can land in the caller's own tensor (see the reference for what each flag does):
 
   ```python
@@ -640,7 +743,7 @@ for position in range(prompt_len, max_cache_len):
 ```
 
 </hfoption>
-<hfoption id="ExecuTorch">
+<hfoption id="ExecuTorch XNNPACK">
 
 ExecuTorch's on-device runtime is C++, and the in-place cache update relies on
 `Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
@@ -729,8 +832,8 @@ visible from the public `export` API, but the most common things to know:
 setting and `eager` also works (slower). Set one of them on the model before calling `export`
 if it's using something else.
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`.
-For `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
-`batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.
+For `ExecutorchExporter` with either XNNPACK or MLX, the exporter swaps MoE experts to
+`batched_mm` before export.
 
 ## Next steps
 

@@ -89,6 +89,7 @@ from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
+    FLASH_ATTN_KERNEL_DEVICES,
     FLASH_ATTN_KERNEL_FALLBACK,
     lazy_import_flash_attention,
     lazy_import_paged_flash_attention,
@@ -113,6 +114,7 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
+    get_device_type,
     has_file,
     is_accelerate_available,
     is_bitsandbytes_available,
@@ -1128,7 +1130,8 @@ class PreTrainedModel(
     _supports_sdpa: bool = False
     _supports_flash_attn: bool = False
     _supports_flex_attn: bool = False
-    # Model's compatible flash kernels (e.g., "kernels-community/flash-mla") defaulting to the first in the list
+    # Model's compatible flash kernels (e.g., "kernels-community/flash-mla") defaulting to the first one supported
+    # by the current hardware
     _compatible_flash_implementations: list[str] | None = None
 
     # Set to `False` by models that can never run under context parallelism, whatever their config
@@ -1748,9 +1751,16 @@ class PreTrainedModel(
                 and compatible_flash_implementations is not None
                 and base_implementation not in compatible_flash_implementations
             ):
-                default_flash_implementation = (
-                    f"paged|{compatible_flash_implementations[0]}" if is_paged else compatible_flash_implementations[0]
-                )
+                # Prefer the first implementation shipping builds for the current device
+                device = get_device_type()
+                supported_flash_implementations = [
+                    impl
+                    for impl in compatible_flash_implementations
+                    if device in FLASH_ATTN_KERNEL_DEVICES.get(FLASH_ATTN_KERNEL_FALLBACK.get(impl, impl), (device,))
+                ]
+                default_flash_implementation = (supported_flash_implementations or compatible_flash_implementations)[0]
+                if is_paged:
+                    default_flash_implementation = f"paged|{default_flash_implementation}"
 
                 logger.warning_once(
                     f"This model is compatible with the following flash attention implementations: `{compatible_flash_implementations}`. "

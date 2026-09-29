@@ -14,7 +14,7 @@
 
 from copy import deepcopy
 
-from ..utils import is_compressed_tensors_available, is_torch_available, logging
+from ..utils import is_compressed_tensors_available, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
 
@@ -42,7 +42,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     With `use_optimized_inference=True`, FP8 checkpoints are kept in FP8 and their matmuls run through
     row-wise FP8 kernels (`torch.nn.functional.scaled_mm`) via `CompressedTensorsFP8Linear`, when FP8 matmul
-    hardware is available (CUDA SM89+ or XPU). This is opt-in and inference only.
+    hardware is available (CUDA SM89+, XPU, or MPS with torch >= 2.15). This is opt-in and inference only.
 
     Otherwise the model goes through the regular compressed-tensors route: `dequantize=True`
     dequantizes the weights at load time, while `dequantize=False` leaves them compressed and lets
@@ -76,12 +76,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # `CompressedTensorsConfig.post_init`; what is left to check is whether the hardware can run
         # the kernels. When it cannot, the model goes through the regular compressed-tensors route.
         self.use_fp8_kernel = self.quantization_config.use_optimized_inference
-        if self.use_fp8_kernel and not (
-            torch.xpu.is_available() or (torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 9))
-        ):
+        # MPS has FP8 tensors and a `torch._scaled_mm_v2` kernel from torch 2.15 on.
+        has_fp8_kernel = (
+            torch.xpu.is_available()
+            or (torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 9))
+            or (torch.backends.mps.is_available() and is_torch_greater_or_equal("2.15", accept_dev=True))
+        )
+        if self.use_fp8_kernel and not has_fp8_kernel:
             logger.warning_once(
                 "Ignoring `use_optimized_inference=True`: FP8 matmul kernels need a CUDA GPU with compute capability "
-                ">= 8.9 (e.g. 4090/H100) or an Intel XPU, and none was found."
+                ">= 8.9 (e.g. 4090/H100), an Intel XPU, or Apple silicon (MPS) with torch >= 2.15, and none was found."
             )
             self.use_fp8_kernel = False
 
