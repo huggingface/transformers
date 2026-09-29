@@ -28,11 +28,10 @@ For basic kernels (stateless `forward` replacements with no parameter changes), 
 Any kernel that carries its own parameters follows a two-class pattern.
 
 - `KernelName`: contains only the `forward` pass. The `kernels` library uses this class to kernelize the model because it does not allow stateful kernel classes.
-- `KernelNameLayout`: an `nn.Module` that holds the parameters and monkey-patches the original module before the checkpoint is loaded. At runtime, `kernelize` replaces its `forward` with the `forward` from `KernelName`'. You do not need to define `forward`. Transformers injects one automatically with the same signature as `KernelName.forward`.
+- `KernelNameLayout`: an `nn.Module` that holds the parameters and monkey-patches the original module before the checkpoint is loaded. At runtime, `kernelize` replaces its `forward` with the `forward` from `KernelName`. You do not need to define `forward`. Transformers injects one automatically with the same signature as `KernelName.forward`.
 
 > [!IMPORTANT]
-
-The naming convention is strict. The layout class must be named `{KernelName}Layout` and defined in the same module as `KernelName`.
+> The naming convention is strict. The layout class must be named `{KernelName}Layout` and defined in the same module as `KernelName`.
 
 ## Parameter transformation
 
@@ -41,8 +40,16 @@ Use this pattern when the kernel expects weights under different names or in a d
 The `KernelNameLayout` class has the same `__init__` signature as the module it replaces and declares a `conversion_mapping` class attribute that tells Transformers how to remap checkpoint keys to the new parameter names (see [Dynamic weight loading](../weightconverter) for more details).
 
 ```python
+# layers.py
+try:
+    from transformers import Concatenate, WeightConverter
+    from transformers.conversion_mapping import WeightRenaming
+except ImportError:
+    Concatenate = WeightConverter = WeightRenaming = None
+
 import torch
 import torch.nn as nn
+
 
 class CustomRMSNormLayout(nn.Module):
     conversion_mapping = [...]  # rules that remap checkpoint keys to the new parameter names
@@ -60,21 +67,26 @@ class CustomRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.scale * hidden_states.to(input_dtype)
+```
 
-
-class layers:
-    CustomRMSNorm = CustomRMSNorm
+```python
+# __init__.py
+from . import layers
 ```
 
 > [!NOTE]
-> The `layers` class is required by the `kernels` library to expose the kernel entry point.
+> The `kernels` library discovers kernel classes through a `layers` module (either `layers.py` or `layers/__init__.py`). Define both the kernel and layout classes directly in `layers.py`, and expose the `layers` module from the package's `__init__.py`. Transformers finds `CustomRMSNormLayout` in the same module as `CustomRMSNorm`.
+>
+> Guard the Transformers-specific imports (`WeightConverter`, `Concatenate`, `WeightRenaming`) in `layers.py` so the kernel can also be imported in environments where Transformers is not installed.
 
 Load this kernel by passing the repo and class name to [`KernelConfig`]. The key is the original module class name from the model. The value points to the `KernelName` class (not the `Layout`) in the repo.
+
+The value is either an `"owner/repo:ClassName"` string or a tuple `(repo_string, metadata)`. In the tuple form, pass `version` or `revision` (at least one), and optionally `trust_remote_code`. Use `version` for a major kernel version or `revision` for a tag, branch, or commit. Set `trust_remote_code=True` to load from outside the trusted `kernels-community` organization. A bare string defaults to `version=1` and `trust_remode_code=False`.
 
 ```python
 from transformers import AutoModelForCausalLM, KernelConfig
 
-kernel_config = KernelConfig({"RMSNorm": "owner/my-kernel:CustomRMSNorm"})
+kernel_config = KernelConfig({"RMSNorm": ("owner/my-kernel:CustomRMSNorm", {"trust_remote_code": True, "version": 1})})
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
@@ -94,8 +106,16 @@ When the model loads, Transformers:
 Use this pattern when a kernel replaces multiple adjacent modules with a single fused implementation. Because the fused module combines parameters from several original modules, the `KernelNameLayout.__init__` receives the instantiated child modules rather than their constructor arguments.
 
 ```python
+# layers.py
+try:
+    from transformers import Concatenate, WeightConverter
+    from transformers.conversion_mapping import WeightRenaming
+except ImportError:
+    Concatenate = WeightConverter = WeightRenaming = None
+
 import torch
 import torch.nn as nn
+
 
 class RMSNormMLPLayout(nn.Module):
     conversion_mapping = [...]  # rules that remap checkpoint keys to the fused parameter names
@@ -130,10 +150,11 @@ class RMSNormMLP(nn.Module):
         hidden_states = self.scale * hidden_states.to(input_dtype)
         gate, up = self.gate_up_proj(hidden_states).chunk(2, dim=-1)
         return self.down_proj(self.act_fn(gate) * up)
+```
 
-
-class layers:
-    RMSNormMLP = RMSNormMLP
+```python
+# __init__.py
+from . import layers
 ```
 
 To fuse modules, pass a tuple of `(class_name, path_pattern)` pairs as the key in `KernelConfig` instead of a plain string. All patterns must share the same parent module (Transformers fuses the children in that parent). The `*` wildcard matches any single path segment.
@@ -146,7 +167,7 @@ kernel_config = KernelConfig(
         (
             ("RMSNorm", "model.layers.*.post_attention_layernorm"),
             ("MLP",     "model.layers.*.mlp"),
-        ): "owner/my-kernel:RMSNormMLP",
+        ): ("owner/my-kernel:RMSNormMLP", {"trust_remote_code": True, "version": 1}),
     }
 )
 model = AutoModelForCausalLM.from_pretrained(

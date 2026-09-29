@@ -29,11 +29,12 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import PILImageResampling, SizeDict
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
@@ -561,34 +562,6 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
         return resized_height // patch_size, resized_width // patch_size
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """
-    Apply HunYuan's multimodal rotary embedding to ``q`` and ``k``.
-
-    `mrope_section` partitions half of the attention head dimension across the multimodal axes produced by
-    `HunYuanVLModel.get_rope_index`. The section order matches the position-id channel order: `(width, height,
-    image_index)` for 3-axis multimodal RoPE and `(position, width, height, image_index)` for 4-axis multimodal RoPE.
-    """
-    x_dim = len(mrope_section)
-    mrope_section = [int(section) * 2 for section in mrope_section]
-    if sum(mrope_section) != cos.shape[-1]:
-        raise ValueError(
-            f"Illegal partition for multimodal RoPE: expected {cos.shape[-1]} rotary dims, got {sum(mrope_section)}"
-        )
-
-    cos = torch.cat([m[i % x_dim] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1)
-    sin = torch.cat([m[i % x_dim] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1)
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    origin_dtype = q.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.float(), sin.float()
-    q_out = (q * cos) + (rotate_half(q) * sin)
-    k_out = (k * cos) + (rotate_half(k) * sin)
-    return q_out.to(origin_dtype), k_out.to(origin_dtype)
-
-
 class HunYuanVLRMSNorm(LlamaRMSNorm):
     pass
 
@@ -596,25 +569,34 @@ class HunYuanVLRMSNorm(LlamaRMSNorm):
 class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     def __init__(self, config: HunYuanVLTextConfig, device=None):
         super().__init__(config)
-        rope_parameters = getattr(config, "rope_parameters", None) or {}
-        self.mrope_section = rope_parameters.get("mrope_section")
+        self.mrope_section = config.rope_parameters.get("mrope_section")
 
     def forward(self, x, position_ids):
-        # In contrast to other models, model has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = (
             self.inv_freq[None, None, :, None].float().expand(len(self.mrope_section), position_ids.shape[1], -1, 1)
         )
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (mrope_section, bs, 1, positions)
+        position_ids_expanded = position_ids[:, :, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
+        return cos.to(x.dtype), sin.to(x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat((freq, freq), dim=-1)
+        split_sizes = [section * 2 for section in self.mrope_section]
+        freq = torch.cat(
+            [m[i % len(self.mrope_section)] for i, m in enumerate(freq.split(split_sizes, dim=-1))], dim=-1
+        )
+        return freq
 
 
 class HunYuanVLVisionMLP(SiglipMLP):
@@ -666,16 +648,12 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size, sequence_len, -1).squeeze(0)
 
-        start = 0
-        image_embeddings_list = []
+        position_embeddings_list = []
         for t, h, w in grid_thw:
-            end = start + t * h * w
-            image_embeddings = embeddings[start:end, :]
-            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
-            image_embeddings_list.append(image_embeddings + position_embedding)
-            start = end
+            position_embeddings_list.append(self.interpolate_pos_encoding(embeddings, h, w).squeeze(0).repeat(t, 1))
+        position_embeddings = torch.concat(position_embeddings_list, dim=0)
 
-        return torch.concat(image_embeddings_list, dim=0).unsqueeze(0)
+        return (embeddings + position_embeddings).unsqueeze(0)
 
 
 class HunYuanVLVisionPatchMerger(nn.Module):
@@ -704,7 +682,10 @@ class HunYuanVLVisionPatchMerger(nn.Module):
     def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         hidden_states = self.before_rms(hidden_states)
         dtype = hidden_states.dtype
-        hidden_states = hidden_states.permute(0, 2, 1).reshape(hidden_states.shape[0], -1, *size)
+        hidden_states = hidden_states.permute(0, 2, 1)
+        hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], *size)
+        torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
+        torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
@@ -818,6 +799,34 @@ class HunYuanVLVisionBlock(SiglipEncoderLayer):
         self.mlp = HunYuanVLVisionMLP(config)
 
 
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    origin_dtype = q.dtype
+    q, k = q.float(), k.float()
+    cos = cos.unsqueeze(unsqueeze_dim).float()
+    sin = sin.unsqueeze(unsqueeze_dim).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed.to(origin_dtype), k_embed.to(origin_dtype)
+
+
 class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
     """
     HunYuan dense attention with optional multimodal rotary embeddings.
@@ -847,9 +856,7 @@ class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.mrope_section
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
@@ -1272,19 +1279,24 @@ class HunYuanVLModel(Qwen2VLModel):
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_embeds = None
-        if pixel_values is not None and image_grid_thw is not None:
-            image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
-            image_embeds = image_outputs.pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, dtype=inputs_embeds.dtype, non_blocking=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
@@ -1316,7 +1328,7 @@ class HunYuanVLModel(Qwen2VLModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -1362,6 +1374,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -1410,6 +1423,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

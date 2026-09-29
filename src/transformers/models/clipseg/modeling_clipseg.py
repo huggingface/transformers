@@ -720,7 +720,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, CLIPSegVisionModel

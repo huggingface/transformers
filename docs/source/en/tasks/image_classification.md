@@ -177,7 +177,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 

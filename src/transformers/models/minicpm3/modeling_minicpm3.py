@@ -123,7 +123,7 @@ class MiniCPM3RotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -263,18 +263,18 @@ class MiniCPM3Attention(nn.Module):
         self.is_causal = True
 
         self.q_proj = (
-            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is None
-            else None
+            None
+            if self.q_lora_rank is not None
+            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         )
         self.q_a_proj = (
-            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
             if self.q_lora_rank is not None
             else None
         )
-        self.q_a_layernorm = MiniCPM3RMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_a_layernorm = MiniCPM3RMSNorm(self.q_lora_rank) if self.q_lora_rank is not None else None
         self.q_b_proj = (
-            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is not None
             else None
         )

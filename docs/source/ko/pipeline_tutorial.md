@@ -229,14 +229,14 @@ NLP 태스크를 위해 [`pipeline`]을 사용하는 일도 거의 동일합니�
 
 [`pipeline`]은 여러 모달리티(역주: 오디오, 비디오, 텍스트와 같은 데이터 형태)를 지원합니다. 예시로 시각적 질의응답(VQA; Visual Question Answering) 태스크는 텍스트와 이미지를 모두 사용합니다. 그 어떤 이미지 링크나 묻고 싶은 질문도 자유롭게 전달할 수 있습니다. 이미지는 URL 또는 로컬 경로의 형태로 전달해주세요.
 
-예를 들어 이 [거래명세서 사진](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png)에서 거래명세서 번호를 묻고 싶다면,
+예를 들어 이 [거래명세서 사진](https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png)에서 거래명세서 번호를 묻고 싶다면,
 
 ```py
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
 >>> vqa(
-...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     image="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
 ...     question="What is the invoice number?",
 ... )
 [{'score': 0.42514941096305847, 'answer': 'us-001', 'start': 16, 'end': 16}]

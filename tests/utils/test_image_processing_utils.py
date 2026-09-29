@@ -18,7 +18,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-import httpx
+from huggingface_hub.utils import httpx
 
 from transformers import AutoImageProcessor, ViTImageProcessor, ViTImageProcessorFast
 from transformers.image_processing_utils import get_size_dict
@@ -51,7 +51,7 @@ class ImageProcessorUtilTester(unittest.TestCase):
         _ = ViTImageProcessorFast.from_pretrained("hf-internal-testing/tiny-random-vit")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = ViTImageProcessor.from_pretrained("hf-internal-testing/tiny-random-vit")
             _ = ViTImageProcessorFast.from_pretrained("hf-internal-testing/tiny-random-vit")
             # This check we did call the fake head request

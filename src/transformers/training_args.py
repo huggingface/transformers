@@ -637,12 +637,16 @@ class TrainingArguments:
                 - `"sequential"`: Uses `SequentialSampler`.
                 - `"group_by_length"`: Uses `LengthGroupedSampler` to group samples of roughly the same length
                   together (to minimize padding and be more efficient).
+                - `"batch_rebalance"`: Uses `BatchRebalanceSampler` to balance padded-token cost across devices
+                  and gradient-accumulation steps within each effective batch, reducing padding waste and peak
+                  memory vs `"group_by_length"`. Currently only supported for data-parallel training
+                  (tensor parallelism is not yet supported).
 
             Note: When using an `IterableDataset`, this argument is ignored.
         length_column_name (`str`, *optional*, defaults to `"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
-            than computing them on train startup. Ignored unless `train_sampling_strategy` is `"group_by_length"` and the dataset
-            is an instance of `Dataset`.
+            than computing them on train startup. Ignored unless `train_sampling_strategy` is `"group_by_length"`or
+            `"batch_rebalance"` and the dataset is an instance of `Dataset`.
 
         > DDP (DistributedDataParallel)
 
@@ -1358,14 +1362,14 @@ class TrainingArguments:
     train_sampling_strategy: str = field(
         default="random",
         metadata={
-            "help": "Sampler for training: 'random' (default), 'sequential', or 'group_by_length'.",
-            "choices": ["random", "sequential", "group_by_length"],
+            "help": "Sampler for training: 'random' (default), 'sequential', 'group_by_length', or 'batch_rebalance'.",
+            "choices": ["random", "sequential", "group_by_length", "batch_rebalance"],
         },
     )
     length_column_name: str = field(
         default="length",
         metadata={
-            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length'."
+            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length' or 'batch_rebalance'."
         },
     )
 
@@ -2214,7 +2218,7 @@ class TrainingArguments:
             weight_decay (`float`, *optional*, defaults to 0):
                 The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in the
                 optimizer.
-            num_train_epochs(`float`, *optional*, defaults to 3.0):
+            num_epochs (`float`, *optional*, defaults to 3.0):
                 Total number of training epochs to perform (if not an integer, will perform the decimal part percents
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):

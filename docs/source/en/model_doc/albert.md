@@ -133,7 +133,9 @@ The resources provided in the following sections consist of a list of official H
 
 ## AlbertTokenizer
 
-[[autodoc]] AlbertTokenizer - build_inputs_with_special_tokens - get_special_tokens_mask - create_token_type_ids_from_sequences - save_vocabulary
+[[autodoc]] AlbertTokenizer
+    - get_special_tokens_mask
+    - save_vocabulary
 
 ## Albert specific outputs
 
@@ -141,19 +143,23 @@ The resources provided in the following sections consist of a list of official H
 
 ## AlbertModel
 
-[[autodoc]] AlbertModel - forward
+[[autodoc]] AlbertModel
+    - forward
 
 ## AlbertForPreTraining
 
-[[autodoc]] AlbertForPreTraining - forward
+[[autodoc]] AlbertForPreTraining
+    - forward
 
 ## AlbertForMaskedLM
 
-[[autodoc]] AlbertForMaskedLM - forward
+[[autodoc]] AlbertForMaskedLM
+    - forward
 
 ## AlbertForSequenceClassification
 
-[[autodoc]] AlbertForSequenceClassification - forward
+[[autodoc]] AlbertForSequenceClassification
+    - forward
 
 ## AlbertForMultipleChoice
 
@@ -161,8 +167,10 @@ The resources provided in the following sections consist of a list of official H
 
 ## AlbertForTokenClassification
 
-[[autodoc]] AlbertForTokenClassification - forward
+[[autodoc]] AlbertForTokenClassification
+    - forward
 
 ## AlbertForQuestionAnswering
 
-[[autodoc]] AlbertForQuestionAnswering - forward
+[[autodoc]] AlbertForQuestionAnswering
+    - forward

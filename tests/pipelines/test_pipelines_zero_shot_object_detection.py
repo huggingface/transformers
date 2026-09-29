@@ -149,7 +149,7 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         object_detector = pipeline("zero-shot-object-detection")
 
         outputs = object_detector(
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             candidate_labels=["cat", "remote", "couch"],
         )
         self.assertEqual(
@@ -166,11 +166,11 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         outputs = object_detector(
             [
                 {
-                    "image": "http://images.cocodataset.org/val2017/000000039769.jpg",
+                    "image": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
                     "candidate_labels": ["cat", "remote", "couch"],
                 },
                 {
-                    "image": "http://images.cocodataset.org/val2017/000000039769.jpg",
+                    "image": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
                     "candidate_labels": ["cat", "remote", "couch"],
                 },
             ],
@@ -202,7 +202,7 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         object_detector = pipeline("zero-shot-object-detection")
 
         outputs = object_detector(
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             candidate_labels=["cat", "remote", "couch"],
             threshold=threshold,
         )
@@ -222,7 +222,7 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         object_detector = pipeline("zero-shot-object-detection")
 
         outputs = object_detector(
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             candidate_labels=["cat", "remote", "couch"],
             top_k=top_k,
         )

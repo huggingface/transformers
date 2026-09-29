@@ -234,7 +234,7 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
     def resize(
         self,
@@ -274,6 +274,43 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
             )
 
         return tvF.pad(videos, [0, 0, target_width - content_width, target_height - content_height], fill=0)
+
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        patch_expand_factor = videos_kwargs.get("patch_expand_factor", None) or self.patch_expand_factor
+        min_image_tokens = videos_kwargs.get("min_image_tokens", None) or self.min_image_tokens
+        max_image_tokens = videos_kwargs.get("max_image_tokens", None) or self.max_image_tokens
+
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            factor=patch_size * merge_size * patch_expand_factor,
+            temporal_factor=temporal_patch_size,
+            min_pixels=min_image_tokens,
+            max_pixels=max_image_tokens,
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t * grid_h * grid_w
 
     def patchify(
         self,

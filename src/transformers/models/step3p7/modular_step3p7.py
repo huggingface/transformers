@@ -39,13 +39,12 @@ from ...utils import (
     no_inherit_decorator,
     torch_int,
 )
-from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from ..gemma3.modeling_gemma3 import Gemma3TextModel
-from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
+from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
     LagunaAttention,
     LagunaDecoderLayer,
@@ -91,6 +90,7 @@ __all__ = [
 class Step3p7VisionConfig(SiglipVisionConfig):
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     # SiGLIP field overrides
     hidden_size: int = 1536
@@ -103,7 +103,6 @@ class Step3p7VisionConfig(SiglipVisionConfig):
     # New fields
     mlp_ratio: float = 8960 / 1536
     layer_scale_init_value: float = 0.1
-    # RoPE config (compatible with Gemma4VisionRotaryEmbedding)
     rope_parameters: dict | None = None
     max_position_embeddings: int = 2704  # (image_size // patch_size)^2 = (728//14)^2
 
@@ -588,16 +587,13 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 #  Vision encoder
 
 
-class Step3p7VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
-    @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (position_ids[..., None].float() * self.inv_freq.to(x.device)).flatten(-2)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = (emb.cos() * self.attention_scaling).to(dtype=x.dtype)
-        sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
-        return cos, sin
+class Step3p7VisionRotaryEmbedding(Kimi_K25VisionRotaryEmbedding):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_hw = freq.flatten(1)
+        return torch.cat((freq_hw, freq_hw), dim=-1)
 
 
 class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
@@ -760,7 +756,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
         # temporal/merge dims: t=1, spatial_merge_size=1) broadcasts across the whole batch, since
         # every image in `pixel_values` shares the same (grid_h, grid_w).
         grid_thw = torch.tensor([[1, grid_h, grid_w]], device=hidden_state.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1).unsqueeze(0)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
         position_embeddings = self.rotary_emb(hidden_state, position_ids)
         for layer in self.layers:
             hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)

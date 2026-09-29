@@ -1273,7 +1273,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
 
         # appending `False` to `image_embeds_position_mask` (because sequence grows during generation)
         elif image_embeds_position_mask is not None:
-            batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else attention_mask.size()
+            batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else input_ids.size()
             mask_len = image_embeds_position_mask.size()[-1]
             image_embeds_position_mask = torch.cat(
                 (
@@ -1422,7 +1422,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2Model
 
@@ -1450,7 +1450,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         >>> list(last_hidden_state.shape)
         [1, 91, 2048]
         ```"""
-        vision_model_output = None
+        image_features = None
         projection_attentions = None
         if image_embeds is None:
             if pixel_values is None:
@@ -1481,7 +1481,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             attentions=outputs.attentions,
             image_embeds=image_embeds,
             projection_attentions=projection_attentions,
-            vision_model_output=vision_model_output,
+            vision_model_output=image_features,
         )
 
 
@@ -1554,7 +1554,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
 

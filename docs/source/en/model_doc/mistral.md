@@ -72,7 +72,7 @@ messages = [
 
 model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
-generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 tokenizer.batch_decode(generated_ids)[0]
 "Mayonnaise can be made as follows: (...)"
 ```
@@ -92,6 +92,7 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
@@ -99,10 +100,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 quantization_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype="torch.float16",
+        bnb_4bit_compute_dtype=torch.float16,
 )
 
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=quantization_config, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 prompt = "My favourite condiment is"
@@ -115,7 +116,7 @@ messages = [
 
 model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
-generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 tokenizer.batch_decode(generated_ids)[0]
 "The expected output"
 ```

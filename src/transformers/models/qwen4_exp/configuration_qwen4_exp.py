@@ -174,20 +174,20 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention" if (i + 1) % interval_pattern else "qwen_sparse_attention"
+                "linear_attention" if (i + 1) % interval_pattern else "indexed_attention"
                 for i in range(self.num_hidden_layers)
             ]
         # The real checkpoint contains "full_attention" entries for layers that are actually using an indexer
         elif "full_attention" in self.layer_types:
             self.layer_types = [
-                "qwen_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
+                "indexed_attention" if layer == "full_attention" else layer for layer in self.layer_types
             ]
 
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "qwen_sparse_attention"})
+        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "indexed_attention"})
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -269,6 +269,8 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
 
     model_type = "qwen4_exp_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -282,6 +284,7 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
     base_model_fsdp_plan = None
 
 

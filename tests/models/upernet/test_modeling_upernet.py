@@ -21,7 +21,6 @@ from transformers import ConvNextConfig, UperNetConfig
 from transformers.testing_utils import (
     require_timm,
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -175,11 +174,6 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="UperNet does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(reason="UperNet has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_hidden_states_output(self):

@@ -16,7 +16,7 @@ def get_runner_status(target_runners, token):
                 offline_runners.append(runner)
 
     # save the result so we can report them on Slack
-    with open("offline_runners.txt", "w") as fp:
+    with open("offline_runners.txt", "w", encoding="utf-8") as fp:
         fp.write(json.dumps(offline_runners))
 
     if len(offline_runners) > 0:

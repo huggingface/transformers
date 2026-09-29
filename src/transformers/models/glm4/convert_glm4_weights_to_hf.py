@@ -160,7 +160,7 @@ def convert_glm4_tokenizer(input_dir, use_post_processor=False):
 
 def convert_glm4_model(input_dir, output_dir, use_post_processor=False):
     # Load and convert config
-    with open(os.path.join(input_dir, "config.json")) as f:
+    with open(os.path.join(input_dir, "config.json"), encoding="utf-8") as f:
         original_config = json.load(f)
     config = convert_config(original_config)
     config.save_pretrained(output_dir)
