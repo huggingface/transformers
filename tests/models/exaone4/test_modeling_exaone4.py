@@ -88,6 +88,8 @@ class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
+        del model
+
     @slow
     def test_model_generation_eager(self):
         EXPECTED_TEXT = "Tell me about the Miracle on the Han river.\n\nOkay, the Miracle on the Han River refers to the rapid industrialization and economic growth of South"
@@ -102,6 +104,8 @@ class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, text)
+
+        del model
 
     @slow
     def test_model_generation_sdpa(self):
@@ -118,6 +122,8 @@ class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, text)
 
+        del model
+
     @pytest.mark.flash_attn_test
     @slow
     @require_torch_accelerator
@@ -133,6 +139,8 @@ class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
+        del model
+
     @slow
     @require_torch_accelerator
     def test_model_generation_beyond_sliding_window(self):
@@ -147,6 +155,8 @@ class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0, -32:], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+        del model
 
     @pytest.mark.torch_export_test
     @slow
