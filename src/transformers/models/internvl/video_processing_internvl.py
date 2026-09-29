@@ -91,7 +91,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
             )
 
-        indices = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames, dtype=int)
+        indices = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames).int()
         return indices
 
     def _preprocess(
