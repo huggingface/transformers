@@ -80,12 +80,12 @@ class RuntimeFeedTest(unittest.TestCase):
     class _Graph:
         """A stand-in for a runner: what it declares, and what the trace recorded about it."""
 
-        def __init__(self, input_names, kwargs=None, cache_input="past_key_values"):
+        def __init__(self, input_names, kwargs=None):
             from transformers.exporters.metadata import ExportMetadata
 
             self.input_names = tuple(input_names)
             self.export_metadata = ExportMetadata.from_dict({"kwargs": kwargs or {}})
-            self.cache_input = cache_input
+            self.cache_inputs = ("past_key_values",)
             self.device = "cpu"
 
         declares = ModelRunner.declares
