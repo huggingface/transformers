@@ -796,7 +796,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertFalse(torch.all(scores == filtered_scores))
 
     def test_bias_dist_processor_token_zero_list_format(self):
-        # Bug A: token id 0 should be accepted in the list format, like the dict format
+        # token id 0 should be accepted in the list format, like the dict format
         vocab_size = 5
         input_ids = torch.tensor([[1, 2]], device=torch_device, dtype=torch.long)
         scores = torch.zeros((1, vocab_size), dtype=torch.float, device=torch_device)
@@ -805,7 +805,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertListEqual(filtered_scores.tolist(), [[-5.0, 0.0, 0.0, 0.0, 0.0]])
 
     def test_no_bad_words_prefix_equal_to_context(self):
-        # Bug B: a banned sequence whose prefix is exactly the whole context should still be blocked
+        # a banned sequence whose prefix is exactly the whole context should still be blocked
         vocab_size = 6
         input_ids = torch.tensor([[3]], device=torch_device, dtype=torch.long)
         scores = torch.zeros((1, vocab_size), dtype=torch.float, device=torch_device)

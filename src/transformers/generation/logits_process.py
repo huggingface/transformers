@@ -1313,9 +1313,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         for sequence_ids, sequence_bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:  # the sequence is of length 1, already applied
                 continue
-            if len(sequence_ids) - 1 > input_ids.shape[1]:  # the prefix is longer than the context, ignore
-                continue
             prefix_length = len(sequence_ids) - 1
+            if prefix_length > input_ids.shape[1]:  # the prefix is longer than the context, ignore
+                continue
             last_token = sequence_ids[-1]
             matching_rows = torch.eq(
                 input_ids[:, -prefix_length:],
