@@ -38,7 +38,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
-    from torch.distributed.nn.functional import all_to_all_single
+    from torch.distributed._functional_collectives import all_to_all_single
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -789,7 +789,6 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
 
         Also returns the sort order and the per-rank split sizes that `_combine_tokens` needs to reverse the exchange.
         """
-        hidden_dim = hidden_states.size(-1)
         num_top_k = top_k_index.size(-1)
 
         # Sorting the selected pairs by expert groups them by owner rank, since each rank owns a contiguous range of
@@ -805,13 +804,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         recv_counts = torch.empty_like(send_counts)
         torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
         send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
-        recv_tokens = all_to_all_single(
-            send_tokens.new_empty(sum(recv_sizes), hidden_dim),
-            send_tokens,
-            output_split_sizes=recv_sizes,
-            input_split_sizes=send_sizes,
-            group=ep_group,
-        )
+        recv_tokens = all_to_all_single(send_tokens, recv_sizes, send_sizes, ep_group)
         recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
         recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
         return recv_tokens, recv_expert_ids, order, send_sizes, recv_sizes
@@ -845,13 +838,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         """Return expert outputs to the token owners and combine them with routing weights."""
         num_tokens, num_top_k = top_k_weights.shape
         hidden_dim = expert_output.size(-1)
-        recv_out = all_to_all_single(
-            expert_output.new_empty(order.numel(), hidden_dim),
-            expert_output,
-            output_split_sizes=send_sizes,
-            input_split_sizes=recv_sizes,
-            group=ep_group,
-        )
+        recv_out = all_to_all_single(expert_output, send_sizes, recv_sizes, ep_group)
         # Restore the original (token, top-k slot) order, then apply routing weights.
         token_outputs = torch.empty_like(recv_out)
         token_outputs[order] = recv_out
