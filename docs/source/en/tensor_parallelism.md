@@ -103,7 +103,7 @@ args = TrainingArguments(
 
 ## PEFT adapters
 
-You can load PEFT adapters onto a tensor parallel base model (requires `peft >= 0.21.0`). PEFT handles sharding the adapter weights. See [PEFT](./peft) for how to add, load, and train adapters, including the distributed training notes.
+You can load PEFT adapters onto a tensor parallel base model (requires `peft >= 0.21.1`). PEFT handles sharding the adapter weights. See [PEFT](./peft) for how to add, load, and train adapters, including the distributed training notes.
 
 ## Next steps
 
