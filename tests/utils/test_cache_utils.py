@@ -823,7 +823,9 @@ class CacheHardIntegrationTest(unittest.TestCase):
         """Tests caches with GPT-J model. Regression test for https://github.com/huggingface/transformers/pull/34799"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
-        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM-for-CacheHardIntegrationTest"
+        # Use the original tiny model (a safetensors-based dedicated backup repo is available at
+        # hf-internal-testing/tiny-random-GPTJForCausalLM-for-CacheHardIntegrationTest)
+        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
         pipe = pipeline("text-generation", model=model_id, dtype=torch.bfloat16)
         pipe.model.config.sliding_window = (
             256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
