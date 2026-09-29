@@ -14,18 +14,17 @@
 """Post-training quantization export tests.
 
 PT2E quantization is a backend-agnostic recipe living in the shared Dynamo layer: pass a `quantizer`
-(any PT2E `Quantizer` — `X86InductorQuantizer`, `XNNPACKQuantizer`, a vendor `QnnQuantizer`, …) on the
+(any PT2E `Quantizer` — `X86InductorQuantizer`, `XNNPACKQuantizer`, …) on the
 export config and the graph is quantized (`prepare_pt2e` → calibrate → `convert_pt2e`) before it's
 returned/lowered — no hardcoded schemes. The tests cover:
 
 - **`test_quantized_{dynamo,onnx,executorch}`** — one per exporter backend (so each carries the right CI
   marker), each over the architecture families (dense / MoE / SSM) with the quantizer(s) natural to that
   backend: dynamo/onnx use the torchao-native `x86` quantizer (graph-level QDQ, no executorch dep); the
-  executorch backend uses the per-tensor `xnnpack` and vendor `qnn` quantizers it can delegate (per-channel
-  x86 has no delegated out variant). One structural check per cell — the artifact exports and carries the
-  quant ops (dynamo `quantize`/`dequantize`, ONNX QDQ that loads in ORT, int8 `.pte`) — driven entirely by
-  `config.quantizer`, no per-case code. QNN HTP's own gaps on MoE routing / SSM conv1d, and SDK/dep gaps,
-  skip with a reason.
+  executorch backend uses the per-tensor `xnnpack` quantizer it can delegate (per-channel x86 has no
+  delegated out variant). One structural check per cell — the artifact exports and carries the quant ops
+  (dynamo `quantize`/`dequantize`, ONNX QDQ that loads in ORT, int8 `.pte`) — driven entirely by
+  `config.quantizer`, no per-case code.
 - **`test_vlm_per_component_quantization`** — a VLM quantized component-by-component, each with its OWN
   recipe (vision encoder static int8, decoder dynamic int8, `lm_head` fp32) via a per-component config dict.
 - **calibration** — the generate-level `calibration_dataset` captured into a separate set per component,
@@ -36,8 +35,6 @@ avoiding the in-graph mask construction that trips PT2E on a full-model forward.
 """
 
 import copy
-import sys
-import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -51,7 +48,6 @@ from transformers.testing_utils import (
     require_executorch,
     require_torch,
     require_torchao,
-    run_command,
     slow,
 )
 from transformers.utils import is_torch_available
@@ -62,21 +58,6 @@ if is_torch_available():
 
 
 MAX_CACHE_LEN = 16
-
-
-def _qnn_available() -> bool:
-    """The QNN backend needs the Qualcomm AI Engine Direct SDK. Probe in a subprocess: importing
-    `executorch.backends.qualcomm` runs an auto-installer that mutates `LD_LIBRARY_PATH`, which would
-    corrupt the pytest process for the other tests. Use a script file rather than `python -c`: on an
-    old glibc the installer re-execs Python under a staged loader and only the file path survives."""
-    with tempfile.NamedTemporaryFile("w", suffix=".py") as probe:
-        probe.write("import executorch.backends.qualcomm\n")
-        probe.flush()
-        try:
-            run_command([sys.executable, probe.name])
-            return True
-        except Exception:
-            return False
 
 
 def _has_quantize_ops(exported) -> bool:
@@ -201,9 +182,8 @@ class QuantizationExportTest(unittest.TestCase):
           `dynamic=True`, dynamic int8 (runtime-quantized activations + int8 weights), the lighter recipe
           typical for decoders (a true weight-only PT2E quantizer isn't available in torchao/executorch).
         - `xnnpack`: per-tensor quantizer for the XNNPACK ExecuTorch backend.
-        - `qnn`: vendor Qualcomm HTP quantizer (only lowers via the QNN ExecuTorch backend).
 
-        `dynamic` applies to `x86` only; `xnnpack`/`qnn` are static per-tensor.
+        `dynamic` applies to `x86` only; `xnnpack` is static per-tensor.
         """
         if name == "x86":
             from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
@@ -219,10 +199,6 @@ class QuantizationExportTest(unittest.TestCase):
             )
 
             return XNNPACKQuantizer().set_global(get_symmetric_quantization_config())
-        if name == "qnn":
-            from executorch.backends.qualcomm.quantizer.quantizer import QnnQuantizer
-
-            return QnnQuantizer()
         raise ValueError(f"unknown quantizer {name}")
 
     def _quantization_target(self, family):
@@ -361,44 +337,24 @@ class QuantizationExportTest(unittest.TestCase):
 
     # ────────────────────────────── ExecuTorch ──────────────────────────────
 
-    @parameterized.expand(
-        [(family, quantizer) for family in ("dense", "moe", "ssm") for quantizer in ("xnnpack", "qnn")]
-    )
+    @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @require_executorch
     @pytest.mark.executorch_export_test
     @disable_hub_kernels
-    def test_quantized_executorch(self, family, quantizer):
-        """The same `config.quantizer` recipe, lowered to an ExecuTorch `.pte`: every family × delegatable
-        quantizer produces a program. The x86 quantizer is absent — its per-channel q/dq ops have no out
-        variant, so they stay undelegated and fail `to_executorch`; the ExecuTorch backends want the
-        per-tensor `xnnpack`/`qnn` quantizers instead."""
+    def test_quantized_executorch(self, family):
+        """The same `config.quantizer` recipe, lowered to an ExecuTorch `.pte`: every family produces a
+        program. The x86 quantizer is absent — its per-channel q/dq ops have no out variant, so they stay
+        undelegated and fail `to_executorch`; XNNPACK wants its per-tensor quantizer instead."""
         from transformers.exporters import ExecutorchConfig, ExecutorchExporter
 
-        if quantizer == "qnn":
-            if not _qnn_available():
-                self.skipTest("requires the Qualcomm QNN SDK")
-            if family == "ssm":
-                # Mamba does not lower to the HTP on ExecuTorch 1.4.1 + QNN SDK 2.37. Everything
-                # graph-side was cleared experimentally (weight-view observer chains folded back into
-                # the constant, `bitwise_not`/scalar-comparison builder gaps worked around, rank-6 scan
-                # intermediates kept off the delegate) — but each workaround needs *partial* delegation,
-                # and the HTP cannot host a partition boundary inside a quantized graph: a bare
-                # `Dequantize` at the cut is disabled in its op registry ("Selecting disabled op ...
-                # q::Dequantize" -> "Oops: Could not prepare op"), so every fallback set aborts
-                # graph-prepare. Needs upstream support for standalone (de)quantize ops on the HTP, or
-                # full-graph support for the scan (rank-6 tensors, int64 index grids, in-graph bool
-                # masks). See the PR thread for the verified per-issue breakdown.
-                self.skipTest("QNN cannot partially delegate quantized graphs (standalone q::Dequantize disabled)")
-
-        et_backend = "qnn" if quantizer == "qnn" else "xnnpack"
         model, inputs = self._quantization_target(family)
         program = ExecutorchExporter().export(
             model,
             copy.deepcopy(inputs),
             ExecutorchConfig(
-                backend=et_backend,
+                backend="xnnpack",
                 dynamic=False,
-                quantizer=self._quantizer(quantizer),
+                quantizer=self._quantizer("xnnpack"),
                 calibration_dataset=[copy.deepcopy(inputs)],
             ),
         )

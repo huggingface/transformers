@@ -99,10 +99,12 @@ class DynamoConfig(ExportConfigMixin):
             user-stated bounds.
         quantizer (`Quantizer`, *optional*):
             Post-training quantization recipe — a PT2E `Quantizer` (e.g. `XNNPACKQuantizer(...)`,
-            `X86InductorQuantizer(...)`, a vendor `QnnQuantizer`, …). When set, the exported graph is
+            `X86InductorQuantizer(...)`, …). When set, the exported graph is
             quantized (`prepare_pt2e` → calibrate → `convert_pt2e`) before it is returned/lowered.
-            Backend-agnostic: the resulting quantized `ExportedProgram` runs on inductor (int8), lowers
-            to ExecuTorch, or translates to ONNX QDQ. `None` (default) exports in full precision.
+            The flow is the same for every backend, but each quantizer injects its own quantize/dequantize
+            ops, which a backend may or may not support: pass one whose ops your target handles
+            (`X86InductorQuantizer` for inductor or ONNX QDQ, `XNNPACKQuantizer` for ExecuTorch).
+            `None` (default) exports in full precision.
         calibration_dataset (`Iterable[dict]`, *optional*):
             Forward-kwarg dicts run through the prepared graph to gather observer statistics for static
             quantization — any iterable of dicts works, including a `torch.utils.data.DataLoader` whose
@@ -181,10 +183,6 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
-            - `"qnn"` — on-SoC accelerator inference via the Qualcomm QNN backend. QNN serves several
-              accelerators (HTP/NPU, LPAI, the Adreno GPU); this integration currently targets the HTP.
-              Requires the Qualcomm AI Engine Direct SDK; pair with a `QnnQuantizer` via `quantizer`
-              for int8/16 (else fp16).
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the

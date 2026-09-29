@@ -139,13 +139,12 @@ class DynamoExporter(HfExporter):
     ) -> ExportedProgram:
         """Post-training quantize the exported graph with PT2E, then re-export it.
 
-        Backend-agnostic: the recipe is the standard PT2E flow, identical for every model, and the only
-        backend-specific input is `config.quantizer` (`XNNPACKQuantizer`, `X86InductorQuantizer`, a vendor
-        `QnnQuantizer`, …). `prepare_pt2e` inserts observers, `config.calibration_dataset` (forward-kwarg
-        dicts) drives their statistics, and `convert_pt2e` folds them into `quantize`/`dequantize` ops.
-        Those two work on a `GraphModule`, so the converted graph is re-exported — with the same inputs and
-        dynamic-shape spec — back into an `ExportedProgram` that any downstream backend consumes (inductor
-        int8, ExecuTorch lowering, ONNX QDQ).
+        The standard PT2E flow, the same for every model: `prepare_pt2e` inserts observers,
+        `config.calibration_dataset` (forward-kwarg dicts) drives their statistics, and `convert_pt2e` folds
+        them into `quantize`/`dequantize` ops. The only backend-specific input is `config.quantizer`: the ops it
+        injects are the target backend's to support or not — ExecuTorch has no kernels for the per-channel
+        ones `X86InductorQuantizer` inserts, for instance. `convert_pt2e` returns a `GraphModule`, so the converted graph is
+        re-exported, with the same inputs and dynamic-shape spec, back into an `ExportedProgram`.
         """
         from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
 
