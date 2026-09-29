@@ -212,6 +212,16 @@ class DynamicLayer(CacheLayerMixin):
             self.values = self.values[indices, ...]
 
 
+class DynamicCrossAttentionLayer(DynamicLayer):
+    """
+    A `DynamicLayer` holding cross-attention K/V, computed once from a source stream (e.g. the image features of
+    Idefics' gated cross-attention) rather than accumulated from the generated tokens, so `crop` leaves it whole.
+    """
+
+    def crop(self, tokens_to_remove: int) -> None:
+        pass
+
+
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
     A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
@@ -1259,6 +1269,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": DynamicSlidingWindowLayer,
     "chunked_attention": DynamicSlidingWindowLayer,
+    "cross_attention": DynamicCrossAttentionLayer,
     "indexed_attention": DynamicIndexedLayer,
     # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
     # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
@@ -1284,6 +1295,8 @@ STATIC_LAYER_TYPE_MAPPING = {
     # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
     "conv": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
+    # Cross-attention K/V have a data-dependent length, so no static buffer can be pre-sized for them
+    "cross_attention": DynamicCrossAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,

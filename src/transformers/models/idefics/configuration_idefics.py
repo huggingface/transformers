@@ -167,5 +167,15 @@ class IdeficsConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    @property
+    def layer_types(self) -> list[str]:
+        """The decoder layers, then one cache slot per gated cross-attention layer (so longer than
+        `num_hidden_layers`). A property, so it is never serialized."""
+        num_cross_layers = self.num_hidden_layers // self.cross_layer_interval
+        return ["full_attention"] * self.num_hidden_layers + ["cross_attention"] * num_cross_layers
+
+    def validate_layer_type(self):
+        """`layer_types` is longer than `num_hidden_layers` on purpose (see the property)."""
+
 
 __all__ = ["IdeficsConfig", "IdeficsPerceiverConfig", "IdeficsVisionConfig"]
