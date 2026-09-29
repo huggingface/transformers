@@ -447,6 +447,7 @@ class DogeCDMoE(nn.Module):
 class DogeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DogeConfig, layer_idx: int | None = None):
         super().__init__()
+        self.config = config
         self.hidden_dropout = config.hidden_dropout
 
         self.input_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -486,6 +487,8 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        if self.config.is_moe:  # MoE returns a tuple of outputs
+            hidden_states = hidden_states[0]
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
         hidden_states = self.post_attention_residual * residual + hidden_states
 
@@ -771,6 +774,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 

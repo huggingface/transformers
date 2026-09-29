@@ -40,7 +40,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_granitemoe_swa import GraniteMoeSWAConfig
 
 
@@ -415,6 +415,7 @@ class GraniteMoeSWAPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeSWATopKRouter, index=0),
         "hidden_states": GraniteMoeSWADecoderLayer,
         "attentions": GraniteMoeSWAAttention,
     }
@@ -724,6 +725,7 @@ class GraniteMoeSWAForCausalLM(GraniteMoeSWAPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 

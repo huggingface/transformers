@@ -2244,6 +2244,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
             rope_deltas=self.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

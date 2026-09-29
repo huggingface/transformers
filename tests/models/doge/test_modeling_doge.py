@@ -352,6 +352,10 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
+    @unittest.skip(reason="Doge has MoE only when `cfg.is_moe=True`, not really worth overriding and testing it")
+    def test_output_router_logits_from_config(self):
+        pass
+
     def test_sdpa_decoder_is_causal(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_sdpa_decoder_is_causal(*config_and_inputs)
