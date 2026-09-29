@@ -196,3 +196,37 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
         tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
         tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
         self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)
+
+    def test_auto_skips_incorrect_hub_tokenizer_class(self):
+        """These checkpoints' hub tokenizer_config.json incorrectly sets tokenizer_class=CohereTokenizerFast.
+        AutoTokenizer should use the TokenizersBackend instead for tiny-aya models,
+        matching the hub's tokenizer.json."""
+        import os
+        import tempfile
+
+        from tokenizers import Tokenizer, models, pre_tokenizers
+
+        from transformers import AutoTokenizer, TokenizersBackend
+
+        with tempfile.TemporaryDirectory() as d:
+            original_cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                repo_id = "CohereLabs/tiny-aya-earth"
+                os.makedirs(repo_id, exist_ok=True)
+
+                with open(os.path.join(repo_id, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                    f.write('{"tokenizer_class": "CohereTokenizerFast", "model_type": "cohere2"}')
+                with open(os.path.join(repo_id, "config.json"), "w", encoding="utf-8") as f:
+                    f.write('{"model_type": "cohere2"}')
+
+                tok = Tokenizer(models.BPE(vocab={"1": 0, "234": 1, "567": 2, "1234567": 3}, merges=[]))
+                tok.pre_tokenizer = pre_tokenizers.Whitespace()
+                tok.save(os.path.join(repo_id, "tokenizer.json"))
+
+                auto_tok = AutoTokenizer.from_pretrained(repo_id)
+                self.assertIsInstance(auto_tok, TokenizersBackend)
+                tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
+                self.assertEqual(auto_tok.tokenize("1234567"), tokenizer_tok.tokenize("1234567"))
+            finally:
+                os.chdir(original_cwd)
