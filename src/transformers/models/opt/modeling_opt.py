@@ -342,10 +342,11 @@ class OPTDecoder(OPTPreTrainedModel):
 
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
 
-        # The dense mask is only required to infer `position_ids`, while `attention_mask` must stay `None` when
-        # unpadded, as `create_causal_mask` would otherwise never skip it in favor of sdpa's `is_causal` argument
+        # The dense mask is only required to infer `position_ids` (here and in `embed_positions`), so there is
+        # nothing to build when those are given; `attention_mask` must stay `None` when unpadded, as
+        # `create_causal_mask` would otherwise never skip it in favor of sdpa's `is_causal` argument
         position_attention_mask = attention_mask
-        if position_attention_mask is None:
+        if position_attention_mask is None and position_ids is None:
             seq_length = past_seen_tokens + inputs_embeds.shape[1]
             position_attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
 
@@ -361,6 +362,7 @@ class OPTDecoder(OPTPreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         pos_embeds = self.embed_positions(position_attention_mask, past_seen_tokens, position_ids=position_ids)

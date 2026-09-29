@@ -57,8 +57,11 @@ class ExportConfigMixin:
         Returns:
             [`ExportConfigMixin`]: The configuration object instantiated from those parameters.
         """
-        config = cls(**config_dict)
-        return config
+        config_dict = dict(config_dict)
+        # Back to the enum, so a config built from a dictionary is the one built directly.
+        if isinstance(config_dict.get("export_format"), str):
+            config_dict["export_format"] = ExportFormat(config_dict["export_format"])
+        return cls(**config_dict)
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -67,10 +70,11 @@ class ExportConfigMixin:
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        return copy.deepcopy(self.__dict__)
-
-    def __iter__(self):
-        yield from self.__dict__.items()
+        # The format as its value, so the dictionary is JSON as it stands — a saved `export_config.json` is
+        # read back by name (`AutoExportConfig.from_dict`), and an enum repr is not a name.
+        fields = copy.deepcopy(self.__dict__)
+        fields["export_format"] = self.export_format.value
+        return fields
 
 
 @dataclass
@@ -134,9 +138,6 @@ class OnnxConfig(DynamoConfig):
         export_params (`bool`, *optional*, defaults to `True`):
             Embed model weights in the ONNX graph. Set to `False` to export
             a weight-free graph (weights must be supplied at runtime).
-        keep_initializers_as_inputs (`bool`, *optional*, defaults to `False`):
-            Expose weight initializers as explicit graph inputs. Required by
-            some older ONNX runtimes (opset < 9).
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
@@ -146,7 +147,6 @@ class OnnxConfig(DynamoConfig):
     external_data: bool = True
     optimize: bool = True
     export_params: bool = True
-    keep_initializers_as_inputs: bool = False
 
 
 @dataclass
@@ -162,6 +162,7 @@ class ExecutorchConfig(DynamoConfig):
             Target ExecuTorch backend. Supported values:
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
+            - `"openvino"` — CPU inference via the ExecuTorch OpenVINO delegate.
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
             - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
@@ -171,16 +172,30 @@ class ExecutorchConfig(DynamoConfig):
             caller's tensor rather than an arena copy.
         alloc_graph_output (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph outputs. When `False`,
-            the caller must bind output buffers at runtime (`Method::set_output_data_ptr`); binding an
-            output to its mutated input's buffer avoids the copy-out roundtrip.
+            the caller binds output buffers at runtime (`Method::set_output_data_ptr`, `Method.set_output`
+            from Python); binding an output to its mutated input's buffer avoids the copy-out roundtrip,
+            which [`ExecutorchModelRunner`] does for the cache when the runtime supports it.
         alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
             state). Passed through to the `MemoryPlanningPass`.
+        partition (`bool`, *optional*, defaults to `True`):
+            Whether to hand eligible subgraphs to the backend's partitioner. When `False` the whole graph
+            lowers to the portable kernels — slower, and the way past a backend whose compiler refuses a
+            partition its own partitioner claimed (XNNPACK does this at method load, so the refusal only
+            shows up when the program is run).
+        partition_exclude (`tuple[str, ...]`, *optional*):
+            Names of the backend partitioner's per-op configs to withhold, e.g.
+            `("ViewCopyConfig",)`. Those ops lower to the portable kernels while everything else stays
+            delegated — the targeted form of `partition=False`, for a backend that refuses a partition
+            because of one op pattern rather than the whole graph. XNNPACK only; names come from
+            `executorch.backends.xnnpack.partition.config.ALL_PARTITIONER_CONFIGS`.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
+    partition: bool = True
+    partition_exclude: tuple[str, ...] = ()
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True
@@ -198,9 +213,10 @@ class OpenVINOConfig(DynamoConfig):
         output_path (`str` or `PathLike`, *optional*):
             Output path for the `.xml` file (the matching `.bin` is written alongside). When
             `None` (default) the converted model is kept in memory as an ``openvino.Model``.
-        compress_to_fp16 (`bool`, *optional*, defaults to `True`):
-            Compress floating-point weights to FP16 when saving — halves on-disk size with
-            negligible accuracy impact on most models. Only applied when ``output_path`` is set.
+        compress_to_fp16 (`bool`, *optional*, defaults to `False`):
+            Halve `float32` weights to `float16` when saving. Off by default: an export answers like the
+            model it came from, and `float16` carries a narrower exponent range than the `float32` it
+            replaces. `bfloat16` weights are left alone either way — only `float32` is compressed.
         stateful (`bool`, *optional*, defaults to `True`):
             Fold round-tripped state tensors (KV cache, SSM states, …) into internal OV
             variables (``ReadValue``/``Assign``). The runtime then carries state across
@@ -213,5 +229,5 @@ class OpenVINOConfig(DynamoConfig):
     export_format: ExportFormat = ExportFormat.OPENVINO
 
     output_path: str | PathLike | None = None
-    compress_to_fp16: bool = True
+    compress_to_fp16: bool = False
     stateful: bool = True

@@ -25,6 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import gelu_new, get_activation, silu
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -476,8 +477,18 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
             attentions=transformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> dict[str, Any]:
-        # Overwritten -- old model with reduced inputs
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past_key_values: Cache | None = None,
+        next_sequence_length: int | None = None,
+        is_first_iteration: bool | None = False,
+        **kwargs,
+    ) -> dict[str, Any]:
+        # Overwritten -- old model with reduced inputs: this architecture has no cache, so every step
+        # recomputes the whole sequence (hence the un-sliced `input_ids`). The cache and the generation-loop
+        # controls are named here, as in the base implementation, so they are consumed rather than forwarded
+        # to a `forward` that has no parameter for them.
         model_inputs = {"input_ids": input_ids}
 
         # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).

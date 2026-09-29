@@ -346,13 +346,9 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
 
         self.assertEqual(response, expected_output)
 
-    # `meituan-longcat/LongCat-Flash-Chat` is 562B parameters (~18.6–31.3B activated per token) --
-    # ~1,047 GiB of bfloat16 weights.
-    #
-    # That far exceeds the budget `device_map="auto"` plans against on the daily CI `a10` runners --
-    # 24 GiB of accelerator plus the 60 GiB `CI_CPU_MEMORY_LIMIT_GB` allowance on the single-accelerator
-    # runner, and 48 + 120 on the two-accelerator one -- so a large portion of the model is placed on
-    # `"disk"`, and loading dies due to MoE weight format incompatibility with accelerate's disk offload.
+    # `meituan-longcat/LongCat-Flash-Chat` is 562B parameters, ~1,047 GiB of bfloat16 weights — far past
+    # what `device_map="auto"` plans against on the daily CI `a10` runners. Much of the model then lands
+    # on `"disk"`, where loading dies on MoE weight format incompatibility with accelerate's offload.
     @slow
     @require_torch_accelerator_memory(memory=1100)
     def test_longcat_generation_cpu(self):

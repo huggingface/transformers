@@ -1118,13 +1118,18 @@ class MllamaTextModel(MllamaPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # `generate()` may pass a per-layer-type mask dict already built by `create_masks_for_generate`;
+        # only the self-attending layers take a causal mask, the cross-attention ones mask on the image.
+        if isinstance(attention_mask, dict):
+            causal_mask = attention_mask["full_attention"]
+        else:
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
@@ -1355,13 +1360,12 @@ class MllamaModel(MllamaPreTrainedModel):
             )
 
         if cross_attention_mask is not None:
-            # `generate` already slices the mask down to the tokens being processed (see
-            # `prepare_inputs_for_generation`), but a plain `forward` call may pass the full mask with a cache.
+            # `generate` slices the mask to the tokens being processed, but a caller driving the model
+            # itself passes the whole mask. Its last `seq_len` rows are the step's either way: an
+            # already-sliced mask is taken whole, a grown one gives the rows this step adds. Unconditional
+            # on purpose — comparing widths would read a cache length that is data-dependent under export.
             seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-            if cross_attention_mask.shape[1] != seq_len:
-                # `int(...)` as compileable layers return a 0-dim tensor. Never reached from `generate`, so not traced.
-                past_seen_tokens = int(past_key_values.get_seq_length()) if past_key_values is not None else 0
-                cross_attention_mask = cross_attention_mask[:, past_seen_tokens : past_seen_tokens + seq_len]
+            cross_attention_mask = cross_attention_mask[:, -seq_len:]
 
             cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
                 cross_attention_mask,

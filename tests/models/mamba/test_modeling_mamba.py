@@ -174,7 +174,26 @@ class MambaModelTester:
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the original mamba does not support decoding more than 1 token neither do we
+
+    def create_and_check_multi_token_continuation(self, config, input_ids, *args):
+        """`test_state_equivalency` for a *multi-token* continuation: several tokens forwarded at once over
+        a warm cache (chat continuation, prefix caching) must match the full forward — the full-sequence
+        scan has to continue from the cached SSM state rather than restart from zero (`initial_states`)."""
+        model = MambaModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        split = input_ids.shape[1] // 2
+        output_whole = model(input_ids).last_hidden_state
+
+        outputs = model(input_ids[:, :split], use_cache=True)
+        continuation = model(input_ids[:, split:], use_cache=True, cache_params=outputs.cache_params)
+
+        self.parent.assertTrue(
+            torch.allclose(
+                torch.cat([outputs.last_hidden_state, continuation.last_hidden_state], dim=1), output_whole, atol=1e-5
+            )
+        )
 
     def create_and_check_mamba_cached_slow_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
@@ -282,6 +301,10 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_state_equivalency(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
+
+    def test_multi_token_continuation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_multi_token_continuation(*config_and_inputs)
 
     def test_mamba_cached_slow_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

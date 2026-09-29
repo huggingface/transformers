@@ -330,6 +330,21 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
         else {}
     )
 
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        """Idefics caches the gated cross-attention layers' image K/V in slots appended after the decoder
+        layers' (see `IdeficsConfig.layer_types`), so the cache is longer than `num_hidden_layers` and the
+        extra slots' sequence axis counts image tokens, not text."""
+        config = config.get_text_config(decoder=True)
+        num_cross_layers = config.num_hidden_layers // config.cross_layer_interval
+        self.assertEqual(config.num_hidden_layers + num_cross_layers, len(past_key_values))
+        head_dim = config.hidden_size // config.num_attention_heads
+        for layer_idx, layer in enumerate(past_key_values.layers):
+            expected = (batch_size, config.num_attention_heads, seq_length, head_dim)
+            if layer_idx >= config.num_hidden_layers:
+                expected = (batch_size, config.num_attention_heads, layer.keys.shape[-2], head_dim)
+            self.assertEqual(tuple(layer.keys.shape), expected)
+            self.assertEqual(tuple(layer.values.shape), expected)
+
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         # XXX: IdeficsForVisionText2TextTest has no MODEL_FOR group yet, but it should be the same

@@ -325,6 +325,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         input_values: torch.FloatTensor,
         padding_mask: torch.BoolTensor | None = None,
         acoustic_tokenizer_chunk_size: int | None = None,
+        acoustic_noise: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
@@ -334,6 +335,9 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
             Mask to avoid performing operations on padding feature indices.
         acoustic_tokenizer_chunk_size (`int`, *optional*):
             Size of audio chunks to process at once through the tokenizers.
+        acoustic_noise (`torch.FloatTensor` of shape `(batch_size, num_audio_tokens, acoustic_hidden_size)`, *optional*):
+            The noise added to the acoustic latents, sampled from `vae_std` when not given. Passing it makes the
+            audio features reproducible.
         """
         if acoustic_tokenizer_chunk_size is None:
             acoustic_tokenizer_chunk_size = self.config.acoustic_tokenizer_chunk_size
@@ -372,10 +376,12 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
             semantic_latents = torch.cat(semantic_latents, dim=1)
 
             # Sample acoustic tokens
-            noise_std = self.config.acoustic_tokenizer_encoder_config.vae_std * torch.randn(
-                acoustic_latents.shape[0], device=acoustic_latents.device, dtype=acoustic_latents.dtype
-            )
-            acoustic_latents = acoustic_latents + noise_std[:, None, None] * torch.randn_like(acoustic_latents)
+            if acoustic_noise is None:
+                noise_std = self.config.acoustic_tokenizer_encoder_config.vae_std * torch.randn(
+                    acoustic_latents.shape[0], device=acoustic_latents.device, dtype=acoustic_latents.dtype
+                )
+                acoustic_noise = noise_std[:, None, None] * torch.randn_like(acoustic_latents)
+            acoustic_latents = acoustic_latents + acoustic_noise
 
         combined_features = self.multi_modal_projector(acoustic_latents, semantic_latents)
         if padding_mask is not None:
@@ -400,6 +406,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         acoustic_tokenizer_chunk_size: int | None = None,
+        acoustic_noise: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrModelOutputWithPast:
         r"""
@@ -407,6 +414,9 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
             Mask to avoid performing operations on padding feature indices.
         acoustic_tokenizer_chunk_size (`int`, *optional*):
             Size of audio chunks processed by the acoustic and semantic tokenizers.
+        acoustic_noise (`torch.FloatTensor` of shape `(batch_size, num_audio_tokens, acoustic_hidden_size)`, *optional*):
+            The noise added to the acoustic latents, sampled from `vae_std` when not given. Passing it makes the
+            audio features reproducible.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -417,6 +427,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
                 input_values=input_values,
                 padding_mask=padding_mask,
                 acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size,
+                acoustic_noise=acoustic_noise,
             ).pooler_output
 
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
@@ -467,6 +478,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         acoustic_tokenizer_chunk_size: int | None = None,
+        acoustic_noise: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -476,6 +488,9 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
             Mask to avoid performing operations on padding feature indices.
         acoustic_tokenizer_chunk_size (`int`, *optional*):
             Size of audio chunks processed by the acoustic and semantic tokenizers.
+        acoustic_noise (`torch.FloatTensor` of shape `(batch_size, num_audio_tokens, acoustic_hidden_size)`, *optional*):
+            The noise added to the acoustic latents, sampled from `vae_std` when not given. Passing it makes the
+            audio features reproducible.
 
         Example:
 
@@ -494,6 +509,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
             input_values=input_values,
             padding_mask=padding_mask,
             acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size,
+            acoustic_noise=acoustic_noise,
             **kwargs,
         )
 

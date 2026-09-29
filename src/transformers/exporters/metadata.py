@@ -1,0 +1,370 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""What an exporter records about a graph, and how a runner reads it back.
+
+A loaded artifact says what its inputs are *called* and what shape they were traced at, but nothing about
+what they mean. This is the trace's own account of itself — the precision it computes in, the kwargs as
+traced, the cache's per-layer geometry — written at export and read by every runner.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from typing import Any
+
+from .. import __version__
+from ..utils import logging
+from ..utils.import_utils import is_torch_available
+from .cache import _self_attention_layers
+from .utils import _class_to_path, _path_to_class, get_leaf_tensors
+
+
+logger = logging.get_logger(__name__)
+
+if is_torch_available():
+    import torch
+
+    from ..cache_utils import Cache
+
+# The key the metadata travels under: an ONNX `metadata_props` entry, an ExecuTorch constant method.
+EXPORT_METADATA_KEY = "transformers_export_metadata"
+
+
+def _traced_kwarg(value: Any) -> dict[str, Any]:
+    """How one traced kwarg was shaped, as JSON: shape and dtype for a tensor, the same per leaf for a
+    mapping of them (a per-attention-type mask dict), and the container's kind for anything else — a cache
+    is the one a runner has to recognise, since it feeds it as an object rather than a tensor.
+
+    The shape is what the trace saw, hints and all, not what the graph left symbolic — an axis a runtime
+    has to match is one the export specialised, and the recorded size is what it specialised to. `rank` is
+    kept beside it: it is the older field, and readers that only ever wanted the rank still ask for it.
+
+    A container also records the class it was, as `module:qualname`. The graph takes such a kwarg as that
+    *type* (dynamo bakes it into the input spec, and the other backends name their leaves by its fields),
+    so a runtime assembling one has to build the same class rather than something shaped like it — an
+    encoder output carrying more than hidden states (parakeet's frame mask) only survives as its own type.
+    """
+    if isinstance(value, torch.Tensor):
+        return {
+            "rank": value.dim(),
+            "shape": [int(dim) for dim in value.shape],
+            "dtype": str(value.dtype).removeprefix("torch."),
+        }
+    if isinstance(value, Mapping):
+        recorded = {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
+        # A per-attention-type mask is a plain dict and is rebuilt as one. An encoder's output is a mapping
+        # too — `ModelOutput` subclasses `OrderedDict` — but the graph takes it as its own class, so that is
+        # recorded here rather than under `container`, which this branch already claimed.
+        if type(value) is not dict:
+            recorded["class"] = _class_to_path(type(value))
+        return recorded
+
+    kind = "cache" if isinstance(value, Cache) else type(value).__name__
+    return {"container": kind, "class": _class_to_path(type(value))}
+
+
+def traced_output_names(exported_program) -> list[str]:
+    """The model's own output leaf names, in output order, read off the program's output pytree.
+
+    The exported call spec holds the output structure the trace returned; unflattening placeholders through
+    it and walking them with `get_leaf_tensors` yields exactly the `{name: tensor}` keys the dynamo runner
+    computes on the real outputs at run time — so an artifact can carry them for a runner that otherwise
+    sees only positional tensors."""
+    spec = exported_program.call_spec.out_spec
+    placeholders = [torch.empty(0) for _ in range(spec.num_leaves)]
+    return list(get_leaf_tensors(torch.utils._pytree.tree_unflatten(placeholders, spec)))
+
+
+def _package_versions(packages: Iterable[str]) -> dict[str, str]:
+    """`{package: version}` for what produced an artifact — transformers plus whatever the exporter needs.
+
+    Provenance for a file that outlives the environment that wrote it: a `.pte` or `.onnx` that misbehaves
+    is usually a version story (a lowering that changed, an op that moved), and the artifact is the only
+    place that can still say which versions were involved."""
+    from ..utils.import_utils import _is_package_available
+
+    versions = {"transformers": __version__}
+    for package in packages:
+        exists, version = _is_package_available(package, return_version=True)
+        if exists and version != "N/A":
+            # Local build suffixes (`+cu126`, `+cpu`) name the wheel, not the API — keep them, they are
+            # exactly what distinguishes two otherwise identical torch versions when a kernel misbehaves.
+            versions[package] = version
+    return versions
+
+
+def _traced_cache_leaf_shapes(module) -> dict[int, tuple[int | None, ...]]:
+    """`{leaf index: shape}` for the graph's cache inputs, keyed by the index in the placeholder's own name.
+
+    Keyed, not positional: a cache tensor the trace folded into a constant (a static sliding layer's
+    `sliding_window_tensor`) has no placeholder at all, so counting placeholders in order would shift
+    every leaf after it — and the pytree context refers to leaves by index."""
+    shapes = {}
+    for node in getattr(getattr(module, "graph", None), "nodes", []):
+        if node.op != "placeholder" or not node.name.startswith("past_key_values"):
+            continue
+        index = node.name.rsplit("_", 1)[-1]
+        value = node.meta.get("val")
+        if index.isdigit() and hasattr(value, "shape"):
+            shapes[int(index)] = tuple(int(dim) if isinstance(dim, int) else None for dim in value.shape)
+    return shapes
+
+
+def _traced_cache_layout(module) -> dict[int, dict[str, int]]:
+    """`{layer index: {"heads", "key_dim", "value_dim", "length", "indexer"}}` from the traced cache — what
+    the metadata records about each layer, in the shape it records it.
+
+    Each key is present only where the trace stated it: a recurrent layer keeps conv / SSM buffers rather
+    than keys and values and has no geometry, and a length belongs to a layer that was *sized* rather than
+    grown (the sizes need not be uniform across one cache).
+
+    The serialized context records which leaf *each* layer's `keys` / `values` occupy, so the shapes are
+    matched by name. Matching by position instead cannot work: a hybrid model's recurrent states are rank-4
+    too, so any rank-based pairing shifts the geometry of every attention layer after the first
+    linear-attention one.
+    """
+    shapes = _traced_cache_leaf_shapes(module)
+    kwargs_spec = module._in_spec.child(1)
+    names = list(kwargs_spec.context or [])
+    cache_name = next((name for name in ("past_key_values", "cache_params") if name in names), None)
+    if cache_name is None:
+        return {}
+    context = kwargs_spec.children_specs[names.index(cache_name)].context
+    state = context.get("s", {}) if isinstance(context, dict) else {}
+    layout = {}
+    for index, layer in enumerate(state.get("layers", []) or []):
+        entries = layer.get("s", {}) if isinstance(layer, dict) else {}
+        keys, values = entries.get("keys"), entries.get("values")
+        key_shape = shapes.get(keys["i"]) if isinstance(keys, dict) and keys.get("_t") == "tensor" else None
+        value_shape = shapes.get(values["i"]) if isinstance(values, dict) and values.get("_t") == "tensor" else None
+        recorded = {}
+        if key_shape is not None and value_shape is not None and len(key_shape) == 4:
+            heads, key_dim, value_dim = key_shape[1], key_shape[3], value_shape[3]
+            if None not in (heads, key_dim, value_dim):
+                recorded = {"heads": heads, "key_dim": key_dim, "value_dim": value_dim}
+        # A fixed-size layer carries the length it was built for in its own context, and layers of one
+        # cache need not agree: mllama sizes its cross-attention layers to the vision sequence and its
+        # self-attention ones to the generation length.
+        if isinstance(entries.get("max_cache_len"), int):
+            recorded["length"] = entries["max_cache_len"]
+        # A sparse-indexer layer keeps a third tensor beside keys and values, but not every layer of such a
+        # cache writes one: hy_v4's "shared" indexer layers reuse the last full layer's, so their slot stays
+        # empty and the graph has one leaf fewer there. Only the trace says which is which.
+        if "indexer_keys" in entries:
+            recorded["indexer"] = isinstance(entries["indexer_keys"], dict)
+        if recorded:
+            layout[index] = recorded
+    return layout
+
+
+@dataclass(frozen=True)
+class ExportMetadata:
+    """What the exporter recorded about one graph (`build_export_metadata`), parsed: the trace's account of
+    what the artifact's inputs and outputs mean, which every runner accessor reads.
+
+    Empty for an artifact without it (another tool's): every accessor then answers `None`/empty and the
+    runner falls back to what its declared tensors say.
+    """
+
+    raw: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_json(cls, payload: str | None) -> ExportMetadata:
+        """Parse a text payload, tolerating anything unreadable — a corrupt or foreign entry under our key
+        is not worth failing an otherwise loadable artifact over."""
+        if not payload:
+            return cls()
+        try:
+            metadata = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning_once(f"Ignoring an unreadable `{EXPORT_METADATA_KEY}`; falling back to inference.")
+            return cls()
+        return cls.from_dict(metadata)
+
+    @classmethod
+    def from_dict(cls, metadata: Any) -> ExportMetadata:
+        return cls(metadata) if isinstance(metadata, Mapping) else cls()
+
+    def __bool__(self) -> bool:
+        return bool(self.raw)
+
+    @property
+    def input_names(self) -> tuple[str, ...]:
+        """What the graph takes, in the flat order it takes them."""
+        return tuple(self.raw.get("input_names", ()))
+
+    @property
+    def output_names(self) -> tuple[str, ...]:
+        """What the graph returns, in the flat order it returns them."""
+        return tuple(self.raw.get("output_names", ()))
+
+    @property
+    def num_user_outputs(self) -> int | None:
+        """How many of the returned leaves are the model's own, before a backend appended its mutated
+        inputs — `None` when unrecorded, which leaves the runner to ask its own handle."""
+        count = self.raw.get("num_user_outputs")
+        return count if isinstance(count, int) else None
+
+    @property
+    def dtype(self) -> torch.dtype | None:
+        """The precision the graph was exported at — not sniffed off whichever tensor is float."""
+        dtype = getattr(torch, self.raw.get("dtype") or "", None)
+        return dtype if isinstance(dtype, torch.dtype) else None
+
+    @property
+    def device(self) -> torch.device | None:
+        """The device the graph was exported on — not read off weights a compiled artifact no longer has."""
+        device = self.raw.get("device")
+        return torch.device(device) if device else None
+
+    @property
+    def constant_inputs(self) -> dict[str, Any]:
+        """Declared inputs that carry no tensor, and the value each holds — a `None` mask slot the trace kept
+        (see `input_names`). A positional backend fills these rather than skipping them."""
+        constants = self.raw.get("constant_inputs")
+        return constants if isinstance(constants, dict) else {}
+
+    @property
+    def kwargs(self) -> dict[str, dict]:
+        """The kwargs the graph was traced with, under the names the model's forward uses — before each
+        backend mangled them into its own input names."""
+        kwargs = self.raw.get("kwargs")
+        return kwargs if isinstance(kwargs, dict) else {}
+
+    def kwarg_class(self, name: str) -> type | None:
+        """The class a container kwarg was traced as, imported — `None` when the trace recorded none (an
+        artifact written before this, or a kwarg that was a plain tensor). Importing it is also what
+        registers that class as a pytree node, which a graph loaded from disk needs before it is called."""
+        path = self.kwargs.get(name, {}).get("class")
+        return _path_to_class(path) if path else None
+
+    @property
+    def mask_rank(self) -> int | None:
+        """The rank the graph's `attention_mask` was traced with, `None` when it takes none. Only the trace
+        can say: the graph starts after the model's own mask building, and a model reading the 2-D mask
+        directly (bloom's alibi) fails a guard when handed the 4-D one `generate` builds."""
+        return self.kwargs.get("attention_mask", {}).get("rank")
+
+    @property
+    def position_axes(self) -> int | None:
+        """How many rows the graph's M-RoPE `position_ids` was traced with, `None` for plain 2-D positions (or
+        none). Not derivable from the config: qwen2_vl prepends a text row to its vision axes, hunyuan_vl
+        does not."""
+        shape = self.kwargs.get("position_ids", {}).get("shape")
+        return shape[0] if isinstance(shape, list) and len(shape) == 3 else None
+
+    @property
+    def mask_dtype(self) -> torch.dtype | None:
+        """The dtype the graph's `attention_mask` was traced with, `None` when it takes none. A model reads
+        a bool mask and a float one differently (a keep-mask vs an additive bias), so a mask the runtime
+        builds is built as the one the graph took."""
+        name = self.kwargs.get("attention_mask", {}).get("dtype")
+        return getattr(torch, name, None) if name else None
+
+    @property
+    def mask_ranks(self) -> dict[str, int | None] | None:
+        """`{attention type: rank}` when the graph was traced with a *dict* of masks, else `None`.
+
+        A single plain mask is recorded as one tensor rather than a mapping, and the generation layer keys on
+        the dict form only — so that case stays `None`, as does an artifact carrying no metadata.
+
+        Every entry the trace declared is kept, with rank `None` for one it held no mask in (a
+        linear-attention slot the model never built a mask for). Dropping those would feed the graph a
+        *shorter* dict than it was traced with: `None` is a pytree leaf, so the slot counts toward the input
+        spec either way."""
+        leaves = self.kwargs.get("attention_mask", {}).get("leaves")
+        return {name: leaf.get("rank") for name, leaf in leaves.items()} if leaves else None
+
+    @property
+    def _cache_layers(self) -> list[dict]:
+        """What the metadata recorded about each traced cache layer, in layer order."""
+        return (self.raw.get("cache") or {}).get("layers") or []
+
+    @property
+    def cache_lengths(self) -> dict[int, int]:
+        """`{layer index: length}` for the traced cache's fixed-size layers; empty for a growing cache."""
+        layers = self._cache_layers
+        return {index: layer["length"] for index, layer in enumerate(layers) if "length" in layer}
+
+    @property
+    def indexer_layers(self) -> dict[int, bool]:
+        """`{layer index: whether the traced layer carried an indexer tensor}`, for the layers whose class
+        keeps one at all. A layer absent here was not traced with an indexer slot to speak of."""
+        layers = self._cache_layers
+        return {index: layer["indexer"] for index, layer in enumerate(layers) if "indexer" in layer}
+
+    @property
+    def kv_geometry(self) -> dict[int, tuple[int, int, int]]:
+        """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` from the recorded cache layout.
+
+        A layer whose state is not keys-and-values (a recurrent layer's conv / SSM buffers) has no geometry
+        and is absent, which is what the caller checks."""
+        layers = self._cache_layers
+        return {
+            index: (layer["heads"], layer["key_dim"], layer["value_dim"])
+            for index, layer in enumerate(layers)
+            if {"heads", "key_dim", "value_dim"} <= layer.keys()
+        }
+
+
+def build_export_metadata(
+    model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
+) -> dict[str, Any]:
+    """The facts about a graph that its runner would otherwise infer from backend-mangled names and shapes:
+    the precision, the kwargs as traced (rank, dtype, container), the flat input and output order, and the
+    cache layout. Deliberately generic — which kwarg is a mask stays with the generation layer.
+    """
+    metadata = {
+        # Provenance, for the day the artifact outlives this environment.
+        "schema_version": 1,
+        "architecture": type(model).__name__,
+        "packages": _package_versions(packages),
+        # The precision the graph computes in, off the parameters (a split-out component is a plain
+        # `nn.Module` with no `.dtype`): a cache fed at another dtype is refused when the method binds it.
+        "dtype": str(
+            next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
+        ).removeprefix("torch."),
+        # Where it was exported, for a runner whose handle cannot say.
+        "device": str(next((p.device for p in model.parameters()), torch.device("cpu"))),
+        "kwargs": {name: _traced_kwarg(value) for name, value in inputs.items()},
+    }
+    graph_signature = exported_program.graph_signature
+    # Every user input in binding order, including a `None` slot the trace kept (a `ConstantArgument`, which
+    # `graph_signature.user_inputs` reports as `None`): drop one and a positional backend binds a slot early.
+    user_inputs = [spec.arg for spec in graph_signature.input_specs if spec.kind.name == "USER_INPUT"]
+    metadata["input_names"] = [arg.name for arg in user_inputs]
+    # What those valueless slots hold, so a positional backend can fill them rather than skip them.
+    metadata["constant_inputs"] = {
+        arg.name: arg.value for arg in user_inputs if type(arg).__name__ == "ConstantArgument"
+    }
+    metadata["output_names"] = traced_output_names(exported_program)
+    metadata["num_user_outputs"] = sum(spec.kind.name == "USER_OUTPUT" for spec in graph_signature.output_specs)
+    try:
+        module = exported_program.module()
+    except Exception:  # a program that cannot be unlifted describes neither
+        module = None
+    # The cache the graph was traced against, layer by layer: what kind of state each keeps, its geometry and
+    # the length it was sized for, which the runtime builds to rather than re-deriving.
+    layout = _traced_cache_layout(module) if module is not None else {}
+    cache = next((value for value in inputs.values() if isinstance(value, Cache)), None)
+    layers = _self_attention_layers(cache)
+    if cache is not None:
+        metadata["cache"] = {
+            "class": type(cache).__name__,
+            "layers": [{"class": type(layer).__name__, **layout.get(index, {})} for index, layer in enumerate(layers)],
+        }
+    return metadata

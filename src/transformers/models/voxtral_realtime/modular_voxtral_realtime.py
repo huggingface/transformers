@@ -344,6 +344,9 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         if (input_features is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_features or inputs_embeds")
 
+        if use_padding_cache is None:
+            use_padding_cache = use_cache
+
         if use_padding_cache and padding_cache is None:
             padding_cache = VoxtralRealtimeConv1dPaddingCache()
 
@@ -574,8 +577,8 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if (input_features is None) ^ (encoder_inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_features or encoder_inputs_embeds")
+        if input_features is not None and encoder_inputs_embeds is not None:
+            raise ValueError("You must specify at most one of input_features or encoder_inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -626,10 +629,8 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            encoder_past_key_values=audio_outputs.past_key_values
-            if (audio_outputs is not None and use_cache)
-            else None,
-            padding_cache=audio_outputs.padding_cache if (audio_outputs is not None and use_cache) else None,
+            encoder_past_key_values=audio_outputs.past_key_values if audio_outputs is not None else None,
+            padding_cache=audio_outputs.padding_cache if audio_outputs is not None else None,
             audio_hidden_states=audio_embeds,
         )
 
