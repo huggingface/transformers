@@ -31,8 +31,9 @@ def _schema_types(schema: Any) -> tuple[str, ...]:
     types = [declared] if isinstance(declared, str) else []
     if isinstance(declared, list):
         types.extend(t for t in declared if isinstance(t, str))
-    for choice in schema.get("anyOf") or []:
-        types.extend(_schema_types(choice))
+    for union_name in ("anyOf", "oneOf"):
+        for choice in schema.get(union_name) or []:
+            types.extend(_schema_types(choice))
     if schema.get("nullable") and "null" not in types:  # `nullable` is how get_json_schema marks Optionals
         types.append("null")
     return tuple(types)
@@ -359,7 +360,15 @@ class ResponseParser:
         value = process_field(self._body, field, self._captures)
         if self._tool_params:
             value = self._coerce_tool_calls(value)
-        if field.repeats:
+        if field.join is not None:
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"Field '{field.name}': 'join' requires each match to parse to a string, "
+                    f"got {type(value).__name__}."
+                )
+            previous = self._output.get(self._current)
+            self._output[self._current] = value if previous is None else previous + field.join + value
+        elif field.repeats:
             self._output.setdefault(self._current, []).append(value)
         else:
             self._output[self._current] = value
@@ -381,7 +390,8 @@ class ResponseParser:
                     continue
                 if isinstance(argument, str):
                     arguments[key] = _coerce(argument, types)
-                elif isinstance(argument, list):  # duplicate keys collected by `merge_duplicates`
+                elif isinstance(argument, list) and "array" not in types:
+                    # duplicate keys collected by `merge_duplicates`
                     arguments[key] = [_coerce(item, types) if isinstance(item, str) else item for item in argument]
         return value
 

@@ -524,10 +524,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Encoder-Decoder cache can not be initialized.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip(
         "Model expects decoder inputs to be of certain shape and thus we cannot test scaling with long inputs"

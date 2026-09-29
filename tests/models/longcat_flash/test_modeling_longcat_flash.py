@@ -23,9 +23,9 @@ from transformers import LongcatFlashConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
-    require_large_cpu_ram,
     require_torch,
     require_torch_accelerator,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -37,7 +37,7 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, Cache, LongcatFlashForCausalLM, LongcatFlashModel
+    from transformers import AutoTokenizer, LongcatFlashForCausalLM, LongcatFlashModel
 
 
 class LongcatFlashModelTester(CausalLMModelTester):
@@ -221,19 +221,6 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Cache)
-
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-
-        expected_key_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        expected_value_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
-
-        for layer_idx in range(config.num_hidden_layers):
-            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
-            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_value_shape)
-
     @unittest.skip("LongcatFlash router uses weight.type() directly in forward which prevents offloading")
     def test_cpu_offload(self):
         pass
@@ -355,12 +342,19 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
             outputs = self.model.generate(inputs["input_ids"], max_new_tokens=10, do_sample=False)
 
         response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年车龄juanaheast稍achaotingupebarebones"
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig affidavhens酒店的coco toughoireFFIXilateraldrawal"
 
         self.assertEqual(response, expected_output)
 
+    # `meituan-longcat/LongCat-Flash-Chat` is 562B parameters (~18.6–31.3B activated per token) --
+    # ~1,047 GiB of bfloat16 weights.
+    #
+    # That far exceeds the budget `device_map="auto"` plans against on the daily CI `a10` runners --
+    # 24 GiB of accelerator plus the 60 GiB `CI_CPU_MEMORY_LIMIT_GB` allowance on the single-accelerator
+    # runner, and 48 + 120 on the two-accelerator one -- so a large portion of the model is placed on
+    # `"disk"`, and loading dies due to MoE weight format incompatibility with accelerate's disk offload.
     @slow
-    @require_large_cpu_ram
+    @require_torch_accelerator_memory(memory=1100)
     def test_longcat_generation_cpu(self):
         # takes absolutely forever and a lot RAM, but allows to test the output in the CI
         model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)

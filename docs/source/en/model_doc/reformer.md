@@ -159,10 +159,6 @@ loss = model(input_ids, labels=input_ids)[0]
 [[autodoc]] ReformerTokenizer
     - save_vocabulary
 
-## ReformerTokenizerFast
-
-[[autodoc]] ReformerTokenizerFast
-
 ## ReformerModel
 
 [[autodoc]] ReformerModel

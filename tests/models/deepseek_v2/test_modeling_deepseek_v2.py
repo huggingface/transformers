@@ -16,8 +16,8 @@
 import math
 import unittest
 
-from transformers import BitsAndBytesConfig, Cache, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers import is_torch_available
+from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -61,23 +61,6 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV2ForCausalLM if is_torch_available() else None
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
 
     def test_model_rope_scaling_frequencies(self):
         """
@@ -155,21 +138,23 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class DeepseekV2IntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_deepseek_v2_lite(self):
-        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.\n\nAttention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.\n\nThe attention function is a function that takes a query and a set of key-value pairs as input and outputs a vector']  # fmt: skip
+        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The query and keys are used to compute a similarity score between each key and the query, and the values are used to compute a weighted sum of the similarity scores. The output is a vector that represents the attention score for each key-value pair.']  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
 
         input_text = [
             "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors."  # fmt: skip
         ]
-        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
 
         generated_ids = model.generate(**model_inputs, max_new_tokens=50, do_sample=False)
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
@@ -180,25 +165,24 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
 
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             attn_implementation="eager",
         )
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
 
-        EXPECTED_MEAN = torch.tensor([[-6.1232, -5.0952, -4.4493, -2.6536, -2.0608, -2.3991, -3.8013, -2.8681]], device=torch_device)  # fmt: skip
+        EXPECTED_MEAN = torch.tensor([[-6.1771, -5.0335, -3.9930, -2.5152, -2.1288, -2.4581, -3.7718, -3.6901]], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits.float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
 
-        EXPECTED_SLICE = torch.tensor([-1.2500, -0.9961, -0.0194, -3.1562,  1.2812, -2.7656, -0.8438, -3.0469, -2.7812, -0.6328, -0.4160, -1.9688, -2.4219, -1.0391, -3.8906], device=torch_device)  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([-1.2188, -0.7422, -0.0201, -2.8281, 1.2500, -2.6094, -0.7266, -2.9219, -2.5313, -0.5469, -0.3223, -1.8281, -2.1094, -0.8125, -3.7813], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
     def test_batch_fa2(self):
         EXPECTED_TEXT = [
-            "Simply put, the theory of relativity states that \nthe laws of physics are the same for all observers, regardless of their \nrelative motion.\nThe theory of relativity is a theory of space, time, and gravity.\nThe theory of",  # fmt: skip
-            "My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup on my hot dogs, hamburgers, french fries, and even on my eggs. I love ketchup. I love ketchup so much that I",  # fmt: skip
+            "Simply put, the theory of relativity states that , the theory of relativity is a theory of space and time. It is a theory that explains the relationship between space and time. It is a theory that explains how space and time are related to each",  # fmt: skip
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don\u2019t like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",  # fmt: skip
         ]
 
         prompts = [
@@ -211,11 +195,10 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
 
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)

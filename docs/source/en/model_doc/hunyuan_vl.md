@@ -18,7 +18,7 @@ specific language governing permissions and limitations under the License.
 HunYuanVL is a vision-language model for image-text understanding and generation
 proposed in [HunyuanOCR Technical Report
 ](https://huggingface.co/papers/2511.19575). The open-source `hunyuan_vl` integration in Transformers is a
-dense-only image-text variant tailored for OCR and document understanding style workloads such as [`tencent/HunyuanOCR`]((https://huggingface.co/tencent/HunyuanOCR)).
+dense-only image-text variant tailored for OCR and document understanding style workloads such as [`tencent/HunyuanOCR`](https://huggingface.co/tencent/HunyuanOCR).
 
 The abstract from the paper is the following:
 

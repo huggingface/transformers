@@ -872,13 +872,15 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
             Zero or more lists that mirror the structure of `nested_images` (flat list, or list of lists when
             `is_nested=True`). Each element is paired 1:1 with the corresponding image so it can be grouped by the
             same shape key. These paired values are grouped alongside `nested_images` but are not stacked in the output, so
-            they do not need to be tensors.
+            they do not need to be tensors. A paired input can also be `None`, in which case it is grouped as `None`
+            for every shape so callers can index it like the others.
         is_nested (bool, *optional*, defaults to False):
             Whether the images are nested.
     Returns:
         tuple[dict, ...]:
             - A dictionary with shape as key and list of images with that shape as value
-            - A dictionary with shape as key and list of paired values with that shape as value
+            - A dictionary with shape as key and list of paired values with that shape as value, or `None` values if
+              the corresponding paired input is `None`
             - A dictionary mapping original indices to (shape, index) tuples
             - A dictionary mapping original indices to (shape, index) tuples for each paired input
     """
@@ -886,11 +888,14 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
     grouped_images_index = {}
     paired_grouped_values = [defaultdict(list) for _ in paired_inputs]
 
-    # Normalize inputs to consistent nested structure
+    # Normalize inputs to consistent nested structure, mirroring the images with `None` for missing paired inputs
     normalized_images = [nested_images] if not is_nested else nested_images
     normalized_paired = []
     for paired_input in paired_inputs:
-        normalized_paired.append([paired_input] if not is_nested else paired_input)
+        if paired_input is None:
+            normalized_paired.append([[None] * len(sublist) for sublist in normalized_images])
+        else:
+            normalized_paired.append([paired_input] if not is_nested else paired_input)
 
     # Process each image and group by shape
     for i, (sublist, *paired_sublists) in enumerate(zip(normalized_images, *normalized_paired)):
@@ -907,6 +912,12 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
     # Store structure size for nested inputs to handle empty sublists during reconstruction
     if is_nested:
         grouped_images_index["_num_sublists"] = len(normalized_images)
+
+    # Missing paired inputs are grouped as a single `None` per shape instead of a list of `None` values
+    paired_grouped_values = [
+        dict.fromkeys(grouped_images, None) if paired_input is None else grouped_values
+        for paired_input, grouped_values in zip(paired_inputs, paired_grouped_values)
+    ]
 
     return grouped_images, *paired_grouped_values, grouped_images_index
 
@@ -984,7 +995,7 @@ def group_images_by_shape(
 ) -> tuple[dict, ...]:
     """
     Groups images by shape.
-    Returns a dictionary with the shape as key and a list of images with that shape as value,
+    Returns a dictionary with the shape or index as key and a list of images with that shape as value,
     and a dictionary with the index of the image in the original list as key and the shape and index in the grouped list as value.
 
     The function supports both flat lists of tensors and nested structures.
@@ -997,7 +1008,8 @@ def group_images_by_shape(
             Zero or more lists that mirror the structure of `images` (flat list, or list of lists when
             `is_nested=True`). Each element is paired 1:1 with the corresponding image so it can be grouped by the
             same shape key. These paired values are grouped alongside `images` but are not stacked in the output, so
-            they do not need to be tensors.
+            they do not need to be tensors. A paired input can also be `None`, in which case it is grouped as `None`
+            for every shape so callers can index it like the others.
         disable_grouping (bool):
             Whether to disable grouping. If None, will be set to True if the images are on CPU, and False otherwise.
             This choice is based on empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
@@ -1006,28 +1018,41 @@ def group_images_by_shape(
 
     Returns:
         tuple[dict, ...]:
-            - A dictionary with shape as key and list/batch of images with that shape as value
+            - A dictionary with shape or index as key and list/batch of images with that shape as value.
+              The key is the shape of the images if `disable_grouping` evaluates to True, and the index
+              of the image in the original list otherwise.
             - Zero or more dictionaries (one per argument in `*paired_inputs`) grouped consistently with `images`; these carry
-              the corresponding per-item values and are not stacked
+              the corresponding per-item values and are not stacked, or `None` values if the corresponding paired
+              input is `None`
             - A dictionary mapping original indices to (shape, index) tuples
     """
     # If disable grouping is not explicitly provided, we favor disabling it if the images are on CPU, and enabling it otherwise.
     if disable_grouping is None:
         device = _get_device_from_images(images, is_nested)
-        disable_grouping = device == "cpu"
+        disable_grouping = device.type == "cpu"
 
     if disable_grouping:
         grouped_images_index = {key: (key, 0) for key, _ in _iterate_items(images, is_nested)}
         if is_nested:
             grouped_images_index["_num_sublists"] = len(images)
 
+        grouped_images = {key: img.unsqueeze(0) for key, img in _iterate_items(images, is_nested)}
+        paired_grouped_values = [
+            dict.fromkeys(grouped_images, None)
+            if paired_list is None
+            else {key: [item] for key, item in _iterate_items(paired_list, is_nested)}
+            for paired_list in paired_inputs
+        ]
+
+        return grouped_images, *paired_grouped_values, grouped_images_index
+
+    # A batched tensor is already a single group of images sharing the same shape, no need to unbind and re-stack it.
+    if isinstance(images, torch.Tensor) and not is_nested and len(images) > 0:
+        shape = images.shape[2:]
         return (
-            {key: img.unsqueeze(0) for key, img in _iterate_items(images, is_nested)},
-            *[
-                {key: item.unsqueeze(0) for key, item in _iterate_items(paired_list, is_nested)}
-                for paired_list in paired_inputs
-            ],
-            grouped_images_index,
+            {shape: images},
+            *[{shape: list(paired_list)} for paired_list in paired_inputs],
+            {index: (shape, index) for index in range(len(images))},
         )
 
     # Handle single level nested structure
@@ -1035,8 +1060,12 @@ def group_images_by_shape(
         images, *paired_inputs, is_nested=is_nested
     )
 
-    # Stack images with the same shape
-    grouped_images = {shape: torch.stack(images_list, dim=0) for shape, images_list in grouped_images.items()}
+    # Stack images with the same shape. Groups holding a single image are unsqueezed instead, as stacking would copy
+    # the image for no reason.
+    grouped_images = {
+        shape: images_list[0].unsqueeze(0) if len(images_list) == 1 else torch.stack(images_list, dim=0)
+        for shape, images_list in grouped_images.items()
+    }
 
     return grouped_images, *paired_grouped_values, grouped_images_index
 
@@ -1057,7 +1086,7 @@ def reorder_images(
             Dictionary mapping original indices to (shape, index) tuples.
         is_nested (bool, *optional*, defaults to False):
             Whether the images are nested. Cannot be inferred from the input, as some processing functions outputs nested images.
-            even with non nested images,e.g functions splitting images into patches. We thus can't deduce is_nested from the input.
+            even with non nested images, e.g. functions splitting images into patches. We thus can't deduce is_nested from the input.
 
 
     Returns:

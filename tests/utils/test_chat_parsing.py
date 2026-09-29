@@ -174,6 +174,37 @@ gemma4_template = {
 }
 
 
+# Inkling (TMLv0) frames every block as <|message_model|>[author-name]<|content_KIND|>body<|end_message|>;
+# the generation prompt pre-writes the first <|message_model|>, so each open treats the header as optional.
+inkling_template = {
+    "defaults": {"role": "assistant"},
+    "start_anchor": "<|message_model|>",
+    "fields": {
+        "thinking": {
+            "open_pattern": r"(?:<\|message_model\|>)?[^<]*<\|content_thinking\|>",
+            "close": "<|end_message|>",
+            "repeats": True,
+            "join": "",
+            "content_args": {"strip": False},
+        },
+        "content": {
+            "open_pattern": r"(?:<\|message_model\|>)?[^<]*<\|content_text\|>",
+            "close": "<|end_message|>",
+            "repeats": True,
+            "join": "",
+            "content_args": {"strip": False},
+        },
+        "tool_calls": {
+            "open_pattern": r"(?:<\|message_model\|>)?[^<]*<\|content_invoke_tool_json\|>",
+            "close": "<|end_message|>",
+            "repeats": True,
+            "content": "json",
+            "transform": {"type": "function", "function": {"name": "{content.name}", "arguments": "{content.args}"}},
+        },
+    },
+}
+
+
 class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_response_template_save_load(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -578,6 +609,133 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             },
         )
 
+    def test_inkling_multi_block_message(self):
+        model_out = (
+            "<|content_thinking|>Consider the weather.<|end_message|>"
+            "<|message_model|><|content_thinking|> Tokyo, probably.<|end_message|>"
+            "<|message_model|><|content_text|>Checking the weather now.<|end_message|>"
+            "<|message_model|>get_weather<|content_invoke_tool_json|>"
+            '{"name":"get_weather","args":{"city":"Tokyo","units":"C"}}<|end_message|>'
+            "<|content_model_end_sampling|>"
+        )
+        prefix = "<|message_system|><|content_text|>Thinking effort level: 0.9<|end_message|><|message_model|>"
+        self.assertEqual(
+            parse_response(model_out, inkling_template, prefix=prefix),
+            {
+                "role": "assistant",
+                "thinking": "Consider the weather. Tokyo, probably.",
+                "content": "Checking the weather now.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "Tokyo", "units": "C"}},
+                    }
+                ],
+            },
+        )
+
+    def test_transform_dotted_paths(self):
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "tool_calls": {
+                    "open": "<tool>",
+                    "close": "</tool>",
+                    "repeats": True,
+                    "content": "json",
+                    "transform": {
+                        "type": "function",
+                        "function": {"name": "{content.name}", "arguments": "{content.args}"},
+                    },
+                },
+            },
+        }
+        model_out = '<tool>{"name": "get_weather", "args": {"city": {"id": 7}}}</tool>'
+        self.assertEqual(
+            parse_response(model_out, template_spec, prefix="")["tool_calls"],
+            [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": {"id": 7}}}}],
+        )
+
+    def test_transform_dotted_paths_with_transform_each(self):
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "tool_calls": {
+                    "open": "<actions>",
+                    "close": "</actions>",
+                    "content": "json",
+                    "transform_each": True,
+                    "transform": {"type": "function", "function": {"name": "{fn.name}", "arguments": "{fn.args}"}},
+                },
+            },
+        }
+        model_out = '<actions>[{"fn": {"name": "a", "args": {"x": 1}}}, {"fn": {"name": "b", "args": {}}}]</actions>'
+        self.assertEqual(
+            parse_response(model_out, template_spec, prefix="")["tool_calls"],
+            [
+                {"type": "function", "function": {"name": "a", "arguments": {"x": 1}}},
+                {"type": "function", "function": {"name": "b", "arguments": {}}},
+            ],
+        )
+
+    def test_transform_dotted_path_errors(self):
+        def spec_with(transform):
+            return {
+                "start_anchor": "<|assistant|>",
+                "fields": {"x": {"open": "<x>", "close": "</x>", "content": "json", "transform": transform}},
+            }
+
+        with self.assertRaisesRegex(ValueError, "missing key 'args'"):
+            parse_response('<x>{"name": "n"}</x>', spec_with({"a": "{content.args}"}), prefix="")
+        with self.assertRaisesRegex(ValueError, "cannot index into str"):
+            parse_response('<x>{"name": "n"}</x>', spec_with({"a": "{content.name.x}"}), prefix="")
+        with self.assertRaises(KeyError):
+            parse_response("<x>{}</x>", spec_with({"a": "{missing}"}), prefix="")
+
+    def test_transform_dotted_mixed_string_rejected(self):
+        template_spec = {
+            "start_anchor": "<|assistant|>",
+            "fields": {"x": {"open": "<x>", "close": "</x>", "transform": {"v": "pre {content.args}"}}},
+        }
+        with self.assertRaisesRegex(ValueError, "mixes"):
+            parse_response("", template_spec, prefix="")
+
+    def test_join_concatenates_repeated_matches(self):
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "thinking": {"open": "<think>", "close": "</think>", "repeats": True, "join": " "},
+                "content": {"repeats": True, "join": " "},
+            },
+        }
+        self.assertEqual(
+            parse_response("<think>first</think>middle<think>second</think>done", template_spec, prefix=""),
+            {"role": "assistant", "thinking": "first second", "content": "middle done"},
+        )
+        self.assertEqual(
+            parse_response("<think>only</think>", template_spec, prefix=""),
+            {"role": "assistant", "thinking": "only"},
+        )
+
+    def test_join_validation(self):
+        no_repeats = {"start_anchor": "a", "fields": {"x": {"open": "<x>", "close": "</x>", "join": ""}}}
+        with self.assertRaisesRegex(ValueError, "requires 'repeats'"):
+            parse_response("", no_repeats, prefix="")
+        bad_type = {"start_anchor": "a", "fields": {"x": {"open": "<x>", "close": "</x>", "repeats": True, "join": 7}}}
+        with self.assertRaisesRegex(ValueError, "must be a string"):
+            parse_response("", bad_type, prefix="")
+
+    def test_join_requires_string_matches(self):
+        template_spec = {
+            "start_anchor": "a",
+            "fields": {"x": {"open": "<x>", "close": "</x>", "repeats": True, "join": "", "content": "json"}},
+        }
+        with self.assertRaisesRegex(ValueError, "parse to a string"):
+            parse_response("<x>{}</x>", template_spec, prefix="")
+
     def test_optional_false_raises_when_missing(self):
         template_spec = {
             "defaults": {"role": "assistant"},
@@ -840,6 +998,19 @@ _STREAMING_FIXTURES = [
         "gemma4",
         gemma4_template,
         '<|channel>thought\nhi<channel|><|tool_call>call:foo{a:1,b:<|"|>bar<|"|>}<tool_call|>',
+    ),
+    (
+        # Exercises `join` fields (two thinking blocks) and dotted transform paths.
+        "inkling",
+        inkling_template,
+        (
+            "<|content_thinking|>Consider the weather.<|end_message|>"
+            "<|message_model|><|content_thinking|> Tokyo, probably.<|end_message|>"
+            "<|message_model|><|content_text|>Checking now.<|end_message|>"
+            "<|message_model|>get_weather<|content_invoke_tool_json|>"
+            '{"name":"get_weather","args":{"city":"Tokyo"}}<|end_message|>'
+            "<|content_model_end_sampling|>"
+        ),
     ),
 ]
 
@@ -1425,6 +1596,7 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(_schema_types({"type": "integer"}), ("integer",))
         self.assertEqual(_schema_types({"type": ["integer", "string"]}), ("integer", "string"))
         self.assertEqual(_schema_types({"anyOf": [{"type": "boolean"}, {"type": "string"}]}), ("boolean", "string"))
+        self.assertEqual(_schema_types({"oneOf": [{"type": "number"}, {"type": "null"}]}), ("number", "null"))
         self.assertEqual(_schema_types({"type": "integer", "nullable": True}), ("integer", "null"))
         # Undescribed parameters resolve to no candidate types, making coercion a no-op.
         self.assertEqual(_schema_types({"description": "no type"}), ())
@@ -1435,6 +1607,11 @@ class ToolArgCoercionTest(unittest.TestCase):
         with_tools = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
         self.assertEqual(_first_tool_args(without), {"hour": "7", "enabled": "true", "label": "wake up"})
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_parse_response_tools_coerces_one_of_string_args(self):
+        tools = _set_alarm_tools(hour={"oneOf": [{"type": "integer"}, {"type": "null"}]})
+        parsed = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=tools)
+        self.assertEqual(_first_tool_args(parsed)["hour"], 7)
 
     def test_streaming_tools_coerces_on_region_close(self):
         # Coercion must land on the region_close event during feed(), not only after finalize().
@@ -1531,6 +1708,15 @@ class ToolArgCoercionTest(unittest.TestCase):
         call = {"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": ["7", "x", 9]}}}
         parser._coerce_tool_calls(call)
         self.assertEqual(call["function"]["arguments"], {"hour": [7, "x", 9]})
+
+    def test_already_decoded_array_is_not_cast_element_wise(self):
+        tools = _set_alarm_tools(groups={"type": "array", "items": {"type": "string"}})
+        call = {
+            "type": "function",
+            "function": {"name": "set_alarm", "arguments": {"groups": ["[1,2]", "[]"]}},
+        }
+        _parser_with_tools(tools)._coerce_tool_calls(call)
+        self.assertEqual(call["function"]["arguments"], {"groups": ["[1,2]", "[]"]})
 
     def test_coerce_tool_calls_ignores_unusable_function_name(self):
         # A transform can hand us a name parsed from model output, so a non-string name

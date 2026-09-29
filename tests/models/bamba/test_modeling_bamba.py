@@ -568,10 +568,8 @@ class BambaModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
-            "input_ids"
-        ].to(torch_device)
-        out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        inputs = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt").to(torch_device)
+        out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
         expected = expectations.get_expectation()
         self.assertEqual(output_sentence, expected)
@@ -579,7 +577,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
-                logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
+                logits = self.model(**inputs, logits_to_keep=40).logits
 
             EXPECTED_LOGITS_NO_GRAD = torch.tensor(
                 [

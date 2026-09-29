@@ -48,7 +48,6 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
-    extract_commit_hash,
     hf_api,
     is_mlx_available,
     is_numpy_array,
@@ -60,6 +59,7 @@ from .utils import (
     list_repo_templates,
     logging,
     requires_backends,
+    resolve_revision,
     to_py_obj,
 )
 from .utils.chat_parsing import ResponseParser
@@ -756,12 +756,12 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         return self
 
-    def to(self, device: str | torch.device, *, non_blocking: bool = False) -> BatchEncoding[torch.Tensor]:
+    def to(self, device: str | torch.device | int, *, non_blocking: bool = False) -> BatchEncoding[torch.Tensor]:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
         Args:
-            device (`str` or `torch.device`): The device to put the tensors on.
+            device (`str` or `torch.device` or `int`): The device to put the tensors on.
             non_blocking (`bool`): Whether to perform the copy asynchronously.
 
         Returns:
@@ -1210,7 +1210,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self, new_tokens: str | AddedToken | Sequence[str | AddedToken], special_tokens: bool = False
     ) -> int:
         """
-        #TODO remove this from here! PreTrainedTOkeniuzerBase should be agnostic of AddedToken.
+        #TODO remove this from here! PreTrainedTokenizerBase should be agnostic of AddedToken.
 
         Add a list of new tokens. If the new tokens are not in the vocabulary, they are added to the end. Added tokens and
         tokens from the vocabulary of the tokenization algorithm are therefore not treated in the same way.
@@ -1577,7 +1577,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        commit_hash = kwargs.pop("_commit_hash", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
         gguf_file = kwargs.get("gguf_file")
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class}
@@ -1587,6 +1587,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
+
+        # Resolve the revision once: the repo listings and all the files below then come from the same repo state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         vocab_files = {}
@@ -1644,14 +1653,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     subfolder=subfolder,
                     user_agent=user_agent,
                     _raise_exceptions_for_missing_entries=False,
-                    _commit_hash=commit_hash,
                 )
                 if resolved_config_file is not None:
                     with open(resolved_config_file, encoding="utf-8") as reader:
                         tokenizer_config = json.load(reader)
                         if "fast_tokenizer_files" in tokenizer_config:
                             fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
                 vocab_files["tokenizer_file"] = fast_tokenizer_file
 
             # This block looks for any extra chat template files
@@ -1714,7 +1721,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         revision=revision,
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
                     )
                 except OSError:
                     # Re-raise any error raised by cached_file in order to get a helpful error message
@@ -1727,7 +1733,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
                         f"containing all relevant files for a {cls.__name__} tokenizer."
                     )
-                commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
@@ -1741,7 +1746,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             token=token,
             cache_dir=cache_dir,
             local_files_only=local_files_only,
-            _commit_hash=commit_hash,
             _is_local=is_local,
             trust_remote_code=trust_remote_code,
             **kwargs,
@@ -1757,7 +1761,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         token=None,
         cache_dir=None,
         local_files_only=False,
-        _commit_hash=None,
         _is_local=False,
         trust_remote_code=False,
         **kwargs,
@@ -1792,7 +1795,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if template_file is None:
                 continue  # I think this should never happen, but just in case
             template_name = extra_chat_template.removeprefix("chat_template_")
-            with open(template_file) as chat_template_handle:
+            with open(template_file, encoding="utf-8") as chat_template_handle:
                 chat_templates[template_name] = chat_template_handle.read()
         if len(chat_templates) == 1 and "default" in chat_templates:
             init_kwargs["chat_template"] = chat_templates["default"]
@@ -2881,7 +2884,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # If we received batched input, decode each sequence
         if isinstance(token_ids, (list, tuple)) and len(token_ids) > 0 and isinstance(token_ids[0], (list, tuple)):
-            clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
+            clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", None)
             return [
                 self._decode(
                     token_ids=seq,

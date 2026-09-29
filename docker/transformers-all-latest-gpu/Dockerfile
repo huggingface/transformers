@@ -9,12 +9,12 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.13.0'
+ARG PYTORCH='2.14.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu130'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.15.0'
+ARG TORCHCODEC='0.16.0'
 
 ARG FLASH_ATTN='false'
 
@@ -91,8 +91,6 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
-# For kernels
-RUN python3 -m pip install --no-cache-dir kernels
 
 # For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime-gpu validates the exported
 # graph on GPU for faster export testing)

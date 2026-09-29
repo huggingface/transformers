@@ -197,6 +197,12 @@ class Zamba2MambaMixer(BambaMixer):
     def __init__(self, config: Zamba2Config, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
         self.config = config
         super().__init__(config, layer_idx, initialize_mixer_weights)
+        if not config.use_mamba_kernels:
+            logger.warning_once(
+                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
+                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
+                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
+            )
         self.use_conv_bias = config.use_conv_bias
         self.activation = "silu"
         self.act = nn.SiLU()
@@ -465,6 +471,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         self._tied_weights_keys = {}
         self.first_transformer_layer_id = 0
         unique_hybrid_blocks = []
+        hybrid_layer_count = 0
 
         for layer_id, layer_type in enumerate(self.layers_block_type):
             mamba_layer = Zamba2MambaDecoderLayer(self.config, layer_idx=layer_id)
@@ -486,7 +493,11 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     # Store source patterns to which the subsequent modules will be tied
                     unique_hybrid_blocks.append(prefix_pattern)
 
-                block_id = layer_id % self.config.num_mem_blocks
+                # `block_id` must count hybrid layers, not all layers: the tie cycle above and the
+                # adapter slots inside each block (`i % num_mem_blocks == block_id`, with `i` running
+                # over hybrid layers) both follow hybrid-layer order, as do the published checkpoints.
+                block_id = hybrid_layer_count % self.config.num_mem_blocks
+                hybrid_layer_count += 1
                 attn_block = Zamba2AttentionDecoderLayer(self.config, block_id=block_id)
                 linear_layer = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
                 layers.append(Zamba2HybridLayer(attn_block, linear_layer, mamba_layer))
@@ -593,12 +604,6 @@ class Zamba2ForSequenceClassification(ZambaForSequenceClassification):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,

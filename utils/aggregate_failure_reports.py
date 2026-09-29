@@ -43,14 +43,14 @@ def aggregate_failures(input_dir, output_file):
     if input_path.exists() and input_path.is_dir():
         for failure_file in input_path.glob("*.json"):
             try:
-                with open(failure_file) as f:
+                with open(failure_file, encoding="utf-8") as f:
                     failure_data = json.load(f)
                     failures.append(failure_data)
             except Exception as e:
                 print(f"Error reading {failure_file}: {e}", file=sys.stderr)
 
     # Write aggregated failures
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(failures, f, indent=2)
 
     print(f"Aggregated {len(failures)} failure(s) from {input_dir} to {output_file}")

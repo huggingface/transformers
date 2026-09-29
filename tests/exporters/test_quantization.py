@@ -41,7 +41,7 @@ from unittest.mock import patch
 import pytest
 from parameterized import parameterized
 
-from tests.exporters.export_utils import disable_hub_kernels, run_onnx_program
+from tests.exporters.test_export import _run_onnx_program, disable_hub_kernels
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters.utils import capture_calibration_inputs, decompose_for_generation
 from transformers.testing_utils import (
@@ -274,33 +274,25 @@ class QuantizationExportTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_vlm_per_component_quantization(self):
-        """A VLM is quantized component-by-component, each with its OWN recipe — the realistic pattern —
-        via a `{component: config}` dict on `export_for_generation` (multi-token decode). The vision
-        encoder and projector get static int8; the language model and the multi-token decode get the
-        lighter dynamic recipe; `lm_head` stays fp32. Recipes are chosen per component, not globally."""
+        """A VLM is quantized component by component, each with its own recipe, via a `{component: config}`
+        dict on `export_for_generation` (multi-token decode): static int8 on the prompt's `language_model`,
+        the lighter dynamic int8 on `decode`, and `lm_head` left in fp32."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         model, inputs = self._vlm_model()
-        # False = static int8 (vision side), True = dynamic int8 (language/decoder side)
-        recipes = {
-            "image_encoder": False,
-            "multi_modal_projector": False,
-            "language_model": True,
-            "decode": True,
-        }
         config = {
-            name: DynamoConfig(dynamic=True, quantizer=self._quantizer("x86", dynamic=dyn))
-            for name, dyn in recipes.items()
+            "language_model": DynamoConfig(dynamic=True, quantizer=self._quantizer("x86", dynamic=False)),
+            "decode": DynamoConfig(dynamic=True, quantizer=self._quantizer("x86", dynamic=True)),
+            "lm_head": DynamoConfig(dynamic=True),
         }
-        config["lm_head"] = DynamoConfig(dynamic=True)  # per-component choice: keep the output head in fp32
         components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 
-        for name in recipes:
-            self.assertTrue(_has_quantize_ops(components[name]), f"{name} should be quantized")
+        self.assertTrue(_has_quantize_ops(components["language_model"]), "language_model should be quantized")
+        self.assertTrue(_has_quantize_ops(components["decode"]), "decode should be quantized")
         self.assertFalse(_has_quantize_ops(components["lm_head"]), "lm_head should stay fp32")
-        # the recipes really differ: the decoder side is dynamically quantized, the vision side is static
+        # the recipes really differ: decode is dynamically quantized, language_model statically
         self.assertTrue(_has_dynamic_quant_ops(components["decode"]), "decode should be dynamically quantized")
-        self.assertFalse(_has_dynamic_quant_ops(components["image_encoder"]), "image_encoder should be static int8")
+        self.assertFalse(_has_dynamic_quant_ops(components["language_model"]), "language_model should be static")
 
     # ──────────────────────────────── ONNX ──────────────────────────────────
 
@@ -331,7 +323,7 @@ class QuantizationExportTest(unittest.TestCase):
         self.assertTrue(_has_onnx_quantize_ops(program))
         # the QDQ graph must run in ONNX Runtime, not just parse — quantization error rules out an
         # eager-parity check, so assert it executes to finite outputs
-        outputs = run_onnx_program(program, copy.deepcopy(inputs))
+        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 

@@ -736,8 +736,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             batch_outputs = {}
             for current_text, current_pair in zip(text, pairs):
                 # Handle tuples/lists as sequence pairs like ("text1", "text2")
-                # For is_split_into_words=True: only unpack if it's a tuple of exactly 2 sequences (pair)
-                # Otherwise, treat the list as a single pretokenized sequence
+                # For is_split_into_words=True, only tuples are treated as pairs; lists are single pretokenized sequences
                 if (
                     isinstance(current_text, (list, tuple))
                     and current_text
@@ -747,6 +746,7 @@ class PythonBackend(PreTrainedTokenizerBase):
                     # Check if this looks like a pair: tuple/list of length 2 where elements are strings or lists/tuples
                     is_pair = (
                         len(current_text) == 2
+                        and (not is_split_into_words or isinstance(current_text, tuple))
                         and (isinstance(current_text[0], str) or isinstance(current_text[0], (list, tuple)))
                         and (isinstance(current_text[1], str) or isinstance(current_text[1], (list, tuple)))
                     )

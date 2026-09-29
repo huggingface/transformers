@@ -30,7 +30,6 @@ from packaging import version
 from ..utils import logging
 from ..utils.import_utils import is_kernels_available, maybe_import_error
 from .hub_kernels import lazy_load_kernel
-from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -38,9 +37,9 @@ logger = logging.get_logger(__name__)
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
 
-# Max sonic-moe build-dependency versions: newer CuteDSL / TVM-FFI releases haven't been validated
-# against the kernel and may break its dispatch, so we refuse to load past them.
-SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.5.2", "apache-tvm-ffi": "0.1.9"}
+# Min sonic-moe build-dependency versions: older CuteDSL / TVM-FFI releases lack APIs the kernel
+# needs and fail at import or JIT time, so we refuse to load below them.
+SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.6.0", "apache-tvm-ffi": "0.1.10"}
 
 
 @torch._dynamo.assume_constant_result
@@ -72,7 +71,7 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             f"capability {major}.x. Use a different `experts_implementation`.",
             raise_error=raise_error,
         )
-    for distribution, max_version in SONICMOE_DEPENDENCIES.items():
+    for distribution, min_version in SONICMOE_DEPENDENCIES.items():
         # These are distribution (`pip install`) names, not import names, so resolve the version directly
         # via `importlib.metadata`. `_is_package_available` looks packages up through `find_spec`, which
         # can't resolve a distribution whose import name differs (e.g. `nvidia-cutlass-dsl` imports as
@@ -83,10 +82,9 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             return maybe_import_error(
                 f"sonic-moe requires `{distribution}`, but it is not installed.", raise_error=raise_error
             )
-        if version.parse(installed) > version.parse(max_version):
+        if version.parse(installed) < version.parse(min_version):
             return maybe_import_error(
-                f"sonic-moe requires `{distribution}` <= {max_version} (newer versions are unvalidated), "
-                f"but {installed} is installed.",
+                f"sonic-moe requires `{distribution}` >= {min_version}, but {installed} is installed.",
                 raise_error=raise_error,
             )
     return True
@@ -185,10 +183,10 @@ def sonicmoe_experts_forward(
     # already zero (RouterParallel masks them at dispatch), so the per-token reduction
     # contributes nothing for sentinel slots.
 
-    w1 = to_local(self.gate_up_proj)
-    w2 = to_local(self.down_proj)
-    b1 = to_local(self.gate_up_proj_bias) if self.has_bias else None
-    b2 = to_local(self.down_proj_bias) if self.has_bias else None
+    w1 = self.gate_up_proj
+    w2 = self.down_proj
+    b1 = self.gate_up_proj_bias if self.has_bias else None
+    b2 = self.down_proj_bias if self.has_bias else None
 
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()

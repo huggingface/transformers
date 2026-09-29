@@ -113,16 +113,23 @@ class Olmo3InternalIntegrationTest(unittest.TestCase):
         cls.model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model", device_map="auto")
         cls.tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer")
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.model = None
+        cls.tokenizer = None
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        out = self.model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        with torch.no_grad():
+            out = self.model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
-                ("cuda", 8): [[1.9575, -2.4659, 0.5985, 1.3795, -0.5207, -0.9844, -2.7795, -1.0069]],
+                ("cuda", 8): [[2.0097, -2.5104, 0.6044, 1.4389, -0.4990, -0.9521, -2.7803, -1.0300]],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -130,7 +137,7 @@ class Olmo3InternalIntegrationTest(unittest.TestCase):
         # slicing logits[0, 0, 0:30]
         expectations = Expectations(
             {
-                ("cuda", 8): [8.5625, 5.7812, 4.4688, 2.7031, 3.1094, 4.8125, 5.7188, 3.4219, 2.3906, 2.0938, 3.9844, 5.4688, 3.5312, 5.0938, 2.7656, 8.8125, 9.4375, 9.0625, 8.5000, 8.1875, 7.8750, 7.5312, 7.3125, 7.2812, 7.0000, 2.5625, 4.0312, 3.1719, 7.6562, 4.5625],
+                ("cuda", 8): [8.5625, 5.8125, 4.5, 2.75, 3.15625, 4.875, 5.78125, 3.484375, 2.484375, 2.15625, 4.03125, 5.5, 3.5625, 5.15625, 2.84375, 8.8125, 9.4375, 9.0625, 8.5, 8.1875, 7.875, 7.53125, 7.3125, 7.3125, 7.0, 2.625, 4.0625, 3.234375, 7.6875, 4.625],
             }
         )  # fmt: skip
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -140,6 +147,7 @@ class Olmo3InternalIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", None): """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel""",
+                ("xpu", 5): """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel""",
             }
         )  # fmt: skip
         prompt = "Simply put, the theory of relativity states that "
@@ -222,6 +230,12 @@ class Olmo3IntegrationTest(unittest.TestCase):
         cls.model = Olmo3ForCausalLM.from_pretrained(cls.model_id, device_map="auto")
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.model = None
+        cls.tokenizer = None
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -246,7 +260,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [
                     'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
-                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein’s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at a constant speed (',
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein\u2019s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at a constant speed (',
                 ],
             }
         )  # fmt: skip
@@ -255,6 +269,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}],
             [{"role": "user", "content": "Simply put, the theory of relativity"}],
         ]
+        self.tokenizer.padding_side = "left"  # required for decoder-only batched generation
         inputs = self.tokenizer.apply_chat_template(
             message, add_generation_prompt=True, padding=True, return_tensors="pt", return_dict=True
         ).to(self.model.device)

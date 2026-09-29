@@ -13,6 +13,10 @@ on:
         description: 'Number of GPUs to use (`single` or `multi`; not needed for cpu runner)'
         required: false
         default: 'none'
+      cache_type:
+        description: 'Cache backend for a10 runners: `bucket` (default) or `efs`'
+        required: false
+        default: 'bucket'
 
 env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
@@ -24,11 +28,12 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   get_runner:
+    permissions: {}
     name: "Get runner to use"
     runs-on: ubuntu-22.04
     outputs:
@@ -39,6 +44,7 @@ jobs:
         env:
           NUM_GPUS: ${{ github.event.inputs.num_gpus }}
           RUNNER_TYPE: ${{ github.event.inputs.runner_type }}
+          CACHE_TYPE: ${{ github.event.inputs.cache_type }}
         run: |
           if [[ "$RUNNER_TYPE" == "a10" ]]; then
             if [[ "$NUM_GPUS" != "single" && "$NUM_GPUS" != "multi" ]]; then
@@ -46,7 +52,11 @@ jobs:
               NUM_GPUS="single"
             fi
             if [[ "$NUM_GPUS" == "single" ]]; then
-              echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
+              if [[ "$CACHE_TYPE" == "efs" ]]; then
+                echo "RUNNER=aws-g5-4xlarge-cache-ssh-efs" >> $GITHUB_ENV
+              else
+                echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
+              fi
             else
               echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
             fi
@@ -63,6 +73,8 @@ jobs:
           echo "RUNNER=$RUNNER" >> $GITHUB_OUTPUT
 
   ssh_runner:
+    permissions:
+      contents: read
     name: "SSH"
     needs: get_runner
     runs-on:
@@ -161,7 +173,7 @@ jobs:
           echo 'source /root/.env_setup' >> /root/.bashrc
 
       - name: Tailscale # In order to be able to SSH when a test fails
-        uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a  # main
+        uses: huggingface/tailscale-action@9d1a67c46875a956cf2d1975473da978a970a2a9  # main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}

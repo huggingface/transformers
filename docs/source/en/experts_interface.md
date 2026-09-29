@@ -156,12 +156,15 @@ This backend requires:
 - A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
 
 ```py
-from transformers import AutoModelForCausalLM
+import os
 
+from transformers import AutoModelForCausalLM, DistributedConfig
+
+distributed_config = DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]))
 model = AutoModelForCausalLM.from_pretrained(
     "deepseek-ai/DeepSeek-V4",
     experts_implementation="deepgemm_megamoe",
-    tp_plan="auto",
+    distributed_config=distributed_config,
 )
 ```
 
@@ -213,7 +216,8 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B",
     dtype="bfloat16",
     experts_implementation="grouped_mm",
-).eval().cuda()
+    device_map="auto",
+).eval()
 
 # Works for grouped_mm (no CUDA graphs)
 model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")

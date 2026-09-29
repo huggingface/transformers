@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Time Series Utilities
+# Utilities for time series
 
 This page lists all the utility functions and classes that can be used for Time Series based models.
 

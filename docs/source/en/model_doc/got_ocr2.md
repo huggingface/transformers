@@ -39,6 +39,9 @@ The model can also be used for interactive OCR, where the user can specify the r
 This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan).
 The original code can be found [here](https://github.com/Ucas-HaoranWei/GOT-OCR2.0).
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 ## Usage example
 
 ### Plain text inference
