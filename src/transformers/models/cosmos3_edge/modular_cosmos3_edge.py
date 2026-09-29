@@ -929,9 +929,9 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
 
     valid_processor_kwargs = ProcessingKwargs
 
-    return_mm_token_type_ids = False
     text_kwargs = AttributeError()
     videos_kwargs = AttributeError()
+    return_mm_token_type_ids = False
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         """Expand an image placeholder to one text token per projected 2×2 patch group."""

@@ -21,24 +21,24 @@ from ...utils import auto_docstring
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": True,
-        },
-        "images_kwargs": {
-            # Values are "null" in preprocessor_config.json
-            "do_convert_rgb": True,
-            "do_pan_and_scan": False,
-            "pan_and_scan_min_crop_size": 256,
-            "pan_and_scan_max_num_crops": 4,
-            "pan_and_scan_min_ratio_to_activate": 1.2,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Gemma3Processor(ProcessorMixin):
     valid_processor_kwargs = Gemma3ProcessorKwargs
+
+    text_kwargs = {
+        "return_mm_token_type_ids": True,
+    }
+    images_kwargs = {
+        # Values are "null" in preprocessor_config.json
+        "do_convert_rgb": True,
+        "do_pan_and_scan": False,
+        "pan_and_scan_min_crop_size": 256,
+        "pan_and_scan_max_num_crops": 4,
+        "pan_and_scan_min_ratio_to_activate": 1.2,
+    }
 
     def __init__(
         self,

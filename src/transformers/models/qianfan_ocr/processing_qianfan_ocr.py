@@ -28,22 +28,22 @@ from ...utils import auto_docstring
 
 
 class QianfanOCRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-        "videos_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class QianfanOCRProcessor(ProcessorMixin):
     valid_processor_kwargs = QianfanOCRProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

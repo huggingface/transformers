@@ -41,21 +41,20 @@ class Lfm2VlTextKwargs(TextKwargs, total=False):
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Lfm2VlTextKwargs
-    _defaults = {
-        "images_kwargs": {
-            "return_row_col_info": True,
-        },
-        "text_kwargs": {
-            "use_image_special_tokens": True,
-            "add_special_tokens": False,
-            "is_split_into_words": False,
-        },
-    }
 
 
 @auto_docstring
 class Lfm2VlProcessor(ProcessorMixin):
     valid_processor_kwargs = Lfm2VlProcessorKwargs
+
+    text_kwargs = {
+        "use_image_special_tokens": True,
+        "add_special_tokens": False,
+        "is_split_into_words": False,
+    }
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
 
     def __init__(
         self,

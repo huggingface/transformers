@@ -23,13 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 class HunYuanVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "add_special_tokens": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
@@ -43,6 +37,12 @@ class HunYuanVLProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = HunYuanVLProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "add_special_tokens": False,
+        "return_mm_token_type_ids": True,
+    }
 
     def __init__(
         self, image_processor=None, tokenizer=None, chat_template=None, cat_extra_token: bool = True, **kwargs

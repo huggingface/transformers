@@ -24,18 +24,19 @@ from ...utils import auto_docstring
 
 
 class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "pad_to_multiple_of": 80,
-            "padding": True,
-            "return_tensors": "pt",
-        },
-        "text_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class MoonshineStreamingProcessor(ProcessorMixin):
+    valid_processor_kwargs = MoonshineStreamingProcessorKwargs
+    text_kwargs = {"return_tensors": "pt"}
+    audio_kwargs = {
+        "pad_to_multiple_of": 80,
+        "padding": True,
+        "return_tensors": "pt",
+    }
+
     def __init__(self, feature_extractor, tokenizer, **kwargs):
         super().__init__(feature_extractor, tokenizer, **kwargs)
 

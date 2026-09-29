@@ -72,15 +72,16 @@ class SamHQImagesKwargs(ImagesKwargs, total=False):
 
 class SamHQProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: SamHQImagesKwargs
-    _defaults = {
-        "images_kwargs": {
-            "point_pad_value": None,
-        }
-    }
 
 
 @auto_docstring
 class SamHQProcessor(ProcessorMixin):
+    valid_processor_kwargs = SamHQProcessorKwargs
+
+    images_kwargs = {
+        "point_pad_value": None,
+    }
+
     def __init__(self, image_processor, **kwargs):
         super().__init__(image_processor, **kwargs)
         # Ensure image_processor is properly initialized

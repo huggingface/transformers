@@ -33,14 +33,20 @@ logger = logging.get_logger(__name__)
 
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": "longest", "return_tensors": "pt"},
-        "images_kwargs": {"data_format": "channels_first", "return_tensors": "pt"},
-    }
+    pass
 
 
 class ColQwen2Processor(ColPaliProcessor):
     valid_processor_kwargs = ColQwen2ProcessorKwargs
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

@@ -18,17 +18,17 @@ from ...utils import auto_docstring
 
 
 class Cohere2VisionProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "padding": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Cohere2VisionProcessor(ProcessorMixin):
     valid_processor_kwargs = Cohere2VisionProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+        "padding": True,
+    }
 
     def __init__(
         self,

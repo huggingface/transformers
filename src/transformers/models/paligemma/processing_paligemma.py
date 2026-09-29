@@ -48,16 +48,15 @@ class PaliGemmaTextKwargs(TextKwargs):
 
 class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: PaliGemmaTextKwargs
-    _defaults = {
-        "images_kwargs": {
-            "data_format": "channels_first",
-        },
-    }
 
 
 @auto_docstring
 class PaliGemmaProcessor(ProcessorMixin):
     valid_processor_kwargs = PaliGemmaProcessorKwargs
+
+    images_kwargs = {
+        "data_format": "channels_first",
+    }
 
     def __init__(
         self,

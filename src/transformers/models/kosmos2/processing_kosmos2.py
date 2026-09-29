@@ -65,26 +65,25 @@ class Kosmos2TextKwargs(TextKwargs, total=False):
 class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Kosmos2TextKwargs
     images_kwargs: Kosmos2ImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "verbose": True,
-            "add_eos_token": False,
-        },
-        "images_kwargs": {
-            "num_image_tokens": 64,
-        },
-    }
 
 
 @auto_docstring
 class Kosmos2Processor(ProcessorMixin):
     valid_processor_kwargs = Kosmos2ProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "stride": 0,
+        "return_overflowing_tokens": False,
+        "return_special_tokens_mask": False,
+        "return_offsets_mapping": False,
+        "return_token_type_ids": False,
+        "verbose": True,
+        "add_eos_token": False,
+    }
+    images_kwargs = {
+        "num_image_tokens": 64,
+    }
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *args, **kwargs):
         r"""

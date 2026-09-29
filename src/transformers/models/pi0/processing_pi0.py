@@ -34,14 +34,21 @@ logger = logging.get_logger(__name__)
 
 
 class PI0ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": "max_length", "max_length": 48, "padding_side": "right", "return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
+    valid_processor_kwargs = PI0ProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "max_length": 48,
+        "padding_side": "right",
+        "return_tensors": "pt",
+    }
+
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
         state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])

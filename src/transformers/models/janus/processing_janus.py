@@ -44,19 +44,18 @@ class JanusTextKwargs(TextKwargs, total=False):
 
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: JanusTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "generation_mode": "text",
-            "return_tensors": "pt",
-        },
-        "images_kwargs": {"return_tensors": "pt"},
-    }
 
 
 @auto_docstring
 class JanusProcessor(ProcessorMixin):
     valid_processor_kwargs = JanusProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+        "generation_mode": "text",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {"return_tensors": "pt"}
 
     def __init__(
         self,

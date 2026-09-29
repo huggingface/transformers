@@ -34,17 +34,17 @@ if is_soundfile_available():
 
 # trf-ignore: TRF019, `sampling_rate` is recommended by the feature extractor
 class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 24000,
-        },
-    }
+    pass
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class VibeVoiceProcessor(ProcessorMixin):
     valid_processor_kwargs = VibeVoiceProcessorKwargs
+
+    audio_kwargs = {
+        "sampling_rate": 24000,
+    }
 
     def __init__(
         self,

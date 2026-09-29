@@ -28,22 +28,18 @@ logger = logging.get_logger(__name__)
 
 
 class Glm46VProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "return_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 @auto_docstring
 class Glm46VProcessor(ProcessorMixin):
     valid_processor_kwargs = Glm46VProcessorKwargs
-
     text_kwargs = {
         "padding": False,
+        "return_token_type_ids": False,
     }
     return_mm_token_type_ids = True
+    videos_kwargs = {"return_metadata": True}
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token

@@ -25,24 +25,24 @@ logger = logging.get_logger(__name__)
 
 
 class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "images_kwargs": {
-            "return_tensors": "pt",
-        },
-        "videoss_kwargs": {
-            "return_tensors": "pt",
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class MiniCPMV4_6Processor(ProcessorMixin):
     valid_processor_kwargs = MiniCPMV4_6ProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "return_tensors": "pt",
+    }
+    videoss_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)

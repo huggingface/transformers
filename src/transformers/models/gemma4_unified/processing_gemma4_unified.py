@@ -50,11 +50,11 @@ class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
 class Gemma4UnifiedProcessor(ProcessorMixin):
     valid_processor_kwargs = Gemma4UnifiedProcessorKwargs
 
-    return_mm_token_type_ids = True
     text_kwargs = {
         "padding": True,
     }
     videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
 
     def __init__(
         self,

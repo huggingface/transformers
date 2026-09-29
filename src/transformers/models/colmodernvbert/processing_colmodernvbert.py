@@ -38,16 +38,22 @@ if TYPE_CHECKING:
 
 
 class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": "longest", "return_tensors": "pt"},
-        "images_kwargs": {"return_row_col_info": True, "data_format": "channels_first", "return_tensors": "pt"},
-    }
+    pass
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(ProcessorMixin):
     valid_processor_kwargs = ColModernVBertProcessorKwargs
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_row_col_info": True,
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

@@ -28,20 +28,7 @@ logger = logging.get_logger(__name__)
 
 
 class VibeVoiceAsrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-            "return_tensors": "pt",
-            "return_attention_mask": True,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 24000,
-            "pad_to_multiple_of": 3200,  # tokenizer hop length
-            "return_attention_mask": True,
-        },
-    }
+    pass
 
 
 class VibeVoiceAsrProcessor(ProcessorMixin):
@@ -70,6 +57,19 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = VibeVoiceAsrProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+        "return_attention_mask": True,
+    }
+    audio_kwargs = {
+        "sampling_rate": 24000,
+        "pad_to_multiple_of": 3200,  # tokenizer hop length
+        "return_attention_mask": True,
+    }
     feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
     tokenizer_class = "Qwen2TokenizerFast"
 

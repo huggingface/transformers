@@ -32,16 +32,7 @@ if is_torch_available():
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-            "return_tensors": "pt",
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 IMAGE_TOKEN = "<image>"
@@ -51,6 +42,15 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 @auto_docstring
 class ColPaliProcessor(ProcessorMixin):
     valid_processor_kwargs = ColPaliProcessorKwargs
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

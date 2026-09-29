@@ -18,20 +18,20 @@ from ...utils import auto_docstring
 
 
 class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "padding": True,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class AyaVisionProcessor(ProcessorMixin):
     valid_processor_kwargs = AyaVisionProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+        "padding": True,
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
 
     def __init__(
         self,

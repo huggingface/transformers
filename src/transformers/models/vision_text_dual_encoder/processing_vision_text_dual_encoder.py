@@ -25,6 +25,8 @@ class VisionTextDualEncoderProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class VisionTextDualEncoderProcessor(ProcessorMixin):
+    valid_processor_kwargs = VisionTextDualEncoderProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

@@ -23,16 +23,15 @@ from ...utils import auto_docstring
 
 
 class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 @auto_docstring
 class Exaone4_5_Processor(ProcessorMixin):
     valid_processor_kwargs = Exaone4_5_ProcessorKwargs
-
     return_mm_token_type_ids = False
+
+    videos_kwargs = {"return_metadata": True}
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token

@@ -2707,30 +2707,30 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
 
 
 class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-        },
-        "videos_kwargs": {
-            "seconds_per_chunk": 2.0,
-            "position_id_per_seconds": 13.0,
-            "use_audio_in_video": False,
-            "size": {
-                "shortest_edge": 128 * 32 * 32,
-                "longest_edge": 768 * 32 * 32,
-            },
-        },
-        "audio_kwargs": {
-            "n_window": 50,  # should match model config
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "return_attention_mask": True,
-        },
-    }
+    pass
 
 
 class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    videos_kwargs = {
+        "seconds_per_chunk": 2.0,
+        "position_id_per_seconds": 13.0,
+        "use_audio_in_video": False,
+        "size": {
+            "shortest_edge": 128 * 32 * 32,
+            "longest_edge": 768 * 32 * 32,
+        },
+    }
+    audio_kwargs = {
+        "n_window": 50,  # should match model config
+        "sampling_rate": 16000,
+        "padding": True,
+        "truncation": False,
+        "return_attention_mask": True,
+    }
+
     def replace_multimodal_special_tokens(
         self,
         text,

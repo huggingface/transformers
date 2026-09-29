@@ -27,23 +27,25 @@ if is_torch_available():
 
 
 class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "return_token_type_ids": False,
-            "stride": 0,
-            "truncation": True,
-            "return_tensors": "pt",
-        },
-        "images_kwargs": {
-            "max_patches": 4096,
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Kosmos2_5Processor(ProcessorMixin):
+    valid_processor_kwargs = Kosmos2_5ProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "return_token_type_ids": False,
+        "stride": 0,
+        "truncation": True,
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "max_patches": 4096,
+        "return_tensors": "pt",
+    }
+
     def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048, **kwargs):
         r"""
         num_image_tokens (`int`, *optional*, defaults to 2048):

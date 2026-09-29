@@ -32,22 +32,24 @@ logger = logging.get_logger(__name__)
 
 
 class VoxtralRealtimeProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "add_special_tokens": False,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-        },
-    }
+    pass
 
 
 @auto_docstring
 @requires(backends=("mistral-common",))
 class VoxtralRealtimeProcessor(ProcessorMixin):
+    valid_processor_kwargs = VoxtralRealtimeProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "add_special_tokens": False,
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+        "truncation": False,
+    }
+
     def __init__(self, feature_extractor, tokenizer, **kwargs):
         if not isinstance(tokenizer, MistralCommonBackend):
             raise ValueError("`tokenizer` must be a `MistralCommonBackend` tokenizer.")

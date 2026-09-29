@@ -35,20 +35,20 @@ logger = logging.get_logger(__name__)
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "is_split_into_words": False,
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Idefics3Processor(ProcessorMixin):
     valid_processor_kwargs = Idefics3ProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "is_split_into_words": False,
+    }
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
 
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str | None = None, **kwargs

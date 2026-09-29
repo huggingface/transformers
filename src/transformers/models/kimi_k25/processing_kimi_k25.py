@@ -30,14 +30,14 @@ logger = logging.get_logger(__name__)
 
 
 class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 @auto_docstring
 class Kimi_K25Processor(ProcessorMixin):
     valid_processor_kwargs = Kimi_K25ProcessorKwargs
+
+    videos_kwargs = {"return_metadata": True}
 
     def __init__(
         self,

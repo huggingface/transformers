@@ -27,16 +27,16 @@ logger = logging.get_logger(__name__)
 
 
 class LlavaNextVideoProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"return_tensors": "pt"},
-        "images_kwargs": {"return_tensors": "pt"},
-        "videos_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class LlavaNextVideoProcessor(ProcessorMixin):
     valid_processor_kwargs = LlavaNextVideoProcessorKwargs
+
+    text_kwargs = {"return_tensors": "pt"}
+    images_kwargs = {"return_tensors": "pt"}
+    videos_kwargs = {"return_tensors": "pt"}
 
     def __init__(
         self,

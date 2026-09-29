@@ -74,18 +74,6 @@ class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
 class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: GotOcr2TextKwargs
     images_kwargs: GotOcr2ImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "format": False,
-        },
-        "images_kwargs": {
-            "num_image_tokens": 256,
-            "multi_page": False,
-            "crop_to_patches": False,
-            "min_patches": 1,
-            "max_patches": 12,
-        },
-    }
 
 
 def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) -> list:
@@ -107,6 +95,17 @@ def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) ->
 @auto_docstring
 class GotOcr2Processor(ProcessorMixin):
     valid_processor_kwargs = GotOcr2ProcessorKwargs
+
+    text_kwargs = {
+        "format": False,
+    }
+    images_kwargs = {
+        "num_image_tokens": 256,
+        "multi_page": False,
+        "crop_to_patches": False,
+        "min_patches": 1,
+        "max_patches": 12,
+    }
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)

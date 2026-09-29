@@ -79,30 +79,28 @@ class Qwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
     videos_kwargs: Qwen2_5_OmniVideosKwargs
 
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-        },
-        "videos_kwargs": {
-            "seconds_per_chunk": 2.0,
-            "position_id_per_seconds": 25,
-            "use_audio_in_video": False,
-            "size": {
-                "shortest_edge": 128 * 28 * 28,
-                "longest_edge": 768 * 28 * 28,
-            },
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "max_length",
-            "return_attention_mask": True,
-        },
-    }
-
 
 @auto_docstring
 class Qwen2_5OmniProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen2_5OmniProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    videos_kwargs = {
+        "seconds_per_chunk": 2.0,
+        "position_id_per_seconds": 25,
+        "use_audio_in_video": False,
+        "size": {
+            "shortest_edge": 128 * 28 * 28,
+            "longest_edge": 768 * 28 * 28,
+        },
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": "max_length",
+        "return_attention_mask": True,
+    }
 
     def __init__(
         self,

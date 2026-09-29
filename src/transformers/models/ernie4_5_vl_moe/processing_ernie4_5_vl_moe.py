@@ -25,18 +25,18 @@ from ...video_utils import VideoInput
 
 
 class Ernie4_5_VLMoeProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Ernie4_5_VLMoeProcessor(ProcessorMixin):
     valid_processor_kwargs = Ernie4_5_VLMoeProcessorKwargs
+
+    text_kwargs = {
+        "padding": False,
+        "return_token_type_ids": False,
+        "return_mm_token_type_ids": True,
+    }
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token

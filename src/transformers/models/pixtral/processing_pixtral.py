@@ -34,20 +34,20 @@ logger = logging.get_logger(__name__)
 
 
 class PixtralProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "images_kwargs": {
-            "return_tensors": "pt",
-        },
-        "text_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @auto_docstring
 @requires(backends=("torchvision", "torch"))
 class PixtralProcessor(ProcessorMixin):
     valid_processor_kwargs = PixtralProcessorKwargs
+
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

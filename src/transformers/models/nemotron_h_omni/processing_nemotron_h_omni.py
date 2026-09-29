@@ -41,6 +41,8 @@ class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
+    valid_processor_kwargs = NemotronH_Omni_Reasoning_V3ProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,

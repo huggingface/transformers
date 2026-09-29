@@ -750,24 +750,24 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
 
 # Different from MiniCPM4-6, we need `mm_token_type_ids` returned by default
 class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
-    _defaults = {
-        "images_kwargs": {
-            "return_tensors": "pt",
-        },
-        "videos_kwargs": {
-            "return_tensors": "pt",
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "return_mm_token_type_ids": True,
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
     valid_processor_kwargs = MiniCPMV4_7ProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "return_mm_token_type_ids": True,
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __call__(
         self,

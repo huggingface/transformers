@@ -1083,13 +1083,6 @@ class GlmImageImagesKwargs(ImagesKwargs, total=False):
 class GlmImageProcessorKwargs(Qwen2VLProcessorKwargs):
     images_kwargs: GlmImageImagesKwargs
 
-    _defaults = {
-        "images_kwargs": {
-            "target_h": 1152,
-            "target_w": 768,
-        },
-    }
-
 
 @requires(backends=("torch",))
 class GlmImageProcessor(ProcessorMixin):
@@ -1106,6 +1099,11 @@ class GlmImageProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = GlmImageProcessorKwargs
+
+    images_kwargs = {
+        "target_h": 1152,
+        "target_w": 768,
+    }
     model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):

@@ -30,15 +30,17 @@ logger = logging.get_logger(__name__)
 
 
 class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "device": "cpu",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Phi4MultimodalProcessor(ProcessorMixin):
+    valid_processor_kwargs = Phi4MultimodalProcessorKwargs
+
+    audio_kwargs = {
+        "device": "cpu",
+    }
+
     def __init__(
         self,
         image_processor,

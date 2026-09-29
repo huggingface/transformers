@@ -48,19 +48,20 @@ class OwlViTImagesKwargs(ImagesKwargs, total=False):
 
 class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: OwlViTImagesKwargs
-    _defaults = {
-        "images_kwargs": {
-            "return_tensors": "pt",
-        },
-        "text_kwargs": {
-            "padding": "max_length",
-            "return_tensors": "pt",
-        },
-    }
 
 
 @auto_docstring
 class OwlViTProcessor(ProcessorMixin):
+    valid_processor_kwargs = OwlViTProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

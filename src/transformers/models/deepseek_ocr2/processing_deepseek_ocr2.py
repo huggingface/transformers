@@ -28,18 +28,20 @@ logger = logging.get_logger(__name__)
 
 
 class DeepseekOcr2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {},
-        "images_kwargs": {
-            "crop_to_patches": True,
-            "min_patches": 2,
-            "max_patches": 6,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class DeepseekOcr2Processor(ProcessorMixin):
+    valid_processor_kwargs = DeepseekOcr2ProcessorKwargs
+
+    text_kwargs = {}
+    images_kwargs = {
+        "crop_to_patches": True,
+        "min_patches": 2,
+        "max_patches": 6,
+    }
+
     def __init__(
         self,
         image_processor=None,

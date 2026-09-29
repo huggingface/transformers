@@ -29,16 +29,16 @@ logger = logging.get_logger(__name__)
 
 
 class LlavaNextProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "images_kwargs": {
-            "do_pad": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class LlavaNextProcessor(ProcessorMixin):
     valid_processor_kwargs = LlavaNextProcessorKwargs
+
+    images_kwargs = {
+        "do_pad": True,
+    }
 
     def __init__(
         self,

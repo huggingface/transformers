@@ -48,25 +48,29 @@ class CsmAudioKwargs(AudioKwargs, total=False):
 
 class CsmProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: CsmAudioKwargs
-    _defaults = {
-        "text_kwargs": {"padding": True, "padding_side": "left", "add_special_tokens": False, "return_tensors": "pt"},
-        "audio_kwargs": {
-            "encoded_length_kwargs": {
-                "kernel_sizes": [7, 3, 1, 8, 3, 1, 10, 3, 1, 12, 3, 1, 16, 3, 4],
-                "strides": [1, 1, 1, 4, 1, 1, 5, 1, 1, 6, 1, 1, 8, 1, 2],
-                "dilations": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                "use_causal_conv": True,
-            },
-            "sampling_rate": 24000,
-            "return_tensors": "pt",
-        },
-    }
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class CsmProcessor(ProcessorMixin):
     valid_processor_kwargs = CsmProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "encoded_length_kwargs": {
+            "kernel_sizes": [7, 3, 1, 8, 3, 1, 10, 3, 1, 12, 3, 1, 16, 3, 4],
+            "strides": [1, 1, 1, 4, 1, 1, 5, 1, 1, 6, 1, 1, 8, 1, 2],
+            "dilations": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "use_causal_conv": True,
+        },
+        "sampling_rate": 24000,
+        "return_tensors": "pt",
+    }
 
     def __init__(self, feature_extractor, tokenizer, chat_template=None, **kwargs):
         if not hasattr(tokenizer, "audio_token"):

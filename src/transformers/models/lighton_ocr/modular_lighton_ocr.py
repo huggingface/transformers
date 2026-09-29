@@ -114,20 +114,20 @@ class LightOnOcrConfig(PreTrainedConfig):
 
 
 class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_tensors": "pt",
-        },
-        "images_kwargs": {
-            "do_pad": True,
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 class LightOnOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = LightOnOcrProcessorKwargs
+
+    text_kwargs = {
+        "padding": False,
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "do_pad": True,
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

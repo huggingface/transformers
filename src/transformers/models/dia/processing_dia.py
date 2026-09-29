@@ -59,23 +59,6 @@ class DiaAudioKwargs(AudioKwargs, total=False):
 
 class DiaProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: DiaAudioKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-            "return_tensors": "pt",
-        },
-        "audio_kwargs": {
-            "eos_token_id": 1024,
-            "pad_token_id": 1025,
-            "bos_token_id": 1026,
-            "delay_pattern": [0, 8, 9, 10, 11, 12, 13, 14, 15],
-            "generation": True,
-            "sampling_rate": 44100,
-            "return_tensors": "pt",
-        },
-    }
 
 
 @requires(backends=("torch",))
@@ -83,6 +66,22 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
 class DiaProcessor(ProcessorMixin):
     audio_tokenizer_class = "DacModel"
     valid_processor_kwargs = DiaProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "eos_token_id": 1024,
+        "pad_token_id": 1025,
+        "bos_token_id": 1026,
+        "delay_pattern": [0, 8, 9, 10, 11, 12, 13, 14, 15],
+        "generation": True,
+        "sampling_rate": 44100,
+        "return_tensors": "pt",
+    }
 
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer, **kwargs):
         r"""

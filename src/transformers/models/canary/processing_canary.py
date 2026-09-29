@@ -59,21 +59,21 @@ LANGUAGE_CODE_TO_NAME = {
 
 
 class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "text_kwargs": {
-            "return_tensors": "pt",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class CanaryProcessor(ProcessorMixin):
     valid_processor_kwargs = CanaryProcessorKwargs
+
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "return_tensors": "pt",
+    }
 
     def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)

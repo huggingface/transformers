@@ -48,20 +48,19 @@ class Owlv2ImagesKwargs(ImagesKwargs, total=False):
 
 class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Owlv2ImagesKwargs
-    _defaults = {
-        "images_kwargs": {
-            "return_tensors": "np",
-        },
-        "text_kwargs": {
-            "padding": "max_length",
-            "return_tensors": "np",
-        },
-    }
 
 
 @auto_docstring
 class Owlv2Processor(ProcessorMixin):
     valid_processor_kwargs = Owlv2ProcessorKwargs
+
+    text_kwargs = {
+        "padding": "max_length",
+        "return_tensors": "np",
+    }
+    images_kwargs = {
+        "return_tensors": "np",
+    }
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)

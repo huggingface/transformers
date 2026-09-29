@@ -46,17 +46,17 @@ def is_image_or_image_url(elem):
 
 
 class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "is_split_into_words": False,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Idefics2Processor(ProcessorMixin):
     valid_processor_kwargs = Idefics2ProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "is_split_into_words": False,
+    }
 
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str | None = None, **kwargs

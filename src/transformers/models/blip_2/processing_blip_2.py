@@ -26,22 +26,24 @@ logger = logging.get_logger(__name__)
 
 
 class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Blip2Processor(ProcessorMixin):
+    valid_processor_kwargs = Blip2ProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "stride": 0,
+        "return_overflowing_tokens": False,
+        "return_special_tokens_mask": False,
+        "return_offsets_mapping": False,
+        "return_token_type_ids": False,
+        "return_length": False,
+        "verbose": True,
+    }
+
     def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
         r"""
         num_query_tokens (`int`, *optional*):

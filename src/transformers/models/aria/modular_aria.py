@@ -523,17 +523,15 @@ class AriaImagesKwargs(ImagesKwargs, total=False):
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: AriaImagesKwargs
 
-    _defaults = {
-        "images_kwargs": {
-            "max_image_size": 980,
-            "split_image": False,
-        },
-    }
-
 
 @auto_docstring
 class AriaProcessor(ProcessorMixin):
     valid_processor_kwargs = AriaProcessorKwargs
+
+    images_kwargs = {
+        "max_image_size": 980,
+        "split_image": False,
+    }
 
     def __init__(
         self,

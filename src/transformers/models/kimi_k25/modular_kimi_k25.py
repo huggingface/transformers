@@ -729,17 +729,17 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
 
 
 class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "videos_kwargs": {"return_metadata": True},
-    }
+    pass
 
 
 @auto_docstring
 class Kimi_K25Processor(Qwen2VLProcessor):
     valid_processor_kwargs = Kimi_K25ProcessorKwargs
 
-    return_mm_token_type_ids = AttributeError()
     text_kwargs = AttributeError()
+
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = AttributeError()
 
     def __init__(
         self,

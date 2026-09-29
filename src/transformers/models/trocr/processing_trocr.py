@@ -28,6 +28,8 @@ class TrOCRProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class TrOCRProcessor(ProcessorMixin):
+    valid_processor_kwargs = TrOCRProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

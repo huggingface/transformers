@@ -30,20 +30,20 @@ logger = logging.get_logger(__name__)
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-            "return_tensors": "pt",
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 class ColPaliProcessor(PaliGemmaProcessor):
     valid_processor_kwargs = ColPaliProcessorKwargs
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

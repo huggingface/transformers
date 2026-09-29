@@ -34,18 +34,6 @@ class UdopTextKwargs(TextKwargs, total=False):
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: UdopTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "truncation": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
 
 
 @auto_docstring
@@ -64,6 +52,19 @@ class UdopProcessor(ProcessorMixin):
     Additionally, it also supports passing `text_target` and `text_pair_target` to the tokenizer, which can be used to
     prepare labels for language modeling tasks.
     """
+
+    valid_processor_kwargs = UdopProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "truncation": False,
+        "stride": 0,
+        "return_overflowing_tokens": False,
+        "return_special_tokens_mask": False,
+        "return_offsets_mapping": False,
+        "return_length": False,
+        "verbose": True,
+    }
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer, **kwargs)

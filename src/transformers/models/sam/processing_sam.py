@@ -71,15 +71,14 @@ class SamImagesKwargs(ImagesKwargs, total=False):
 
 class SamProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: SamImagesKwargs
-    _defaults = {
-        "images_kwargs": {
-            "point_pad_value": -10,
-        }
-    }
 
 
 @auto_docstring
 class SamProcessor(ProcessorMixin):
+    images_kwargs = {
+        "point_pad_value": -10,
+    }
+
     def __init__(self, image_processor, **kwargs):
         super().__init__(image_processor, **kwargs)
         self.target_size = self.image_processor.size["longest_edge"]

@@ -56,27 +56,28 @@ class VoxtralAudioKwargs(AudioKwargs, total=False):
 
 class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: VoxtralAudioKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "tokenize": True,
-            "return_dict": True,
-            "return_tensors": "pt",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "pad_to_multiple_of": 480000,
-            "max_source_positions": 3000,
-            "return_tensors": "pt",
-        },
-    }
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class VoxtralProcessor(ProcessorMixin):
+    valid_processor_kwargs = VoxtralProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "tokenize": True,
+        "return_dict": True,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+        "truncation": False,
+        "pad_to_multiple_of": 480000,
+        "max_source_positions": 3000,
+        "return_tensors": "pt",
+    }
+
     def __init__(self, feature_extractor, tokenizer, **kwargs):
         self.audio_token_id = 24
         self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)

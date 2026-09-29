@@ -20,18 +20,24 @@ from ...utils import auto_docstring
 
 
 class TvpProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "truncation": True,
-            "padding": "max_length",
-            "pad_to_max_length": True,
-            "return_token_type_ids": False,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class TvpProcessor(ProcessorMixin):
+    # TODO: This fixes a bug because we previously didn't assign
+    # valid_processor_kwargs and didn't update __call__ so the _defaults
+    # from TvpProcessorKwargs were ignored and not applied.
+    # Question: This is a breaking change, do we want to include it?
+    valid_processor_kwargs = TvpProcessorKwargs
+
+    text_kwargs = {
+        "truncation": True,
+        "padding": "max_length",
+        "pad_to_max_length": True,
+        "return_token_type_ids": False,
+    }
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
         self.video_processor = image_processor

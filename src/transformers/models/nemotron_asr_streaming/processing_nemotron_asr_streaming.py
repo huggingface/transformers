@@ -25,21 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 class NemotronAsrStreamingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-            "subsampling_factor": 8,
-            "return_tensors": "pt",
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 # Default supported right attention contexts (lookaheads, in subsampled encoder frames) of the NeMo
@@ -49,6 +35,22 @@ DEFAULT_NUM_LOOKAHEAD_TOKENS = [13, 6, 1, 0]
 
 @auto_docstring
 class NemotronAsrStreamingProcessor(ProcessorMixin):
+    valid_processor_kwargs = NemotronAsrStreamingProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": "longest",
+        "return_attention_mask": True,
+        "subsampling_factor": 8,
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         feature_extractor,

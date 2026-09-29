@@ -20,16 +20,16 @@ from ...utils import auto_docstring
 
 
 class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class PerceptionLMProcessor(ProcessorMixin):
     valid_processor_kwargs = PerceptionLMProcessorKwargs
+
+    text_kwargs = {
+        "padding": False,
+    }
 
     def __init__(
         self,

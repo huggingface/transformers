@@ -27,16 +27,16 @@ from ...utils import auto_docstring
 
 
 class Granite4VisionProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "images_kwargs": {
-            "do_pad": True,
-        },
-    }
+    pass
 
 
 @auto_docstring
 class Granite4VisionProcessor(ProcessorMixin):
     valid_processor_kwargs = Granite4VisionProcessorKwargs
+
+    images_kwargs = {
+        "do_pad": True,
+    }
 
     def __init__(
         self,

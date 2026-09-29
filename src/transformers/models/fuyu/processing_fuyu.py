@@ -54,11 +54,7 @@ BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 
 
 class FuyuProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-        },
-    }
+    pass
 
 
 # Simplified assuming self.crop_top = self.padding_top = 0
@@ -202,6 +198,10 @@ def construct_full_unpacked_stream(
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
     valid_processor_kwargs = FuyuProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+    }
 
     @classmethod
     def _load_tokenizer_from_pretrained(

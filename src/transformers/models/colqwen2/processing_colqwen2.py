@@ -33,15 +33,21 @@ if is_torch_available():
 
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": "longest", "return_tensors": "pt"},
-        "images_kwargs": {"data_format": "channels_first", "return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class ColQwen2Processor(ProcessorMixin):
     valid_processor_kwargs = ColQwen2ProcessorKwargs
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
+
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,

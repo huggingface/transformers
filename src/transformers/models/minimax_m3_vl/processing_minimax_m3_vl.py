@@ -22,9 +22,7 @@ from ...utils import auto_docstring
 
 
 class MiniMaxM3VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "videos_kwargs": {"do_resize": False, "return_metadata": True},
-    }
+    pass
 
 
 @auto_docstring
@@ -38,6 +36,11 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
+
+    videos_kwargs = {
+        "do_resize": False,
+        "return_metadata": True,
+    }
 
     IMAGE_TOKEN = "]<]image[>["
     VIDEO_TOKEN = "]<]video[>["

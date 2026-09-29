@@ -23,15 +23,15 @@ from ...utils import auto_docstring
 
 
 class DeepseekVLHybridProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "images_kwargs": {"return_tensors": "pt"},
-        "text_kwargs": {"return_tensors": "pt"},
-    }
+    pass
 
 
 @auto_docstring
 class DeepseekVLHybridProcessor(ProcessorMixin):
     valid_processor_kwargs = DeepseekVLHybridProcessorKwargs
+
+    text_kwargs = {"return_tensors": "pt"}
+    images_kwargs = {"return_tensors": "pt"}
 
     def __init__(self, image_processor, tokenizer, chat_template=None, num_image_tokens=576, **kwargs):
         r"""

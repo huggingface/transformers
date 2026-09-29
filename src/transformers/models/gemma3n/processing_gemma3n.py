@@ -28,6 +28,8 @@ class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Gemma3nProcessor(ProcessorMixin):
+    valid_processor_kwargs = Gemma3nProcessorKwargs
+
     def __init__(
         self,
         feature_extractor,

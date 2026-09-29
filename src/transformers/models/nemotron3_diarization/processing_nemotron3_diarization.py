@@ -37,6 +37,8 @@ class Nemotron3DiarizationProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Nemotron3DiarizationProcessor(ProcessorMixin):
+    valid_processor_kwargs = Nemotron3DiarizationProcessorKwargs
+
     def __init__(
         self, feature_extractor, subsampling_factor=8, streaming_modes=None, streaming_mode="low_latency", **kwargs
     ):

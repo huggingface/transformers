@@ -56,22 +56,6 @@ if is_torchvision_available():
 
 class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: OmDetTurboTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 77,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-            "task": None,
-        },
-    }
 
 
 def clip_boxes(box, box_size: tuple[int, int]):
@@ -189,6 +173,21 @@ def _post_process_boxes_for_image(
 @auto_docstring
 class OmDetTurboProcessor(ProcessorMixin):
     valid_processor_kwargs = OmDetTurboProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 77,
+        "stride": 0,
+        "return_overflowing_tokens": False,
+        "return_special_tokens_mask": False,
+        "return_offsets_mapping": False,
+        "return_token_type_ids": False,
+        "return_length": False,
+        "verbose": True,
+        "task": None,
+    }
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer, **kwargs)

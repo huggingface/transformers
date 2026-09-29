@@ -25,22 +25,22 @@ from ...video_utils import VideoInput
 
 
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-        "videos_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+    pass
 
 
 @auto_docstring
 class InternVLProcessor(ProcessorMixin):
     valid_processor_kwargs = InternVLProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
