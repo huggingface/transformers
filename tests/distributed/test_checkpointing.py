@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import shutil
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -32,6 +33,7 @@ if is_torch_available():
     from transformers import LlamaConfig, LlamaForCausalLM
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import (
+        _prepare_state_dict_for_dcp,
         load_checkpoint_in_distributed_model,
         load_optimizer_distributed,
         save_optimizer_distributed,
@@ -93,6 +95,9 @@ def _test_save_and_from_pretrained(rank, directory, source_config, destination_c
 
 
 def _test_load_checkpoint_in_distributed_model(rank, directory):
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+
     with _distributed_context(rank, directory):
         reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
         model = LlamaForCausalLM.from_pretrained(
@@ -101,14 +106,32 @@ def _test_load_checkpoint_in_distributed_model(rank, directory):
         model.save_pretrained(f"{directory}/dcp", distributed_checkpoint=True)
         model.save_pretrained(f"{directory}/safetensors", distributed_checkpoint=False, max_shard_size="4KB")
 
-        for checkpoint in ("dcp", "safetensors"):
-            # Zero the weights so the check below only passes if the checkpoint was actually loaded.
-            with torch.no_grad():
-                for parameter in model.parameters():
-                    parameter.zero_()
-            load_checkpoint_in_distributed_model(model, f"{directory}/{checkpoint}")
-            full_state_dict = get_model_state_dict(model, options=StateDictOptions(full_state_dict=True))
-            torch.testing.assert_close(full_state_dict, reference.state_dict(), msg=f"checkpoint={checkpoint}")
+        # Also accept checkpoints consolidated by PyTorch, with no retained rank-local files to fall back to.
+        dcp.save(
+            _prepare_state_dict_for_dcp(get_model_state_dict(model)),
+            storage_writer=HuggingFaceStorageWriter(
+                f"{directory}/consolidated", save_distributed=True, enable_consolidation=True
+            ),
+        )
+        dist.barrier()
+        if rank == 0:
+            shutil.rmtree(f"{directory}/consolidated/sharded")
+        dist.barrier()
+
+        for config in (DistributedConfig(tp_size=2, fsdp_size=2), DistributedConfig(tp_size=4)):
+            model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=config)
+            placements = {name: getattr(parameter, "placements", None) for name, parameter in model.named_parameters()}
+            for checkpoint in ("seed", "dcp", "safetensors", "consolidated"):
+                # Zero the weights so the check below only passes if the checkpoint was actually loaded.
+                with torch.no_grad():
+                    for parameter in model.parameters():
+                        parameter.zero_()
+                load_checkpoint_in_distributed_model(model, f"{directory}/{checkpoint}")
+                full_state_dict = get_model_state_dict(model, options=StateDictOptions(full_state_dict=True))
+                torch.testing.assert_close(full_state_dict, reference.state_dict(), msg=f"checkpoint={checkpoint}")
+                assert {
+                    name: getattr(parameter, "placements", None) for name, parameter in model.named_parameters()
+                } == placements
 
 
 def _test_optimizer_checkpoint(rank, directory, consolidate):

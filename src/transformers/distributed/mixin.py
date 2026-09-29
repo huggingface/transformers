@@ -19,7 +19,6 @@ import warnings
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
-from ..utils.hub import create_and_tag_model_card
 from .checkpoint import save_model_checkpoint_distributed
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism
@@ -204,17 +203,8 @@ class DistributedMixin:
         self,
         model_to_save,
         save_directory: str | os.PathLike,
-        *,
-        consolidate: bool = True,
-        push_to_hub: bool = False,
-        save_on_this_rank: bool = True,
-        repo_id: str | None = None,
-        files_timestamps: dict | None = None,
-        commit_message: str | None = None,
-        token: str | bool | None = None,
-        create_pr: bool = False,
     ) -> None:
-        """Save an FSDP- or TP-sharded model as safetensors via DCP and optionally push to the Hub."""
+        """Save an FSDP- or TP-sharded model as rank-local safetensors via DCP for resuming training."""
         if not _check_distributed_checkpointing_available(raise_if_not=False):
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
 
@@ -228,19 +218,7 @@ class DistributedMixin:
                 "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
                 "initialized with a distributed_config (_device_mesh is None)."
             )
-        save_model_checkpoint_distributed(model_to_save, save_directory, consolidate=consolidate)
-
-        if push_to_hub and save_on_this_rank:
-            model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
-            model_card.save(os.path.join(save_directory, "README.md"))
-            self._upload_modified_files(
-                save_directory,
-                repo_id,
-                files_timestamps,
-                commit_message=commit_message,
-                token=token,
-                create_pr=create_pr,
-            )
+        save_model_checkpoint_distributed(model_to_save, save_directory)
 
     def gather_sharded_state_dict_for_save(
         self,

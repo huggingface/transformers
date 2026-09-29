@@ -3412,12 +3412,7 @@ class PreTrainedModel(
                 current_peft_config.save_pretrained(save_directory)
 
         if distributed_checkpoint:
-            self.save_distributed_checkpoint(
-                model_to_save,
-                save_directory,
-                # Native DCP checkpoints remain sharded, use `distributed_checkpoint=False` for an interoperable checkpoint.
-                consolidate=False,
-            )
+            self.save_distributed_checkpoint(model_to_save, save_directory)
             return
 
         # Get the model state_dict
