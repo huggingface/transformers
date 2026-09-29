@@ -126,9 +126,8 @@ _import_structure = {
     ],
     "liger": ["apply_liger_kernel"],
     "linear_attention": [
-        "ALL_SSD_FUNCTIONS",
+        "ALL_LINEAR_ATTENTION_FUNCTIONS",
         "LinearAttentionInterface",
-        "SSDInterface",
     ],
     "metal_quantization": [
         "MetalLinear",
@@ -283,9 +282,8 @@ if TYPE_CHECKING:
     )
     from .liger import apply_liger_kernel
     from .linear_attention import (
-        ALL_SSD_FUNCTIONS,
+        ALL_LINEAR_ATTENTION_FUNCTIONS,
         LinearAttentionInterface,
-        SSDInterface,
     )
     from .metal_quantization import (
         MetalLinear,

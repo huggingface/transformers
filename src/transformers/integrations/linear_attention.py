@@ -12,15 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Interfaces for the stateful core of linear attention layers.
+Interface for the stateful core of linear attention layers.
 
 A linear attention layer keeps its projections, gating and output projection in the modeling file and dispatches only
-its stateful core (causal convolution, recurrence and reading/writing of the recurrent state) through the interface of
-its mechanism. This lets an external runtime, which manages the recurrent state itself, swap the core without
-re-implementing the rest of the layer.
+its stateful core (causal convolution, recurrence and reading/writing of the recurrent state) through
+`ALL_LINEAR_ATTENTION_FUNCTIONS`. This lets an external runtime, which manages the recurrent state itself, swap the core
+without re-implementing the rest of the layer.
 
-Each mechanism has its own interface because the signature of its core differs. All of them are selected with
-`config._linear_attn_implementation`.
+Functions are registered under `"<implementation>|<mechanism>"` and selected with `config._linear_attn_implementation`.
+The signature of a function depends on its mechanism:
+
+- `"ssd"` (Mamba2's state space duality):
+  `(module, hidden_states_B_C, dt, cache_params=None, attention_mask=None, **kwargs) -> scan_output`, where
+    - `module` is the mixer, from which the function reads `conv1d`, `A_log`, `D`, `dt_bias` and the layer geometry.
+    - `hidden_states_B_C` has shape `(batch_size, seq_len, conv_dim)` and is the input to the convolution.
+    - `dt` has shape `(batch_size, seq_len, num_heads)` and is the time step before `dt_bias` and softplus.
+    - `scan_output` has shape `(batch_size, seq_len, num_heads * head_dim)` and is the output of the scan, including
+      the `D` skip connection but before the gated normalization.
 """
 
 from __future__ import annotations
@@ -35,45 +43,38 @@ logger = logging.get_logger(__name__)
 
 
 class LinearAttentionInterface(GeneralInterface):
-    """Base class for the per-mechanism linear attention interfaces. Subclasses must define their own
-    `_global_mapping` so that registering a function for one mechanism does not register it for the others."""
-
-    def get_interface(self, linear_attn_implementation: str | None, default: Callable) -> Callable:
-        """Return the requested `linear_attn_implementation`, or `default` for `"eager"`. Raise if the requested
-        implementation is not registered for this mechanism."""
-        if linear_attn_implementation is None:
-            logger.warning_once(
-                f"You tried to access the `{type(self).__name__}` with a `config._linear_attn_implementation` set to "
-                "`None`. This is expected if you use a linear attention module as a standalone module. If this is "
-                "not the case, something went wrong with the dispatch of `config._linear_attn_implementation`"
-            )
-        elif linear_attn_implementation != "eager" and linear_attn_implementation not in self:
-            raise KeyError(
-                f"`{linear_attn_implementation}` is not a valid linear attention implementation registered in the "
-                f"`{type(self).__name__}`"
-            )
-        return super().get(linear_attn_implementation, default)
-
-
-class SSDInterface(LinearAttentionInterface):
     """
-    Interface for the core of Mamba2 (state space duality, SSD): causal convolution, chunked scan and recurrent state
-    handling.
-
-    A registered function has the signature
-    `(module, hidden_states_B_C, dt, cache_params=None, attention_mask=None, **kwargs) -> scan_output`, where:
-
-    - `module` is the mixer, from which the function reads `conv1d`, `A_log`, `D`, `dt_bias` and the layer geometry.
-    - `hidden_states_B_C` has shape `(batch_size, seq_len, conv_dim)` and is the input to the convolution.
-    - `dt` has shape `(batch_size, seq_len, num_heads)` and is the time step before `dt_bias` and softplus.
-    - `scan_output` has shape `(batch_size, seq_len, num_heads * head_dim)` and is the output of the selective scan,
-      including the `D` skip connection but before the gated normalization.
+    Dict-like object keeping track of the functions that implement the stateful core of linear attention layers. Keys
+    are `"<implementation>|<mechanism>"`, e.g. `"vllm|ssd"`, because the signature of the core differs between
+    mechanisms. See the module docstring for the signature of each mechanism.
     """
 
     _global_mapping = {}
 
+    def get_interface(self, linear_attn_implementation: str | None, mechanism: str, default: Callable) -> Callable:
+        """Return the function registered for `linear_attn_implementation` and `mechanism`, or `default` for
+        `"eager"`. Raise if `linear_attn_implementation` does not implement `mechanism`."""
+        if linear_attn_implementation is None:
+            logger.warning_once(
+                "You tried to access the `LinearAttentionInterface` with a `config._linear_attn_implementation` set "
+                "to `None`. This is expected if you use a linear attention module as a standalone module. If this is "
+                "not the case, something went wrong with the dispatch of `config._linear_attn_implementation`"
+            )
+            return default
+        if linear_attn_implementation == "eager":
+            return default
+        key = f"{linear_attn_implementation}|{mechanism}"
+        if key not in self:
+            raise KeyError(
+                f"`{linear_attn_implementation}` does not implement the `{mechanism}` linear attention mechanism. "
+                "Register a function for it in the `LinearAttentionInterface` under "
+                f'`"{key}"`, or use `linear_attn_implementation="eager"`.'
+            )
+        return self[key]
 
-ALL_SSD_FUNCTIONS = SSDInterface()
+    def implementations(self) -> set[str]:
+        """Every implementation with at least one registered mechanism."""
+        return {key.split("|", 1)[0] for key in self}
 
-ALL_LINEAR_ATTENTION_INTERFACES: tuple[LinearAttentionInterface, ...] = (ALL_SSD_FUNCTIONS,)
-"""Every linear attention interface, used to validate `linear_attn_implementation`."""
+
+ALL_LINEAR_ATTENTION_FUNCTIONS = LinearAttentionInterface()

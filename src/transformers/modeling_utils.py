@@ -82,7 +82,7 @@ from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
-from .integrations.linear_attention import ALL_LINEAR_ATTENTION_INTERFACES
+from .integrations.linear_attention import ALL_LINEAR_ATTENTION_FUNCTIONS
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -1908,7 +1908,7 @@ class PreTrainedModel(
         """
         if linear_attn_implementation is None:
             return "eager"
-        valid_implementations = {"eager"}.union(*(interface.keys() for interface in ALL_LINEAR_ATTENTION_INTERFACES))
+        valid_implementations = {"eager"} | ALL_LINEAR_ATTENTION_FUNCTIONS.implementations()
         if linear_attn_implementation not in valid_implementations:
             valid = ", ".join(f'`linear_attn_implementation="{fn}"`' for fn in sorted(valid_implementations))
             raise ValueError(
