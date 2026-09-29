@@ -18,6 +18,11 @@ target-version = "py310"
 line-length = 119
 
 [tool.ruff.lint]
+# `PLW1514` is still a preview rule, so `preview` has to be on for it. Pair it with
+# `explicit-preview-rules` so only the preview rules named in `select` below turn on,
+# instead of every preview rule of the selected families.
+preview = true
+explicit-preview-rules = true
 select = [
     "E",  # pycodestyle errors
     "F",  # Pyflakes
@@ -34,6 +39,7 @@ select = [
     "PLC1802",  # Checks for len calls on sequences in a boolean test context.
     "PLC0208",  # Checks for iteration over a set literal where each element in the set is itself a literal value.
     "PIE794",  # Checks for duplicate field definitions in classes.
+    "PLW1514",  # Checks that `open()` in text mode is called with an explicit encoding.
 ]
 ignore = [
     "E501",  # Checks for lines that exceed the specified maximum character length.

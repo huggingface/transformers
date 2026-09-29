@@ -1709,6 +1709,15 @@ class ToolArgCoercionTest(unittest.TestCase):
         parser._coerce_tool_calls(call)
         self.assertEqual(call["function"]["arguments"], {"hour": [7, "x", 9]})
 
+    def test_already_decoded_array_is_not_cast_element_wise(self):
+        tools = _set_alarm_tools(groups={"type": "array", "items": {"type": "string"}})
+        call = {
+            "type": "function",
+            "function": {"name": "set_alarm", "arguments": {"groups": ["[1,2]", "[]"]}},
+        }
+        _parser_with_tools(tools)._coerce_tool_calls(call)
+        self.assertEqual(call["function"]["arguments"], {"groups": ["[1,2]", "[]"]})
+
     def test_coerce_tool_calls_ignores_unusable_function_name(self):
         # A transform can hand us a name parsed from model output, so a non-string name
         # must be ignored rather than raising on the schema lookup.

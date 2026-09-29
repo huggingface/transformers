@@ -22,7 +22,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -116,7 +116,6 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
     tie_word_embeddings: bool = True
 
     norm_topk_prob = AttributeError()
-    output_router_logits = AttributeError()
     use_sliding_window = AttributeError()
     sliding_window = AttributeError()
 
@@ -347,7 +346,9 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3VLMoeCausalLMOutputWithPast:
         r"""
@@ -394,6 +395,10 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
         "A woman in a plaid shirt sits on a sandy beach at sunset, smiling as she gives a high-five to a yellow Labrador Retriever wearing a harness. The ocean waves roll in the background."
         ```"""
 
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -405,6 +410,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            mm_encoder_outputs=mm_encoder_outputs,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -421,7 +428,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
             )
 
         aux_loss = None
-        if kwargs.get("output_router_logits", False):
+        if output_router_logits:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.config.text_config.num_experts,

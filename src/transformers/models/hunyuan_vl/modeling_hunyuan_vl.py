@@ -36,7 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
@@ -140,7 +140,7 @@ class HunYuanVLRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, :, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             cos = freqs.cos() * self.attention_scaling
@@ -222,16 +222,12 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size, sequence_len, -1).squeeze(0)
 
-        start = 0
-        image_embeddings_list = []
+        position_embeddings_list = []
         for t, h, w in grid_thw:
-            end = start + t * h * w
-            image_embeddings = embeddings[start:end, :]
-            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
-            image_embeddings_list.append(image_embeddings + position_embedding)
-            start = end
+            position_embeddings_list.append(self.interpolate_pos_encoding(embeddings, h, w).squeeze(0).repeat(t, 1))
+        position_embeddings = torch.concat(position_embeddings_list, dim=0)
 
-        return torch.concat(image_embeddings_list, dim=0).unsqueeze(0)
+        return (embeddings + position_embeddings).unsqueeze(0)
 
 
 class HunYuanVLVisionPatchMerger(nn.Module):
@@ -260,7 +256,10 @@ class HunYuanVLVisionPatchMerger(nn.Module):
     def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         hidden_states = self.before_rms(hidden_states)
         dtype = hidden_states.dtype
-        hidden_states = hidden_states.permute(0, 2, 1).reshape(hidden_states.shape[0], -1, *size)
+        hidden_states = hidden_states.permute(0, 2, 1)
+        hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], *size)
+        torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
+        torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
@@ -1057,19 +1056,24 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_embeds = None
-        if pixel_values is not None and image_grid_thw is not None:
-            image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
-            image_embeds = image_outputs.pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, dtype=inputs_embeds.dtype, non_blocking=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
@@ -1101,7 +1105,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -1147,6 +1151,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -1195,6 +1200,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
