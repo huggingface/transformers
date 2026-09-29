@@ -27,7 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.linear_attention import ALL_LINEAR_ATTENTION_FUNCTIONS
+from ...integrations.linear_attention import ALL_SSD_FUNCTIONS
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -221,8 +221,8 @@ class FalconH1Mixer(BambaMixer):
         )
 
         # 2. Convolution and SSM transformation
-        ssd_interface: Callable = ALL_LINEAR_ATTENTION_FUNCTIONS.get_interface(
-            self.config._linear_attn_implementation, "ssd", eager_ssd_forward
+        ssd_interface: Callable = ALL_SSD_FUNCTIONS.get_interface(
+            self.config._linear_attn_implementation, eager_ssd_forward
         )
         scan_output = ssd_interface(
             self,

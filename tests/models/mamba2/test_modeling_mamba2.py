@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, Mamba2ForCausalLM, Mamba2Model
-    from transformers.integrations.linear_attention import ALL_LINEAR_ATTENTION_FUNCTIONS, LinearAttentionInterface
+    from transformers.integrations.linear_attention import ALL_SSD_FUNCTIONS, SSDInterface
     from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer, eager_ssd_forward
 
 
@@ -338,7 +338,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
     def test_linear_attn_implementation_dispatch(self):
-        """A function registered for `"ssd"` replaces the eager SSD core of every mixer."""
+        """A function registered in `ALL_SSD_FUNCTIONS` replaces the eager SSD core of every mixer."""
         config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
         calls = []
 
@@ -346,7 +346,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             calls.append(module.layer_idx)
             return eager_ssd_forward(module, hidden_states_B_C, dt, **kwargs)
 
-        ALL_LINEAR_ATTENTION_FUNCTIONS.register("recording|ssd", recording_ssd_forward)
+        ALL_SSD_FUNCTIONS.register("recording", recording_ssd_forward)
         try:
             model = Mamba2Model(config).to(torch_device).eval()
             with torch.no_grad():
@@ -354,7 +354,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 model.config._linear_attn_implementation = "recording"
                 result = model(input_ids).last_hidden_state
         finally:
-            del LinearAttentionInterface._global_mapping["recording|ssd"]
+            del SSDInterface._global_mapping["recording"]
 
         self.assertEqual(calls, list(range(config.num_hidden_layers)))
         torch.testing.assert_close(result, expected)

@@ -35,7 +35,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.linear_attention import ALL_LINEAR_ATTENTION_FUNCTIONS
+from ...integrations.linear_attention import ALL_SSD_FUNCTIONS
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -815,8 +815,8 @@ class BambaMixer(nn.Module):
         )
 
         # 2. Convolution and SSM transformation
-        ssd_interface: Callable = ALL_LINEAR_ATTENTION_FUNCTIONS.get_interface(
-            self.config._linear_attn_implementation, "ssd", eager_ssd_forward
+        ssd_interface: Callable = ALL_SSD_FUNCTIONS.get_interface(
+            self.config._linear_attn_implementation, eager_ssd_forward
         )
         scan_output = ssd_interface(
             self,
