@@ -18,9 +18,24 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    pass
-    # Add models to deprecate like:
-    # from .XXX import *
+    from .cpmant import *
+    from .decision_transformer import *
+    from .glpn import *
+    from .groupvit import *
+    from .imagegpt import *
+    from .lxmert import *
+    from .mobilevit import *
+    from .mobilevitv2 import *
+    from .mra import *
+    from .nystromformer import *
+    from .pegasus_x import *
+    from .regnet import *
+    from .roberta_prelayernorm import *
+    from .switch_transformers import *
+    from .univnet import *
+    from .visual_bert import *
+    from .vit_msn import *
+    from .yoso import *
 else:
     import sys
 

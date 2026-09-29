@@ -125,7 +125,7 @@ diff = '''
 [rules.TRF007]
 description = "self.post_init() should stay last in a PreTrainedModel __init__."
 default_enabled = true
-allowlist_models = ["distilbert", "lxmert", "mt5", "pix2struct", "pop2piano", "switch_transformers", "t5"]
+allowlist_models = ["deprecated", "distilbert", "lxmert", "mt5", "pix2struct", "pop2piano", "switch_transformers", "t5"]
 
 [rules.TRF007.explanation]
 what_it_does = "Checks for self attribute assignments after self.post_init() in __init__."
@@ -480,7 +480,7 @@ default_enabled = true
 # cutoff cannot grandfather them. qwen3_asr mirrors Whisper's encoder config, where d_model is public API.
 # openai -> openai-gpt.md and kosmos2 -> kosmos-2.md cannot be derived from the directory name, so the
 # cutoff cannot grandfather them. qwen3_asr mirrors Whisper's encoder config, where d_model is public API.
-allowlist_models = ["kosmos2", "openai", "qwen3_asr"]
+allowlist_models = ["deprecated", "kosmos2", "openai", "qwen3_asr"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF023.explanation]
@@ -548,7 +548,7 @@ diff = '''
 [rules.TRF026]
 description = "A module whose forward only delegates to its single submodule adds nothing; inline it."
 default_enabled = true
-allowlist_models = []
+allowlist_models = ["deprecated"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF026.explanation]
@@ -606,7 +606,7 @@ diff = '''
 [rules.TRF029]
 description = "A module taking `config` must not also take arguments that live on the config."
 default_enabled = true
-allowlist_models = ["kosmos2"]
+allowlist_models = ["deprecated", "kosmos2"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF029.explanation]
@@ -743,7 +743,7 @@ diff = '''
 [rules.TRF036]
 description = "nn.Sequential hides the forward flow; declare the submodules explicitly."
 default_enabled = true
-allowlist_models = ["x_clip"]
+allowlist_models = ["deprecated", "x_clip"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF036.explanation]
@@ -792,7 +792,7 @@ default_enabled = true
 # upstream -- TRF038 should skip a source file that defines no classes -- so this is a placeholder, not a
 # permanent exemption. The other tokenizer findings 0.1.5 surfaced (bert_legacy, convbert, dpr, fnet, qwen3_5)
 # got real test files instead, and `roberta` was fixed by deleting its dead `tokenization_roberta_old.py`.
-allowlist_models = ["bart", "bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "granite_speech5", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "mobilebert", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "squeezebert", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip", "glm5_next"]
+allowlist_models = ["bart", "bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "granite_speech5", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "mobilebert", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "squeezebert", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip", "glm5_next", "deprecated"]
 
 [rules.TRF038.explanation]
 what_it_does = "Checks that every modeling_*.py, processing_*.py, image_processing_*.py, video_processing_*.py, feature_extraction_*.py and tokenization_*.py file has a matching tests/models/<model>/test_*.py (modeling_acme.py -> tests/models/acme/test_modeling_acme.py). Exempt: configuration_*.py, covered by ConfigTester in the companion test_modeling_*.py, and tokenization_utils*.py, a helper covered through its tokenizer; tokenization_<name>_fast.py maps to its slow counterpart's test file. A modular_*.py can define several families at once, so its classes are routed by name suffix -- XxxModel/XxxPreTrainedModel/XxxFor<Task> modeling, XxxImageProcessor(Fast) image processing, XxxProcessor processing, XxxVideoProcessor video processing, XxxFeatureExtractor feature extraction, XxxTokenizer(Fast) tokenization, XxxConfig skipped -- and one violation is reported per missing test file. `# trf-ignore: TRF038` is not supported; use `allowlist_models` so an exemption is visible in review."
@@ -931,7 +931,7 @@ default_enabled = true
 # model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
 # kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
 # model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
-allowlist_models = ["kosmos2", "openai", "timm_backbone", "timm_wrapper"]
+allowlist_models = ["deprecated", "kosmos2", "openai", "timm_backbone", "timm_wrapper"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF045.explanation]
@@ -1048,7 +1048,7 @@ default_enabled = true
 # attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
 # Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
 # axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4"]
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4", "deprecated"]
 
 [rules.TRF051.explanation]
 what_it_does = "Flags comparisons against a _attn_implementation attribute in modeling_*.py and modular_*.py."
@@ -1088,7 +1088,7 @@ default_enabled = true
 # hand, 12 of them in legacy `modeling_*.py` and 3 modular (csm, gemma3, modernbert_decoder). Each move to
 # `self.loss_function` has to be checked against that model's own loss -- encoder-decoder models pass
 # already-shifted labels -- so they go one model per PR.
-allowlist_models = ["blip", "blip_2", "clvp", "csm", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
+allowlist_models = ["blip", "blip_2", "clvp", "csm", "deprecated", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
 
 [rules.TRF053.explanation]
 what_it_does = "In modeling_*.py and modular_*.py, flags assignments that build shift_logits/shift_labels (and shifted_ variants) by slicing, as in labels[..., 1:]. Receiving already-shifted labels (shift_labels = kwargs.pop(\"shift_labels\", labels)) is the correct idiom and is not flagged."
@@ -1147,7 +1147,7 @@ default_enabled = true
 # no contribution date
 # no contribution date
 # no contribution date
-allowlist_models = ["kosmos2", "timm_backbone", "timm_wrapper", "vitpose_backbone", "wav2vec2_with_lm", "x_clip"]
+allowlist_models = ["deprecated", "kosmos2", "timm_backbone", "timm_wrapper", "vitpose_backbone", "wav2vec2_with_lm", "x_clip"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF057.explanation]

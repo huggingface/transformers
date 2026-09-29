@@ -17,6 +17,14 @@ rendered properly in your Markdown viewer.
 
 # LXMERT
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
+
 
 ## Overview
 
@@ -71,11 +79,11 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 ## Lxmert specific outputs
 
-[[autodoc]] models.lxmert.modeling_lxmert.LxmertModelOutput
+[[autodoc]] models.deprecated.lxmert.modeling_lxmert.LxmertModelOutput
 
-[[autodoc]] models.lxmert.modeling_lxmert.LxmertForPreTrainingOutput
+[[autodoc]] models.deprecated.lxmert.modeling_lxmert.LxmertForPreTrainingOutput
 
-[[autodoc]] models.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
+[[autodoc]] models.deprecated.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
 
 ## LxmertModel
 

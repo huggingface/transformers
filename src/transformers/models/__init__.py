@@ -91,7 +91,6 @@ if TYPE_CHECKING:
     from .cosmos3_edge import *
     from .cosmos3_omni import *
     from .cpm import *
-    from .cpmant import *
     from .csm import *
     from .ctrl import *
     from .cvt import *
@@ -103,7 +102,6 @@ if TYPE_CHECKING:
     from .dbrx import *
     from .deberta import *
     from .deberta_v2 import *
-    from .decision_transformer import *
     from .deepseek_ocr2 import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
@@ -190,7 +188,6 @@ if TYPE_CHECKING:
     from .glm_ocr import *
     from .glmasr import *
     from .glmga import *
-    from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
     from .gpt_bigcode import *
@@ -211,7 +208,6 @@ if TYPE_CHECKING:
     from .granitemoehybrid import *
     from .granitemoeshared import *
     from .grounding_dino import *
-    from .groupvit import *
     from .helium import *
     from .herbert import *
     from .hgnet_v2 import *
@@ -232,7 +228,6 @@ if TYPE_CHECKING:
     from .idefics2 import *
     from .idefics3 import *
     from .ijepa import *
-    from .imagegpt import *
     from .informer import *
     from .inkling import *
     from .instructblip import *
@@ -273,7 +268,6 @@ if TYPE_CHECKING:
     from .longt5 import *
     from .luke import *
     from .lw_detr import *
-    from .lxmert import *
     from .m2m_100 import *
     from .mamba import *
     from .mamba2 import *
@@ -308,8 +302,6 @@ if TYPE_CHECKING:
     from .mobilebert import *
     from .mobilenet_v1 import *
     from .mobilenet_v2 import *
-    from .mobilevit import *
-    from .mobilevitv2 import *
     from .modernbert import *
     from .modernbert_decoder import *
     from .modernvbert import *
@@ -318,7 +310,6 @@ if TYPE_CHECKING:
     from .moshi import *
     from .mpnet import *
     from .mpt import *
-    from .mra import *
     from .mt5 import *
     from .muse_glimmer import *
     from .muse_glimmer_assistant import *
@@ -340,7 +331,6 @@ if TYPE_CHECKING:
     from .nllb_moe import *
     from .nomic_bert import *
     from .nougat import *
-    from .nystromformer import *
     from .olmo import *
     from .olmo2 import *
     from .olmo3 import *
@@ -363,7 +353,6 @@ if TYPE_CHECKING:
     from .pe_audio_video import *
     from .pe_video import *
     from .pegasus import *
-    from .pegasus_x import *
     from .perceiver import *
     from .perception_lm import *
     from .persimmon import *
@@ -419,12 +408,10 @@ if TYPE_CHECKING:
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
-    from .regnet import *
     from .rembert import *
     from .resnet import *
     from .rf_detr import *
     from .roberta import *
-    from .roberta_prelayernorm import *
     from .roc_bert import *
     from .roformer import *
     from .rt_detr import *
@@ -469,7 +456,6 @@ if TYPE_CHECKING:
     from .swin import *
     from .swin2sr import *
     from .swinv2 import *
-    from .switch_transformers import *
     from .t5 import *
     from .t5gemma import *
     from .t5gemma2 import *
@@ -490,7 +476,6 @@ if TYPE_CHECKING:
     from .umt5 import *
     from .unispeech import *
     from .unispeech_sat import *
-    from .univnet import *
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *
@@ -506,10 +491,8 @@ if TYPE_CHECKING:
     from .vipllava import *
     from .vision_encoder_decoder import *
     from .vision_text_dual_encoder import *
-    from .visual_bert import *
     from .vit import *
     from .vit_mae import *
-    from .vit_msn import *
     from .vitdet import *
     from .vitmatte import *
     from .vitpose import *
@@ -537,7 +520,6 @@ if TYPE_CHECKING:
     from .xlstm import *
     from .xmod import *
     from .yolos import *
-    from .yoso import *
     from .youtu import *
     from .zamba import *
     from .zamba2 import *

@@ -18,6 +18,14 @@ rendered properly in your Markdown viewer.
 
 # VisualBERT
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v5.17.0.
+You can do so by running the following command: `pip install -U transformers==5.17.0`.
+
+</Tip>
+
 [VisualBERT](https://huggingface.co/papers/1908.03557) is a vision-and-language model. It uses an approach called "early fusion", where inputs are fed together into a single Transformer stack initialized from [BERT](./bert). Self-attention implicitly aligns words with their corresponding image objects. It processes text with visual features from object-detector regions instead of raw pixels.
 
 You can find all the original VisualBERT checkpoints under the [UCLA NLP](https://huggingface.co/uclanlp/models?search=visualbert) organization.

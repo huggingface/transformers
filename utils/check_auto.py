@@ -131,10 +131,11 @@ def build_processor_mapping(
         module = model_type.replace("-", "_")
         processor_name = None
 
-        if os.path.exists(f"src/transformers/models/{module}/{processor_filename}_{module}.py"):
-            with open(
-                f"src/transformers/models/{module}/{processor_filename}_{module}.py", "r", encoding="utf-8"
-            ) as f:
+        processor_paths = glob.glob(
+            f"src/transformers/models/**/{module}/{processor_filename}_{module}.py", recursive=True
+        )
+        if processor_paths:
+            with open(processor_paths[0], "r", encoding="utf-8") as f:
                 content = f.read()
 
             tree = ast.parse(content)
