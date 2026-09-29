@@ -379,7 +379,7 @@ class BaseImageProcessor(ImageProcessingMixin):
             resample=resample,
         )
 
-    @auto_docstring
+    @auto_docstring(custom_intro="Preprocess an image or a batch of images.")
     def preprocess(
         self,
         images: ImageInput,
@@ -387,9 +387,6 @@ class BaseImageProcessor(ImageProcessingMixin):
         image_like_kwargs: dict[str, Any] | None = None,
         **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
-        """
-        Preprocess an image or a batch of images.
-        """
         # Perform type validation on received kwargs
         validate_typed_dict(self.valid_kwargs, kwargs)
 
