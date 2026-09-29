@@ -146,60 +146,11 @@ class TDTLossTest(unittest.TestCase):
 @require_torch_gpu
 @require_kernels
 class TDTLossKernelTest(unittest.TestCase):
-    """Test the `kernels-community/tdt-loss` CUDA kernel against the NeMo fixtures and the PyTorch implementation."""
-
-    @classmethod
-    def setUpClass(cls):
-        from transformers.integrations.hub_kernels import get_kernel
-
-        with open(TDTLossTest.FIXTURE_PATH, encoding="utf-8") as f:
-            cls.fixture = json.load(f)
-        try:
-            cls.kernel_tdt_loss = get_kernel("kernels-community/tdt-loss", version=1).layers.TDTLoss()
-        except Exception as e:
-            raise unittest.SkipTest(f"The tdt-loss kernel could not be loaded: {e}")
+    """Test that `use_kernels=True` swaps `tdt_loss` for the `kernels-community/tdt-loss` kernel. The kernel's
+    correctness is tested in kernels-community."""
 
     def tearDown(self):
         reset_parakeet_kernels()
-
-    def _make_inputs(self):
-        # Same inputs as `TDTLossTest`, on the GPU.
-        inputs = TDTLossTest._make_inputs(self)
-        return {k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-
-    def test_kernel_matches_nemo(self):
-        inputs = self._make_inputs()
-        for reduction, sigma, key in [
-            ("sum", 0.0, "expected_loss_sum"),
-            ("mean", 0.0, "expected_loss_mean"),
-            ("none", 0.0, "expected_loss_none"),
-            ("mean", 0.05, "expected_loss_mean_sigma_0p05"),
-        ]:
-            with self.subTest(reduction=reduction, sigma=sigma):
-                loss = self.kernel_tdt_loss(**inputs, sigma=sigma, reduction=reduction)
-                torch.testing.assert_close(loss.cpu(), torch.tensor(self.fixture[key]))
-
-    def test_kernel_matches_torch(self):
-        for reduction in ("mean_volume", "mean_batch", "mean", "sum", "none"):
-            for sigma in (0.0, 0.05):
-                with self.subTest(reduction=reduction, sigma=sigma):
-                    inputs = self._make_inputs()
-                    losses, grads = [], []
-                    for loss_fn in (self.kernel_tdt_loss, tdt_loss):
-                        token_logits = inputs["token_logits"].clone().requires_grad_(True)
-                        duration_logits = inputs["duration_logits"].clone().requires_grad_(True)
-                        loss = loss_fn(
-                            **{**inputs, "token_logits": token_logits, "duration_logits": duration_logits},
-                            sigma=sigma,
-                            reduction=reduction,
-                        )
-                        loss.sum().backward()
-                        losses.append(loss)
-                        grads.append((token_logits.grad, duration_logits.grad))
-
-                    torch.testing.assert_close(losses[0], losses[1], rtol=1e-4, atol=1e-4)
-                    torch.testing.assert_close(grads[0][0], grads[1][0], rtol=1e-4, atol=1e-5)
-                    torch.testing.assert_close(grads[0][1], grads[1][1], rtol=1e-4, atol=1e-5)
 
     def test_use_kernels(self):
         """`use_kernels=True` swaps `tdt_loss` for the kernel in `ParakeetForTDT`, with the same loss."""
@@ -226,6 +177,14 @@ class TDTLossKernelTest(unittest.TestCase):
         with torch.no_grad():
             loss = model(**inputs).loss
         torch.testing.assert_close(loss, expected, rtol=1e-4, atol=1e-4)
+
+        # Training mode also uses the kernel, which has a backward
+        reset_parakeet_kernels()
+        model.train()
+        model.set_use_kernels(True)
+        self.assertIn("forward", vars(tdt_loss), "`tdt_loss` was not kernelized in training mode")
+        model(**inputs).loss.backward()
+        self.assertTrue(any(p.grad is not None for p in model.parameters()), "No gradients after backward")
 
 
 @require_torch
@@ -918,8 +877,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
     @slow
     def test_tdt_model_integration_loss(self):
         """
-        Verify that ParakeetForTDT loss matches NeMo's TDT loss (sigma=0), with both the CUDA kernel and the
-        PyTorch implementation.
+        Verify that ParakeetForTDT loss matches NeMo's TDT loss (sigma=0).
         reproducer: https://gist.github.com/883ea42bf7d8ce2af42f3055627476a7
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_loss_tdt.json"
@@ -942,48 +900,26 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         )
         inputs.to(model.device)
 
-        # Check both the PyTorch implementation and the `kernels-community/tdt-loss` CUDA kernel (`use_kernels=True`)
-        # (`tdt_loss` is only kernelizable when the `kernels` library is installed and enabled)
-        backends = ["torch", "kernel"] if isinstance(tdt_loss, torch.nn.Module) else ["torch"]
+        # Forward in eval mode — check loss matches NeMo. This fixture was generated with an HF-style "mean"
+        # reduction (per-sample / target_length, then averaged), not NeMo's native reduction, so pass
+        # `reduction="mean"` to match it (the loss default is "mean_volume"). TODO: regenerate this fixture from
+        # NeMo's native `model.loss` (mean_volume), like reproducer_rnnt_loss.py does, and drop this override.
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**inputs, reduction="mean")
+        self.assertIsNotNone(outputs.loss, "Loss must be computed when labels are provided")
+        self.assertEqual(outputs.logits.dim(), 4, "Training logits must be 4D (B, T, U+1, V+D)")
+        torch.testing.assert_close(outputs.loss.cpu(), EXPECTED_MEAN_LOSS, rtol=1e-3, atol=1e-3)
 
-        def set_backend(backend):
-            if backend == "kernel":
-                model.set_use_kernels(True)
-            else:
-                reset_parakeet_kernels()
-
-        try:
-            # Forward in eval mode — check loss matches NeMo. This fixture was generated with an HF-style "mean"
-            # reduction (per-sample / target_length, then averaged), not NeMo's native reduction, so pass
-            # `reduction="mean"` to match it (the loss default is "mean_volume"). TODO: regenerate this fixture
-            # from NeMo's native `model.loss` (mean_volume), like reproducer_rnnt_loss.py does, and drop this
-            # override.
-            model.eval()
-            for backend in backends:
-                with self.subTest(backend=backend), torch.no_grad():
-                    set_backend(backend)
-                    outputs = model(**inputs, reduction="mean")
-                    self.assertIsNotNone(outputs.loss, "Loss must be computed when labels are provided")
-                    self.assertEqual(outputs.logits.dim(), 4, "Training logits must be 4D (B, T, U+1, V+D)")
-                    torch.testing.assert_close(outputs.loss.cpu(), EXPECTED_MEAN_LOSS, rtol=1e-3, atol=1e-3)
-                    del outputs
-                    torch.cuda.empty_cache()
-
-            # Backward — verify gradients flow. Done after all the eval checks, since train mode updates the
-            # BatchNorm running statistics.
-            model.train()
-            for backend in backends:
-                with self.subTest(backend=backend):
-                    set_backend(backend)
-                    model.zero_grad()
-                    outputs = model(**inputs)
-                    outputs.loss.backward()
-                    n_with_grad = sum(1 for p in model.parameters() if p.grad is not None)
-                    self.assertGreater(n_with_grad, 0, "No gradients after backward")
-                    del outputs
-                    torch.cuda.empty_cache()
-        finally:
-            set_backend("torch")
+        # Backward — verify gradients flow
+        del outputs
+        torch.cuda.empty_cache()
+        model.train()
+        model.zero_grad()
+        outputs = model(**inputs)
+        outputs.loss.backward()
+        n_with_grad = sum(1 for p in model.parameters() if p.grad is not None)
+        self.assertGreater(n_with_grad, 0, "No gradients after backward")
 
 
 class ParakeetForRNNTModelTester:

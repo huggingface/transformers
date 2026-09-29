@@ -710,7 +710,15 @@ if is_kernels_available():
                 },
             },
             "tdt_loss": {
-                "cuda": LayerRepository(repo_id="kernels-community/tdt-loss", layer_name="TDTLoss", version=1),
+                # The kernel supports backward but not torch.compile
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/tdt-loss", layer_name="TDTLoss", version=1
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/tdt-loss", layer_name="TDTLoss", version=1
+                    ),
+                },
             },
         }
 
