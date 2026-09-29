@@ -108,4 +108,3 @@ class MossTranscribeDiarizeFeatureExtractionTest(SequenceFeatureExtractionTestMi
         audio = np.random.randn(5_000).astype(np.float32)
         with self.assertRaises(ValueError):
             feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate + 1)
-            

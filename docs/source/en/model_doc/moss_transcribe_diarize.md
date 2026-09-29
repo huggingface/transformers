@@ -247,8 +247,75 @@ hooks that cause repeated recompilation, so load the model directly on a single 
 On a B200, we observed a speed-up of ~2.1x for a batch size of 4.
 
 ```python
+import time
+
 import torch
+
 from transformers import AutoProcessor, AutoModelForCausalLM
+
+
+model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+
+num_warmup = 5
+num_runs = 20
+
+# Load processor + model
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id).to("cuda")
+
+# Prepare static inputs
+audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav"
+inputs = processor.apply_transcription_request([audio_url] * 4).to(model.device, torch.bfloat16)
+
+# Benchmark without compile
+print("Warming up without compile...")
+with torch.no_grad():
+    for _ in range(num_warmup):
+        _ = model(**inputs)
+
+torch.accelerator.synchronize()
+
+print("\nBenchmarking without torch.compile...")
+torch.accelerator.synchronize()
+start = time.time()
+with torch.no_grad():
+    for _ in range(num_runs):
+        _ = model(**inputs)
+torch.accelerator.synchronize()
+no_compile_time = (time.time() - start) / num_runs
+print(f"Average time without compile: {no_compile_time:.4f}s")
+
+# Benchmark with compile
+print("\nCompiling model...")
+model = torch.compile(model)
+
+print("Warming up with compile (includes graph capture)...")
+with torch.no_grad():
+    for _ in range(num_warmup):
+        _ = model(**inputs)
+
+torch.accelerator.synchronize()
+
+print("\nBenchmarking with torch.compile...")
+torch.accelerator.synchronize()
+start = time.time()
+with torch.no_grad():
+    for _ in range(num_runs):
+        _ = model(**inputs)
+torch.accelerator.synchronize()
+compile_time = (time.time() - start) / num_runs
+print(f"Average time with compile: {compile_time:.4f}s")
+
+speedup = no_compile_time / compile_time
+print(f"\nSpeedup: {speedup:.2f}x")
+```
+
+For autoregressive transcription, `torch.compile` accelerates the per-token forward passes inside `generate` by
+providing a `CompileConfig` object instead of compiling `model.forward` directly.
+
+```python
+import torch
+from transformers import AutoProcessor, AutoModelForCausalLM, CompileConfig
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 num_warmup = 3
@@ -259,13 +326,18 @@ model = AutoModelForCausalLM.from_pretrained(model_id).to("cuda")
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav"
 inputs = processor.apply_transcription_request([audio_url] * 4).to(model.device, torch.bfloat16)
 
-# Warm-up and apply model
-model.forward = torch.compile(model.forward)
-with torch.no_grad():
-    for _ in range(num_warmup):
-        _ = model(**inputs)
-with torch.no_grad():
-    _ = model(**inputs)
+compile_config = CompileConfig()
+
+# Warmup
+for _ in range(num_warmup):
+    _ = model.generate(**inputs, max_new_tokens=128, cache_implementation="static", compile_config=compile_config)
+
+# Apply model
+generated_ids = model.generate(
+    **inputs, max_new_tokens=128, cache_implementation="static", compile_config=compile_config
+)
+transcription = processor.decode(generated_ids[:, inputs.input_ids.shape[1] :], return_format="transcription_only")
+print(transcription)
 ```
 
 ## MossTranscribeDiarizeConfig
