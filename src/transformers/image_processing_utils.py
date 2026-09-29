@@ -400,14 +400,9 @@ class BaseImageProcessor(ImageProcessingMixin):
         # Validate kwargs
         self._validate_preprocess_kwargs(**kwargs)
 
-        # noqa: NC001, NC002
         # This is a workaround when adding new image like inputs to existing processors where we cannot
-        # modify the order of the input arguments for BC. For example, we want to add `keypoints` to
-        # `_preprocess_image_like_inputs(images, do_convert_rgb: bool, ..., **kwargs)`.
-        # For BC we have to add `keypoints` at the end before **kwargs but this fails when calling
-        # `super().preprocess(images, keypoints=keypoints, ...)` as `preprocess` expects image like inputs
-        # to be positional and not keyword arguments. In this case image_like_kwargs can be used instead:
-        # `super().preprocess(images, image_like_kwargs={"keypoints": keypoints}, ...)`.
+        # modify the order of the input arguments for BC. For details see:
+        # https://github.com/huggingface/transformers/pull/47199#discussion_r4131643549
         image_like_kwargs = {} if image_like_kwargs is None else image_like_kwargs
 
         return self._preprocess_image_like_inputs(images, *args, **image_like_kwargs, **kwargs)
