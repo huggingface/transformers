@@ -29,12 +29,12 @@ if is_torch_available():
 
     from transformers import LlamaConfig, LlamaForCausalLM
     from transformers.distributed import DistributedConfig
-    from transformers.distributed.utils import (
-        clip_grad_norm_,
+    from transformers.distributed.checkpoint import (
         load_checkpoint_in_distributed_model,
         load_optimizer_distributed,
         save_optimizer_distributed,
     )
+    from transformers.distributed.utils import clip_grad_norm_
 
     if dist.is_available():
         from torch.distributed.device_mesh import init_device_mesh

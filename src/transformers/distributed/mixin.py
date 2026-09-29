@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
+from .checkpoint import save_model_checkpoint_distributed
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
@@ -34,7 +35,6 @@ from .utils import (
     _is_torch_distributed_initialized,
     gather_full_state_dict,
     initialize_distributed_mesh,
-    save_model_checkpoint_distributed,
 )
 
 
