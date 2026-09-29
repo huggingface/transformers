@@ -267,11 +267,9 @@ def convert_encoder_config(nemo_config):
         "dropout_att": "attention_dropout",
         "xscaling": "scale_input",
         "use_bias": "attention_bias",
-        # NeMo's stochastic depth is the equivalent of LayerDrop
         "stochastic_depth_drop_prob": "layerdrop",
     }
-    # NeMo disables stochastic depth by default, while `ParakeetEncoderConfig` defaults to `layerdrop=0.1`: start
-    # from NeMo's default so that checkpoints trained without it (all released ones) don't drop layers when fine-tuned
+    # NeMo's default (no stochastic depth), which differs from ParakeetEncoderConfig's
     converted_encoder_config = {"layerdrop": 0.0}
 
     for key, value in nemo_config["encoder"].items():
@@ -281,12 +279,6 @@ def convert_encoder_config(nemo_config):
             converted_encoder_config[encoder_config_keys_mapping[key]] = value
             if key == "use_bias":
                 converted_encoder_config["convolution_bias"] = value
-            if key == "stochastic_depth_drop_prob" and value > 0:
-                print(
-                    f"NeMo uses stochastic depth ({value=}, mode={nemo_config['encoder'].get('stochastic_depth_mode')}, "
-                    f"start_layer={nemo_config['encoder'].get('stochastic_depth_start_layer')}), converted to a "
-                    "uniform `layerdrop`: layers are dropped with the same probability, from the first layer."
-                )
         else:
             raise ValueError(f"Key {key} not found in encoder_config_keys_mapping")
 
