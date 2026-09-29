@@ -195,7 +195,7 @@ def _sparse_attention(module, query, key, value, scaling, block_indices, block_s
     # as a device tensor (no host sync) -- `build_k2q_csr` reads only the host shape hints `total_k`/
     # `max_seqlen_k` (kept fixed at `bsz*k_len`/`k_len` below), so this stays compile/cudagraph stable.
     if bsz == 1 and cache_position is not None:
-        valid_k = (cache_position[-1] + 1).to(torch.int32).reshape(1)
+        valid_k = (cache_position[-1] + 1).to(device=q.device, dtype=torch.int32).reshape(1)
         cu_seqlens_k = torch.cat([torch.zeros(1, device=q.device, dtype=torch.int32), valid_k])
     else:
         cu_seqlens_k = torch.arange(0, (bsz + 1) * k_len, k_len, device=q.device, dtype=torch.int32)

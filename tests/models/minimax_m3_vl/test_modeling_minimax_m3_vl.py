@@ -15,6 +15,7 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -30,7 +31,9 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    get_device_properties,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -467,6 +470,92 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     pixel_values_videos=pixel_values_videos,
                     video_grid_thw=video_grid_thw,
                 )
+
+    @require_torch_accelerator
+    @unittest.skipIf(
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 10,
+        "Skipping: MSA sparse attention requires SM100/Blackwell (compute capability >= 10.0)",
+    )
+    def test_sparse_attention_cache_position_on_cpu(self):
+        """Regression test for the CPU/CUDA device-mismatch in ``_sparse_attention`` (PR #46848).
+
+        When ``bsz == 1`` and ``cache_position`` lives on the CPU (the typical case in the
+        generation loop), ``valid_k`` was cast to ``torch.int32`` without an explicit ``device``
+        argument and therefore stayed on CPU. Concatenating that CPU tensor with the GPU-resident
+        zero tensor raised::
+
+            RuntimeError: Expected all tensors to be on the same device,
+            but found at least two devices, cuda:0 and cpu!
+
+        The fix adds ``device=q.device`` to the ``.to()`` call so ``valid_k`` always follows
+        the query tensor's device.
+
+        Note on hardware requirements: an SM100/Blackwell GPU is required. Although
+        ``_msa_sparse_atten_op`` is patched to a stub, ``_sparse_attention`` calls it through
+        the PyTorch op dispatcher, which on a non-SM100 device would attempt to load the
+        Blackwell CuTe-DSL hub kernel and crash before the patch intercepts the call.
+        """
+        from transformers.integrations.msa_attention import _sparse_attention
+        from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention
+
+        # Use the tester's standard config helper, then override only the two values the MSA
+        # kernel requires: head_dim == 128 (MSA_SUPPORTED_HEAD_DIM) and index_block_size == 128
+        # (MSA_SUPPORTED_BLOCK_SIZE). hidden_size is bumped to stay consistent with head_dim.
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        text_config = config.text_config
+        text_config.head_dim = 128
+        text_config.index_block_size = 128
+        text_config.hidden_size = 256
+
+        # layer_types from the tester already contains "minimax_m3_sparse" at index 1.
+        attn_module = MiniMaxM3VLAttention(text_config, layer_idx=1).to(torch_device).eval()
+        self.assertIsNotNone(attn_module.indexer, "Layer 1 must be a sparse layer with a real indexer")
+
+        bsz, q_len, k_len = 1, 1, 16
+        num_q_heads = text_config.num_attention_heads
+        num_kv_heads = text_config.num_key_value_heads
+        head_dim = text_config.head_dim
+
+        query = torch.randn(bsz, num_q_heads, q_len, head_dim, device=torch_device)
+        key = torch.randn(bsz, num_kv_heads, k_len, head_dim, device=torch_device)
+        value = torch.randn(bsz, num_kv_heads, k_len, head_dim, device=torch_device)
+        block_indices = torch.zeros(
+            bsz, num_kv_heads, q_len, text_config.index_topk_blocks, dtype=torch.long, device=torch_device
+        )
+        # cache_position on CPU — the exact source of the original bug.
+        cache_position = torch.tensor([7], device="cpu")
+
+        captured = {}
+
+        def _stub_op(q, k, v, q2k, cu_seqlens_q, cu_seqlens_k, *args, **kwargs):
+            captured["cu_seqlens_k"] = cu_seqlens_k
+            return torch.zeros_like(q)
+
+        with patch("transformers.integrations.msa_attention._msa_sparse_atten_op", side_effect=_stub_op):
+            _sparse_attention(
+                attn_module,
+                query,
+                key,
+                value,
+                scaling=head_dim**-0.5,
+                block_indices=block_indices,
+                block_size=text_config.index_block_size,
+                cache_position=cache_position,
+            )
+
+        self.assertIn("cu_seqlens_k", captured, "_stub_op was never called")
+        cu_seqlens_k = captured["cu_seqlens_k"]
+        # Before the fix this would be on CPU, causing the RuntimeError.
+        self.assertEqual(
+            cu_seqlens_k.device.type,
+            torch.device(torch_device).type,
+            f"cu_seqlens_k must be on {torch_device} (same as QKV), got {cu_seqlens_k.device}",
+        )
+        expected = torch.tensor([0, 8], dtype=torch.int32, device=torch_device)
+        self.assertTrue(
+            torch.equal(cu_seqlens_k, expected),
+            f"Expected cu_seqlens_k == {expected.tolist()}, got {cu_seqlens_k.tolist()}",
+        )
 
 
 @slow
