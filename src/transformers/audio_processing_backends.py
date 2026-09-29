@@ -393,12 +393,22 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _astype(self, x, dtype_name):
         return x.to(getattr(torch, dtype_name))
 
+    def _prepare_waveform(self, audio_el, *, device=None, **kwargs):
+        return audio_el.to(device=device) if device is not None else audio_el
+
     def _amax_over_features(self, x):
         return x.amax(dim=(-2, -1), keepdim=True)
 
     def _zeros_int32(self, shape, *, like=None):
         device = like.device if isinstance(like, torch.Tensor) else None
         return torch.zeros(shape, dtype=torch.int32, device=device)
+
+    def _get_mask(self, ranges, padded_length, *, like=None):
+        if not isinstance(like, torch.Tensor):
+            return super()._get_mask(ranges, padded_length, like=like)
+        range_tensor = torch.tensor(ranges, dtype=torch.int64, device=like.device)
+        positions = torch.arange(padded_length, device=like.device)
+        return ((positions >= range_tensor[:, :1]) & (positions < range_tensor[:, 1:])).to(torch.int32)
 
     def _as_backend_array(self, x, *, like=None):
         if isinstance(x, np.ndarray):
@@ -524,18 +534,41 @@ class TorchAudioBackend(BaseAudioProcessor):
         return spec.transpose(-2, -1)
 
     def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        stft_out = torch.stft(
-            audio,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            win_length=frame_length,
-            window=window,
-            center=stft_cfg.center,
-            pad_mode=stft_cfg.pad_mode,
-            normalized=stft_cfg.normalized == "frame_length",
-            onesided=stft_cfg.onesided,
-            return_complex=True,
-        )
+        win_length = stft_cfg.win_length
+        if audio.device.type == "cuda" and win_length < n_fft:
+            # `torch.stft` performs this same pad -> unfold -> window -> FFT sequence,
+            # but its generic wrapper adds material dispatch overhead on short GPU
+            # workloads. Express the operations directly so CUDA reaches the cached
+            # cuFFT plan without that wrapper; this is also the eager layout used by
+            # native cuFFT audio frontends such as fast-gpu-asr. This specialization
+            # pays off when the cached analysis window was padded to the larger FFT
+            # size; full-window CUDA transforms and CPU transforms keep `torch.stft`,
+            # which benchmarks faster for those cases.
+            if stft_cfg.center:
+                signal_dim = audio.ndim
+                extended_shape = [1] * (3 - signal_dim) + list(audio.shape)
+                pad = n_fft // 2
+                audio = torch.nn.functional.pad(audio.view(extended_shape), (pad, pad), mode=stft_cfg.pad_mode)
+                audio = audio.view(audio.shape[-signal_dim:])
+
+            frames = audio.unfold(-1, n_fft, hop_length)
+            frames = frames * window
+            fft = torch.fft.rfft if stft_cfg.onesided else torch.fft.fft
+            norm = "ortho" if stft_cfg.normalized == "frame_length" else "backward"
+            stft_out = fft(frames, n=n_fft, norm=norm).transpose(-2, -1)
+        else:
+            stft_out = torch.stft(
+                audio,
+                n_fft=n_fft,
+                hop_length=hop_length,
+                win_length=frame_length,
+                window=window,
+                center=stft_cfg.center,
+                pad_mode=stft_cfg.pad_mode,
+                normalized=stft_cfg.normalized == "frame_length",
+                onesided=stft_cfg.onesided,
+                return_complex=True,
+            )
         stft_out = self._round_through_complex64(stft_out, stft_cfg)
         if stft_cfg.normalized in (True, "window"):
             stft_out = stft_out / window.pow(2.0).sum().sqrt()

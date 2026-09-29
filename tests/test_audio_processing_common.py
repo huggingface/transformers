@@ -454,3 +454,13 @@ class AudioBackendOptimizationTest(unittest.TestCase):
 
         clamp.assert_called_once()
         torch.testing.assert_close(output, torch.full_like(output, 1e-4))
+
+    def test_torch_mask_vectorizes_arbitrary_ranges(self):
+        processor = self._make_torch_processor(mel_floor=0.0)
+
+        mask = processor._get_mask([(0, 3), (2, 5)], 6, like=torch.empty(2, 6))
+
+        torch.testing.assert_close(
+            mask,
+            torch.tensor([[1, 1, 1, 0, 0, 0], [0, 0, 1, 1, 1, 0]], dtype=torch.int32),
+        )
