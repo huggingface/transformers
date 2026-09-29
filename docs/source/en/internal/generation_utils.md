@@ -206,6 +206,12 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] TextDiffusionStreamer
 
+[[autodoc]] BaseInputStreamer
+
+[[autodoc]] AudioIteratorStreamer
+
+[[autodoc]] AsyncAudioIteratorStreamer
+
 ## Caches
 
 [[autodoc]] CacheLayerMixin

@@ -17,8 +17,10 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
-from queue import Queue
+from queue import Empty, Queue
 from typing import TYPE_CHECKING, Any, cast
+
+import numpy as np
 
 
 if TYPE_CHECKING:
@@ -404,3 +406,322 @@ class TextDiffusionStreamer(TextStreamer):
         """Flushes any remaining cache and prints a newline."""
         self._clear_draft()
         super().end()
+
+
+class BaseInputStreamer:
+    """
+    Base class from which `.generate()` *input* streamers should inherit.
+
+    This is the input-side counterpart to [`BaseStreamer`]. A producer feeds data with `put()` and signals
+    completion with `end()`, while `.generate()` consumes the stream by pulling model inputs with `get()`.
+    The class is also a Python iterator (`__next__` calls `get()` and `__iter__` returns `self`), so a
+    streaming-capable model can detect a `BaseInputStreamer` passed as `input_features` and drive it with
+    either `get()` or `next()`.
+    """
+
+    def put(self, value):
+        """Push new input data into the stream (producer side)."""
+        raise NotImplementedError()
+
+    def end(self):
+        """Signal that no more input will be pushed (producer side)."""
+        raise NotImplementedError()
+
+    def get(self):
+        """Return the next model input (consumer side). Raises `StopIteration` when the stream is exhausted."""
+        raise NotImplementedError()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.get()
+
+    @property
+    def model_kwargs(self):
+        """Auxiliary keyword arguments to forward to `.generate()` alongside `input_features`."""
+        raise NotImplementedError()
+
+
+class AudioIteratorStreamer(BaseInputStreamer):
+    """
+    Synchronous, thread-safe audio input streamer for streaming-ASR `.generate()`.
+
+    A producer thread pushes raw mono audio samples with [`~AudioIteratorStreamer.put`] (one or many calls, e.g.
+    a real-time microphone feed) and calls [`~AudioIteratorStreamer.end`] when the stream is over. A consumer
+    (typically `model.generate` running in a worker thread) iterates over the streamer to receive the
+    `input_features` chunks the model expects. All chunking geometry is derived from the processor, so the
+    same class works for any processor exposing `num_samples_first_audio_chunk` and
+    `num_samples_per_audio_chunk`, plus a feature extractor with `hop_length`, `win_length`, `n_fft`,
+    `feature_size`.
+
+    Parameters:
+        processor:
+            A streaming-ASR processor (e.g. `NemotronAsrStreamingProcessor`, `VoxtralRealtimeProcessor`).
+        device (*optional*):
+            Device to move yielded feature chunks (and tensor `model_kwargs`) to.
+        dtype (*optional*):
+            Dtype to cast yielded feature chunks to.
+        timeout (`float`, *optional*):
+            Seconds to wait for the next audio in the blocking get. `None` blocks indefinitely. Useful to
+            avoid hanging `.generate()` forever if the producer dies.
+
+    Examples:
+
+        ```python
+        >>> from threading import Thread
+        >>> from transformers import AudioIteratorStreamer, TextIteratorStreamer
+
+        >>> input_streamer = AudioIteratorStreamer(processor, device=model.device, dtype=model.dtype)
+        >>> output_streamer = TextIteratorStreamer(processor.tokenizer, skip_special_tokens=True)
+        >>> generate_kwargs = {
+        ...     "input_features": input_streamer,
+        ...     "streamer": output_streamer,
+        ...     **input_streamer.model_kwargs,
+        ... }
+        >>> thread = Thread(target=model.generate, kwargs=generate_kwargs)
+        >>> thread.start()
+        >>> input_streamer.put(audio)
+        >>> input_streamer.end()
+        >>> for text_chunk in output_streamer:
+        ...     print(text_chunk, end="", flush=True)
+        >>> thread.join()
+        ```
+    """
+
+    _SENTINEL = object()
+
+    def __init__(self, processor, device=None, dtype=None, timeout: float | None = None):
+        self._setup(processor, device, dtype, timeout)
+        self._queue = Queue()
+
+    def _setup(self, processor, device, dtype, timeout):
+        self.processor = processor
+        self.device = device
+        self.dtype = dtype
+        self.timeout = timeout
+
+        fe = processor.feature_extractor
+        self._hop = fe.hop_length
+        self._win = fe.win_length
+        self._n_fft = fe.n_fft
+        self._feature_size = fe.feature_size
+        self._first_chunk_samples = processor.num_samples_first_audio_chunk
+        self._chunk_samples = processor.num_samples_per_audio_chunk
+        # Subsequent windows overlap by `win_length` (the STFT window context that `center=False` needs), so
+        # they advance by `num_samples_per_audio_chunk - win_length`. The first subsequent window starts at
+        # the raw-sample offset that makes its `center=False` frames continue seamlessly after the first
+        # (`center=True`) chunk.
+        self._advance = self._chunk_samples - self._win
+        self._second_chunk_start = self._first_chunk_samples + self._hop - self._n_fft // 2 - self._win // 2
+
+        # consumer-private rolling buffer (only the consuming thread touches it)
+        self._buffer = np.zeros(0, dtype=np.float32)
+        self._base = 0  # absolute index of self._buffer[0]
+        self._total = 0  # absolute number of samples received so far
+        self._ended = False
+
+        # consumer iteration state
+        self._started = False  # whether the first chunk has been emitted
+        self._start = 0  # absolute start of the next subsequent window
+        self._exhausted = False  # whether `get()` has raised StopIteration
+
+        # `drops_last`: whether the feature extractor itself drops the trailing padded STFT frame
+        # (`stft[..., :-1]`). If it does, we never trim; if not, we must drop the trailing padded frame of
+        # the first (`center=True`) chunk ourselves. Detected empirically, so no model-specific config or
+        # processor edits are needed.
+        self._drops_last = self._detect_drops_last()
+
+        self._model_kwargs = self._compute_model_kwargs()
+
+    def _compute_model_kwargs(self):
+        # input_ids (voxtral) depends only on the *length* of the first chunk, not its content, so a zero
+        # placeholder of the right length yields the correct auxiliary kwargs. Feature output is discarded.
+        placeholder = np.zeros(self._first_chunk_samples, dtype=np.float32)
+        batch = self.processor(placeholder, is_streaming=True, is_first_audio_chunk=True, return_tensors="pt")
+        kwargs = {}
+        for key, value in batch.items():
+            if key in ("input_features", "attention_mask"):
+                continue
+            # Move aux tensors (e.g. `input_ids`) to device but never cast their dtype: they are integer
+            # tensors, unlike the float feature chunks handled in `_extract`. Duck-typed on `.to` to keep
+            # this module backend-agnostic; scalar aux values (e.g. `num_delay_tokens`) have no `.to`.
+            if self.device is not None and hasattr(value, "to"):
+                value = value.to(self.device)
+            kwargs[key] = value
+        return kwargs
+
+    @property
+    def model_kwargs(self):
+        return self._model_kwargs
+
+    # ---- producer side ----
+    def put(self, value):
+        """Push raw mono audio samples (numpy array, list, or any array-like that exposes `__array__`)."""
+        self._queue.put(self._to_numpy(value))
+
+    def end(self):
+        """Signal end of the audio stream."""
+        self._queue.put(self._SENTINEL)
+
+    @staticmethod
+    def _to_numpy(value):
+        # `np.asarray` converts lists, numpy arrays, and any array-like exposing `__array__` (e.g. CPU
+        # tensors) to a 1-D float32 buffer, without this module depending on a specific array backend.
+        return np.asarray(value, dtype=np.float32).reshape(-1)
+
+    def _get(self):
+        try:
+            return self._queue.get(timeout=self.timeout)
+        except Empty as e:
+            raise TimeoutError("AudioIteratorStreamer timed out waiting for audio input.") from e
+
+    # ---- consumer side ----
+    def _ensure(self, abs_index):
+        """Pull from the queue until `self._total >= abs_index` or the stream ends. Returns `self._total`."""
+        while self._total < abs_index and not self._ended:
+            item = self._get()
+            if item is self._SENTINEL:
+                self._ended = True
+            else:
+                self._buffer = np.concatenate([self._buffer, item])
+                self._total += item.shape[0]
+        return self._total
+
+    def _slice(self, start, length):
+        """Return `length` samples starting at absolute `start`, zero-padded if the buffer is short."""
+        local_start = start - self._base
+        end = local_start + length
+        if local_start >= 0 and end <= self._buffer.shape[0]:
+            return self._buffer[local_start:end].copy()
+        out = np.zeros(length, dtype=np.float32)
+        valid = self._buffer.shape[0] - max(local_start, 0)
+        if valid > 0:
+            src = max(local_start, 0)
+            out[: min(valid, length)] = self._buffer[src : src + min(valid, length)]
+        return out
+
+    def _discard_before(self, abs_index):
+        """Drop buffered samples before absolute `abs_index` to bound memory."""
+        drop = min(abs_index - self._base, self._buffer.shape[0])
+        if drop > 0:
+            self._buffer = self._buffer[drop:]
+            self._base += drop
+
+    def _time_axis(self, features):
+        # Time axis = the non-batch axis whose size differs from `feature_size`. Falls back to the last axis
+        # when the layout can't be told apart (e.g. the frame count coincides with `feature_size`).
+        if features.dim() == 3 and features.shape[2] == self._feature_size and features.shape[1] != self._feature_size:
+            return 1
+        return 2
+
+    def _detect_drops_last(self):
+        # Feed a subsequent (`center=False`) chunk: it should yield `1 + (L - n_fft) // hop` frames. A feature
+        # extractor that drops the trailing padded frame (`stft[..., :-1]`) returns one fewer.
+        probe = np.zeros(self._chunk_samples, dtype=np.float32)
+        features = self.processor(
+            probe, is_streaming=True, is_first_audio_chunk=False, return_tensors="pt"
+        ).input_features
+        produced = features.shape[self._time_axis(features)]
+        expected = 1 + (self._chunk_samples - self._n_fft) // self._hop
+        return produced == expected - 1
+
+    def _extract(self, samples, is_first):
+        batch = self.processor(samples, is_streaming=True, is_first_audio_chunk=is_first, return_tensors="pt")
+        features = batch.input_features
+        # The first chunk is the only `center=True` chunk, so it is the only one carrying a trailing padded
+        # frame. If the feature extractor does not already drop it (`drops_last`), drop it here.
+        if is_first and not self._drops_last:
+            features = self._drop_last_frame(features)
+        return features.to(device=self.device, dtype=self.dtype)
+
+    def _drop_last_frame(self, features):
+        if self._time_axis(features) == 1:
+            return features[:, :-1]
+        return features[:, :, :-1]
+
+    def get(self):
+        """Return the next `input_features` chunk. Raises `StopIteration` when the stream is exhausted."""
+        if self._exhausted:
+            raise StopIteration
+
+        # First chunk.
+        if not self._started:
+            self._started = True
+            total = self._ensure(self._first_chunk_samples)
+            if total == 0 and self._ended:
+                self._exhausted = True
+                raise StopIteration
+            first = self._slice(0, self._first_chunk_samples)
+            features = self._extract(first, is_first=True)
+            self._discard_before(self._second_chunk_start)
+            self._start = self._second_chunk_start
+            return features
+
+        # Subsequent chunks.
+        start = self._start
+        total = self._ensure(start + self._chunk_samples + 1)
+        if total <= start + self._chunk_samples:
+            # No full window lies strictly inside the (now-ended) stream. This matches the reference
+            # generators' `while end_idx < len` guard: a final window ending exactly at the last sample is
+            # dropped. For live feeds the next `put` resolves it; pre-recorded callers who need the exact
+            # tail should pad the audio (as voxtral's `num_right_pad_tokens` padding does).
+            self._exhausted = True
+            raise StopIteration
+        window = self._slice(start, self._chunk_samples)
+        features = self._extract(window, is_first=False)
+        self._start = start + self._advance
+        self._discard_before(self._start)
+        return features
+
+
+class AsyncAudioIteratorStreamer(AudioIteratorStreamer):
+    """
+    Asyncio variant of [`AudioIteratorStreamer`] for async producers (e.g. audio arriving over a websocket).
+
+    `put()` and `end()` are coroutines that enqueue onto an `asyncio.Queue`. The consumer side
+    (`get()`) is still synchronous — `model.generate` runs in a worker thread and pulls chunks
+    synchronously — and bridges to the event loop via `asyncio.run_coroutine_threadsafe`. This mirrors how
+    [`AsyncTextIteratorStreamer`] bridges the output side with `loop.call_soon_threadsafe`.
+
+    Must be constructed inside a running event loop. The producer (`put`/`end`) runs on the event loop,
+    but consumption (by `.generate()`) must happen on a *different* thread — e.g. pass the streamer as
+    `input_features` to `Thread(target=model.generate)`. Consuming on the loop's own thread deadlocks,
+    because the synchronous `_get` blocks that thread via `run_coroutine_threadsafe(...).result()` and the
+    queue can never be served.
+
+    Parameters: identical to [`AudioIteratorStreamer`].
+
+    Examples:
+
+        ```python
+        >>> # Inside an async context, with model.generate running in a worker thread:
+        >>> input_streamer = AsyncAudioIteratorStreamer(processor, device=model.device, dtype=model.dtype)
+        >>> # ... start the generate thread with input_features=input_streamer and **input_streamer.model_kwargs ...
+        >>> async for audio_chunk in mic_source():
+        ...     await input_streamer.put(audio_chunk)
+        >>> await input_streamer.end()
+        ```
+    """
+
+    def __init__(self, processor, device=None, dtype=None, timeout: float | None = None):
+        self._loop = asyncio.get_running_loop()
+        self._setup(processor, device, dtype, timeout)
+        self._queue = asyncio.Queue()
+
+    async def put(self, value):
+        """Push raw mono audio samples onto the async queue."""
+        await self._queue.put(self._to_numpy(value))
+
+    async def end(self):
+        """Signal end of the audio stream on the async queue."""
+        await self._queue.put(self._SENTINEL)
+
+    def _get(self):
+        import concurrent.futures
+
+        future = asyncio.run_coroutine_threadsafe(self._queue.get(), self._loop)
+        try:
+            return future.result(timeout=self.timeout)
+        except concurrent.futures.TimeoutError as e:
+            raise TimeoutError("AsyncAudioIteratorStreamer timed out waiting for audio input.") from e

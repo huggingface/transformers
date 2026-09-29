@@ -16,7 +16,7 @@ from types import GeneratorType
 
 import torch
 
-from ...generation import GenerationMixin
+from ...generation import BaseInputStreamer, GenerationMixin
 from ...models.parakeet.generation_parakeet import (
     ParakeetRNNTDecoderCache,
     ParakeetRNNTGenerateOutput,
@@ -139,13 +139,13 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
     def _prepare_model_inputs(self, inputs=None, bos_token_id=None, model_kwargs=None):
         input_features = inputs if inputs is not None else (model_kwargs or {}).get("input_features")
 
-        if isinstance(input_features, GeneratorType):
+        if isinstance(input_features, (GeneratorType, BaseInputStreamer)):
             model_kwargs = model_kwargs or {}
             generator = input_features
             try:
                 first_chunk = next(generator)
             except StopIteration as e:
-                raise ValueError("The `input_features` generator did not yield any chunk.") from e
+                raise ValueError("The `input_features` stream did not yield any chunk.") from e
             first_chunk = first_chunk.to(device=self.device, dtype=self.dtype)
             self._validate_stream_chunk(first_chunk, is_first_chunk=True)
 
@@ -211,7 +211,7 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
 
     def generate(self, inputs=None, generation_config=None, **kwargs):
         input_features = kwargs.get("input_features", inputs)
-        self._streaming = isinstance(input_features, GeneratorType)
+        self._streaming = isinstance(input_features, (GeneratorType, BaseInputStreamer))
         if self._streaming:
             self._stream_exhausted = False
             num_lookahead_tokens = kwargs.pop("num_lookahead_tokens", None)

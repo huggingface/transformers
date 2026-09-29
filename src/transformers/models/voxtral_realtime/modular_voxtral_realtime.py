@@ -22,7 +22,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...generation import GenerationMixin
+from ...generation import BaseInputStreamer, GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
@@ -769,10 +769,10 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
 
         input_features = model_kwargs.get("input_features")
-        if input_features is not None and not isinstance(input_features, GeneratorType):
+        if input_features is not None and not isinstance(input_features, (GeneratorType, BaseInputStreamer)):
             model_kwargs["encoder_inputs_embeds"] = self.model.audio_tower.embedder(model_kwargs.pop("input_features"))
 
-        elif isinstance(input_features, GeneratorType):
+        elif isinstance(input_features, (GeneratorType, BaseInputStreamer)):
             input_features_generator = model_kwargs.pop("input_features")
             model_kwargs["input_features_generator"] = input_features_generator
             try:
@@ -877,7 +877,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
         input_features = model_kwargs.get("input_features")
-        if input_features is not None and not isinstance(input_features, GeneratorType):
+        if input_features is not None and not isinstance(input_features, (GeneratorType, BaseInputStreamer)):
             audio_length = input_features.shape[-1]
             num_audio_tokens = math.ceil(audio_length / self.config.audio_length_per_tok)
             # Stash for use in _prepare_generated_length
@@ -891,7 +891,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
             else:
                 generation_config._voxtral_set_max_length = False
 
-        elif isinstance(input_features, GeneratorType):
+        elif isinstance(input_features, (GeneratorType, BaseInputStreamer)):
             # In streaming mode, generation length is controlled by stream exhaustion only
             generation_config.max_new_tokens = None
             generation_config.max_length = int(1e9)

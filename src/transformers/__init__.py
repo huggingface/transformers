@@ -111,7 +111,10 @@ _import_structure = {
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
     "generation": [
+        "AsyncAudioIteratorStreamer",
         "AsyncTextIteratorStreamer",
+        "AudioIteratorStreamer",
+        "BaseInputStreamer",
         "CompileConfig",
         "ContinuousBatchingConfig",
         "GenerationConfig",
@@ -576,7 +579,10 @@ if TYPE_CHECKING:
 
     # Generation
     from .generation import AlternatingCodebooksLogitsProcessor as AlternatingCodebooksLogitsProcessor
+    from .generation import AsyncAudioIteratorStreamer as AsyncAudioIteratorStreamer
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
+    from .generation import AudioIteratorStreamer as AudioIteratorStreamer
+    from .generation import BaseInputStreamer as BaseInputStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
