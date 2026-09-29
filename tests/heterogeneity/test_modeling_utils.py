@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+import pickle
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from parameterized import parameterized
 
@@ -41,7 +43,10 @@ if is_torch_available():
         Llama4ForCausalLM,
         LlamaConfig,
         LlamaForCausalLM,
+        LlamaForSequenceClassification,
+        LlamaModel,
         NemotronHForCausalLM,
+        PreTrainedConfig,
         PreTrainedModel,
         StaticCache,
     )
@@ -103,9 +108,10 @@ if is_torch_available():
     class _MaskSelectingToyLayer(torch.nn.Module):
         def __init__(self, config, layer_idx):
             super().__init__()
+            self.scale = torch.nn.Parameter(torch.tensor(2.0))
 
         def forward(self, hidden_states, position_ids=None, attention_mask=None):
-            return attention_mask
+            return hidden_states * self.scale, attention_mask
 
     class _MaskSelectingToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = HeterogeneousModelingSpec(
@@ -116,6 +122,23 @@ if is_torch_available():
         def __init__(self, config, layer_idx=0):
             super().__init__(config)
             self.layer = _MaskSelectingToyLayer(config, layer_idx=layer_idx)
+
+    class _TwoTowerConfig(PreTrainedConfig):
+        model_type = "two_tower_test"
+        sub_configs = {"text_config": LlamaConfig}
+
+        def __init__(self, text_config=None, **kwargs):
+            self.text_config = text_config
+            super().__init__(**kwargs)
+
+    class _TwoTowerModel(PreTrainedModel):
+        config_class = _TwoTowerConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.first = LlamaModel(config.text_config)
+            self.second = LlamaModel(config.text_config)
+            self.post_init()
 
 
 @require_torch
@@ -162,6 +185,24 @@ class TestHeterogeneousModeling(unittest.TestCase):
             for layer_config in layer_configs:
                 self.assertEqual(getattr(layer_config, attribute), requested)
 
+    def test_quantized_flag_propagates_to_layer_configs(self):
+        config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
+        model = build_model(config, LlamaForCausalLM)
+
+        # Quantizers set this after construction; attention reads it from its layer config.
+        model.config._is_quantized = True
+
+        for layer in model.model.layers:
+            self.assertTrue(getattr(layer.self_attn.config, "_is_quantized", False))
+
+    def test_inherited_init_finalizes_layer_configs(self):
+        config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
+
+        model = build_model(config, LlamaForSequenceClassification)
+
+        self.assertTrue(config.generic_modeling_applied)
+        self.assertIs(config._heterogeneity_spec.model_layer_configs[1], model.model.layers[1].self_attn.config)
+
     def test_failed_outer_init_does_not_publish_layer_configs(self):
         config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
 
@@ -181,6 +222,32 @@ class TestHeterogeneousModeling(unittest.TestCase):
         for layer_idx, layer in enumerate(model.model.layers):
             self.assertIs(config._heterogeneity_spec.model_layer_configs[layer_idx], layer.self_attn.config)
 
+    def test_used_config_cannot_construct_another_model(self):
+        config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
+        build_model(config, LlamaForCausalLM)
+        copied_config = copy.deepcopy(config)
+
+        with self.assertRaisesRegex(ValueError, "was already used to construct a model"):
+            LlamaForCausalLM(copied_config)
+
+    def test_composite_publishes_sub_config_layer_configs_only_after_success(self):
+        text_config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
+        config = _TwoTowerConfig(text_config=text_config)
+
+        def fail_post_init(model):
+            raise RuntimeError("Composite model initialization failed")
+
+        with patch.object(_TwoTowerModel, "post_init", fail_post_init):
+            with self.assertRaisesRegex(RuntimeError, "Composite model initialization failed"):
+                _TwoTowerModel(config)
+
+        self.assertFalse(text_config.generic_modeling_applied)
+
+        model = _TwoTowerModel(config)
+        for layer_idx, (first_layer, second_layer) in enumerate(zip(model.first.layers, model.second.layers)):
+            self.assertIs(first_layer.self_attn.config, second_layer.self_attn.config)
+            self.assertIs(text_config.per_layer_config[layer_idx], first_layer.self_attn.config)
+
     def test_error_missing_skip_descriptor(self):
         """Requesting a skip type without a matching descriptor should raise ValueError."""
         config = tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
@@ -195,16 +262,49 @@ class TestHeterogeneousModeling(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "No-op descriptors are missing"):
                 build_model(config, LlamaForCausalLM)
 
-    def test_class_specific_skip_replacement_takes_precedence(self):
+    def test_error_when_spec_layer_cls_is_not_constructed(self):
+        """If the model never builds the spec's layer class, init should fail."""
+        config = tiny_llama_config(per_layer_config={0: {"skip": ["attention"]}})
+        # The model builds a `_ToyDecoderLayer`, but the spec is looking for `_MaskSelectingToyLayer`, so it never
+        # catches anything. Without the check, layer 0 would just quietly keep its attention.
+        spec = _toy_modeling_spec(_MaskSelectingToyLayer, _ToyNoOpAttention)
+        with patch.object(_SingleLayerToyModel, "_heterogeneous_modeling_spec", spec):
+            with self.assertRaisesRegex(ValueError, "no `_MaskSelectingToyLayer` layer was constructed"):
+                _SingleLayerToyModel(config)
+
+    @parameterized.expand([("class_specific_match", True), ("generic_match", False)])
+    def test_skip_replacement_selection(self, _, class_matches):
         spec = _toy_modeling_spec(_ToyDecoderLayer, _ToyNoOpAttention)
+        member_class = _ToyAttention if class_matches else torch.nn.Linear
         spec.skip_descriptors["attention"] = {
             "self_attn": _ToyNoOpAttention,
-            ("self_attn", _ToyAttention): _ClassSpecificNoOpAttention,
+            ("self_attn", member_class): _ClassSpecificNoOpAttention,
         }
         with patch.object(_SingleLayerToyModel, "_heterogeneous_modeling_spec", spec):
             model = _SingleLayerToyModel(_toy_config(intermediate_size=32, skip_attention=True))
 
-        self.assertIsInstance(model.layer.self_attn, _ClassSpecificNoOpAttention)
+        expected_class = _ClassSpecificNoOpAttention if class_matches else _ToyNoOpAttention
+        self.assertIs(type(model.layer.self_attn), expected_class)
+
+    def test_unmatched_skip_member_raises_before_replacing_any_members(self):
+        config = tiny_llama_config(per_layer_config={3: {"skip": ["attention"]}})
+        fixture = MODEL_FIXTURES["llama"]
+        spec = fixture.spec_factory()
+        norm_replacement = Mock(wraps=torch.nn.Identity)
+        spec.skip_descriptors["attention"] = {
+            "input_layernorm": norm_replacement,
+            ("self_attn", torch.nn.Linear): torch.nn.Identity,
+            ("self_attn", torch.nn.Conv1d): torch.nn.Identity,
+        }
+
+        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", spec, create=True):
+            with self.assertRaisesRegex(
+                ValueError,
+                "Layer 3.*'attention'.*no replacement.*'self_attn'.*LlamaAttention",
+            ):
+                build_model(config, LlamaForCausalLM)
+
+        norm_replacement.assert_not_called()
 
     @parameterized.expand([("no_main_skips", []), ("main_layers_skipped", ["attention", "mlp"])])
     def test_mtp_model_applies_per_layer_config_and_skips(self, _, main_skips):
@@ -269,8 +369,26 @@ class TestHeterogeneousModeling(unittest.TestCase):
         model = _MaskSelectingToyModel(_toy_config(intermediate_size=64), layer_idx=2)
         masks = AttentionMasksByLayerIdx({0: "layer-zero-mask", 2: "layer-two-mask"})
 
-        self.assertEqual(model.layer(torch.zeros(1), attention_mask=masks), "layer-two-mask")
-        self.assertEqual(model.layer(torch.zeros(1), None, masks), "layer-two-mask")
+        self.assertEqual(model.layer(torch.zeros(1), attention_mask=masks)[1], "layer-two-mask")
+        self.assertEqual(model.layer(torch.zeros(1), None, masks)[1], "layer-two-mask")
+
+    @parameterized.expand([("deepcopy",), ("data_parallel",), ("pickle",)])
+    def test_copied_layer_uses_its_own_parameters(self, copy_method):
+        model = _MaskSelectingToyModel(_toy_config(intermediate_size=64), layer_idx=2)
+        if copy_method == "deepcopy":
+            copied_layer = copy.deepcopy(model.layer)
+        elif copy_method == "data_parallel":
+            # Exercise DataParallel's shallow replication without requiring GPUs.
+            copied_layer = model.layer._replicate_for_data_parallel()
+        else:
+            copied_layer = pickle.loads(pickle.dumps(model.layer))
+        copied_layer.scale = torch.nn.Parameter(torch.tensor(7.0))
+        masks = AttentionMasksByLayerIdx({0: "layer-zero-mask", 2: "layer-two-mask"})
+
+        output, selected_mask = copied_layer(torch.tensor(3.0), attention_mask=masks)
+
+        torch.testing.assert_close(output, torch.tensor(21.0))
+        self.assertEqual(selected_mask, "layer-two-mask")
 
     def test_sequential_heterogeneous_models_no_interference(self):
         """Two heterogeneous models built sequentially should each have correct per-layer weights."""

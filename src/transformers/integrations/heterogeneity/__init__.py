@@ -17,7 +17,7 @@ from ...utils import is_torch_available
 from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, HeterogeneousConfigMixin
 from .heterogeneous_modeling_spec import (
     HeterogeneousModelingSpec,
-    SkipDescriptors,
+    SkipDescriptor,
     get_heterogeneous_modeling_spec,
     nest_skip_descriptor_paths,
 )
@@ -37,7 +37,7 @@ __all__ = [
     "LayerIdxFromModelInitStack",
     "LayerIdxResolver",
     "ReturnEntry",
-    "SkipDescriptors",
+    "SkipDescriptor",
     "apply_generic_heterogeneous_modeling_if_applicable",
     "get_heterogeneous_modeling_spec",
     "get_skip_replacement_factory",

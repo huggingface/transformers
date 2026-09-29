@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Hashable
+from collections.abc import Callable
 from functools import partial, wraps
 from inspect import signature, unwrap
 from typing import TYPE_CHECKING, Any
@@ -83,6 +83,8 @@ def _get_cache_geometry(
     query_offset = past_key_values.get_query_offset(layer_idx)
     key_value_length, key_value_offset = past_key_values.get_mask_sizes(query_length, layer_idx)
     geometry = (query_offset, key_value_length, key_value_offset)
+    # Only Python ints are compared: comparing tensor values would force a device sync, or a graph break under
+    # `torch.compile`. An initialized `StaticLayer` returns its query offset as a tensor, so this returns `None` for it.
     return geometry if all(type(value) is int for value in geometry) else None
 
 
@@ -92,9 +94,6 @@ def _get_mask_reuse_key(
     query_length: Any,
     layer_idx: int,
 ) -> tuple[Any, ...] | None:
-    if not all(isinstance(value, Hashable) for value in mask_settings):
-        return None
-
     cache_geometry = _get_cache_geometry(past_key_values, query_length, layer_idx)
     if cache_geometry is None:
         return None
@@ -110,7 +109,10 @@ def _create_attention_masks_by_layer_idx(
     **kwargs: Any,
 ) -> AttentionMasksByLayerIdx:
     attention_masks = AttentionMasksByLayerIdx()
-    masks_by_reuse_key: dict[tuple[Any, ...], Any] = {}
+    # Keys are compared with `==` instead of being stored in a dict. Under `torch.compile`, a dict lookup ties the
+    # compiled graph to the exact cache length in the key, so it would recompile at every decoding step. `==` only
+    # needs the lengths to be equal to each other.
+    reuse_keys_and_layer_indices: list[tuple[tuple[Any, ...], int]] = []
     past_key_values = kwargs.get("past_key_values")
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
@@ -139,13 +141,18 @@ def _create_attention_masks_by_layer_idx(
             layer_idx,
         )
 
-        if reuse_key is not None and reuse_key in masks_by_reuse_key:
-            attention_masks[layer_idx] = masks_by_reuse_key[reuse_key]
-            continue
+        if reuse_key is not None:
+            reused_layer_idx = next(
+                (idx for key, idx in reuse_keys_and_layer_indices if key == reuse_key),
+                None,
+            )
+            if reused_layer_idx is not None:
+                attention_masks[layer_idx] = attention_masks[reused_layer_idx]
+                continue
 
         attention_masks[layer_idx] = create_mask_fn(layer_config, *args, **layer_kwargs)
         if reuse_key is not None:
-            masks_by_reuse_key[reuse_key] = attention_masks[layer_idx]
+            reuse_keys_and_layer_indices.append((reuse_key, layer_idx))
 
     return attention_masks
 

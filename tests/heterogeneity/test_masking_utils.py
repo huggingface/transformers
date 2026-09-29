@@ -24,7 +24,7 @@ if is_torch_available():
     import torch
 
     from tests.heterogeneity.testing_utils import tiny_llama4_config, tiny_llama_config
-    from transformers import DynamicCache
+    from transformers import DynamicCache, StaticCache
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.masking_utils import (
         create_bidirectional_mask,
@@ -146,6 +146,31 @@ class TestHeterogeneousMasking(unittest.TestCase):
 
         self.assertEqual(mask[0].shape[-1], 2)
         self.assertEqual(mask[1].shape[-1], 3)
+
+    def test_mask_reuse_does_not_recompile_when_cache_grows(self):
+        config = tiny_llama_config(
+            num_hidden_layers=2,
+            sliding_window=None,
+            per_layer_config={0: {"sliding_window": 16}, 1: {"sliding_window": 16}},
+        )
+        config._attn_implementation = "eager"
+        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
+        cache = StaticCache(config=config, max_cache_len=32)
+        states = torch.randn(1, config.num_key_value_heads, 1, config.head_dim)
+        inputs_embeds = torch.randn(1, 1, config.hidden_size)
+        # Start from a clean compile cache, since other tests compile the same mask wrapper
+        torch._dynamo.reset()
+        # Without `dynamic=True`, the first change in cache length would recompile once, which is expected
+        create_mask = torch.compile(create_sliding_window_causal_mask, backend="eager", dynamic=True)
+
+        # Static sliding window layers track their length as a Python int, which grows with every update
+        with torch._dynamo.config.patch(error_on_recompile=True):
+            for _ in range(3):
+                for layer_idx in range(config.num_hidden_layers):
+                    cache.update(states, states, layer_idx=layer_idx)
+                mask = create_mask(config, inputs_embeds, attention_mask=None, past_key_values=cache)
+
+        self.assertIs(mask[0], mask[1])
 
     def test_chunked_attention_masks_are_keyed_by_layer_idx(self):
         config = tiny_llama4_config(

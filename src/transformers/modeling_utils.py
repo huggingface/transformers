@@ -1246,8 +1246,7 @@ class PreTrainedModel(
             cls.config_class = full_annotation
 
         # Support generic heterogeneous modeling
-        if "__init__" in cls.__dict__:
-            cls.__init__ = support_generic_heterogeneous_modeling(cls.__init__)
+        cls.__init__ = support_generic_heterogeneous_modeling(cls.__init__)
 
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()

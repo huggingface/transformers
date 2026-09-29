@@ -52,7 +52,7 @@ patches the initialization of the architecture's layer class so that:
    with modules that turn them into a no-op.
 3. Sliding-window and chunked attention masks are packaged in a container keyed by the indices of the layers that consume them.
    Layers can share a mask when their mask settings and cache geometry match. The appropriate mask is selected
-   automatically before each layer's forward call.
+   automatically by a forward pre-hook on each layer.
 
 All of this is driven by a single declaration, the `HeterogeneousModelingSpec`.
 
@@ -162,6 +162,9 @@ skip_descriptors = {
         ),
         ("mixer", NemotronHMamba2Mixer): get_skip_replacement_factory(
             NemotronHMamba2Mixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+        ),
+        ("mixer", NemotronHMLP): get_skip_replacement_factory(
+            NemotronHMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
         ),
     },
 }

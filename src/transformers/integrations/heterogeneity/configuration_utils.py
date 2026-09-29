@@ -316,7 +316,7 @@ class HeterogeneousConfigMixin:
     def __setattr__(self, key: str, value: Any) -> None:
         super().__setattr__(key, value)
         if (
-            key in ("_attn_implementation_internal", "_experts_implementation_internal")
+            key in ("_attn_implementation_internal", "_experts_implementation_internal", "_is_quantized")
             and self.generic_modeling_applied
         ):
             # Propagate the changed settings to the configs by the layers

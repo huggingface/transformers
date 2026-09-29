@@ -29,19 +29,19 @@ if TYPE_CHECKING:
 
 
 # Class-specific (member name, member class) keys take precedence over plain member names.
-SkipDescriptors: TypeAlias = dict[str | tuple[str, type], Callable[[], "nn.Module"]]
+SkipDescriptor: TypeAlias = dict[str | tuple[str, type], Callable[[], "nn.Module"]]
 
 
 @dataclass(frozen=True)
 class HeterogeneousModelingSpec:
     layer_cls: type[nn.Module]
     layer_idx_resolver: LayerIdxResolver
-    skip_descriptors: dict[str, SkipDescriptors] | None = None
+    skip_descriptors: dict[str, SkipDescriptor] | None = None
 
 
 def nest_skip_descriptor_paths(
-    skip_descriptors: dict[str, SkipDescriptors] | None, parent_path: str
-) -> dict[str, SkipDescriptors] | None:
+    skip_descriptors: dict[str, SkipDescriptor] | None, parent_path: str
+) -> dict[str, SkipDescriptor] | None:
     """Return new skip descriptors whose replacement paths are nested under a parent attribute path.
 
     Args:

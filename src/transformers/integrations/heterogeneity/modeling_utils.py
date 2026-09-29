@@ -20,11 +20,11 @@ import inspect
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import partial, update_wrapper, wraps
+from functools import partial, wraps
 from typing import TYPE_CHECKING, Any
 
 from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import (
-    SkipDescriptors,
+    SkipDescriptor,
     get_heterogeneous_modeling_spec,
 )
 from transformers.integrations.heterogeneity.layer_idx_resolvers import LayerIdxResolver
@@ -42,15 +42,15 @@ class _LayerInitContext:
     model: PreTrainedModel
     layer_cls: type[nn.Module]
     layer_idx_resolver: LayerIdxResolver
-    skip_descriptors: dict[str, SkipDescriptors]
+    skip_descriptors: dict[str, SkipDescriptor]
     model_layer_configs: dict[int, PreTrainedConfig]
 
 
 _layer_init_contexts: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
     "_layer_init_contexts", default=()
 )
-_model_init_contexts: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = contextvars.ContextVar(
-    "_model_init_contexts", default=()
+_initializing_models: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = contextvars.ContextVar(
+    "_initializing_models", default=()
 )
 _layer_patching_lock = threading.Lock()
 
@@ -68,6 +68,14 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     """
     if not model.config.is_heterogeneous:
         return
+
+    if model.config.generic_modeling_applied:
+        raise ValueError(
+            f"This {type(model.config).__name__}, or the config it was copied from, was already used to construct a "
+            "model with generic heterogeneous modeling. Its `per_layer_config` returns the layer configs resolved "
+            "when that model was built, so later changes to the global config would not reach a new model. Create a "
+            "new config with `type(config).from_dict(config.to_dict())`."
+        )
 
     heterogeneous_modeling_spec = get_heterogeneous_modeling_spec(model)
     if heterogeneous_modeling_spec is None:
@@ -97,46 +105,57 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
     """Create the model-initialization scope required by ``apply_generic_heterogeneous_modeling_if_applicable``.
 
     That function runs inside ``PreTrainedModel.__init__`` and registers temporary state that is used later, when the
-    model subclass creates its layers. This wrapper keeps that state available across the model's ``super().__init__()``
-    chain and restores the previous state when initialization finishes. Generic heterogeneous modeling is marked as
-    applied only after construction succeeds. Nested models sharing a config collect their layer configs together and
-    publish them when the outermost applicable initialization succeeds. If generic heterogeneous modeling is not applied,
-    the wrapper does not change model initialization.
+    model subclass creates its layers. This wrapper keeps that state available across the model's
+    ``super().__init__()`` chain and restores the previous state when initialization finishes. Generic heterogeneous
+    modeling is marked as applied only after the root model's construction succeeds. If generic heterogeneous modeling
+    is not applied, the wrapper does not change model initialization.
     """
     if getattr(orig_init, "_scoped_for_heterogeneous_modeling", False):
         return orig_init
 
     @wraps(orig_init)
     def _scoped_init(self, *args, **kwargs):
-        model_init_contexts = _model_init_contexts.get()
-        if any(model is self for model in model_init_contexts):
+        initializing_models = _initializing_models.get()
+        # The model's `super().__init__()` chain calls the wrapper of each class in its MRO; the first call owns
+        # the scope.
+        if any(model is self for model in initializing_models):
             return orig_init(self, *args, **kwargs)
 
-        model_init_contexts_token = _model_init_contexts.set((*model_init_contexts, self))
+        # Mark this model as initializing
+        initializing_models_token = _initializing_models.set((*initializing_models, self))
         # Setting the current value gives us a token to restore it after initialization.
         layer_init_contexts_token = _layer_init_contexts.set(_layer_init_contexts.get())
         try:
             result = orig_init(self, *args, **kwargs)
+        except BaseException:
+            # Initialization failed, so discard the layer init contexts registered during it
+            _layer_init_contexts.reset(layer_init_contexts_token)
+            raise
+        finally:
+            _initializing_models.reset(initializing_models_token)
 
-            # Nested models can share a config. Its first context belongs to the outermost model,
-            # which must finish successfully before we publish the collected layer configs.
-            outermost_context = next(
-                (context for context in _layer_init_contexts.get() if context.model.config is self.config), None
-            )
-            if outermost_context is not None and outermost_context.model is self:
-                self.config._heterogeneity_spec.model_layer_configs = outermost_context.model_layer_configs
-
+        if initializing_models:
+            # Models containing this one are still initializing
             return result
+        try:
+            layer_init_contexts = _layer_init_contexts.get()
+            # Validate all contexts before publishing any, so that a failed initialization publishes nothing
+            for context in layer_init_contexts:
+                _validate_layer_configs_collected(context)
+            # The root model completed initialization, so now we can set the models' layer configs on their configs
+            for context in layer_init_contexts:
+                context.model.config._heterogeneity_spec.model_layer_configs = context.model_layer_configs
         finally:
             _layer_init_contexts.reset(layer_init_contexts_token)
-            _model_init_contexts.reset(model_init_contexts_token)
+        return result
 
     _scoped_init._scoped_for_heterogeneous_modeling = True
     return _scoped_init
 
 
 def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
-    """Patch ``layer_cls.__init__`` to resolve each layer's index and pass its matching per-layer config to the original init function."""
+    """Patch ``layer_cls.__init__`` to resolve each layer's index and pass its matching per-layer config to the
+    original init function."""
     if getattr(layer_cls.__init__, "_heterogeneity_layer_cls", None) is layer_cls:
         return
 
@@ -173,60 +192,80 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
             )
 
             # --- Apply per-layer config ---
-            layer_config = config.per_layer_config[layer_idx]
+            layer_config = context.model_layer_configs.get(layer_idx)
+            if layer_config is None:
+                layer_config = config.per_layer_config[layer_idx]
             orig_layer_init(self, layer_config, *args, **kwargs)
 
             # --- Replace skipped sublayers ---
             for skip_type in layer_config.skip:
                 _apply_skip_descriptor(
                     layer=self,
+                    skip_type=skip_type,
                     skip_descriptor=context.skip_descriptors[skip_type],
                     layer_idx=layer_idx,
                 )
 
-            # --- Patch forward for attention mask selection ---
-            _patch_layer_forward_for_attention_mask_layer_selection(layer=self, layer_idx=layer_idx)
+            # --- Register attention mask selection forward pre-hook ---
+            _register_layer_attention_mask_selection_hook(layer=self, layer_idx=layer_idx)
+
             context.model_layer_configs[layer_idx] = layer_config
 
         _patched_layer_init._heterogeneity_layer_cls = layer_cls
         layer_cls.__init__ = _patched_layer_init
 
 
-def _patch_layer_forward_for_attention_mask_layer_selection(
+def _register_layer_attention_mask_selection_hook(
     *,
     layer: nn.Module,
     layer_idx: int,
 ) -> None:
-    orig_forward = layer.forward
     positional_names = [
         name
-        for name, parameter in inspect.signature(orig_forward).parameters.items()
+        for name, parameter in inspect.signature(layer.forward).parameters.items()
         if parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     ]
     mask_position = positional_names.index("attention_mask") if "attention_mask" in positional_names else None
+    layer.register_forward_pre_hook(
+        partial(_select_attention_mask_by_layer_idx, layer_idx=layer_idx, mask_position=mask_position),
+        with_kwargs=True,
+    )
 
-    def _patched_forward(orig_forward, /, *args, **kwargs):
-        if mask_position is not None and mask_position < len(args):
-            attention_mask = args[mask_position]
-            mask_is_positional = True
-        else:
-            attention_mask = kwargs.get("attention_mask")
-            mask_is_positional = False
 
+def _select_attention_mask_by_layer_idx(
+    module: nn.Module,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    layer_idx: int,
+    mask_position: int | None,
+) -> tuple[tuple[Any, ...], dict[str, Any]] | None:
+    if mask_position is not None and mask_position < len(args):
+        # Mask is positionally passed
+        attention_mask = args[mask_position]
         if isinstance(attention_mask, AttentionMasksByLayerIdx):
-            if mask_is_positional:
-                args = (*args[:mask_position], attention_mask[layer_idx], *args[mask_position + 1 :])
-            else:
-                kwargs["attention_mask"] = attention_mask[layer_idx]
+            return (*args[:mask_position], attention_mask[layer_idx], *args[mask_position + 1 :]), kwargs
+    else:
+        # Mask is keyword-passed
+        attention_mask = kwargs.get("attention_mask")
+        if isinstance(attention_mask, AttentionMasksByLayerIdx):
+            kwargs["attention_mask"] = attention_mask[layer_idx]
+            return args, kwargs
 
-        return orig_forward(*args, **kwargs)
 
-    # Use partial so a copied layer calls its own forward method.
-    layer.forward = update_wrapper(partial(_patched_forward, orig_forward), orig_forward)
+def _validate_layer_configs_collected(context: _LayerInitContext) -> None:
+    if not context.model_layer_configs and context.model.config.num_hidden_layers > 0:
+        layer_cls_name = context.layer_cls.__name__
+        raise ValueError(
+            f"The heterogeneous modeling spec of {type(context.model).__name__} targets `{layer_cls_name}`, but no "
+            f"`{layer_cls_name}` layer was constructed with the model's config. Check that the spec's `layer_cls` is "
+            "the layer class the model constructs, and that the layers receive the model's config object itself, not a "
+            "copy."
+        )
 
 
 def _validate_skip_descriptors(
-    per_layer_skip_types: list[list[str]], skip_descriptors: dict[str, SkipDescriptors]
+    per_layer_skip_types: list[list[str]], skip_descriptors: dict[str, SkipDescriptor]
 ) -> None:
     skip_types = {skip_type for layer_skip_types in per_layer_skip_types for skip_type in layer_skip_types}
     missing_descriptors = skip_types - skip_descriptors.keys()
@@ -237,12 +276,14 @@ def _validate_skip_descriptors(
 def _apply_skip_descriptor(
     *,
     layer: nn.Module,
-    skip_descriptor: SkipDescriptors,
+    skip_type: str,
+    skip_descriptor: SkipDescriptor,
     layer_idx: int,
 ) -> None:
     """Apply the selected skip replacements."""
     generic_targets = {}
     class_specific_targets = {}
+    targeted_members = set()
 
     for key, replacement_factory in skip_descriptor.items():
         if isinstance(key, tuple):
@@ -253,9 +294,11 @@ def _apply_skip_descriptor(
 
         if not _hasattr_by_path(layer, member_name):
             raise AttributeError(
-                f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute {member_name}"
+                f"Layer {layer_idx} skips '{skip_type}', but class {layer.__class__.__name__} "
+                f"has no attribute '{member_name}'."
             )
 
+        targeted_members.add(member_name)
         if cls is None:
             generic_targets[member_name] = replacement_factory
             continue
@@ -265,12 +308,20 @@ def _apply_skip_descriptor(
 
         if member_name in class_specific_targets:
             raise ValueError(
-                f"Multiple class-specific skip replacements match layer {layer_idx} "
-                f"attribute {member_name} in class {layer.__class__.__name__}"
+                f"Layer {layer_idx} skips '{skip_type}', but multiple class-specific replacements "
+                f"match member '{member_name}' in class {layer.__class__.__name__}."
             )
         class_specific_targets[member_name] = replacement_factory
 
     selected_targets = generic_targets | class_specific_targets
+    for member_name in targeted_members:
+        if member_name not in selected_targets:
+            member_cls = type(_getattr_by_path(layer, member_name))
+            raise ValueError(
+                f"Layer {layer_idx} skips '{skip_type}', but that descriptor has no replacement for member "
+                f"'{member_name}' with class {member_cls.__name__}. Add a class-specific or generic replacement."
+            )
+
     for member_name, replacement_factory in selected_targets.items():
         original = _getattr_by_path(layer, member_name)
         replacement = replacement_factory()
