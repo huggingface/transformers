@@ -275,6 +275,15 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    image_like_kwargs = {
+        "description": """
+    Developer flag for additional image like inputs that will also be preprocessed. Only use this if
+    passing the inputs as kwarg doesn't work. For example, `preprocess(images, masks=masks)` is the
+    preferred option but results in argument priority issues for some models. In those cases
+    `preprocess(images, image_like_inputs={"masks": masks})` can be used instead.
+    """
+    }
+
     # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
     __kwargs__ = {
         "description": """
