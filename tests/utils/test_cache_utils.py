@@ -817,6 +817,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         _ = model(**inputs)
         _ = model.generate(**inputs, max_new_tokens=2, cache_implementation="hybrid")
 
+    @slow
     @require_torch_accelerator
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_gptj_model(self, cache_implementation):
