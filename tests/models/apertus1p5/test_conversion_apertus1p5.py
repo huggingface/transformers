@@ -64,14 +64,11 @@ class Apertus1p5ConversionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "float32"):
             conversion._check_fp32_tokenizer_source("audio tokenizer", {"w": torch.ones(2, dtype=torch.bfloat16)})
 
-    def test_build_config_stamps_architectures(self):
+    def test_build_config_stamps_loading_metadata(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp = Path(tmp_dir)
             for source in ("apertus", "vision", "audio"):
                 (tmp / source).mkdir()
-            (tmp / "apertus" / "config.json").write_text(
-                json.dumps({"model_type": "apertus", "architectures": ["ApertusForCausalLM"]})
-            )
             (tmp / "vision" / "config.json").write_text(
                 json.dumps({**Apertus1p5VisionTokenizerConversionTest.ORIGINAL_CONFIG, "codebook_size": 131072})
             )
@@ -85,15 +82,27 @@ class Apertus1p5ConversionTest(unittest.TestCase):
                 )
             )
 
-            config = conversion.build_config(str(tmp / "apertus"), str(tmp / "vision"), str(tmp / "audio"))
-
-        self.assertEqual(config.architectures, ["Apertus1p5ForConditionalGeneration"])
-        self.assertIsInstance(config.text_config, Apertus1p5TextConfig)
-        self.assertIsInstance(config.audio_config, WavTokenizerConfig)
-        self.assertEqual(config.text_config.model_type, "apertus1p5_text")
-        # source entrypoints must not leak into nested sub-configs
-        self.assertIsNone(getattr(config.text_config, "architectures", None))
-        self.assertIsNone(getattr(config.audio_config, "architectures", None))
+            for dtype_fields, expected_dtype in (
+                ({}, "bfloat16"),
+                ({"dtype": "bfloat16"}, "bfloat16"),
+                ({"dtype": "float32"}, "float32"),
+                ({"torch_dtype": "float32"}, "float32"),
+            ):
+                with self.subTest(dtype_fields=dtype_fields):
+                    (tmp / "apertus" / "config.json").write_text(
+                        json.dumps({"model_type": "apertus", "architectures": ["ApertusForCausalLM"], **dtype_fields})
+                    )
+                    config = conversion.build_config(str(tmp / "apertus"), str(tmp / "vision"), str(tmp / "audio"))
+                    config.save_pretrained(tmp / "output")
+                    saved_config = json.loads((tmp / "output" / "config.json").read_text())
+                    self.assertEqual(saved_config["dtype"], expected_dtype)
+                    self.assertEqual(config.architectures, ["Apertus1p5ForConditionalGeneration"])
+                    self.assertIsInstance(config.text_config, Apertus1p5TextConfig)
+                    self.assertIsInstance(config.audio_config, WavTokenizerConfig)
+                    self.assertEqual(config.text_config.model_type, "apertus1p5_text")
+                    # source entrypoints must not leak into nested sub-configs
+                    self.assertIsNone(getattr(config.text_config, "architectures", None))
+                    self.assertIsNone(getattr(config.audio_config, "architectures", None))
 
     def test_remapped_sources_prunes_audio_decoder(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
