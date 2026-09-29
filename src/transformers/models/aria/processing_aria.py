@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin
-from ...utils import TensorType, auto_docstring
+from ...utils import auto_docstring
 from ..auto import AutoTokenizer
 
 
@@ -51,7 +51,6 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
             "max_image_size": 980,
             "split_image": False,
         },
-        "return_tensors": TensorType.PYTORCH,
     }
 
 

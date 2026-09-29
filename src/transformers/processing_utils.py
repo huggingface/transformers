@@ -456,13 +456,13 @@ class ProcessingKwargs(TypedDict, total=False):
     ```
     """
 
-    _defaults = {}  # Deprecated, set defaults as class variables on ProcessorMixin instead
+    _defaults = {}  # Deprecated, set defaults as class variables on the processor class inheriting from ProcessorMixin instead
 
     text_kwargs: TextKwargs
     images_kwargs: ImagesKwargs
     videos_kwargs: VideosKwargs
     audio_kwargs: AudioKwargs
-    common_kwargs: dict[str, Any]
+
     return_mm_token_type_ids: bool
     return_text_replacement_offsets: bool
 
@@ -1608,7 +1608,7 @@ class ProcessorMixin(PushToHubMixin):
                 ```
             7) Recommended: processor attributes have lowest priority.
                 ```python
-                processor_class(..., text_kwargs={"padding": "max_length"}, common_kwargs={"return_tensors": "pt"})
+                processor = MyProcessor(..., text_kwargs={"padding": "max_length"})
                 ```
 
                 Defaults can be registered as class variables and have lower priority than kwargs passed at initialization time:
@@ -1617,11 +1617,6 @@ class ProcessorMixin(PushToHubMixin):
                     text_kwargs = {
                         "padding": "max_length",
                         "max_length": 64,
-                    }
-                    # Common kwargs have lower priority than modality specific kwargs.
-                    # This matches behavior when passing kwargs directly to __call__.
-                    common_kwargs = {
-                        "return_tensors": "pt",
                     }
                 ```
         Args:
@@ -1665,17 +1660,14 @@ class ProcessorMixin(PushToHubMixin):
         possible_modality_keywords = {"text", "audio", "videos", "images"}
         used_keys = set()
 
-        common_kwargs = getattr(self, "common_kwargs", {})
-
         # 7): flat, not modality-specific processor attributes
         for key in ModelProcessorKwargs.__annotations__:
-            if key != "common_kwargs" and key not in default_kwargs and hasattr(self, key):
+            if key not in default_kwargs and hasattr(self, key):
                 default_kwargs[key] = copy.copy(getattr(self, key))
 
         # get defaults from set model processor kwargs if they exist
         for modality in map_preprocessor_kwargs:
             # 7): modality-specific processor attributes
-            default_kwargs[modality].update(common_kwargs.copy())
             default_kwargs[modality].update(getattr(self, modality, {}).copy())
 
             # 6): _defaults overrides for BC

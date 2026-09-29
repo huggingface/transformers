@@ -528,7 +528,6 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
             "max_image_size": 980,
             "split_image": False,
         },
-        "return_tensors": TensorType.PYTORCH,
     }
 
 
