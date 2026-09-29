@@ -22,7 +22,7 @@ import io
 import math
 import os
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
 from urllib.parse import urlparse
@@ -65,6 +65,10 @@ if is_torchcodec_available():
 AudioInput = Union[np.ndarray, "torch.Tensor", list[np.ndarray], list["torch.Tensor"]]
 
 
+class _DefaultStftValue(int):
+    """Resolved STFT default that remains omitted from serialized configuration."""
+
+
 @dataclass(frozen=True, eq=False, unsafe_hash=True)
 class StftConfig(DataclassDict):
     _renamed_fields = {"frame_extension": "extra_samples_per_frame"}
@@ -89,6 +93,24 @@ class StftConfig(DataclassDict):
     # "complex64": the FFT output is rounded through complex64 before the float64 magnitudes.
     fft_dtype: str | None = None
     magnitude_mode: str | None = None
+
+    def __post_init__(self):
+        if self.win_length is None or isinstance(self.win_length, _DefaultStftValue):
+            object.__setattr__(self, "win_length", _DefaultStftValue(self.n_fft))
+        if self.hop_length is None or isinstance(self.hop_length, _DefaultStftValue):
+            object.__setattr__(self, "hop_length", _DefaultStftValue(self.win_length // 2))
+
+    def __contains__(self, key):
+        if key not in {f.name for f in fields(self)}:
+            return False
+        value = getattr(self, key)
+        return value is not None and not isinstance(value, _DefaultStftValue)
+
+    def __iter__(self):
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if value is not None and not isinstance(value, _DefaultStftValue):
+                yield f.name, value.to_dict() if isinstance(value, DataclassDict) else value
 
 
 @dataclass(frozen=True, eq=False, unsafe_hash=True)
