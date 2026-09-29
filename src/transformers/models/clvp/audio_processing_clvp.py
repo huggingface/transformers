@@ -84,10 +84,10 @@ class ClvpAudioProcessor(ClvpAudioProcessorMixin, TorchAudioBackend):
         # to match the legacy feature extractor's precision (same recipe as the numpy sibling).
         mel_floor = spectrogram_config.mel_floor
         features = torch.log(
-            torch.maximum(torch.tensor(mel_floor, dtype=features.dtype, device=features.device), features)
+            torch.maximum(self._host_to_device(mel_floor, features.device, dtype=features.dtype), features)
         )
         if mel_norms is not None:
-            mel_norms = torch.as_tensor(mel_norms, dtype=features.dtype, device=features.device)[:, None]
+            mel_norms = self._host_to_device(mel_norms, features.device, dtype=features.dtype)[:, None]
             features = features / mel_norms
         return features.to(torch.float32)
 

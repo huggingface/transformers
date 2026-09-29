@@ -163,9 +163,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
         audio = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate, **kwargs)
         return self._preprocess(audio, *args, **kwargs)
 
-    def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sampling_rate: int | None = None, **kwargs) -> list:
+    def _prepare_audio_like_inputs(
+        self, audio: AudioInput, *args, sampling_rate: int | None = None, device=None, **kwargs
+    ) -> list:
         audio, sampling_rate = self._prepare_audio_structure(audio, sampling_rate=sampling_rate)
-        audio = [self._prepare_waveform(self._downmix_to_mono(audio_el), **kwargs) for audio_el in audio]
+        # Placement is a batch step, not a per-waveform hook: `_prepare_waveform` overrides need not
+        # remember to forward `device`, and the whole batch crosses to the device in one transfer.
+        audio = self._to_device([self._downmix_to_mono(audio_el) for audio_el in audio], device)
+        audio = [self._prepare_waveform(audio_el, **kwargs) for audio_el in audio]
         # Resample last, so `_resample` always sees a mono waveform in the backend's own array type.
         if sampling_rate != self.sampling_rate:
             logger.warning_once(
@@ -441,16 +446,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
         actual_lengths = [audio_el.shape[-1] for audio_el in audio]
 
         if padding_strategy != PaddingStrategy.DO_NOT_PAD:
-            audio = [
-                self._pad_waveform(
-                    audio_el,
-                    max_length=max_length,
-                    padding_side=padding_side,
-                    padding_value=padding_value,
-                    **kwargs,
-                )
-                for audio_el in audio
-            ]
+            audio = self._pad_waveforms(
+                audio, max_length=max_length, padding_side=padding_side, padding_value=padding_value, **kwargs
+            )
 
         audio_ranges = []
         for i, length in enumerate(actual_lengths):
@@ -503,6 +501,21 @@ class BaseAudioProcessor(AudioProcessingMixin):
         Override for level normalization, a length floor, or anything else the utterance needs on its own.
         """
         return audio_el
+
+    def _to_device(self, audio: list, device) -> list:
+        """Place the mono waveforms on `device`. Only the Torch backend has devices."""
+        return audio
+
+    def _pad_waveforms(
+        self, audio: list, max_length: int, *, padding_side: str, padding_value: float, **kwargs
+    ) -> list:
+        """Pad every waveform to `max_length`. Backends may assemble the batch in one allocation."""
+        return [
+            self._pad_waveform(
+                audio_el, max_length=max_length, padding_side=padding_side, padding_value=padding_value, **kwargs
+            )
+            for audio_el in audio
+        ]
 
     def _stack_waveforms(self, audio, *, padding=None):
         self._validate_stackable(audio, padding=padding, item_name="waveforms")

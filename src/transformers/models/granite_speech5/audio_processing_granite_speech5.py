@@ -152,7 +152,7 @@ class GraniteSpeech5AudioProcessor(GraniteSpeech5AudioProcessorMixin, TorchAudio
         return torch.nn.functional.conv1d(padded, kernel, groups=features.shape[-2]) / denominator
 
     def _stacked_mask(self, lengths, width, like):
-        lengths = torch.tensor(lengths, device=like.device)
+        lengths = self._host_to_device(lengths, like.device)
         return (torch.arange(width, device=like.device)[None, :] < lengths[:, None]).long()
 
 

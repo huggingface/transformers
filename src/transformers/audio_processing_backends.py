@@ -391,8 +391,80 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _astype(self, x, dtype_name):
         return x.to(getattr(torch, dtype_name))
 
-    def _prepare_waveform(self, audio_el, *, device=None, **kwargs):
-        return audio_el.to(device=device) if device is not None else audio_el
+    _transfer_chunk_bytes = 8 * 2**20
+
+    @staticmethod
+    def _host_to_device(values, device, dtype=None):
+        """Copy host data (lengths, ranges, filter banks) to `device` without blocking the host.
+
+        A copy from pageable memory waits for every kernel already queued on the stream, so each one
+        stalled the Python thread until the GPU drained -- including a model forward still running
+        from the previous batch, which kept preprocessing from overlapping with inference. Staging
+        through pinned memory makes the copy asynchronous.
+        """
+        tensor = torch.as_tensor(values, dtype=dtype)
+        device = torch.device(device)
+        if tensor.device == device:
+            return tensor
+        if device.type != "cuda" or tensor.device.type != "cpu":
+            return tensor.to(device)
+        return tensor.pin_memory().to(device, non_blocking=True)
+
+    def _to_device(self, audio, device):
+        if device is None:
+            return audio
+        device = torch.device(device)
+        if all(audio_el.device == device for audio_el in audio):
+            return audio
+        if (
+            device.type != "cuda"
+            or len(audio) == 1
+            or any(audio_el.device.type != "cpu" or audio_el.ndim != 1 for audio_el in audio)
+            or len({audio_el.dtype for audio_el in audio}) > 1
+        ):
+            return [audio_el.to(device) for audio_el in audio]
+        # Stage through pinned memory in ~8 MB chunks, so packing chunk k+1 on the host overlaps the DMA
+        # of chunk k and only the last chunk's copy is exposed. Per-waveform pageable copies each blocked
+        # the host, which made the transfer ~4x slower than the bytes it moves. The waveforms come back
+        # as views of one device buffer.
+        lengths = [audio_el.shape[-1] for audio_el in audio]
+        flat = torch.empty(sum(lengths), dtype=audio[0].dtype, device=device)
+        chunk_samples = self._transfer_chunk_bytes // flat.element_size()
+        offset = start = pending = 0
+        for end, length in enumerate(lengths, start=1):
+            pending += length
+            if pending < chunk_samples and end < len(audio):
+                continue
+            host = torch.cat(audio[start:end], out=torch.empty(pending, dtype=flat.dtype, pin_memory=True))
+            flat[offset : offset + pending].copy_(host, non_blocking=True)
+            offset, start, pending = offset + pending, end, 0
+        return list(flat.split(lengths))
+
+    def _pad_waveforms(self, audio, max_length, *, padding_side, padding_value, **kwargs):
+        # Batched assembly only pays off on an accelerator: on CPU the per-item pads are cheaper than a
+        # scatter, and a single waveform has nothing to amortize.
+        if (
+            len(audio) == 1
+            or audio[0].device.type == "cpu"
+            or padding_side not in ("left", "right")
+            or any(audio_el.ndim != 1 or audio_el.device != audio[0].device for audio_el in audio)
+            or len({audio_el.dtype for audio_el in audio}) > 1
+            or any(audio_el.shape[-1] > max_length for audio_el in audio)
+        ):
+            return super()._pad_waveforms(
+                audio, max_length, padding_side=padding_side, padding_value=padding_value, **kwargs
+            )
+        # One allocation and one scatter for the whole batch: per-waveform `pad` paid an allocation, a
+        # fill and a copy per item, and the Python loop over rows kept the host busy while the device idled.
+        # `masked_scatter_` fills the mask in row-major order, which is exactly the concatenation order
+        # for either padding side, so the result is a pure copy -- bit-identical to per-item padding.
+        width = max_length
+        device = audio[0].device
+        lengths = self._host_to_device([audio_el.shape[-1] for audio_el in audio], device)
+        positions = torch.arange(width, device=device)
+        mask = positions >= width - lengths[:, None] if padding_side == "left" else positions < lengths[:, None]
+        batch = torch.full((len(audio), width), padding_value, dtype=audio[0].dtype, device=device)
+        return list(batch.masked_scatter_(mask, torch.cat(audio)))
 
     def _amax_over_features(self, x):
         return x.amax(dim=(-2, -1), keepdim=True)
@@ -404,14 +476,14 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _get_mask(self, ranges, padded_length, *, like=None):
         if not isinstance(like, torch.Tensor):
             return super()._get_mask(ranges, padded_length, like=like)
-        range_tensor = torch.tensor(ranges, dtype=torch.int64, device=like.device)
+        range_tensor = self._host_to_device(ranges, like.device, dtype=torch.int64)
         positions = torch.arange(padded_length, device=like.device)
         return ((positions >= range_tensor[:, :1]) & (positions < range_tensor[:, 1:])).to(torch.int32)
 
     def _get_mask_from_lengths(self, lengths, padded_length, *, like=None):
         if not isinstance(like, torch.Tensor):
             return super()._get_mask_from_lengths(lengths, padded_length, like=like)
-        lengths = torch.as_tensor(lengths, dtype=torch.int64, device=like.device)
+        lengths = self._host_to_device(lengths, like.device, dtype=torch.int64)
         positions = torch.arange(padded_length, device=like.device)
         return (positions < lengths[:, None]).to(torch.int32)
 
@@ -424,7 +496,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             # Sequences (e.g. `list[list[float]]`) are a documented input type; convert through numpy
             # so the torch backend accepts everything the numpy one does.
             result = torch.from_numpy(np.asarray(x))
-        return result.to(device=like.device) if isinstance(like, torch.Tensor) else result
+        return self._host_to_device(result, like.device) if isinstance(like, torch.Tensor) else result
 
     def _arange(self, stop, *, like=None):
         device = like.device if isinstance(like, torch.Tensor) else None
@@ -514,7 +586,7 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
         audio = torch.cat([audio[..., :1], audio[..., 1:] - preemphasis * audio[..., :-1]], dim=-1)
         if audio_ranges is not None:
-            lengths = torch.tensor([end - start for start, end in audio_ranges], device=audio.device)
+            lengths = self._host_to_device([end - start for start, end in audio_ranges], audio.device)
             mask = torch.arange(audio.shape[-1], device=audio.device).unsqueeze(0) < lengths.unsqueeze(1)
             audio = audio.masked_fill(~mask, 0.0)
         return audio
@@ -759,7 +831,7 @@ class TorchAudioBackend(BaseAudioProcessor):
         # Match the filters to the feature dtype: unlike numpy, `torch.matmul` refuses mixed
         # dtypes, so float64 filters against float32 features would raise instead of promoting.
         mel_filters = self.mel_filters if mel_filters is None else mel_filters
-        mel_filters = mel_filters.to(device=features.device, dtype=features.dtype)
+        mel_filters = self._host_to_device(mel_filters.to(features.dtype), features.device)
         matmul_order = spectrogram_config.mel_scale_config.matmul_order
         if matmul_order == "features_first":
             mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)

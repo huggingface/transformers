@@ -159,7 +159,7 @@ class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
     def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         # No mel-scale clamp, as in the numpy sibling. Match the filters to the feature dtype:
         # unlike numpy, `torch.matmul` refuses mixed dtypes rather than promoting.
-        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
+        mel_filters = self._host_to_device(self.mel_filters.to(features.dtype), features.device)
         return torch.matmul(mel_filters.T, features)
 
 

@@ -165,11 +165,13 @@ class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudio
             center=True,
             pad=0,
             normalized=True,
-        ).to(device)
+        )
+        # The module's only state is its window; copy it without blocking the host.
+        spec_transform.window = self._host_to_device(spec_transform.window, device)
         spec = spec_transform(waveform).squeeze(1)
 
         # Chroma features
-        chroma_filters = chroma_filters.to(device)
+        chroma_filters = self._host_to_device(chroma_filters, device)
         raw_chroma = torch.einsum("cf, ...ft->...ct", chroma_filters, spec)
 
         # Normalize with inf norm
