@@ -46,32 +46,7 @@ def _is_all_empty(media) -> bool:
     return isinstance(media, (list, tuple)) and all(isinstance(el, (list, tuple)) and len(el) == 0 for el in media)
 
 
-@auto_docstring(
-    custom_intro="""
-    Constructs an Apertus 1.5 processor which wraps an image processor, an audio feature extractor and the
-    tokenizer into a single processor: each `<|image|>` / `<|audio|>` placeholder in the text is expanded into
-    the model's structured token run, and the media are prepared into the model's tensor inputs.
-
-    Media handling:
-
-    - Media items may be loaded objects or URL / local path strings, which are fetched automatically
-      (fetched audio is decoded and resampled to 24 kHz).
-    - Flat lists are consumed in batch-sample order, then left-to-right placeholder order, and validate only
-      the total count, so items must already follow that order. Nested lists (one sub-list per batch sample,
-      empty sub-lists allowed) give explicit ownership and validate counts per sample.
-    - Images and audio are tracked independently and may be interleaved arbitrarily; image sizes and
-      per-sample media counts may vary freely.
-
-    Input expectations:
-
-    - Images: expected UNSCALED (PIL images or uint8-range pixel values; per the standard `do_rescale`
-      convention, float images already in `[0, 1]` would be rescaled again). The image processor converts to
-      RGB, resizes, and normalizes to `[-1, 1]`.
-    - Audio: bare waveform arrays are assumed to be 24 kHz mono; their absolute scale is irrelevant because
-      every clip is peak-normalized to -3 dBFS before feature extraction. Stereo or empty clips are rejected,
-      as is a declared `sampling_rate` other than 24000.
-    """
-)
+@auto_docstring(custom_intro="Constructs an Apertus 1.5 processor for text, images, and audio.")
 @requires(backends=("vision", "torch", "torchvision"))
 class Apertus1p5Processor(ProcessorMixin):
     valid_processor_kwargs = Apertus1p5ProcessorKwargs
@@ -104,13 +79,13 @@ class Apertus1p5Processor(ProcessorMixin):
         audio: AudioInput | None = None,
         **kwargs,
     ):
+        """Normalize inputs, supporting nested audio with one sub-list per text sample (empty if unused)."""
         # collections without a single media item (e.g. `[[], []]` from a uniform collator) mean "no media"
         if images is not None and _is_all_empty(images):
             images = None
         if audio is not None and _is_all_empty(audio):
             audio = None
-        # unlike the base layout, audio may be nested (one sub-list per sample, empty sub-lists allowed) so that
-        # per-sample ownership can be validated; clips are flattened again in `_process_audio`
+        # Preserve sample ownership for validation; `_process_audio` flattens the clips afterward.
         if audio is not None and _is_nested_media(audio):
             sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
             audio = [

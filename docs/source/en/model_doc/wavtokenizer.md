@@ -16,108 +16,70 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2024-08-29 and contributed to Hugging Face Transformers on 2026-09-22.*
+*This model was published in HF papers on 2024-08-29 and contributed to Hugging Face Transformers on 2026-09-29.*
 
 # WavTokenizer
 
 ## Overview
 
-WavTokenizer is a discrete acoustic codec tokenizer proposed in [WavTokenizer: an Efficient Acoustic Discrete Codec Tokenizer for Audio Language Modeling](https://huggingface.co/papers/2408.16532) by Shengpeng Ji, Ziyue Jiang, Wen Wang, Yifu Chen, Minghui Fang, Jialong Zuo, Qian Yang, Xize Cheng, Zehan Wang, Ruiqi Li, Ziang Zhang, Xiaoda Yang, Rongjie Huang, Yidi Jiang, Qian Chen, Siqi Zheng, Zhou Zhao (ICLR 2025).
+[WavTokenizer](https://huggingface.co/papers/2408.16532) encodes 24 kHz mono audio into discrete tokens using a
+single codebook, at 40 or 75 tokens per second depending on the checkpoint. It can also reconstruct audio
+from those tokens.
 
-WavTokenizer compresses 24 kHz audio into a **single codebook** of discrete tokens at an extremely low frame rate
-(40 or 75 tokens per second), making it well suited as an audio tokenizer for language models. The encoder and
-quantizer follow [EnCodec](encodec)'s SEANet encoder with a single-codebook vector quantization; the decoder is a
-[Vocos](https://huggingface.co/papers/2306.00814)-style backbone (ConvNeXt blocks and a positional conv/attention net) with
-an inverse STFT head.
+This implementation supports inference with [`WavTokenizerModel`] for encoding and decoding, or
+[`WavTokenizerEncoderModel`] for encoding only. The 40-token-per-second variant supplies the audio tokenizer
+for [Apertus 1.5](./apertus1p5). Training the codec is not supported.
 
-The 40 tokens/s variant of WavTokenizer is used as the audio tokenizer of [Apertus 1.5](./apertus1p5). Apertus uses
-[`WavTokenizerEncoderModel`], which contains only the encoder and quantizer. The full [`WavTokenizerModel`] exposes the
-same component as `encoder_model` and additionally provides the reconstruction decoder.
-
-The abstract from the paper is the following:
-
-*Language models have been effectively applied to modeling natural signals, such as images, video, speech, and audio. A crucial component of these models is the codec tokenizer, which compresses high-dimensional natural signals into lower-dimensional discrete tokens. In this paper, we introduce WavTokenizer, which offers several advantages over previous SOTA acoustic codec models in the audio domain: 1) extreme compression. By compressing the layers of quantizers and the temporal dimension of the discrete codec, one-second audio of 24kHz sampling rate requires only a single quantizer with 40 or 75 tokens. 2) improved subjective quality. Despite the reduced number of tokens, WavTokenizer achieves state-of-the-art reconstruction quality with outstanding UTMOS scores and inherently contains richer semantic information.*
-
-This port was contributed as part of the Apertus 1.5 integration by the
-[SwissAI initiative](https://huggingface.co/swiss-ai). The original code (MIT license) can be found
-[here](https://github.com/jishengpeng/WavTokenizer). The implementation is inference-only: it covers encoding audio
-into discrete codes and decoding codes back to audio, while the original training stack (GAN discriminators, loss
-modules, differentiable quantization) is not ported. The released raw
-PyTorch Lightning checkpoints use one of two temporal configurations:
-
-|  Token rate | `upsampling_ratios` | Hop length | ISTFT FFT size |
-|------------:|:-------------------:|-----------:|---------------:|
-| 40 tokens/s |   `[6, 5, 5, 4]`    |        600 |           2400 |
-| 75 tokens/s |   `[8, 5, 4, 2]`    |        320 |           1280 |
-
-The small, medium, large, domain-specific, and v2 releases share the remaining inference architecture.
+This model was contributed by the [Swiss AI Initiative](https://huggingface.co/swiss-ai).
+The original implementation is available on [GitHub](https://github.com/jishengpeng/WavTokenizer).
 
 ## Available checkpoints
 
-All released checkpoints are available on the Hub already converted to the Transformers format and can be loaded
-directly with `from_pretrained`:
+These checkpoints are ready to load with `from_pretrained`:
 
-| Checkpoint                                                                                                                        | Domain      | Token rate | Converted from                                                                                                              |
-|-----------------------------------------------------------------------------------------------------------------------------------|-------------|-----------:|-----------------------------------------------------------------------------------------------------------------------------|
-| [swiss-ai/wavtokenizer-small-speech-40token](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-40token)                   | speech      |       40/s | [novateur/WavTokenizer](https://huggingface.co/novateur/WavTokenizer)                                                       |
-| [swiss-ai/wavtokenizer-small-speech-75token](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-75token)                   | speech      |       75/s | [novateur/WavTokenizer](https://huggingface.co/novateur/WavTokenizer)                                                       |
-| [swiss-ai/wavtokenizer-medium-speech-75token](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token)                 | speech      |       75/s | [novateur/WavTokenizer-medium-speech-75token](https://huggingface.co/novateur/WavTokenizer-medium-speech-75token)           |
-| [swiss-ai/wavtokenizer-medium-speech-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token-v2)           | speech      |       75/s | [novateur/WavTokenizer-medium-speech-75token](https://huggingface.co/novateur/WavTokenizer-medium-speech-75token)           |
-| [swiss-ai/wavtokenizer-medium-music-audio-75token](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token)       | music/audio |       75/s | [novateur/WavTokenizer-medium-music-audio-75token](https://huggingface.co/novateur/WavTokenizer-medium-music-audio-75token) |
-| [swiss-ai/wavtokenizer-medium-music-audio-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token-v2) | music/audio |       75/s | [novateur/WavTokenizer-medium-music-audio-75token](https://huggingface.co/novateur/WavTokenizer-medium-music-audio-75token) |
-| [swiss-ai/wavtokenizer-large-unify-40token](https://huggingface.co/swiss-ai/wavtokenizer-large-unify-40token)                     | unified     |       40/s | [novateur/WavTokenizer-large-unify-40token](https://huggingface.co/novateur/WavTokenizer-large-unify-40token)               |
-| [swiss-ai/wavtokenizer-large-speech-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-large-speech-75token-v2)             | speech      |       75/s | [novateur/WavTokenizer-large-speech-75token](https://huggingface.co/novateur/WavTokenizer-large-speech-75token)             |
-
-## Converting custom checkpoints
-
-Custom or self-trained original-format checkpoints can be converted with the conversion script. It infers the
-temporal configuration from checkpoint tensor shapes and saves it in `config.json`. Subsequent `from_pretrained`
-calls construct the model from that saved configuration and do not infer architecture from the weights.
-
-```bash
-python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
-    --checkpoint_path /path/to/original.ckpt \
-    --output_dir /path/to/converted-model
-```
-
-A converted checkpoint is also the audio half of an [Apertus 1.5](./apertus1p5) composite; see that page for
-the full conversion path.
+| Checkpoint | Domain | Tokens per second |
+|---|---|---:|
+| [Small, 40 tokens/s](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-40token) | Speech | 40 |
+| [Small, 75 tokens/s](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-75token) | Speech | 75 |
+| [Medium](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token) | Speech | 75 |
+| [Medium v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token-v2) | Speech | 75 |
+| [Medium](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token) | Music/audio | 75 |
+| [Medium v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token-v2) | Music/audio | 75 |
+| [Large unified](https://huggingface.co/swiss-ai/wavtokenizer-large-unify-40token) | Unified | 40 |
+| [Large v2](https://huggingface.co/swiss-ai/wavtokenizer-large-speech-75token-v2) | Speech | 75 |
 
 ## Usage example
 
+Load a speech clip, resample it to the checkpoint's sampling rate, and encode and reconstruct it:
+
 ```python
 import torch
-from datasets import Audio, load_dataset
 from transformers import AutoFeatureExtractor, WavTokenizerModel
+from transformers.audio_utils import load_audio
 
-model = WavTokenizerModel.from_pretrained("swiss-ai/wavtokenizer-large-unify-40token")
-feature_extractor = AutoFeatureExtractor.from_pretrained("swiss-ai/wavtokenizer-large-unify-40token")
+model_id = "swiss-ai/wavtokenizer-large-unify-40token"
+model = WavTokenizerModel.from_pretrained(model_id)
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
-dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-audio = dataset[0]["audio"]["array"]
-
+audio = load_audio(
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/belinda.wav",
+    sampling_rate=feature_extractor.sampling_rate,
+)
 inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
 with torch.no_grad():
-    audio_codes = model.encode(**inputs).audio_codes  # (batch, 1, ceil(samples / 600))
-    reconstruction = model.decode(audio_codes).audio_values
+    audio_codes = model.encode(**inputs).audio_codes
+    reconstruction = model.decode(audio_codes).audio_values[..., : len(audio)]
 ```
 
-The feature extractor expects mono audio already sampled at its configured sampling rate; it does not resample or
-downmix. Always pass `sampling_rate` so mismatches are detected. The model pads internally and accepts arbitrary
-non-empty lengths, producing `ceil(num_samples / hop_length)` codes.
+## Usage notes
 
-By default, batches containing clips of different lengths are zero-padded to the longest clip and include a
-`padding_mask`. This mask is downsampled to `audio_codes_mask`. Padding can perturb codes near the end of shorter
-clips, so encode clips separately when codes must exactly match single-clip or original-pipeline results.
-
-Decoded audio is always returned in `float32` (the ISTFT head upcasts internally). A single code is supported and
-decodes to one configuration-dependent hop (600 samples for 40 tokens/s or 320 samples for 75 tokens/s).
-
-> [!WARNING]
-> Load and run the tokenizer in `float32` (the default). Code assignment is a nearest-neighbour argmin over the
-> codebook, so half precision (`dtype=torch.bfloat16`/`float16`) flips a large fraction of codes near decision
-> boundaries (~66% disagreement vs. `float32` measured in bf16) and breaks reproducible tokenization.
+- **Audio inputs:** The feature extractor expects mono audio at its configured sampling rate; it does not
+  resample or downmix. The example uses `load_audio` to handle both. Decoding can add trailing samples due to
+  internal padding, so the example trims the reconstruction to the original length.
+- **Batching:** Padding clips of different lengths can change their codes. Encode clips separately when
+  you need the same codes as processing each clip on its own.
+- **Precision:** Load and run the tokenizer in `float32` (the default). Lower precision can change code
+  assignments.
 
 ## WavTokenizerConfig
 
