@@ -620,12 +620,8 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         processor = self.default_processor
 
-        image1 = Image.open(
-            hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image1.jpeg", repo_type="dataset")
-        )
-        image2 = Image.open(
-            hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image2.jpeg", repo_type="dataset")
-        )
+        image1 = Image.open(hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image1.jpeg", repo_type="dataset"))
+        image2 = Image.open(hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image2.jpeg", repo_type="dataset"))
 
         text = (
             "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"
