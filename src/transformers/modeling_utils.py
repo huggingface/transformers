@@ -82,6 +82,7 @@ from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
+from .integrations.linear_attention import ALL_LINEAR_ATTENTION_INTERFACES
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -1271,6 +1272,11 @@ class PreTrainedModel(
         self.config._experts_implementation_internal = self._check_and_adjust_experts_implementation(
             self.config._experts_implementation
         )
+        # Check the linear attention implementation is supported, or set it if not yet set (on the internal attr, to
+        # avoid setting it recursively)
+        self.config._linear_attn_implementation_internal = self._check_and_adjust_linear_attn_implementation(
+            self.config._linear_attn_implementation
+        )
         if self.can_generate():
             # `from_model_config` is a legacy behavior -- we shouldn't set generation flags in the model config
             try:
@@ -1427,6 +1433,10 @@ class PreTrainedModel(
         # If passing `experts_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
+
+        # If passing `linear_attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
+        if "linear_attn_implementation" in kwargs:
+            config._linear_attn_implementation = kwargs.pop("linear_attn_implementation")
 
         # Needed if the attn_implementation is an outside `kernels-community` kernel
         allow_all_kernels = kwargs.get("allow_all_kernels", False)
@@ -1885,6 +1895,27 @@ class PreTrainedModel(
                 applicable_attention = "eager"
 
         return applicable_attention
+
+    def _check_and_adjust_linear_attn_implementation(self, linear_attn_implementation: str | None) -> str:
+        """
+        Check that the `linear_attn_implementation` exists, defaulting to `"eager"`.
+
+        Args:
+            linear_attn_implementation (`str` or `None`):
+                The linear attention implementation to check for existence/validity.
+        Returns:
+            `str`: The final linear attention implementation to use.
+        """
+        if linear_attn_implementation is None:
+            return "eager"
+        valid_implementations = {"eager"}.union(*(interface.keys() for interface in ALL_LINEAR_ATTENTION_INTERFACES))
+        if linear_attn_implementation not in valid_implementations:
+            valid = ", ".join(f'`linear_attn_implementation="{fn}"`' for fn in sorted(valid_implementations))
+            raise ValueError(
+                f'Specified `linear_attn_implementation="{linear_attn_implementation}"` is not supported. The only '
+                f"possible arguments are {valid}."
+            )
+        return linear_attn_implementation
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
@@ -4229,6 +4260,9 @@ class PreTrainedModel(
 
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
+
+        if "linear_attn_implementation" in kwargs:
+            config._linear_attn_implementation = kwargs.pop("linear_attn_implementation")
 
         hf_quantizer, config, device_map = get_hf_quantizer(
             config, quantization_config, device_map, weights_only, user_agent, gguf_file=gguf_file
