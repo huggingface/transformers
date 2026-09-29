@@ -1743,7 +1743,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest("This model doesn't support compilation without graph breaks")
 
             # 2. Prepares two sets of inputs, For this test we need two sets of *different* inputs with the same shape
+            set_seed(42)
             config, input_1 = self.prepare_config_and_inputs_for_generate(batch_size=2)
+
+            set_seed(62)
             _, input_2 = self.prepare_config_and_inputs_for_generate(batch_size=2)
             model_input_sets = [input_1, input_2]
 

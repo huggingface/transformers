@@ -346,6 +346,18 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.model_tester = Kosmos2_5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Kosmos2_5Config, hidden_size=32)
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # override - old testers that is composed of separate classes for vision/text
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.text_model_tester.batch_size = batch_size
+            self.model_tester.vision_model_tester.batch_size = batch_size
+            config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        finally:
+            self.model_tester.text_model_tester.batch_size = original_batch_size
+            self.model_tester.vision_model_tester.batch_size = original_batch_size
+        return config, inputs_dict
+
     @unittest.skip("KOSMOS-2.5 doesn't support padding")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass

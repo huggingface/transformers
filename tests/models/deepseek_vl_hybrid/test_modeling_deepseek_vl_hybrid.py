@@ -38,10 +38,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_processing_common import url_to_local_path
 
 
-if is_torch_available():
-    pass
-
-
 class DeepseekVLHybridModelTester:
     def __init__(
         self,
