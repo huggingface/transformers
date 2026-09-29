@@ -344,6 +344,11 @@ print(transcription)
 
 [[autodoc]] MossTranscribeDiarizeConfig
 
+## MossTranscribeDiarizeFeatureExtractor
+
+[[autodoc]] MossTranscribeDiarizeFeatureExtractor
+    - __call__
+
 ## MossTranscribeDiarizeProcessor
 
 [[autodoc]] MossTranscribeDiarizeProcessor
@@ -357,8 +362,8 @@ print(transcription)
     - forward
     - get_audio_features
 
-## AutoModel
+## MossTranscribeDiarizeForConditionalGeneration
 
-[[autodoc]] AutoModel
+[[autodoc]] MossTranscribeDiarizeForConditionalGeneration
     - forward
     - get_audio_features
