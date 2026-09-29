@@ -723,8 +723,8 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 Every export config accepts a `quantizer`. Set it to any PT2E
 [`Quantizer`](https://docs.pytorch.org/ao/main/pt2e_quantization/index.html) and the exporter runs post-training quantization on
 the traced graph (`prepare_pt2e` → calibrate → `convert_pt2e`) before the program is returned or
-lowered. Quantization happens on the graph rather than the modeling code, so a single `quantizer` works
-across every backend and architecture without per-model handling.
+lowered. Quantization happens on the graph rather than the modeling code, so a `quantizer` works across
+every architecture without per-model handling.
 
 Quantize through [`~HfExporter.export_for_generation`], which exports the decomposed generation components. Their attention mask is a precomputed graph input, which keeps PT2E away from the in-graph mask construction that trips its `make_fx` retrace on a full model forward.
 
@@ -746,13 +746,12 @@ exported = DynamoExporter().export(model, inputs, config)  # quantize/dequantize
 
 ### Choosing a quantizer
 
-Each target runtime expects its own quantizer. Whichever you pass, the quantized graph is portable from there. It runs on inductor as int8, translates to ONNX `QuantizeLinear`/`DequantizeLinear` (per-channel included), or lowers to an ExecuTorch `.pte`.
+Each quantizer injects its own quantize/dequantize ops, and a backend may or may not support them, so pick the quantizer for the runtime you target. The ops `X86InductorQuantizer` inserts run on inductor as int8 and translate to ONNX `QuantizeLinear`/`DequantizeLinear` (per-channel included), but ExecuTorch has no kernels for its per-channel ones; ExecuTorch takes the per-tensor `XNNPACKQuantizer` instead.
 
 | Where you'll run | Quantizer to pass | Import from |
 | --- | --- | --- |
 | PyTorch inductor, or ONNX Runtime (QDQ) | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
 | ExecuTorch XNNPACK backend | `XNNPACKQuantizer` | `executorch.backends.xnnpack.quantizer.xnnpack_quantizer` |
-| ExecuTorch QNN backend (Qualcomm SoC accelerators; HTP today) | `QnnQuantizer` | `executorch.backends.qualcomm.quantizer.quantizer` |
 
 ### Calibration
 
