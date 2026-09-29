@@ -119,5 +119,5 @@ class OmniASRFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         torch.testing.assert_close(encoded_pt.input_values, encoded_np.input_values, atol=TOL, rtol=TOL)
 
         # The mask marks the padding, so the model knows which frames are real
-        self.assertListEqual(encoded_pt.attention_mask.sum(-1).tolist(), [len(x) for x in audio_inputs])
+        self.assertListEqual(encoded_pt.padding_mask.sum(-1).tolist(), [len(x) for x in audio_inputs])
         self.assertTrue(torch.all(encoded_pt.input_values[0, len(audio_inputs[0]) :] == 0.0))

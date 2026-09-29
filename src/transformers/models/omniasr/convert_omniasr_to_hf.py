@@ -12,55 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Setup
-```
-pip install omnilingual-asr
-pip install sentencepiece
-pip install -e .
 
-# - macOS (Apple Silicon)
-brew install libsndfile
-
-# - DGX
-python -m pip uninstall -y torch torchvision torchaudio
-python -m pip install \
-  torch==2.8.0+cu128 \
-  torchvision==0.23.0+cu128 \
-  torchaudio==2.8.0 \
-  --index-url https://download.pytorch.org/whl/cu128
-python -m pip install fairseq2 \
-  --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
-python -m pip install --upgrade huggingface_hub
-```
-
-See here for available models: https://github.com/facebookresearch/omnilingual-asr?tab=readme-ov-file#model-architectures
-
-Example conversion:
-```python
-# -- CTC-variant v2
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
-    --model_card omniASR_CTC_300M_v2 \
-    --repo_id bezzam/omniasr-ctc-300m-v2
-
-# -- LLM-variant v2
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
---model_card omniASR_LLM_300M_v2 \
---repo_id bezzam/omniasr-llm-300m-v2
-
-
-## release v1
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
-    --model_card omniASR_CTC_300M \
-    --repo_id bezzam/omniasr-ctc-300m
-
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
-    --model_card omniASR_W2V_300M \
-    --repo_id bezzam/omniasr-w2v-300m
-```
-
-Original model checkpoints are saved under:  ~/.cache/fairseq2/assets/
-"""
 
 import argparse
 import os
@@ -75,9 +27,9 @@ from fairseq2.runtime.config_registry import get_config
 from fairseq2.runtime.dependency import get_dependency_resolver
 from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
 from omnilingual_asr.models.wav2vec2_llama.config import ModelType, Wav2Vec2LlamaConfig, Wav2Vec2LlamaStreamingConfig
+from tokenizers import Regex, decoders, normalizers, pre_tokenizers
 
 from transformers import (
-    LasrTokenizer,
     LlamaConfig,
     OmniASRConfig,
     OmniASRCTCConfig,
@@ -86,10 +38,29 @@ from transformers import (
     OmniASRFeatureExtractor,
     OmniASRForConditionalGeneration,
     OmniASRForCTC,
+    ParakeetTokenizer,
     logging,
 )
+from transformers.convert_slow_tokenizer import SpmConverter, import_protobuf
 from transformers.models.omniasr.processing_omniasr import OmniASRProcessor
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
+
+
+class OmniASRConverter(SpmConverter):
+    def __init__(self, vocab_file):
+        self.original_tokenizer = None
+        self.proto = import_protobuf().ModelProto()
+        with open(vocab_file, "rb") as f:
+            self.proto.ParseFromString(f.read())
+
+    def normalizer(self, proto):
+        return normalizers.Sequence([normalizers.Strip(), normalizers.Replace(Regex(" {2,}"), " ")])
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        # `split_by_whitespace`: pieces never cross a whitespace, which starts the piece that follows it.
+        return pre_tokenizers.Split(" ", behavior="merged_with_next")
+
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Fuse()
 
 
 # Rows reserved right after the tokenizer's vocabulary, in the order the tokenizer declares them: `<extra_id_0>`
@@ -98,6 +69,27 @@ NUM_RESERVED_TOKENS = 2
 
 # The language-agnostic mode the original model reaches by looking up row 0 of its language embedding table.
 LANGUAGE_AGNOSTIC = "auto"
+
+# The LLM variant's decoder prompt `audio | lid_marker | language | bos`, from which the transcription is decoded.
+# `OmniASRProcessor` expands the audio placeholder into one token per speech encoder frame. With an assistant turn
+# (training), its transcription and the EOS follow the prompt.
+# fmt: off
+CHAT_TEMPLATE = (
+    "{%- for message in messages -%}"
+        "{%- if message['role'] == 'user' -%}"
+            "{%- set ns = namespace(language='" + LANGUAGE_AGNOSTIC + "') -%}"
+            "{%- for item in message['content'] -%}"
+                "{%- if item['type'] == 'audio' -%}<extra_id_1>"
+                "{%- elif item['type'] == 'language' -%}{%- set ns.language = item['language'] | lower -%}"
+                "{%- endif -%}"
+            "{%- endfor -%}"
+            "<extra_id_0><|lang:{{ ns.language }}|><s>"
+        "{%- elif message['role'] == 'assistant' -%}"
+            "{%- for item in message['content'] if item['type'] == 'text' -%}{{ item['text'] }}{%- endfor -%}</s>"
+        "{%- endif -%}"
+    "{%- endfor -%}"
+)
+# fmt: on
 
 
 logging.set_verbosity_info()
@@ -148,15 +140,6 @@ llm_convert_list = [
     ("llama_decoder.layer_norm", "model.language_model.norm"),
     ("text_frontend", "model.language_model.embed_tokens"),
 ]
-
-
-"""
-LLM model also has:
-(encoder_proj): Linear(input_dim=1024, output_dim=4096, bias=True)
-(text_frontend): StandardEmbedding(num_embeddings=10289, embed_dim=4096)
-(llama_decoder): StandardTransformerLMDecoder(
-(lang_embeddings): StandardEmbedding(num_embeddings=1694, embed_dim=4096)
-"""
 
 
 def _rename_keys(state_dict, convert_list, applies, verbose=False):
@@ -609,73 +592,40 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     download_dir = os.getcwd()
     tokenizer_path = os.path.join(download_dir, os.path.basename(tokenizer_url))
     urllib.request.urlretrieve(tokenizer_url, tokenizer_path)
-    vocab_ids, vocab_scores, merges = SentencePieceExtractor(tokenizer_path).extract()
-    # TODO do we also need to overwrite the pad token to be ID 0? (before <s>)
-    vocab_scores[0] = ("<pad>", vocab_scores[0][1])
-    # TODO create own tokenizer like LasrTokenizer but with correct special tokens?
-    tokenizer_kwargs = {}
+    converter = OmniASRConverter(tokenizer_path)
+    trainer_spec = converter.proto.trainer_spec
+    # `ParakeetTokenizer` decodes CTC outputs (collapsing repeats and dropping the pad token, which is the CTC blank),
+    # and appends no special token: the chat template (LLM) and the processor (CTC labels) add them themselves.
+    tokenizer = ParakeetTokenizer(
+        tokenizer_object=converter.converted(),
+        bos_token=trainer_spec.bos_piece,
+        eos_token=trainer_spec.eos_piece,
+        unk_token=trainer_spec.unk_piece,
+        pad_token=trainer_spec.pad_piece,
+        clean_up_tokenization_spaces=False,
+    )
     if "LLM" in model_card:
         # The added tokens take the ids that follow the vocabulary, in this order, so they line up with the rows
         # `config` reserves and with the language embeddings folded into the input embeddings above.
-        tokenizer_kwargs = {
-            "extra_ids": NUM_RESERVED_TOKENS,
-            "additional_special_tokens": [f"<extra_id_{i}>" for i in range(NUM_RESERVED_TOKENS)] + language_tokens,
-        }
-    tokenizer = LasrTokenizer(vocab=vocab_scores, **tokenizer_kwargs)
-    tokenizer.add_eos_token = False
-
-    # # -- create Transformers-compatible tokenizer
-    # vocab_path = "vocab.json"
-    # vocab_dict = {}
-    # for idx in range(original_tokenizer.vocab_info.size):
-    #     token = original_tokenizer._model.index_to_token(idx)
-    #     vocab_dict[token] = idx
-    # with open(vocab_path, "w", encoding="utf-8") as f:
-    #     json.dump(vocab_dict, f, ensure_ascii=False, indent=2)
-    # # NOTE: For CTC models, pad_token should be the CTC blank token.
-    # # In the original fairseq2 model, token 0 (<s> - BOS) is used as the CTC blank.
-    # # Wav2Vec2CTCTokenizer uses pad_token_id as the blank token for CTC decoding.
-    # tokenizer = Wav2Vec2CTCTokenizer(
-    #     vocab_file=vocab_path,
-    #     unk_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.unk_idx),
-    #     # pad_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.pad_idx),
-    #     pad_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.bos_idx),  # Use BOS as CTC blank
-    #     bos_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.bos_idx),
-    #     eos_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.eos_idx),
-    #     word_delimiter_token="|",
-    #     do_lower_case=False,    # TODO: set to True?
-    # )
-
-    # vocab_file = "/raid/eric/.cache/fairseq2/assets/e7be1a6acb8f76fdbca19dce/omniASR_tokenizer_written_v2.model"
-    # # NOTE or directly use TokenizersBackend?
-    # from ...tokenization_utils_tokenizers import TokenizersBackend
-    # tokenizer = SeamlessM4TTokenizer(vocab_file=vocab_file) # leads to empty transcript
+        tokenizer.add_special_tokens(
+            {"extra_special_tokens": [f"<extra_id_{i}>" for i in range(NUM_RESERVED_TOKENS)] + language_tokens}
+        )
 
     # -- create processor
-    language_mapping = None
     processor_kwargs = {}
     if "LLM" in model_card:
-        # `OmniASRProcessor` resolves `language` straight to the token it writes into the prompt, so the mapping
-        # holds token ids rather than the rows of the table the original model looked up.
-        language_token_id_base = config.language_token_id + NUM_RESERVED_TOKENS
-        language_mapping = {LANGUAGE_AGNOSTIC: language_token_id_base}
-        language_mapping.update(
-            {code: language_token_id_base + index for code, index in original_model.lang_mapping.items()}
-        )
-        # Everything `OmniASRProcessor` needs to build the decoder prompt `audio | lid_marker | language | bos`.
+        # The chat template writes the decoder prompt, and the convolution geometry counts how many audio
+        # placeholders it holds.
         processor_kwargs = {
-            "audio_token_id": config.audio_token_id,
-            "language_token_id": config.language_token_id,
-            "bos_token_id": config.bos_token_id,
+            "chat_template": CHAT_TEMPLATE,
             "conv_kernel": list(config.audio_config.conv_kernel),
             "conv_stride": list(config.audio_config.conv_stride),
         }
-    processor = OmniASRProcessor(
-        feature_extractor=feature_extractor,
-        tokenizer=tokenizer,
-        language_mapping=language_mapping,
-        **processor_kwargs,
-    )
+    processor = OmniASRProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer, **processor_kwargs)
+    if "LLM" in model_card:
+        prompt_ids = [config.audio_token_id, config.language_token_id, config.bos_token_id]
+        if processor.tokenizer.convert_tokens_to_ids(["<extra_id_1>", "<extra_id_0>", "<s>"]) != prompt_ids:
+            raise ValueError(f"The chat template's prompt tokens do not match the config's ids {prompt_ids}.")
 
     # 5) Upload to hub
     if repo_id:
@@ -684,13 +634,54 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         processor.push_to_hub(repo_id)
 
     # 6) Cleanup
-    # if os.path.exists(vocab_path):
-    #     os.remove(vocab_path)
     if os.path.exists(tokenizer_path):
         os.remove(tokenizer_path)
 
-    # TODO try loading model
 
+
+"""
+Setup
+```
+pip install omnilingual-asr
+pip install sentencepiece
+python -m pip uninstall -y torch torchvision torchaudio
+python -m pip install \
+  torch==2.8.0+cu128 \
+  torchvision==0.23.0+cu128 \
+  torchaudio==2.8.0 \
+  --index-url https://download.pytorch.org/whl/cu128
+python -m pip install fairseq2 \
+  --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
+python -m pip install --upgrade huggingface_hub
+```
+
+See here for available models: https://github.com/facebookresearch/omnilingual-asr?tab=readme-ov-file#model-architectures
+
+Example conversion:
+```python
+# -- CTC-variant v2
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+    --model_card omniASR_CTC_300M_v2 \
+    --repo_id bezzam/omniasr-ctc-300m-v2
+
+# -- LLM-variant v2
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+--model_card omniASR_LLM_300M_v2 \
+--repo_id bezzam/omniasr-llm-300m-v2
+
+
+## release v1
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+    --model_card omniASR_CTC_300M \
+    --repo_id bezzam/omniasr-ctc-300m
+
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+    --model_card omniASR_W2V_300M \
+    --repo_id bezzam/omniasr-w2v-300m
+```
+
+Original model checkpoints are saved under:  ~/.cache/fairseq2/assets/
+"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

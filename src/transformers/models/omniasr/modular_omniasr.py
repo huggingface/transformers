@@ -198,6 +198,8 @@ class OmniASREncoder(OmniASRPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> OmniASREncoderModelOutput:
         r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            Padding mask used to pad `input_values`.
         output_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether to return the subsampled attention mask. Only effective when `padding_mask` is provided.
         """
@@ -253,6 +255,9 @@ class OmniASRForCTC(ParakeetForCTC):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutput:
         r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            Padding mask used to pad `input_values`.
+
         Example:
 
         ```python
@@ -472,7 +477,7 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 
-        >>> inputs = processor(ds[0]["audio"]["array"], language="eng_Latn")
+        >>> inputs = processor.apply_transcription_request(ds[0]["audio"]["array"], language="eng_Latn")
         >>> generated_ids = model.generate(**inputs, max_new_tokens=256)
         >>> transcription = processor.decode(generated_ids, skip_special_tokens=True)
         ```"""

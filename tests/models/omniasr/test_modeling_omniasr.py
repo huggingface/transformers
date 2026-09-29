@@ -291,12 +291,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.checkpoint_name, torch_dtype=self.dtype, device_map="auto"
         )
 
-        inputs = self.processor(
-            samples,
-            return_tensors="pt",
-            sampling_rate=self.processor.feature_extractor.sampling_rate,
-            language=["eng_Latn"],
-        )
+        inputs = self.processor.apply_transcription_request(samples, language="eng_Latn")
         inputs.to(model.device, dtype=self.dtype)
         with torch.no_grad():
             generated_ids = model.generate(
@@ -327,13 +322,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.checkpoint_name, torch_dtype=self.dtype, device_map="auto"
         )
 
-        inputs = self.processor(
-            samples,
-            return_tensors="pt",
-            sampling_rate=self.processor.feature_extractor.sampling_rate,
-            padding=True,
-            language=["eng_Latn"] * len(samples),
-        )
+        inputs = self.processor.apply_transcription_request(samples, language=["eng_Latn"] * len(samples))
         inputs.to(model.device, dtype=self.dtype)
         with torch.no_grad():
             generated_ids = model.generate(
@@ -367,12 +356,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         def generate(batch):
-            inputs = self.processor(
-                batch,
-                sampling_rate=self.processor.feature_extractor.sampling_rate,
-                language=["eng_Latn"] * len(batch),
-                padding=True,
-            )
+            inputs = self.processor.apply_transcription_request(batch, language=["eng_Latn"] * len(batch))
             inputs.to(model.device, dtype=self.dtype)
             with torch.no_grad():
                 generated_ids = model.generate(**inputs, max_new_tokens=200)

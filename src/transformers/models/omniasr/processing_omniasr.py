@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
+from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
@@ -24,7 +25,7 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-# The key `language_mapping` reserves for the model's language-agnostic mode, which is also the default.
+# The language token that selects the model's language-agnostic mode, which is also the default.
 LANGUAGE_AGNOSTIC = "auto"
 
 
@@ -37,13 +38,14 @@ class OmniASRProcessorKwargs(ProcessingKwargs, total=False):
         },
         "text_kwargs": {
             "padding": True,
-            "padding_side": "right",
+            "padding_side": "left",
             "add_special_tokens": False,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
 
 
+@auto_docstring
 class OmniASRProcessor(ProcessorMixin):
     valid_processor_kwargs = OmniASRProcessorKwargs
 
@@ -51,52 +53,33 @@ class OmniASRProcessor(ProcessorMixin):
         self,
         feature_extractor,
         tokenizer,
-        language_mapping=None,
+        chat_template=None,
+        audio_token="<extra_id_1>",
         group_tokens=None,
-        audio_token_id=None,
-        language_token_id=None,
-        bos_token_id=None,
         conv_kernel=None,
         conv_stride=None,
     ):
         r"""
-        language_mapping (`dict[str, int]`, *optional*):
-            Mapping from a language code (e.g. `"eng_latn"`, and `"auto"` for the language-agnostic mode) to the id
-            of the token that stands for it in the prompt. The language tokens close the model's vocabulary, one per
-            row of the language embedding table the original checkpoint kept apart. Only the LLM variant is
-            language-conditioned, so only its checkpoints carry a mapping; when it is `None`, `language` cannot be
-            resolved and the prompt is not built here.
+        audio_token (`str`, *optional*, defaults to `"<extra_id_1>"`):
+            The placeholder token that stands for one speech encoder frame in the LLM variant's prompt, i.e. the
+            token of [`OmniASRConfig.audio_token_id`].
         group_tokens (`bool`, *optional*):
             Whether [`~OmniASRProcessor.decode`] collapses runs of identical tokens. This is what CTC decoding
             requires, and what the autoregressive LLM variant must not do. Defaults to `True` for the CTC variant
-            and `False` for the LLM variant.
-        audio_token_id (`int`, *optional*):
-            Id of the placeholder token that stands for one speech encoder frame in `input_ids`, i.e.
-            [`OmniASRConfig.audio_token_id`]. Only the LLM variant is prompted with the audio, so only its
-            checkpoints carry the ids and the convolution geometry below.
-        language_token_id (`int`, *optional*):
-            Id of the LID marker token that opens the language slot of the prompt, i.e.
-            [`OmniASRConfig.language_token_id`].
-        bos_token_id (`int`, *optional*):
-            Id of the token that closes the prompt, and from which the transcription is decoded. Defaults to the
-            tokenizer's `bos_token_id`.
+            and `False` for the LLM variant, i.e. to whether a chat template is set.
         conv_kernel (`list[int]`, *optional*):
             Kernel size of each convolution of the speech encoder's feature encoder, i.e.
-            [`OmniASREncoderConfig.conv_kernel`]. Needed to count the frames an audio input is subsampled to, and
-            therefore how many audio placeholders its prompt holds.
+            [`OmniASREncoderConfig.conv_kernel`]. Needed by the LLM variant to count the frames an audio input is
+            subsampled to, and therefore how many audio placeholders its prompt holds.
         conv_stride (`list[int]`, *optional*):
             Stride of each convolution of the speech encoder's feature encoder, i.e.
             [`OmniASREncoderConfig.conv_stride`].
         """
-        super().__init__(feature_extractor, tokenizer)
-        self.language_mapping = language_mapping
-        if group_tokens is None:
-            # Checkpoints converted before `group_tokens` was explicit are recognised by carrying a mapping.
-            group_tokens = language_mapping is None
-        self.group_tokens = group_tokens
-        self.audio_token_id = audio_token_id
-        self.language_token_id = language_token_id
-        self.bos_token_id = bos_token_id if bos_token_id is not None else tokenizer.bos_token_id
+        self.audio_token = audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        # Only the LLM variant is prompted, so only its checkpoints ship a chat template.
+        self.group_tokens = group_tokens if group_tokens is not None else chat_template is None
         # Lists rather than tuples, so that saving and reloading the processor round-trips to an equal object.
         self.conv_kernel = list(conv_kernel) if conv_kernel is not None else None
         self.conv_stride = list(conv_stride) if conv_stride is not None else None
@@ -104,91 +87,57 @@ class OmniASRProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        audio: AudioInput,
+        audio: AudioInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        language: str | list[str] = "auto",
-        sampling_rate: int | None = None,
+        output_labels: bool | None = False,
         **kwargs: Unpack[OmniASRProcessorKwargs],
-    ):
-        """
-        Processes audio input and optionally text/language for OmniASR models.
-
-        For the CTC variant, pass `audio` (and optionally `text` for training labels).
-        For the LLM variant, pass `audio` and `language` (e.g., `["eng_Latn"]`).
-
-        Args:
-            audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`, *optional*):
-                The audio input, passed to the feature extractor.
-            text (`str`, `list[str]`, *optional*):
-                Transcription(s), one per audio input, from which the training `labels` are built.
-            language (`str` or `list[str]`, *optional*, defaults to `"auto"`):
-                Language code(s) for the LLM variant (e.g. `"eng_Latn"` or `["eng_Latn", "fra_Latn"]`), resolved
-                into the language token of each prompt via `language_mapping`. Either a single code applied to the
-                whole batch, or one per audio. `"auto"` selects the model's language-agnostic mode; naming the
-                language explicitly gives better transcription quality. Ignored by the CTC variant, which is not
-                language-conditioned.
-            sampling_rate (`int`, *optional*):
-                The sampling rate of the audio input. Will warn if not provided.
+    ) -> BatchFeature:
+        r"""
+        text (`str`, `list[str]`, *optional*):
+            For the CTC variant, the transcription(s), one per audio input, from which the CTC `labels` are built.
+            For the LLM variant, the prompt(s) rendered by [`~OmniASRProcessor.apply_chat_template`], each holding
+            one `audio_token` per audio input; prefer [`~OmniASRProcessor.apply_transcription_request`].
+        output_labels (`bool`, *optional*, defaults to `False`):
+            LLM variant only: whether to return `labels` for training, which only cover what follows each prompt's
+            closing BOS, i.e. the assistant's transcription and its EOS.
 
         Returns:
-            [`BatchFeature`]: For the CTC variant, `input_values` and its `padding_mask`. For the LLM variant, the
-            decoder prompt as `input_ids` and its `attention_mask`, alongside `input_values` and `padding_mask` (the
-            mask over the raw samples). `labels` is added whenever `text` is given: the CTC targets for the CTC
-            variant, and for the LLM variant the transcript appended to the prompt, aligned with `input_ids`.
+            [`BatchFeature`]: `input_values` and its `padding_mask`. For the CTC variant, `labels` is added whenever
+            `text` is given. For the LLM variant, the decoder prompt as `input_ids` and its `attention_mask`, and
+            `labels` when `output_labels=True`.
         """
-        audio = make_list_of_audio(audio)
+        if self.chat_template is None:
+            return self._call_ctc(audio, text=text, **kwargs)
 
+        if output_labels:
+            kwargs["return_mm_token_type_ids"] = True
+        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
+
+        if output_labels:
+            model_inputs.pop("mm_token_type_ids")
+            input_ids = model_inputs["input_ids"]
+            # The prompt closes with the BOS the transcription is decoded from, so everything up to it (the audio
+            # placeholders, the language markers and the left padding) is masked out of the loss.
+            prompt_mask = (input_ids == self.tokenizer.bos_token_id).flip(-1).cumsum(-1).flip(-1) > 0
+            labels = input_ids.masked_fill(prompt_mask | (model_inputs["attention_mask"] == 0), -100)
+            model_inputs["labels"] = labels
+
+        return model_inputs
+
+    def _call_ctc(
+        self,
+        audio: AudioInput,
+        text: TextInput | list[TextInput] | None = None,
+        **kwargs: Unpack[OmniASRProcessorKwargs],
+    ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
             OmniASRProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        if sampling_rate is None:
-            logger.warning_once(
-                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
-            )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-            )
-
         inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
 
-        # The speech encoder gets its own mask over the raw samples, named `padding_mask` as in every other model
-        # that takes `input_values`, so that `attention_mask` is free to cover the LLM variant's decoder prompt.
-        padding_mask = inputs.pop("attention_mask", None)
-        if padding_mask is not None:
-            inputs["padding_mask"] = padding_mask
-
-        # Only the LLM variant is language-conditioned, and only its checkpoints ship a mapping.
-        if self.language_mapping is not None:
-            if padding_mask is not None:
-                audio_lengths = padding_mask.sum(-1)
-            else:
-                audio_lengths = torch.full((len(audio),), inputs["input_values"].shape[-1], dtype=torch.long)
-            language_token_ids = self._resolve_language_token_ids(language, len(audio))
-            text_token_ids = None
-            if text is not None:
-                if isinstance(text, str):
-                    text = [text]
-                if len(text) != len(audio):
-                    raise ValueError(f"Received {len(text)} `text` entries for {len(audio)} audio input(s).")
-                # Each transcript is appended to its own prompt, so it is tokenized unpadded.
-                text_kwargs = {**output_kwargs["text_kwargs"], "padding": False, "return_tensors": None}
-                text_token_ids = self.tokenizer(text, **text_kwargs)["input_ids"]
-            inputs["input_ids"], inputs["attention_mask"], labels = self._build_prompt(
-                audio_lengths, language_token_ids, text_token_ids
-            )
-            if labels is not None:
-                inputs["labels"] = labels
-        elif language != LANGUAGE_AGNOSTIC:
-            logger.warning_once(
-                f"`language={language!r}` is ignored: this processor has no `language_mapping`, so the model it "
-                "belongs to is not language-conditioned."
-            )
-
-        if text is not None and self.language_mapping is None:
+        if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
             labels = encodings["input_ids"]
             # Mask padding positions with -100 so the CTC loss ignores them.
@@ -199,111 +148,127 @@ class OmniASRProcessor(ProcessorMixin):
 
         return inputs
 
-    def decode(self, *args, **kwargs):
-        # CTC decoding collapses runs of identical tokens; the autoregressive LLM variant must keep them.
-        kwargs.setdefault("group_tokens", self.group_tokens)
-        return self.tokenizer.decode(*args, **kwargs)
+    def validate_inputs(
+        self,
+        audio: AudioInput | None = None,
+        text: TextInput | list[TextInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(audio=audio, text=text, **kwargs)
 
-    def _resolve_language_token_ids(self, language: str | list[str], batch_size: int) -> list[int]:
-        """Id of the language token each prompt carries, one per audio input."""
-        if isinstance(language, str):
-            language = [language] * batch_size
-        if len(language) == 1 and batch_size > 1:
-            # A single language code is broadcast to every audio sample in the batch.
-            language = list(language) * batch_size
-        if len(language) != batch_size:
-            raise ValueError(f"Received {len(language)} `language` entries for {batch_size} audio input(s).")
+        if text is not None and audio is not None and len(text) != len(audio):
+            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
-        language_token_ids = []
-        for lang in language:
-            key = lang.lower()
-            if key not in self.language_mapping:
-                raise ValueError(
-                    f"Unknown `language={lang!r}`. Pass {LANGUAGE_AGNOSTIC!r} for the language-agnostic mode, or one "
-                    f"of the {len(self.language_mapping) - 1} codes in `language_mapping`, e.g. "
-                    f"{sorted(set(self.language_mapping) - {LANGUAGE_AGNOSTIC})[:5]}."
-                )
-            language_token_ids.append(self.language_mapping[key])
-        return language_token_ids
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs["num_audio_tokens"] = self._get_num_audio_tokens(audio_inputs["padding_mask"].sum(-1))
+        audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
+        return audio_inputs, audio_replacements
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        return self.audio_token * int(audio_inputs["num_audio_tokens"][audio_idx])
 
     def _get_num_audio_tokens(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
         """
         Number of speech encoder frames each audio length is subsampled to, i.e. how many audio placeholders its
         prompt holds. Mirrors `OmniASRPreTrainedModel._get_feat_extract_output_lengths`.
         """
+        # TODO remove guard and check in init?
+        if self.conv_kernel is None or self.conv_stride is None:
+            raise ValueError(
+                f"{self.__class__.__name__} needs `conv_kernel` and `conv_stride` to count the audio placeholders of "
+                "the LLM variant's prompt; they are saved alongside its checkpoints."
+            )
         for kernel, stride in zip(self.conv_kernel, self.conv_stride):
             audio_lengths = torch.div(audio_lengths - kernel, stride, rounding_mode="floor") + 1
         return audio_lengths
 
-    def _build_prompt(
+    def apply_transcription_request(
         self,
-        audio_lengths: "torch.Tensor",
-        language_token_ids: list[int],
-        text_token_ids: list[list[int]] | None = None,
-    ) -> tuple["torch.LongTensor", "torch.LongTensor", "torch.LongTensor | None"]:
+        audio: str | list[str] | AudioInput,
+        language: str | list[str] | None = None,
+        **kwargs: Unpack[OmniASRProcessorKwargs],
+    ) -> BatchFeature:
         """
-        Build the decoder prompt `audio | lid_marker | language | bos` of each audio input, as `input_ids` holding
-        one audio placeholder per speech encoder frame.
+        Prepare inputs for the LLM variant's speech recognition without manually writing the chat template.
 
-        When `text_token_ids` are given, each transcript and an EOS follow its prompt, and `labels` are returned
-        aligned with `input_ids`: the prompt and the padding are masked with `-100`, so that the causal language
-        modeling loss only covers the transcript and its EOS.
+        Args:
+            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
+                the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
+            language (`str` or `list[str]`, *optional*):
+                Language code(s) (e.g. `"eng_Latn"` or `["eng_Latn", "fra_Latn"]`), either one for the whole batch
+                or one per audio. `None` or `"auto"` selects the model's language-agnostic mode; naming the language
+                explicitly gives better transcription quality.
+            **kwargs:
+                Additional keyword arguments forwarded to [`~OmniASRProcessor.apply_chat_template`] (for example
+                `text_kwargs`, `audio_kwargs`, ...).
 
-        The prompts are left-padded, so that every sequence ends with `bos` -- decoding continues from there for the
-        whole batch -- and the distance between the audio and the markers does not depend on how much the batch was
-        padded. The [original implementation](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1051)
-        instead packs the markers directly after each sample's own last frame, and tracks the lengths alongside.
+        Returns:
+            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`OmniASRForConditionalGeneration.generate`].
         """
-        missing = [
-            name
-            for name, value in [
-                ("audio_token_id", self.audio_token_id),
-                ("language_token_id", self.language_token_id),
-                ("bos_token_id", self.bos_token_id),
-                ("conv_kernel", self.conv_kernel),
-                ("conv_stride", self.conv_stride),
-            ]
-            if value is None
-        ]
-        if text_token_ids is not None and self.tokenizer.eos_token_id is None:
-            missing.append("eos_token_id")
-        if missing:
+        if self.chat_template is None:
             raise ValueError(
-                f"{self.__class__.__name__} cannot build the decoder prompt without {missing}, which are saved "
-                "alongside the LLM variant's checkpoints. A checkpoint converted before the prompt was built here "
-                "has to be converted again."
+                f"{self.__class__.__name__} has no chat template: only the LLM variant is prompted. The CTC variant "
+                "takes the audio directly, e.g. `processor(audio)`."
             )
+        audio_items = list(make_list_of_audio_chat_template(audio))
+        batch_size = len(audio_items)
+        if batch_size == 0:
+            raise ValueError("`audio` must contain at least one sample.")
 
-        num_audio_tokens = self._get_num_audio_tokens(audio_lengths).tolist()
-        prompts = [
-            [self.audio_token_id] * num_frames + [self.language_token_id, language_token_id, self.bos_token_id]
-            for num_frames, language_token_id in zip(num_audio_tokens, language_token_ids)
-        ]
-        if text_token_ids is None:
-            targets = [[] for _ in prompts]
-        else:
-            targets = [list(token_ids) + [self.tokenizer.eos_token_id] for token_ids in text_token_ids]
-        max_length = max(len(prompt) + len(target) for prompt, target in zip(prompts, targets))
+        if language is None or isinstance(language, str):
+            language = [language] * batch_size
+        if len(language) != batch_size:
+            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
 
-        input_ids = torch.full((len(prompts), max_length), self.tokenizer.pad_token_id, dtype=torch.long)
-        attention_mask = torch.zeros((len(prompts), max_length), dtype=torch.long)
-        labels = torch.full((len(prompts), max_length), -100, dtype=torch.long)
-        for idx, (prompt, target) in enumerate(zip(prompts, targets)):
-            sequence = prompt + target
-            input_ids[idx, max_length - len(sequence) :] = torch.tensor(sequence, dtype=torch.long)
-            attention_mask[idx, max_length - len(sequence) :] = 1
-            if target:
-                labels[idx, max_length - len(target) :] = torch.tensor(target, dtype=torch.long)
+        conversations = []
+        for audio_item, lang in zip(audio_items, language):
+            content = [make_audio_chat_template_content(audio_item)]
+            if lang is not None:
+                content.append({"type": "language", "language": self._resolve_language(lang)})
+            conversations.append([{"role": "user", "content": content}])
 
-        return input_ids, attention_mask, labels if text_token_ids is not None else None
+        return self.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            **kwargs,
+        )
+
+    def _resolve_language(self, language: str) -> str:
+        """Lower-case the language code, and check that the vocabulary holds its token."""
+        code = language.lower()
+        if self.tokenizer.convert_tokens_to_ids(f"<|lang:{code}|>") == self.tokenizer.unk_token_id:
+            languages = sorted(
+                token[len("<|lang:") : -len("|>")]
+                for token in self.tokenizer.get_vocab()
+                if token.startswith("<|lang:") and token != f"<|lang:{LANGUAGE_AGNOSTIC}|>"
+            )
+            raise ValueError(
+                f"Unknown `language={language!r}`. Pass {LANGUAGE_AGNOSTIC!r} for the language-agnostic mode, or one "
+                f"of the {len(languages)} supported codes, e.g. {languages[:5]}."
+            )
+        return code
+
+    def decode(self, *args, **kwargs):
+        # CTC decoding collapses runs of identical tokens; the autoregressive LLM variant must keep them.
+        kwargs.setdefault("group_tokens", self.group_tokens)
+        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):
-        if self.language_mapping is None:
-            # CTC variant: the audio is the whole input, and `padding_mask` masks its padding.
-            return ["input_values", "padding_mask", "labels"]
-        # LLM variant: the audio fills the placeholders of a decoder prompt, so it carries its own mask.
-        return ["input_values", "padding_mask", "input_ids", "attention_mask", "labels"]
+        if self.chat_template is None:
+            # CTC variant: the transcription is only tokenized into the CTC `labels`.
+            return self.feature_extractor.model_input_names + ["labels"]
+        return super().model_input_names
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_audio_tokens"]
 
 
 __all__ = ["OmniASRProcessor"]

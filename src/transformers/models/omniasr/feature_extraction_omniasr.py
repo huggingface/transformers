@@ -49,7 +49,7 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
             before padding, to match the [original implementation](https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L23).
     """
 
-    model_input_names = ["input_values", "attention_mask"]
+    model_input_names = ["input_values", "padding_mask"]
 
     def __init__(
         self,
@@ -71,7 +71,7 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
         padding: bool | str | PaddingStrategy = True,
         max_length: int | None = None,
         truncation: bool = False,
-        return_attention_mask: bool | None = None,
+        return_attention_mask: bool | None = True,
         return_tensors: str | TensorType | None = "pt",
         **kwargs,
     ) -> BatchFeature:
@@ -97,9 +97,8 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, the value of
-                `self.return_attention_mask` is used.
+            return_attention_mask (`bool`, *optional*, defaults to `True`):
+                Whether to return the mask over the raw samples, as `padding_mask`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `"pt"`):
                 Only `"pt"` is supported, i.e. returning PyTorch `torch.Tensor` objects.
         """
@@ -139,7 +138,7 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
             audio[idx] = example
 
         encoded_inputs = BatchFeature({"input_values": audio})
-        return self.pad(
+        output_values = self.pad(
             encoded_inputs,
             padding=padding,
             max_length=max_length,
@@ -147,6 +146,9 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
             return_tensors=return_tensors,
         )
+        if return_attention_mask:
+            output_values["padding_mask"] = output_values.pop("attention_mask")
+        return output_values
 
 
 __all__ = ["OmniASRFeatureExtractor"]

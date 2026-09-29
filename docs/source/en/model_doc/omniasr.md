@@ -136,14 +136,9 @@ ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="v
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 speech_samples = [el["array"] for el in ds["audio"][:5]]
 
-inputs = processor(
-    speech_samples,
-    sampling_rate=processor.feature_extractor.sampling_rate,
-    language=["eng_Latn"],
-)
+inputs = processor.apply_transcription_request(speech_samples, language="eng_Latn")
 inputs.to(model.device, dtype=model.dtype)
 generated_ids = model.generate(**inputs, max_new_tokens=256)
-# the audio is prompted as placeholder tokens in `input_ids`, which `generate` returns back before the transcription
 generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
 transcription = processor.decode(generated_ids, skip_special_tokens=True)
 print(transcription)
