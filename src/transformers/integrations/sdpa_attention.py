@@ -25,14 +25,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
-    # GQA can only be used under the following conditions
-    # 1.cuda or Ascend NPU
-    #   - attention_mask is None (otherwise it will fall back to the math kernel)
-    #   - key head_dim == value head_dim <= 256 (otherwise it will fall back to the math kernel)
-    # 2.xpu
-    #   - torch version >= 2.8
-    if _is_torch_xpu_available:
+    # XPU and MPS support masked GQA; older MPS implementations may repeat KV heads internally.
+    if _is_torch_xpu_available or key.device.type == "mps":
         return _is_torch_greater_or_equal_than_2_8
+    # CUDA and Ascend NPU require these constraints to avoid falling back to the math kernel.
     return attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 
