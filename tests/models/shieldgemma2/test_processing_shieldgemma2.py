@@ -66,7 +66,7 @@ _SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ShieldGemma2Processor
 
-    images_text_kwargs_max_length = 740
+    images_text_kwargs_max_length = 741
     images_text_kwargs_override_max_length = 750
     images_unstructured_max_length = 742
 
