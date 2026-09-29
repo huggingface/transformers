@@ -34,12 +34,11 @@ class VibeVoiceAsrProcessorKwargs(ProcessingKwargs, total=False):
             "padding_side": "left",
             "add_special_tokens": False,
             "return_tensors": "pt",
+            "return_attention_mask": True,
         },
         "audio_kwargs": {
             "sampling_rate": 24000,
             "pad_to_multiple_of": 3200,  # tokenizer hop length
-        },
-        "common_kwargs": {
             "return_attention_mask": True,
         },
     }

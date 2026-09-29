@@ -59,6 +59,8 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
+            "tokenize": True,
+            "return_dict": True,
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -69,8 +71,6 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {
             "return_tensors": "pt",
-            "return_dict": True,
-            "tokenize": True,
         },
     }
 

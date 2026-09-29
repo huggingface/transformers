@@ -1574,7 +1574,7 @@ class ProcessorMixin(PushToHubMixin):
                 ```python
                 processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": {"height": 222, "width": 222}}})
                 ```
-            3) "common_kwargs" passed as part of kwargs
+            3) Deprecated in favor of 2): "common_kwargs" passed as part of kwargs
                 ```python
                 kwargs = {"common_kwargs": {"return_tensors": "pt"}}
                 processor(..., **kwargs)

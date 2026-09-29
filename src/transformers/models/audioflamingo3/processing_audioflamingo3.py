@@ -43,7 +43,7 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {
             "return_tensors": "pt",
-            "padding_side": "left",
+            "padding_side": "left",  # Don't move to "text_kwargs" as it will no longer override the tokenizer defaults
         },
     }
 
