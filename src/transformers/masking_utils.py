@@ -213,11 +213,8 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
     if attention_mask is not None:
         # Pad it if necessary
         padding_length = kv_length + kv_offset - attention_mask.shape[-1]
-        if has_free_unbacked_symbols(padding_length):
-            # A model that sizes its own mask from the cache length (opt) makes this width *unbacked*, so it
-            # cannot be compared at all. Clamp instead of branching — padding by a symbolic zero is just a
-            # copy, so nothing is lost. Only here: `sym_max` is an op some backends cannot lower
-            # (ExecuTorch's prim registry has no `sym_max`), so the ordinary branch stays the default.
+        # An unbacked width (only under export, e.g. opt) can't be compared, so clamp it with `sym_max` instead
+        if is_torchdynamo_exporting() and has_free_unbacked_symbols(padding_length):
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, torch.sym_max(padding_length, 0)))
         elif padding_length > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
