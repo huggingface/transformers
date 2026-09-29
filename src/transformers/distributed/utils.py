@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import warnings
-from collections import defaultdict
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -301,47 +300,3 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     if _get_torch_distributed_rank() == 0:
         return full_state_dict
     return {}
-
-
-def clip_grad_norm_(parameters, max_norm, norm_type=2.0, error_if_nonfinite=False, foreach=None):
-    """
-    Equivalent to torch.nn.utils.clip_grad_norm_ but supports a mixture of ordinary and DTensors parameters.
-    """
-    from torch.nn.utils import clip_grads_with_norm_, get_total_norm
-
-    parameters = [parameters] if isinstance(parameters, torch.Tensor) else list(parameters)
-    norm_type = float(norm_type)
-    max_norm = float(max_norm)
-    params_by_mesh = defaultdict(list)
-    for param in parameters:
-        if param.grad is not None:
-            params_by_mesh[param.grad.device_mesh if is_dtensor(param.grad) else None].append(param)
-
-    if len(params_by_mesh) <= 1 and max_norm != float("inf"):
-        total_norm = torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type, error_if_nonfinite, foreach)
-        return total_norm.full_tensor() if is_dtensor(total_norm) else total_norm
-
-    if not params_by_mesh:
-        return torch.tensor(0.0)
-
-    norms = []
-    for params in params_by_mesh.values():
-        norm = get_total_norm([param.grad for param in params], norm_type, foreach=foreach)
-        norms.append(norm.full_tensor() if is_dtensor(norm) else norm)
-    stacked_norms = torch.stack([norm.to(norms[0].device) for norm in norms])
-
-    # For order zero, each group norm counts nonzero tensor norms, combine those counts by summing.
-    total_norm = stacked_norms.sum() if norm_type == 0 else torch.linalg.vector_norm(stacked_norms, norm_type)
-
-    if error_if_nonfinite and torch.logical_or(total_norm.isnan(), total_norm.isinf()):
-        raise RuntimeError(
-            f"The total norm of order {norm_type} for gradients from "
-            "`parameters` is non-finite, so it cannot be clipped. To disable "
-            "this error and scale the gradients by the non-finite norm anyway, "
-            "set `error_if_nonfinite=False`"
-        )
-
-    if max_norm != float("inf"):
-        for params in params_by_mesh.values():
-            clip_grads_with_norm_(params, max_norm, total_norm, foreach)
-    return total_norm
