@@ -189,7 +189,7 @@ def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
 def load_original_state_dict(checkpoint_dir: Path) -> dict[str, Any]:
     index_path = checkpoint_dir / "model.safetensors.index.json"
     if index_path.exists():
-        with open(index_path, "r") as f:
+        with open(index_path, "r", encoding="utf-8") as f:
             weight_map = json.load(f)["weight_map"]
         shard_files = sorted(set(weight_map.values()))
     else:
@@ -207,10 +207,10 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
 
     # `adaptor_input_dim` is derived.
     config_path = checkpoint_dir / "config.json"
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         raw_config_dict = json.load(f)
     raw_config_dict.pop("adaptor_input_dim", None)
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         json.dump(raw_config_dict, f, indent=2)
 
     # 1) Load original state dict, config, generation config and processor.
