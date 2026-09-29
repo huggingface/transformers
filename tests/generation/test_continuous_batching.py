@@ -145,8 +145,8 @@ def get_tokenizer_and_model(
     model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, torch_dtype=dtype)
     model = model.to(device).eval()
     # If needed, upcast the lm_head to fp32 for added precision. This helps break ties in bf16 that would lead to token
-    # # divergence between CB and generate, while not affecting the rest of the model: if there is a real divergence in
-    # # the model, it will accumulate over layers, and having a more precise LM head will not close the gap.
+    # divergence between CB and generate, while not affecting the rest of the model: if there is a real divergence in
+    # the model, it will accumulate over layers, and having a more precise LM head will not close the gap.
     if upcast_lm_head:
         model.lm_head = copy.deepcopy(model.lm_head).to(torch.float32)  # copy in case embedding are tied
         model.lm_head.register_forward_pre_hook(lambda m, args: (args[0].float(), *args[1:]))
@@ -178,6 +178,17 @@ def with_flush_memory(func):
             flush_memory(flush_compile=flush_compile)
 
     return wrapper
+
+
+def flexible_flash_skip(test_case: unittest.TestCase, attn_implementation: str) -> None:
+    """Skip the test if Flash Attention 2 or 3 is required but not available."""
+    is_fa2 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
+    if is_fa2 and not is_flash_attn_2_available(kernels_fallback_ok=True):
+        test_case.skipTest("Flash Attention 2 is not available, as a package or through `kernels`. Skipping test.")
+
+    is_fa3 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=3)
+    if is_fa3 and not is_flash_attn_3_available(kernels_fallback_ok=True):
+        test_case.skipTest("Flash Attention 3 is not available, as a package or through `kernels`. Skipping test.")
 
 
 def get_generation_inputs(
@@ -1197,16 +1208,6 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
 
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
-    def flexible_flash_skip(self, attn_implementation: str) -> None:
-        """Skip the test if Flash Attention 2 or 3 is required but not available."""
-        is_fa2 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
-        if is_fa2 and not is_flash_attn_2_available(kernels_fallback_ok=True):
-            self.skipTest("Flash Attention 2 is not available, as a package or through `kernels`. Skipping test.")
-
-        is_fa3 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=3)
-        if is_fa3 and not is_flash_attn_3_available(kernels_fallback_ok=True):
-            self.skipTest("Flash Attention 3 is not available, as a package or through `kernels`. Skipping test.")
-
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #
@@ -1224,7 +1225,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
         # Skip the test if Flash Attention 2 or 3 is required but not available.
-        self.flexible_flash_skip(attn_implementation)
+        flexible_flash_skip(self, attn_implementation)
         # Skip the test if cuda graph is on but the device is not CUDA
         if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
             self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
@@ -2069,7 +2070,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @slow
     @require_flash_attn
     def test_flash_attn_with_kvcache_parity(self, use_cuda_graph: bool, use_async: bool) -> None:
-        """Test that paged flash_attn3 (flash_attn_with_kvcache path) produces same outputs as varlen."""
+        """Test that flash attention with kvcache (flash_attn_with_kvcache path) produces same outputs as varlen."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         # Upcast the lm_head: in bf16, near-tied logits round to the same value and padding (CUDA graphs) flips greedy picks
         tokenizer, model = get_tokenizer_and_model(
@@ -2106,10 +2107,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             self.assertTrue(mock_get_block_table_key.called, "get_block_table_key method was not called.")
 
         self.assertEqual(len(outputs_varlen), len(outputs_kvcache))
-        for (_, out_fa2), (_, out_fa3) in zip(outputs_varlen.items(), outputs_kvcache.items()):
-            text_fa2 = tokenizer.decode(out_fa2.generated_tokens, skip_special_tokens=True)
-            text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
-            self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")
+        for (_, out_varlen), (_, out_kvcache) in zip(outputs_varlen.items(), outputs_kvcache.items()):
+            text_varlen = tokenizer.decode(out_varlen.generated_tokens, skip_special_tokens=True)
+            text_kvcache = tokenizer.decode(out_kvcache.generated_tokens, skip_special_tokens=True)
+            self.assertEqual(text_varlen, text_kvcache, f"Mismatch:\nvarlen: {text_varlen}\nkvcache: {text_kvcache}")
 
     @parameterized.expand([(False, False), (False, True), (True, True)])
     @slow
@@ -2137,10 +2138,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Generated with a regular generate in bf16, without CB nor upcast lm_head
         expected_texts = Expectations(
             {
-                ("cuda", (10, 0)): [
-                    "The robe takes 2 bolts",
-                    "The basket contains 25 oranges",
-                ],
+                ("cuda", (10, 0)): ["The robe takes 2 bolts", "The basket contains 25 oranges"],
+                # Default expectation was not tested but needs to be there to avoid crashes. Feel free to change.
+                (None, None): ["The robe takes 2 bolts", "The basket contains 25 oranges"],
             }
         ).get_expectation()
         self.assertEqual(len(outputs), len(expected_texts))
@@ -2154,7 +2154,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Decode-fast-path output must match varlen when more requests decode concurrently than
         `max_blocks_per_request` (regression test for the `pad_to_pow2` cap truncating the decode batch)."""
         # Skip the test if Flash Attention 2 or 3 is required but not available.
-        self.flexible_flash_skip(attn_implementation)
+        flexible_flash_skip(self, attn_implementation)
 
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         tokenizer, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, torch.bfloat16)
@@ -2849,6 +2849,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
             "use_async_batching": False,
         }
         defaults.update(worker_kwargs)
+        flexible_flash_skip(self, defaults["attn_implementation"])
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
 
     def test_continuous_batching_tp_fast(self) -> None:
@@ -2856,6 +2857,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         that all TP ranks agree on the generated tokens."""
         self._run_cb_worker(max_new_tokens=4)
 
+    @require_flash_attn
     def test_continuous_batching_tp_pause(self) -> None:
         """Test that `pause` keeps the TP ranks in the same pause window even when they request it at different
         iterations, and that pausing repeatedly mid-generation loses no request and does not make the ranks diverge."""
@@ -2893,6 +2895,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         self._run_cb_worker(use_cuda_graph=True, use_async_batching=True)
 
     @slow
+    @require_flash_attn
     def test_continuous_batching_tp_cancellation(self) -> None:
         """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
@@ -2902,6 +2905,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         )
 
     @slow
+    @require_flash_attn
     def test_continuous_batching_tp_cancellation_realistic(self) -> None:
         """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
