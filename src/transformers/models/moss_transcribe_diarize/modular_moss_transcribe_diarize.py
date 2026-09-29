@@ -680,11 +680,11 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
             Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
             `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
             and filled with the audio embeddings.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss.
         padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`, *optional*):
             Mask marking each audio sample's valid raw-audio length. Used with `config.audio_chunk_size` to
             recover `audio_chunk_mapping`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss.
 
         Example:
 

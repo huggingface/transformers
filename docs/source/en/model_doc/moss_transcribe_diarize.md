@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and limitations 
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-18.*
+*This model was contributed to Hugging Face Transformers on 2026-09-29.*
 
 # MOSS-Transcribe-Diarize
 
@@ -49,11 +49,11 @@ string, the parsed segments as a list of dicts (`return_format="parsed"`), or ju
 (`return_format="transcription_only"`).
 
 ```python
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/podcast_sample.wav"
 inputs = processor.apply_transcription_request(audio_url)
@@ -99,11 +99,11 @@ passed alongside it for additional context.
 Below we transcribe an audio clip that mentions "Yorùbá", comparing with and without passing it as a keyword.
 
 ```python
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/languages_sample.wav"
 
@@ -133,11 +133,11 @@ The above examples use `apply_transcription_request`, which is a convenience fun
 the chat template. It is equivalent to a user turn that contains only audio:
 
 ```python
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav"
 conversation = [
@@ -170,12 +170,12 @@ Pass a list of audio, and optionally a matching list of prompts and/or keywords,
 Set an entry to `None` to skip it for that sample.
 
 ```python
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 # `from_pretrained` is used here for convenience, the model can also be built from a config directly.
-model = AutoModel.from_pretrained(model_id, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 audio = [
     "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav",
@@ -198,11 +198,11 @@ conversation with the audio in the user turn and the target transcription as the
 out with `-100`).
 
 ```python
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 model.train()
 
 conversation = [
@@ -248,13 +248,13 @@ On a B200, we observed a speed-up of ~2.1x for a batch size of 4.
 
 ```python
 import torch
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 num_warmup = 3
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id).to("cuda")
+model = AutoModelForCausalLM.from_pretrained(model_id).to("cuda")
 
 audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav"
 inputs = processor.apply_transcription_request([audio_url] * 4).to(model.device, torch.bfloat16)
