@@ -268,7 +268,7 @@ class OmniASRLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-# NOTE: similar to `ParakeetEncoderSubsamplingConv2D` but for 1D, and a replacement for `Wav2Vec2FeatureEncoder` and `Wav2Vec2FeatureProjection`
+# NOTE: similar to `ParakeetEncoderSubsamplingConv2D` but for 1D directly on audio, and a replacement for `Wav2Vec2FeatureEncoder` and `Wav2Vec2FeatureProjection`
 class OmniASREncoderSubsamplingConv1D(nn.Module):
     def __init__(self, config: OmniASREncoderConfig):
         super().__init__()

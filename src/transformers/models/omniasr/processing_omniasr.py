@@ -29,19 +29,17 @@ logger = logging.get_logger(__name__)
 LANGUAGE_AGNOSTIC = "auto"
 
 
-class OmniASRProcessorKwargs(ProcessingKwargs, total=False):
+class OmniASRProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "padding": True,
-            "return_attention_mask": True,
         },
         "text_kwargs": {
             "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
     }
 
 
