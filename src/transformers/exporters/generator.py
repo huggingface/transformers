@@ -85,7 +85,7 @@ if is_torch_available():
 
     from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
     from ..masking_utils import create_masks_for_generate
-    from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+    from ..modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast
 
 # The text-path kwargs `generate` always carries. A modality graph that declares one of these names means
 # its own (an audio encoder's `attention_mask` covers mel frames, not prompt tokens), so it is never
@@ -114,11 +114,13 @@ class Modality:
     - `runner`: the exported `get_<modality>_features` graph.
     - `input_keys`: the generate kwargs that belong to it (e.g. `("pixel_values", "image_grid_thw")`); the
       first is the presence key — the modality runs only when it's passed.
+    - `kind`: its key in `generate`'s `mm_encoder_outputs` (`"image"`, `"video"`, `"audio"`).
     """
 
     token_id: int | None
     runner: ModelRunner
     input_keys: tuple
+    kind: str
 
 
 @dataclass
@@ -362,7 +364,7 @@ class ExportedGenerator(GenerationMixin):
                         continue
                     runner = runners["image_encoder"]
                 input_keys = tuple(spec_input_keys) + ((grid_key,) if grid_key is not None else ())
-                modalities.append(Modality(token_id, runner, input_keys))
+                modalities.append(Modality(token_id, runner, input_keys, name.removesuffix("_encoder")))
         embedder = None
         if (spec := streaming_embedder_spec(config)) is not None and spec.component in runners:
             embedder = StreamingEmbedder(
@@ -850,6 +852,73 @@ class ExportedGenerator(GenerationMixin):
             return self._decode_runner.state_length
         return _cache_length(cache) if cache is not None else 0
 
+    def _maybe_prepare_encoder_kwargs_for_generation(
+        self, inputs_tensor, model_kwargs, model_input_name, generation_config
+    ):
+        """Encode each modality once, before `generate` expands the batch for beams, into the
+        `mm_encoder_outputs` it expands and hands to the prefill."""
+        model_kwargs = super()._maybe_prepare_encoder_kwargs_for_generation(
+            inputs_tensor, model_kwargs, model_input_name, generation_config
+        )
+        if self.config.is_encoder_decoder or self._text_embed is None or model_input_name != "input_ids":
+            return model_kwargs
+        encoded = model_kwargs.setdefault("mm_encoder_outputs", {})
+        for modality in self._modalities:
+            feature_keys = [key for key in modality.input_keys if not key.endswith(_MODALITY_AUX_SUFFIXES)]
+            # `generate` pre-encodes images and videos only, finding their placeholders by `config.<kind>_token_id`
+            # and splitting features per sample; a deepstack tower's per-layer features are not in that form.
+            if (
+                modality.kind not in ("image", "video")
+                or modality.kind in encoded
+                or all(model_kwargs.get(key) is None for key in feature_keys)
+                or getattr(self.config, f"{modality.kind}_token_id", None) is None
+                or any(
+                    re.fullmatch(r".*image_features\.\d+", name)
+                    for name in modality.runner.export_metadata.output_names
+                )
+            ):
+                continue
+            features = self._modality_features(modality, model_kwargs, inputs_tensor).flatten(0, -2)
+            rows_per_sample = (inputs_tensor == modality.token_id).sum(-1).tolist()
+            encoded[modality.kind] = BaseModelOutputWithPooling(pooler_output=list(features.split(rows_per_sample)))
+            for key in feature_keys:
+                model_kwargs.pop(key, None)
+        return model_kwargs
+
+    def _modality_features(self, modality, kwargs, input_ids):
+        """Run one modality's graph: the features to scatter into its placeholder rows, or, for a deepstack
+        anyres tower, `{layer: features}` to sum in inside the decoder."""
+        feed = self._modality_feed(modality, kwargs, input_ids)
+        # An anyres image graph stops at the projector (`PatchVisionEncoder`) because the packing's token
+        # count per image is data; so the padding rows come off here and the packing happens here too.
+        image_sizes = kwargs.get("image_sizes")
+        packs_anyres = (
+            image_sizes is not None
+            and modality.input_keys[0] == "pixel_values"
+            and "image_sizes" not in modality.runner.input_names
+            and _find_config_attr(self.config, "image_grid_pinpoints") is not None
+        )
+        if packs_anyres:
+            tower_input = modality.runner.input_names[0]
+            feed[tower_input] = flatten_anyres_patches(self.config, feed[tower_input], image_sizes)
+        outputs = modality.runner(**feed)
+        # A deepstack tower emits one feature tensor per decoder layer it is injected at
+        # (`image_features.<layer>`).
+        per_layer = {
+            int(name.rsplit(".", 1)[-1]): tensor
+            for name, tensor in outputs.items()
+            if re.fullmatch(r".*image_features\.\d+", name)
+        }
+        if packs_anyres and per_layer:
+            return {
+                layer: pack_anyres_features(self.config, tensor, image_sizes, outputs)
+                for layer, tensor in sorted(per_layer.items())
+            }
+        features = next(iter(outputs.values()))
+        if packs_anyres:
+            features = pack_anyres_features(self.config, features, image_sizes, outputs)
+        return features
+
     def _merge_modalities(self, input_ids, kwargs) -> dict[str, torch.Tensor]:
         """Embed `input_ids` and scatter each present modality's features into its placeholder rows.
 
@@ -864,6 +933,7 @@ class ExportedGenerator(GenerationMixin):
         `video_grid_thw`) to the graph's `grid_thw` input."""
 
         extras: dict = {}
+        encoded = kwargs.get("mm_encoder_outputs") or {}
 
         embedded = self._text_embed(input_ids=input_ids)
         embeds_name = next(iter(embedded))
@@ -871,7 +941,10 @@ class ExportedGenerator(GenerationMixin):
         for modality in self._modalities:
             # Presence keys on whichever of the modality's own input names this call carries — never the
             # aux keys, which `generate` may keep after dropping the features themselves.
-            if all(kwargs.get(key) is None for key in modality.input_keys if not key.endswith(_MODALITY_AUX_SUFFIXES)):
+            pre_encoded = encoded.get(modality.kind)
+            if pre_encoded is None and all(
+                kwargs.get(key) is None for key in modality.input_keys if not key.endswith(_MODALITY_AUX_SUFFIXES)
+            ):
                 continue
             if modality.token_id is not None:
                 mask = (input_ids == modality.token_id).unsqueeze(-1)
@@ -885,39 +958,19 @@ class ExportedGenerator(GenerationMixin):
             # kwarg `generate` kept around would otherwise re-encode for nothing.
             if not mask.any():
                 continue
-            feed = self._modality_feed(modality, kwargs, input_ids)
-            # An anyres image graph stops at the projector (`PatchVisionEncoder`) because the packing's token
-            # count per image is data; so the padding rows come off here and the packing happens here too.
-            image_sizes = kwargs.get("image_sizes")
-            packs_anyres = (
-                image_sizes is not None
-                and modality.input_keys[0] == "pixel_values"
-                and "image_sizes" not in modality.runner.input_names
-                and _find_config_attr(self.config, "image_grid_pinpoints") is not None
-            )
-            if packs_anyres:
-                tower_input = modality.runner.input_names[0]
-                feed[tower_input] = flatten_anyres_patches(self.config, feed[tower_input], image_sizes)
-            outputs = modality.runner(**feed)
-            # A deepstack tower emits one feature tensor per decoder layer it is injected at
-            # (`image_features.<layer>`). Those are summed in inside the decoder rather than scattered, so the
-            # placeholder rows are zeroed here and the packed tensors go on to the decode graph by name.
-            per_layer = {
-                int(name.rsplit(".", 1)[-1]): tensor
-                for name, tensor in outputs.items()
-                if re.fullmatch(r".*image_features\.\d+", name)
-            }
-            if packs_anyres and per_layer:
+            if pre_encoded is not None:
+                features = torch.cat(pre_encoded.pooler_output)
+            else:
+                features = self._modality_features(modality, kwargs, input_ids)
+            # Deepstack features are summed in inside the decoder rather than scattered, so the placeholder
+            # rows are zeroed here and the packed tensors go on to the decode graph by name.
+            if isinstance(features, dict):
                 extras["deepstack_features"] = {
-                    layer: pack_anyres_features(self.config, tensor, image_sizes, outputs).to(inputs_embeds.dtype)
-                    for layer, tensor in sorted(per_layer.items())
+                    layer: tensor.to(inputs_embeds.dtype) for layer, tensor in features.items()
                 }
                 extras["vision_mask"] = mask
                 inputs_embeds = inputs_embeds.masked_fill(mask, 0.0)
                 continue
-            features = next(iter(outputs.values()))
-            if packs_anyres:
-                features = pack_anyres_features(self.config, features, image_sizes, outputs)
             inputs_embeds = inputs_embeds.masked_scatter(mask, features.to(inputs_embeds.dtype))
         return {**embedded, embeds_name: inputs_embeds, **extras}
 

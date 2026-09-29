@@ -50,6 +50,7 @@ from .precompute import _find_config_attr, precompute_export_inputs
 from .utils import (
     module_device,
     module_dtype,
+    patch_attributes,
 )
 
 
@@ -339,8 +340,10 @@ def decompose_prefill_decode(
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
     capture_config.disable_compile = True
+    # Record the forwards that encode their own modalities, so the prefill keeps its encoder inputs
+    no_mm_encoder_outputs = [(model, "_supports_mm_encoder_outputs", lambda original: lambda: False)]
     try:
-        with _capture_forward(model) as calls:
+        with _capture_forward(model) as calls, patch_attributes(no_mm_encoder_outputs):
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
         # A cache-shape error here means the geometry `kv_cache_geometry` derived for the materialized

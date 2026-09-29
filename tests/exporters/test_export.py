@@ -1489,7 +1489,7 @@ class ExportTesterMixin:
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
-        """ExportArtifacts each model class with ``torch.export`` and verify outputs match eager within tolerance."""
+        """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
 
         exporter = DynamoExporter()
@@ -1580,7 +1580,7 @@ class ExportTesterMixin:
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_onnx_export(self, dynamic, atol=1e-3, rtol=1e-3):
-        """ExportArtifacts each model class to ONNX and verify output names match eager."""
+        """Export each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_model_classes:
@@ -1613,7 +1613,7 @@ class ExportTesterMixin:
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_executorch_export(self, backend, dynamic, atol=1e-3, rtol=1e-3):
-        """ExportArtifacts each model class to ExecuTorch, run it, and verify its outputs match eager."""
+        """Export each model class to ExecuTorch, run it, and verify its outputs match eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
@@ -1737,7 +1737,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     # the variance survives pinning both weights and inputs). A real wiring bug — wrong cache, mask or
     # positions — diverges by orders of magnitude more, and the id-parity check below still guards it.
     def test_torch_export_generate(self, dynamic, multi_token_decode, generation_config, atol=5e-4, rtol=1e-4):
-        """ExportArtifacts prefill and decode stages with ``torch.export`` and verify outputs match eager."""
+        """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
 
         exporter = DynamoExporter()
@@ -1787,7 +1787,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_onnx_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
-        """ExportArtifacts prefill and decode stages to ONNX and verify output names match eager."""
+        """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_generative_model_classes:
@@ -1833,7 +1833,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_openvino_export(self, dynamic, atol=1e-3, rtol=1e-3):
-        """ExportArtifacts each model class to OpenVINO IR and verify output names match eager."""
+        """Export each model class to OpenVINO IR and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_model_classes:
@@ -1862,7 +1862,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_openvino_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3):
-        """ExportArtifacts prefill and decode stages to OpenVINO IR and verify output names match eager."""
+        """Export prefill and decode stages to OpenVINO IR and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_generative_model_classes:
@@ -1914,7 +1914,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     def test_executorch_export_generate(
         self, backend, dynamic, multi_token_decode, generation_config, atol=1e-3, rtol=1e-3
     ):
-        """ExportArtifacts prefill and decode stages to ExecuTorch, run each, and verify they match eager."""
+        """Export prefill and decode stages to ExecuTorch, run each, and verify they match eager."""
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()

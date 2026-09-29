@@ -258,7 +258,10 @@ def _ignore_causal_mask_sdpa(
     # Never skip under export: `is_causal` would be hard-coded into the graph for the traced query length
     # (pytorch#108108). `torch.compile` can still skip when `padding_mask` values need not be read, on
     # torch>=2.14 (before pytorch#176499, `torch.compiler.is_exporting()` was a constant `True` under dynamo).
-    if is_torchdynamo_exporting() or (padding_mask is not None and is_tracing(padding_mask)):
+    # A static single-token query without padding is the exception: its `is_causal=False` holds at any length.
+    if is_torchdynamo_exporting():
+        return padding_mask is None and local_attention_size is None and type(q_length) is int and q_length == 1
+    if padding_mask is not None and is_tracing(padding_mask):
         return False
 
     if padding_mask is not None and padding_mask.shape[-1] > kv_length:

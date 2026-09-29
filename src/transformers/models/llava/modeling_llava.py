@@ -184,8 +184,6 @@ class LlavaModel(LlavaPreTrainedModel):
                 .tolist()
             )
             image_features = torch.split(image_features.squeeze(0), split_sizes)
-        else:
-            image_features = list(image_features)
         image_outputs.pooler_output = image_features
 
         return image_outputs
@@ -251,7 +249,9 @@ class LlavaModel(LlavaPreTrainedModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

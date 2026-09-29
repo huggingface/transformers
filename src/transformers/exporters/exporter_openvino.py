@@ -1636,6 +1636,9 @@ def _patch_sdpa(original):
             else:
                 attn_mask = attn_mask.clamp_min(masked_value)
                 unattended = attn_mask.amax(dim=-1, keepdim=True) <= masked_value
+        elif not kwargs.get("is_causal", False):
+            # OV's fused KV-cache SDPA rejects a call without a mask (`attention_mask do not match q and k`)
+            attn_mask = query.new_zeros(query.shape[-2], key.shape[-2])
         q_heads, k_heads = query.shape[-3], key.shape[-3]
         if q_heads != k_heads and q_heads % k_heads == 0:
             reps = q_heads // k_heads

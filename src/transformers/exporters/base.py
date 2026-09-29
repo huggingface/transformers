@@ -403,7 +403,7 @@ class HfExporter(ABC):
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin,
     ) -> ExportArtifacts:
-        """ExportArtifacts the model as one graph, as an [`ExportArtifacts`] that can save and run itself.
+        """Export the model as one graph, as an [`ExportArtifacts`] that can save and run itself.
 
         Takes the same **forward** kwargs as [`~HfExporter.export_artifact`]; reach the backend's own
         program object through `output.artifact`. No `generation_config`: one graph is called, not generated
