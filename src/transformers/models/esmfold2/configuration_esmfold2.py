@@ -292,7 +292,7 @@ class EsmFold2LmEncoderConfig(PreTrainedConfig):
     per_loop_lm_dropout: bool | None = True
 
 
-@auto_docstring(checkpoint="biohub/ESMFold2-hf")
+@auto_docstring(checkpoint="biohub/ESMFold2")
 @strict
 class EsmFold2Config(PreTrainedConfig):
     r"""

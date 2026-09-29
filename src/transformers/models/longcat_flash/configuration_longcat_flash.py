@@ -35,6 +35,9 @@ class LongcatFlashConfig(PreTrainedConfig):
         Number of zero experts (identity function) to add to the expert pool.
     expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
         Hidden size of individual expert FFN layers.
+    num_layers (`int`, *optional*, defaults to 28):
+        Number of decoder layers. Each holds two attention sublayers, so
+        `num_hidden_layers` is always derived as `2 * num_layers`.
 
     ```python
     >>> from transformers import LongcatFlashModel, LongcatFlashConfig
@@ -56,6 +59,7 @@ class LongcatFlashConfig(PreTrainedConfig):
         "num_local_experts": "n_routed_experts",
         "num_experts_per_tok": "moe_topk",
         "intermediate_size": "ffn_hidden_size",
+        "moe_intermediate_size": "expert_ffn_hidden_size",
     }
     default_theta = 10000000.0
     base_model_tp_plan = {
@@ -80,7 +84,6 @@ class LongcatFlashConfig(PreTrainedConfig):
 
     vocab_size: int = 131072
     hidden_size: int = 6144
-    num_hidden_layers: int = 56
     num_layers: int = 28
     num_attention_heads: int = 64
     num_key_value_heads: int | None = None
@@ -109,6 +112,14 @@ class LongcatFlashConfig(PreTrainedConfig):
     zero_expert_num: int = 256
     expert_ffn_hidden_size: int = 2048
     routed_scaling_factor: float = 6.0
+
+    @property
+    def num_hidden_layers(self) -> int:
+        return 2 * self.num_layers
+
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value: int):
+        self.num_layers = value // 2
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

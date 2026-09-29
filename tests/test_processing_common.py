@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.video_utils import get_video_size
 
 
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -793,38 +794,40 @@ class ProcessorTesterMixin:
         call_signature = inspect.signature(processor.__call__)
         input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
 
-        if not ("text" in input_args and ("images" in input_args and "videos" in input_args)):
-            self.skipTest(f"{self.processor_class} doesn't support several vision modalities with text.")
+        if not (
+            "text" in input_args
+            and "images" in input_args
+            and hasattr(processor, "image_processor")
+            and hasattr(processor, "tokenizer")
+        ):
+            self.skipTest(f"{self.processor_class} doesn't support images with text.")
 
         # Prepare inputs and filter by input signature. Make sure to use a high batch size, we'll set some
         # samples to text-only later
-        text = self.prepare_text_inputs(batch_size=3, modalities=["image", "video"])
         image_inputs = self.prepare_images_inputs(batch_size=3)
-        video_inputs = self.prepare_videos_inputs(batch_size=3)
-        inputs_dict = {"text": text, "images": image_inputs, "videos": video_inputs}
-        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        inputs_dict_nested = {"images": image_inputs_nested}
+        modalities = ["image"]
 
         processing_kwargs = {"return_tensors": "pt", "padding": True}
         # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
-        if "videos" in inputs_dict:
+        if "videos" in input_args and hasattr(processor, "video_processor"):
+            video_inputs = self.prepare_videos_inputs(batch_size=3)
+            inputs_dict_nested["videos"] = [[video] for video in video_inputs]
+            modalities.append("video")
             processing_kwargs["do_sample_frames"] = False
 
         # First call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
-        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
-        video_inputs_nested = [[video] for video in video_inputs]
-        inputs_dict_nested = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
-        inputs_dict_nested = {k: v for k, v in inputs_dict_nested.items() if k in input_args}
+        text = self.prepare_text_inputs(batch_size=3, modalities=modalities)
+        inputs_dict_nested["text"] = text
         inputs = processor(**inputs_dict_nested, **processing_kwargs)
         self.assertTrue(self.text_input_name in inputs)
 
         # Now call with one of the samples with no associated vision input. Let's set the first input to be a plain text
         # with no placeholder tokens and no images/videos. The final format would be `images = [[], [image2], [image3]]`
         plain_text = "lower newer"
-        image_inputs_nested[0] = []
-        video_inputs_nested[0] = []
-        text[0] = plain_text
-        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
-        inputs_dict_no_vision = {k: v for k, v in inputs_dict_no_vision.items() if k in input_args}
+        inputs_dict_no_vision = {key: [[]] + value[1:] for key, value in inputs_dict_nested.items() if key != "text"}
+        inputs_dict_no_vision["text"] = [plain_text] + text[1:]
         inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
 
         # Check that text samples are same and are expanded with placeholder tokens correctly. First sample
@@ -1144,7 +1147,7 @@ class ProcessorTesterMixin:
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname)
-            with open(Path(tmpdirname, "chat_template.json"), "w") as fp:
+            with open(Path(tmpdirname, "chat_template.json"), "w", encoding="utf-8") as fp:
                 json.dump({"chat_template": processor.chat_template}, fp)
             os.remove(Path(tmpdirname, "chat_template.jinja"))
 
@@ -1285,7 +1288,7 @@ class ProcessorTesterMixin:
         # Qwen-style pixels don't scale with bs same way as other models
         # calculate expected video token count based on video_grid_thw
         if (grid_thw := out_dict.get(f"{modality}_grid_thw")) is not None:
-            mm_len = sum([thw[0] * thw[1] * thw[2] for thw in grid_thw])
+            mm_len = sum(thw[0] * thw[1] * thw[2] for thw in grid_thw)
         else:
             mm_len = batch_size
 
@@ -1585,72 +1588,76 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
+        # The second conversation is shorter, so it gets padded when the two are batched together
         messages = [
             [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is the capital of France?"},
-                    ],
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "The capital of France is Paris."},
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What about Italy?"},
-                    ],
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "The capital of Italy is Rome."},
-                    ],
-                },
-            ]
+                {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of France is Paris."}]},
+                {"role": "user", "content": [{"type": "text", "text": "What about Italy?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of Italy is Rome."}]},
+            ],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "What is the capital of Spain?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of Spain is Madrid."}]},
+            ],
         ]
-
         dummy_template = (
             "{% for message in messages %}"
             "{% if (message['role'] != 'assistant') %}"
-            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
+            "{% for content in message['content'] %}"
+            "{{ image_token if content['type'] == 'image' else content['text'] }}"
+            "{% endfor %}"
+            "{{'<|special_end|>' + '\n'}}"
             "{% elif (message['role'] == 'assistant')%}"
             "{{'<|special_start|>' + message['role'] + '\n'}}"
             "{% generation %}"
-            "{{message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{message['content'][0]['text'] + '<|special_end|>'}}"
             "{% endgeneration %}"
+            "{{'\n'}}"
             "{% endif %}"
             "{% endfor %}"
         )
 
-        inputs = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=False,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            return_assistant_tokens_mask=True,
-            chat_template=dummy_template,
+        # The tokenizer's own implementation on the text-only conversations is the reference for the assistant ids. Note
+        # that the generation span ends on a non-whitespace char above: `char_to_token` has no token for stripped whitespace
+        reference = processor.tokenizer.apply_chat_template(
+            messages, tokenize=True, return_dict=True, return_assistant_tokens_mask=True, chat_template=dummy_template
         )
-        self.assertTrue("assistant_masks" in inputs)
-        self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
+        expected_ids = [
+            [token_id for token_id, is_assistant in zip(input_ids, assistant_mask) if is_assistant]
+            for input_ids, assistant_mask in zip(reference["input_ids"], reference["assistant_masks"])
+        ]
 
-        mask = inputs["assistant_masks"].bool()
-        assistant_ids = inputs["input_ids"][mask]
+        # Regression test for #44521: expanding each placeholder into N image tokens must not shift the assistant spans.
+        # Use several images in one turn and images in several turns, since every expansion shifts the spans after it
+        image_token = getattr(self, "image_token", None)
+        if image_token and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token"):
+            for turn, num_images in ((0, 2), (2, 1)):
+                for _ in range(num_images):
+                    messages[0][turn]["content"].insert(0, {"type": "image", "image": self.prepare_images_inputs()})
 
-        assistant_text = (
-            "The capital of France is Paris.<|special_end|>\nThe capital of Italy is Rome.<|special_end|>\n"
-        )
+        # A single conversation first, then a batch mixing it with the text-only one. Padding tokens have `(0, 0)`
+        # offsets, so the spans must be mapped correctly whichever side the padding is on
+        for batch, padding_side in ((messages[:1], None), (messages, "right"), (messages, "left")):
+            inputs = processor.apply_chat_template(
+                batch,
+                add_generation_prompt=False,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                return_assistant_tokens_mask=True,
+                chat_template=dummy_template,
+                image_token=image_token,
+                padding=True,
+                padding_side=padding_side,
+            )
+            self.assertIn("assistant_masks", inputs)
+            self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
 
-        # Some tokenizers add extra spaces which aren't then removed when decoding, so we need to check token ids
-        # if we can't get identical text outputs
-        text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
-        ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
-        self.assertTrue(text_is_same or ids_is_same)
+            masks = inputs["assistant_masks"].bool()
+            for input_ids, mask, expected in zip(inputs["input_ids"], masks, expected_ids):
+                self.assertEqual(input_ids[mask].tolist(), expected)
 
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()
@@ -1718,6 +1725,67 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
         self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
+
+    def test_get_num_multimodal_tokens_matches_processor_call_video(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if getattr(processor, "video_processor", None) is None:
+            self.skipTest("Processor has no video processor")
+
+        if "video_sizes" not in inspect.signature(processor._get_num_multimodal_tokens).parameters:
+            self.skipTest("Processor doesn't count video tokens yet")
+
+        video_inputs = self.prepare_videos_inputs(batch_size=2)
+        # An odd frame count, so that the temporal padding of the counters is covered
+        video_inputs = [video_inputs[0][:7], video_inputs[1][:7, :, :, :200]]
+        video_sizes = [(len(video), *get_video_size(video)) for video in video_inputs]
+
+        try:
+            num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes)
+        except AttributeError:
+            self.skipTest("Video processor doesn't support `get_num_of_video_patches` yet")
+        if num_video_tokens_from_helper["num_video_tokens"] is None:
+            self.skipTest("Processor doesn't count video tokens yet")
+
+        video_token = getattr(self, "video_token", "")
+        text = [f"This is a video {video_token}"] * len(video_inputs)
+        inputs = processor(
+            text=text,
+            videos=video_inputs,
+            padding=True,
+            do_sample_frames=False,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
+        self.assertListEqual(num_video_tokens_from_call, num_video_tokens_from_helper["num_video_tokens"])
+
+        # Test with two videos per single text
+        text = [f"These are two videos {video_token}{video_token}"] * len(video_inputs)
+        inputs = processor(
+            text=text,
+            videos=video_inputs * 2,
+            padding=True,
+            do_sample_frames=False,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
+        num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2)
+        self.assertEqual(sum(num_video_tokens_from_call), sum(num_video_tokens_from_helper["num_video_tokens"]))
 
     @staticmethod
     def does_processor_return_mm_offsets(processor_class, method_name: str):

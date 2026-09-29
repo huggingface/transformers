@@ -149,6 +149,10 @@ class HfQuantizer(ABC):
         "updates the tp plan for the scales"
         return config
 
+    def update_attn_implementation(self, config):
+        """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
+        return config
+
     def _process_model_before_weight_loading(self, model, **kwargs):
         return model
 

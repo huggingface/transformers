@@ -25,70 +25,22 @@ if is_torch_available():
 
 
 class DeepseekOcr2ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=500,
-        max_resolution=800,
-        do_resize=True,
-        size=None,
-        tile_size=384,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-    ):
-        size = size if size is not None else {"height": 512, "width": 512}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.tile_size = tile_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 500)
+        kwargs.setdefault("max_resolution", 800)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "tile_size": self.tile_size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("tile_size", 384)
+
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = DeepseekOcr2ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_resize"))
-            self.assertTrue(hasattr(image_processor, "size"))
-            self.assertTrue(hasattr(image_processor, "tile_size"))
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "image_mean"))
-            self.assertTrue(hasattr(image_processor, "image_std"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
+    image_processor_tester_class = DeepseekOcr2ImageProcessingTester
 
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):

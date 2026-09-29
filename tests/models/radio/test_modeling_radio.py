@@ -15,6 +15,8 @@
 
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers import RadioConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
@@ -80,7 +82,7 @@ class RadioModelTester:
         self.num_prefix_tokens = num_cls_tokens + num_registers
         self.seq_length = self.num_prefix_tokens + self.num_patches
 
-    def get_config(self):
+    def get_config(self, **kwargs):
         return RadioConfig(
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -100,6 +102,7 @@ class RadioModelTester:
             num_registers=self.num_registers,
             summary_idxs=self.summary_idxs,
             initializer_range=self.initializer_range,
+            **kwargs,
         )
 
     def prepare_config_and_inputs(self):
@@ -152,6 +155,33 @@ class RadioModelTester:
 
         self.parent.assertEqual(result.features.shape, (self.batch_size, expected_patches, self.hidden_size))
 
+    def create_and_check_video_patch_projection(self, config, pixel_values):
+        temporal_patch_size = 2
+        # `video_patch_dim` is derived in `__post_init__`, so it has to be set at construction
+        config = self.get_config(video_temporal_patch_size=temporal_patch_size)
+        model = RadioModel(config=config)
+        # the input conditioner normalizes single frames; packed video is normalized by the caller
+        model.make_preprocessor_external()
+        model.to(torch_device)
+        model.eval()
+
+        packed = floats_tensor(
+            [self.batch_size, temporal_patch_size * self.num_channels, self.image_size, self.image_size]
+        ).to(torch_device)
+        with torch.no_grad():
+            video_result = model(packed)
+            image_result = model(pixel_values.to(torch_device))
+            video_embeddings = model.embeddings(packed)
+
+        self.parent.assertEqual(video_result.features.shape, (self.batch_size, self.num_patches, self.hidden_size))
+        self.parent.assertEqual(image_result.features.shape, (self.batch_size, self.num_patches, self.hidden_size))
+        expected = model.embeddings.video_patch_projection(model.embeddings._image_to_patches(packed))
+        num_prefix = self.num_prefix_tokens
+        position_embedding = model.embeddings._interpolate_position_embedding(
+            (self.image_size // self.patch_size, self.image_size // self.patch_size), expected.dtype
+        )
+        torch.testing.assert_close(video_embeddings[:, num_prefix:], expected + position_embedding)
+
 
 @require_torch
 class RadioModelTest(ModelTesterMixin, unittest.TestCase):
@@ -180,6 +210,51 @@ class RadioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_layer_scale_init(self):
         config, pixel_values = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_layer_scale_init(config, pixel_values)
+
+    def test_video_patch_projection(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_video_patch_projection(config, pixel_values)
+
+    def test_packed_video_requires_video_patch_projection(self):
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        model = RadioModel(config=config).to(torch_device).eval()
+        model.make_preprocessor_external()
+        self.assertIsNone(model.embeddings.video_patch_projection)
+        packed = floats_tensor([1, 2 * config.num_channels, config.image_size, config.image_size]).to(torch_device)
+        with self.assertRaises(ValueError):
+            model(packed)
+
+    def test_packed_images_match_dense(self):
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        patch_size, num_channels = config.patch_size, config.num_channels
+        grids = [(8, 8), (4, 6), (6, 4)]
+        images = [floats_tensor([1, num_channels, h * patch_size, w * patch_size]) for h, w in grids]
+        packed = torch.cat(
+            [
+                image.reshape(1, num_channels, h, patch_size, w, patch_size)
+                .permute(0, 2, 4, 1, 3, 5)
+                .reshape(h * w, num_channels * patch_size**2)
+                for image, (h, w) in zip(images, grids)
+            ]
+        )
+        image_grid_hw = torch.tensor(grids)
+
+        for attn_implementation in ("eager", "sdpa"):
+            config._attn_implementation = attn_implementation
+            model = RadioModel(config).to(torch_device).eval()
+            with torch.no_grad():
+                dense = [model(image.to(torch_device)) for image in images]
+                packed_output = model(packed.to(torch_device), image_grid_hw=image_grid_hw.to(torch_device))
+
+            torch.testing.assert_close(packed_output.features, torch.cat([out.features[0] for out in dense]))
+            torch.testing.assert_close(packed_output.summary, torch.cat([out.summary for out in dense]))
+            torch.testing.assert_close(
+                packed_output.last_hidden_state, torch.cat([out.last_hidden_state[0] for out in dense])
+            )
+
+    def test_video_temporal_patch_size_must_exceed_one(self):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "video_temporal_patch_size"):
+            RadioConfig(video_temporal_patch_size=1)
 
     def test_variable_resolution(self):
         config, pixel_values = self.model_tester.prepare_config_and_inputs()

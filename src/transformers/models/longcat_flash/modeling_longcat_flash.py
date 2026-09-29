@@ -113,7 +113,7 @@ class LongcatFlashRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -583,10 +583,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
         self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used)
-
-        self.config.num_hidden_layers = 2 * config.num_layers
 
         # Initialize weights and apply final processing
         self.post_init()

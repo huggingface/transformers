@@ -78,7 +78,7 @@ def parse_args():
     parser.add_argument(
         "--dataset_name",
         type=str,
-        default="cifar10",
+        default="uoft-cs/cifar10",
         help="Name of a dataset from the datasets package",
     )
     parser.add_argument(
@@ -429,7 +429,7 @@ def main():
             api = HfApi()
             repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+", encoding="utf-8") as gitignore:
                 if "step_*" not in gitignore:
                     gitignore.write("step_*\n")
                 if "epoch_*" not in gitignore:

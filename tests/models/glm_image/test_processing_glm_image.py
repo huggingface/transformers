@@ -59,6 +59,18 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
+    def test_processor_text_has_no_visual(self):
+        # GLM-Image generates images and requires homogeneous source-image counts within a batch.
+        processor = self.get_processor()
+        images = self.prepare_images_inputs(batch_size=2, nested=True)
+        text = self.prepare_text_inputs(batch_size=2, modalities=["image"])
+        processor(images=images, text=text, padding=True, return_tensors="pt")
+
+        images[0] = []
+        text[0] = "lower newer"
+        with self.assertRaisesRegex(ValueError, "all samples must have the same number of source images"):
+            processor(images=images, text=text, padding=True, return_tensors="pt")
+
     @unittest.skip("tiny model has too little tokens and collapses everything to UNK which is not defined")
     def test_replacement_offsets(self):
         pass
