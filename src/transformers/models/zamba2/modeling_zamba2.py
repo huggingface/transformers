@@ -776,7 +776,6 @@ class Zamba2MambaMixer(nn.Module):
     def __init__(self, config: Zamba2Config, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
-        self.config = config
         self.num_heads = self.config.n_mamba_heads
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.mamba_d_state

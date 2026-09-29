@@ -489,7 +489,6 @@ class NemotronHMamba2Mixer(nn.Module):
     def __init__(self, config: NemotronHConfig, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
-        self.config = config
         self.num_heads = config.mamba_num_heads
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.ssm_state_size
