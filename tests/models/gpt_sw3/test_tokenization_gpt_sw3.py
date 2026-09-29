@@ -97,6 +97,12 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         # fmt: on
 
+    def test_preprocess_text_normalizes_unicode_whitespace(self):
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, name_or_path="test")
+
+        for whitespace in ["\u2002", "\u2003", "\u2005", "\u2008", "\u2009", "\u200a", "\u202f", "\u3000"]:
+            self.assertEqual(tokenizer.preprocess_text(f"en{whitespace}text"), "en text")
+
     def test_fast_encode_decode(self):
         tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, name_or_path="test")
         texts = ["This is a test", "I was born in 92000, and this is falsé."]

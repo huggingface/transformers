@@ -156,7 +156,6 @@ class NemotronHModelTester:
             max_position_embeddings=self.max_position_embeddings,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             ssm_state_size=self.ssm_state_size,
             mamba_num_heads=self.mamba_num_heads,
             mamba_n_groups=self.mamba_n_groups,

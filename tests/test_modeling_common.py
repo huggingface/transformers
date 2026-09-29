@@ -4264,6 +4264,11 @@ class ModelTesterMixin(ExportTesterMixin):
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
+            # Some models only support a sub set of all FA implementations
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)  # let's construct it here to see if any submodels can't support flash attn
             if not all(
