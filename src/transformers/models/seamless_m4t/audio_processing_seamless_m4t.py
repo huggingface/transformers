@@ -56,6 +56,7 @@ class SeamlessM4tAudioProcessorMixin:
         "waveform_scale": 32768.0,
         "mel_floor": 1.192092955078125e-07,
         "computation_dtype": "float64",
+        "transpose_features": True,
     }
 
     stride = 2
@@ -89,14 +90,6 @@ class SeamlessM4tAudioProcessorMixin:
 
 
 class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBackend):
-    def compute_features(self, audio, *, spectrogram_config, **kwargs):
-        features = []
-        for waveform in audio:
-            waveform = waveform.squeeze()
-            f = super().compute_features([waveform], spectrogram_config=spectrogram_config, **kwargs)
-            features.append(f[0].transpose(-2, -1))
-        return features
-
     def _finalize_features(self, features, feature_lengths, **kwargs):
         # bit-exact with the legacy FE: numpy reductions use pairwise summation, whose
         # accumulation order differs from torch's float32 `mean`/`var`. The legacy features are

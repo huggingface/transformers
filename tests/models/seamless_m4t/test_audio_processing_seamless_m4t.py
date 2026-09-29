@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch
 
 from ...test_audio_processing_common import AudioProcessingTestMixin
@@ -37,3 +39,17 @@ class SeamlessM4tAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase
     def setUp(self):
         self.audio_processor_tester = SeamlessM4tAudioProcessingTester()
         super().setUp()
+
+    def test_spectrogram_preserves_batch_dimension(self):
+        audio = np.zeros((2, 1_600), dtype=np.float32)
+        for backend, processor_class in self.audio_processing_classes.items():
+            with self.subTest(backend=backend):
+                processor = processor_class()
+                backend_audio = self._to_torch(audio) if processor.backend == "torch" else audio
+                features = processor.spectrogram(
+                    backend_audio,
+                    spectrogram_config=processor.spectrogram_config,
+                    dither=0.0,
+                )
+                self.assertEqual(features.shape[0], 2)
+                self.assertEqual(features.shape[-1], 80)

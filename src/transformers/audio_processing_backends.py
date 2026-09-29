@@ -95,7 +95,8 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
-    def _create_stft_window(self, win_length, stft_cfg, audio):
+    def _create_stft_window(self, stft_cfg, audio):
+        win_length = stft_cfg.win_length
         if stft_cfg.window_fn == "hann_window_f32":
             # fixed USM float32 periodic Hann (bit-exact with the legacy Gemma3n extractor, which
             # builds it inline from a float32 arange -- under numpy scalar promotion the whole
@@ -158,14 +159,14 @@ class NumpyAudioBackend(BaseAudioProcessor):
         shape = x.shape[:-1] + (n_frames, frame_length)
         return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
 
-    def _frame_waveform(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _frame_waveform(self, audio, window, frame_length, stft_cfg):
         if stft_cfg.center == "left":
             # semicausal (USM/Gemma): zeros prepended only
-            audio = self._pad_axis(audio, (stft_cfg.win_length or n_fft) // 2, 0, axis=-1)
+            audio = self._pad_axis(audio, stft_cfg.win_length // 2, 0, axis=-1)
         elif stft_cfg.center:
             pad_width = [(0, 0)] * (audio.ndim - 1) + [(frame_length // 2, frame_length // 2)]
             audio = np.pad(audio, pad_width, mode=stft_cfg.pad_mode)
-        frames = self._np_frame(np.ascontiguousarray(audio), frame_length, hop_length)
+        frames = self._np_frame(np.ascontiguousarray(audio), frame_length, stft_cfg.hop_length)
         compute_dtype = np.result_type(audio.dtype, window.dtype)
         return frames.astype(compute_dtype, copy=False)
 
@@ -181,40 +182,37 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _dither_waveform(self, audio, audio_ranges=None, *, dither):
         return audio + (dither * np.random.randn(*audio.shape)).astype(audio.dtype)
 
-    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+    def _stft_framed(self, frames, window, frame_length, stft_cfg):
         frames = frames * window
         fft = np.fft.rfft if stft_cfg.onesided else np.fft.fft
-        spec = fft(frames, n=n_fft, axis=-1)
+        spec = fft(frames, n=stft_cfg.n_fft, axis=-1)
         if stft_cfg.fft_dtype in (None, "complex64"):
             # librosa contract: FFT output rounded through complex64
             spec = spec.astype(np.complex64)
         if stft_cfg.normalized in (True, "window"):
             spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
         elif stft_cfg.normalized == "frame_length":
-            spec = spec / np.sqrt(n_fft).astype(spec.real.dtype)
+            spec = spec / np.sqrt(stft_cfg.n_fft).astype(spec.real.dtype)
         elif stft_cfg.normalized is not False:
             raise ValueError(f"Invalid normalized value: {stft_cfg.normalized!r}")
         return np.moveaxis(spec, -1, -2)
 
-    def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _stft_native(self, audio, window, frame_length, stft_cfg):
         # No numpy-native STFT exists; compose the manual framing + FFT leaves. This path
         # receives the center-padded window and frame_length == n_fft from
         # `_prepare_window_and_framing`, unlike the manual path (left-aligned window).
         # `fft_dtype` can't leak in here: `_waveform_to_spectrum` rejects it on native-STFT configurations.
-        frames = self._frame_waveform(audio, window, frame_length, hop_length, n_fft, stft_cfg)
-        return self._stft_framed(frames, window, frame_length, n_fft, stft_cfg)
+        frames = self._frame_waveform(audio, window, frame_length, stft_cfg)
+        return self._stft_framed(frames, window, frame_length, stft_cfg)
 
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, **kwargs):
+    def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
         # `computation_dtype` names the dtype the upstream FE took magnitudes in, as it does in the
         # torch leaf and in the mel-filter leaves below. It was previously read as a flag -- any
         # truthy value meant float64 -- so a config asking for float32 silently got float64 here
         # while torch honoured it, one field with two meanings.
-        dtype = (
-            np.dtype(spectrogram_config.computation_dtype)
-            if spectrogram_config and spectrogram_config.computation_dtype
-            else None
-        )
-        if spectrogram_config and spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
+        power = spectrogram_config.stft_config.power
+        dtype = np.dtype(spectrogram_config.computation_dtype) if spectrogram_config.computation_dtype else None
+        if spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
             real = np.real(stft_out).astype(dtype, copy=False) if dtype else np.real(stft_out)
             imag = np.imag(stft_out).astype(dtype, copy=False) if dtype else np.imag(stft_out)
             magnitudes = np.sqrt(real**2 + imag**2)
@@ -373,8 +371,8 @@ class NumpyAudioBackend(BaseAudioProcessor):
             return fbank.numpy()
 
         waveform = np.squeeze(waveform)
-        features = self.compute_features([waveform], spectrogram_config=self.spectrogram_config, dither=self.dither)
-        return features[0].T
+        features = self.spectrogram(waveform, spectrogram_config=self.spectrogram_config, dither=self.dither)
+        return features.T
 
 
 class TorchAudioBackend(BaseAudioProcessor):
@@ -409,6 +407,13 @@ class TorchAudioBackend(BaseAudioProcessor):
         range_tensor = torch.tensor(ranges, dtype=torch.int64, device=like.device)
         positions = torch.arange(padded_length, device=like.device)
         return ((positions >= range_tensor[:, :1]) & (positions < range_tensor[:, 1:])).to(torch.int32)
+
+    def _get_mask_from_lengths(self, lengths, padded_length, *, like=None):
+        if not isinstance(like, torch.Tensor):
+            return super()._get_mask_from_lengths(lengths, padded_length, like=like)
+        lengths = torch.as_tensor(lengths, dtype=torch.int64, device=like.device)
+        positions = torch.arange(padded_length, device=like.device)
+        return (positions < lengths[:, None]).to(torch.int32)
 
     def _as_backend_array(self, x, *, like=None):
         if isinstance(x, np.ndarray):
@@ -456,7 +461,8 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
-    def _create_stft_window(self, win_length, stft_cfg, audio):
+    def _create_stft_window(self, stft_cfg, audio):
+        win_length = stft_cfg.win_length
         dtype = getattr(torch, stft_cfg.window_dtype) if stft_cfg.window_dtype else audio.dtype
         raw_wkwargs = dict(stft_cfg.wkwargs or {})
         unsupported = set(raw_wkwargs) - {"requires_grad"}
@@ -497,13 +503,13 @@ class TorchAudioBackend(BaseAudioProcessor):
             raise ValueError(f"Unknown window function '{name}'")
         return window.to(device=audio.device)
 
-    def _frame_waveform(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _frame_waveform(self, audio, window, frame_length, stft_cfg):
         if stft_cfg.center == "left":
-            pad_left = (stft_cfg.win_length or n_fft) // 2
+            pad_left = stft_cfg.win_length // 2
             audio = torch.nn.functional.pad(audio, (pad_left, 0), mode="constant", value=0.0)
         elif stft_cfg.center:
             audio = torch.nn.functional.pad(audio, (frame_length // 2, frame_length // 2), mode=stft_cfg.pad_mode)
-        return audio.unfold(-1, frame_length, hop_length)
+        return audio.unfold(-1, frame_length, stft_cfg.hop_length)
 
     def _preemphasize_waveform(self, audio, preemphasis, audio_ranges=None):
         audio = torch.cat([audio[..., :1], audio[..., 1:] - preemphasis * audio[..., :-1]], dim=-1)
@@ -517,25 +523,25 @@ class TorchAudioBackend(BaseAudioProcessor):
         noise = torch.randn(audio.shape, dtype=audio.dtype, device=audio.device)
         return audio + dither * noise
 
-    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+    def _stft_framed(self, frames, window, frame_length, stft_cfg):
         frames = frames * window
         if stft_cfg.fft_dtype == "float64":
             frames = frames.to(torch.float64)  # mirrors numpy's rfft float64 promotion
-        if frame_length < n_fft:
-            frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))
+        if frame_length < stft_cfg.n_fft:
+            frames = torch.nn.functional.pad(frames, (0, stft_cfg.n_fft - frame_length))
         fft = torch.fft.rfft if stft_cfg.onesided else torch.fft.fft
-        spec = self._round_through_complex64(fft(frames, n=n_fft), stft_cfg)
+        spec = self._round_through_complex64(fft(frames, n=stft_cfg.n_fft), stft_cfg)
         if stft_cfg.normalized in (True, "window"):
             spec = spec / window.pow(2.0).sum().sqrt()
         elif stft_cfg.normalized == "frame_length":
-            spec = spec / math.sqrt(n_fft)
+            spec = spec / math.sqrt(stft_cfg.n_fft)
         elif stft_cfg.normalized is not False:
             raise ValueError(f"Invalid normalized value: {stft_cfg.normalized!r}")
         return spec.transpose(-2, -1)
 
-    def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _stft_native(self, audio, window, frame_length, stft_cfg):
         win_length = stft_cfg.win_length
-        if audio.device.type == "cuda" and win_length < n_fft:
+        if audio.device.type == "cuda" and win_length < stft_cfg.n_fft:
             # `torch.stft` performs this same pad -> unfold -> window -> FFT sequence,
             # but its generic wrapper adds material dispatch overhead on short GPU
             # workloads. Express the operations directly so CUDA reaches the cached
@@ -547,20 +553,20 @@ class TorchAudioBackend(BaseAudioProcessor):
             if stft_cfg.center:
                 signal_dim = audio.ndim
                 extended_shape = [1] * (3 - signal_dim) + list(audio.shape)
-                pad = n_fft // 2
+                pad = stft_cfg.n_fft // 2
                 audio = torch.nn.functional.pad(audio.view(extended_shape), (pad, pad), mode=stft_cfg.pad_mode)
                 audio = audio.view(audio.shape[-signal_dim:])
 
-            frames = audio.unfold(-1, n_fft, hop_length)
+            frames = audio.unfold(-1, stft_cfg.n_fft, stft_cfg.hop_length)
             frames = frames * window
             fft = torch.fft.rfft if stft_cfg.onesided else torch.fft.fft
             norm = "ortho" if stft_cfg.normalized == "frame_length" else "backward"
-            stft_out = fft(frames, n=n_fft, norm=norm).transpose(-2, -1)
+            stft_out = fft(frames, n=stft_cfg.n_fft, norm=norm).transpose(-2, -1)
         else:
             stft_out = torch.stft(
                 audio,
-                n_fft=n_fft,
-                hop_length=hop_length,
+                n_fft=stft_cfg.n_fft,
+                hop_length=stft_cfg.hop_length,
                 win_length=frame_length,
                 window=window,
                 center=stft_cfg.center,
@@ -589,7 +595,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             return magnitudes
         return magnitudes.float()
 
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, **kwargs):
+    def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
         # TODO(audio-processor): reinstate the contiguity fix once the perf/parity trade-off is
         # decided. `torch.stft` returns a non-contiguous tensor and `abs() ** power` keeps that
         # layout, so the downstream `mel_filters.T @ magnitudes` matmul can fall onto a slow
@@ -611,7 +617,8 @@ class TorchAudioBackend(BaseAudioProcessor):
         # torchaudio families stay green because the reference libraries consume the same
         # contiguous layout we produce. Only the numpy legacy extractors pin the strided
         # accumulation order, so run the parity suite (`./validate`) for any layout change.
-        if spectrogram_config and spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
+        power = spectrogram_config.stft_config.power
+        if spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
             # NeMo-derived form; differs from `abs()` in the last ulp
             magnitudes = torch.view_as_real(stft_out).pow(2).sum(-1).sqrt()
             return magnitudes.pow(power) if power != 1.0 else magnitudes

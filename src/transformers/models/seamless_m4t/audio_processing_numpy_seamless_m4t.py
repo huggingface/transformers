@@ -19,14 +19,6 @@ from .audio_processing_seamless_m4t import SeamlessM4tAudioProcessorMixin
 
 
 class SeamlessM4tAudioProcessorNumpy(SeamlessM4tAudioProcessorMixin, NumpyAudioBackend):
-    def compute_features(self, audio, *, spectrogram_config, **kwargs):
-        features = []
-        for waveform in audio:
-            waveform = np.squeeze(waveform)
-            f = super().compute_features([waveform], spectrogram_config=spectrogram_config, **kwargs)
-            features.append(f[0].T)
-        return features
-
     def _finalize_features(self, features, feature_lengths, **kwargs):
         normalized = []
         for f in features:

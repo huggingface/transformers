@@ -23,7 +23,7 @@ class UnivNetAudioProcessorNumpy(UnivNetAudioProcessorMixin, NumpyAudioBackend):
         pad_width = [(0, 0)] * (audio.ndim - 1) + [(pad_amount, pad_amount)]
         return np.pad(audio, pad_width, mode="reflect")
 
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, *, magnitude_floor, **kwargs):
+    def _spectrum_magnitude(self, stft_out, spectrogram_config, *, magnitude_floor, **kwargs):
         return np.sqrt(np.real(stft_out) ** 2 + np.imag(stft_out) ** 2 + magnitude_floor)
 
     def _project_to_mel(self, features, *, spectrogram_config, **kwargs):

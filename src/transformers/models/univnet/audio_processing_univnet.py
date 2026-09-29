@@ -149,7 +149,7 @@ class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
             return torch.nn.functional.pad(audio[None], (pad_amount, pad_amount), mode="reflect")[0]
         return torch.nn.functional.pad(audio, (pad_amount, pad_amount), mode="reflect")
 
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, *, magnitude_floor, **kwargs):
+    def _spectrum_magnitude(self, stft_out, spectrogram_config, *, magnitude_floor, **kwargs):
         # round-trip through complex64/float32 like the legacy FE, so the float64 magnitudes
         # match bit-exactly (the numpy sibling stays in float64 throughout)
         stft_out = stft_out.to(torch.complex64)

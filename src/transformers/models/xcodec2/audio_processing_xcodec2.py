@@ -145,9 +145,7 @@ class Xcodec2AudioProcessorMixin:
             waveform = self._select_semantic_waveform(audio[i], audio_values[i], start, end, hop_length=hop_length)
             waveform = self._pad_semantic_waveform(waveform, hop_length=hop_length)
             features.append(
-                self._standardize_frames(
-                    self.compute_features([waveform], spectrogram_config=spectrogram_config, **kwargs)[0]
-                )
+                self._standardize_frames(self.spectrogram(waveform, spectrogram_config=spectrogram_config, **kwargs))
             )
 
         features, frame_ranges = self._pad_features(

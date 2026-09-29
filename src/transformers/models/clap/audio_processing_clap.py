@@ -189,7 +189,7 @@ class ClapAudioProcessorMixin:
                 waveform = self._concat_last([waveform] * repeats)[:max_length]
             waveform = self._pad_axis(waveform, 0, max_length - waveform.shape[-1], axis=-1, value=0.0)
 
-        mel = super().compute_features(waveform, spectrogram_config=spectrogram_config, **kwargs)
+        mel = super().spectrogram(waveform, spectrogram_config=spectrogram_config, **kwargs)
         if truncation_mode == "rand_trunc":
             return mel[None], longer
         chunk_frames = max_length // spectrogram_config.stft_config.hop_length + 1

@@ -112,8 +112,8 @@ class Phi4MultimodalAudioProcessor(Phi4MultimodalAudioProcessorMixin, TorchAudio
     def _process_frames(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
         # Mask frames that overlap the boundary between real audio and padding
         stft_cfg = spectrogram_config.stft_config
-        win_length = stft_cfg.win_length or stft_cfg.n_fft
-        hop_length = stft_cfg.hop_length or win_length // 2
+        win_length = stft_cfg.win_length
+        hop_length = stft_cfg.hop_length
         batch_size = frames.shape[0]
 
         if audio_ranges is not None and batch_size > 1:
@@ -137,12 +137,12 @@ class Phi4MultimodalAudioProcessor(Phi4MultimodalAudioProcessorMixin, TorchAudio
         frames_prev[..., 0] = frames_prev[..., 1]
         return (frames - spectrogram_config.preemphasis * frames_prev) * 32768
 
-    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+    def _stft_framed(self, frames, window, frame_length, stft_cfg):
         frames = frames * window
-        if frame_length < n_fft:
-            frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))
+        if frame_length < stft_cfg.n_fft:
+            frames = torch.nn.functional.pad(frames, (0, stft_cfg.n_fft - frame_length))
         # Cast to complex64 before abs() to match the FE's precision path
-        spec = torch.fft.rfft(frames, n=n_fft).to(torch.complex64)
+        spec = torch.fft.rfft(frames, n=stft_cfg.n_fft).to(torch.complex64)
         if stft_cfg.normalized:
             spec = spec / window.pow(2.0).sum().sqrt()
         return spec.transpose(-2, -1)
