@@ -46,6 +46,8 @@ from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters.utils import capture_calibration_inputs, decompose_for_generation
 from transformers.testing_utils import (
     require_executorch,
+    require_onnxruntime,
+    require_onnxscript,
     require_torch,
     require_torchao,
     slow,
@@ -297,16 +299,13 @@ class QuantizationExportTest(unittest.TestCase):
     # ──────────────────────────────── ONNX ──────────────────────────────────
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
+    @require_onnxscript
+    @require_onnxruntime
     @pytest.mark.onnx_export_test
     @disable_hub_kernels
     def test_quantized_onnx(self, family):
         """The same x86-quantizer recipe, lowered to ONNX: every family produces a QDQ graph
         (QuantizeLinear nodes) that runs in ONNX Runtime. Static export throughout."""
-        from transformers.utils import is_onnxruntime_available, is_onnxscript_available
-
-        if not (is_onnxruntime_available() and is_onnxscript_available()):
-            self.skipTest("requires onnxruntime + onnxscript")
-
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         model, inputs = self._quantization_target(family)

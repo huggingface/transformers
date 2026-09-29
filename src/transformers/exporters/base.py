@@ -204,7 +204,7 @@ class HfExporter(ABC):
             # a single config's `calibration_dataset` is generate-level here: fan it out into a
             # per-component (forward-level) calibration set via the decomposition capture
             calibration = {}
-            if getattr(config, "calibration_dataset", None):
+            if config.calibration_dataset:
                 calibration = capture_calibration_inputs(
                     model,
                     config.calibration_dataset,

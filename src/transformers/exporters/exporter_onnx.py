@@ -1171,14 +1171,11 @@ if is_onnxscript_available():
     # registered once that lib is imported; import it so the per-channel dequant overload resolves as a
     # table key (onnxscript covers only the per-tensor variants). The entry is inert unless a
     # quantized graph actually contains the op, so it costs nothing when quantization is unused.
-    try:
-        import torch.ao.quantization.fx._decomposed  # noqa: F401
+    import torch.ao.quantization.fx._decomposed  # noqa: F401
 
-        _ONNX_TRANSLATION_TABLE[torch.ops.quantized_decomposed.dequantize_per_channel.default] = (
-            _quantized_decomposed_dequantize_per_channel
-        )
-    except (ImportError, AttributeError):
-        pass
+    _ONNX_TRANSLATION_TABLE[torch.ops.quantized_decomposed.dequantize_per_channel.default] = (
+        _quantized_decomposed_dequantize_per_channel
+    )
 
 
 # ── Stage 5: ONNX IR fixes ────────────────────────────────────────────────────
