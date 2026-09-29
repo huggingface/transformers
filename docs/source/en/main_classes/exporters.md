@@ -43,11 +43,6 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
     - export_artifact
     - save_artifact
 
-    - export_artifact
-    - save_artifact
-
-    - export_artifact
-
 ## OnnxExporter
 
 [[autodoc]] exporters.exporter_onnx.OnnxExporter
