@@ -828,6 +828,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mllama", "MllamaForCausalLM"),
         ("modernbert-decoder", "ModernBertDecoderForCausalLM"),
         ("moshi", "MoshiForCausalLM"),
+        ("moss_transcribe_diarize", "MossTranscribeDiarizeForConditionalGeneration"),
         ("mpt", "MptForCausalLM"),
         ("musicgen", "MusicgenForCausalLM"),
         ("musicgen_melody", "MusicgenMelodyForCausalLM"),

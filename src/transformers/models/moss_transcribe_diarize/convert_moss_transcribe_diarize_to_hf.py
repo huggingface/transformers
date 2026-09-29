@@ -89,7 +89,7 @@ CHAT_TEMPLATE = """{%- macro render_content(content) -%}
         {{- "\n" }}
         {{- tool | tojson }}
     {%- endfor %}
-    {{- "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
+    {{- "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\\"name\\": <function-name>, \\"arguments\\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
 {%- else %}
     {%- if messages[0].role == 'system' %}
         {{- '<|im_start|>system\n' + render_content(messages[0].content) + '<|im_end|>\n' }}
