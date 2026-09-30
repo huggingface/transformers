@@ -131,14 +131,35 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
-class MeshManager:
-    """Named access to dense and expert parallel axes without exposing their view selection."""
+class TransformersDeviceMesh:
+    """
+    Holds the device meshes used by a model.
+
+    dense layers and experts are sharded differently, so they need different views of the same ranks.
+
+        dense  : (pp, fsdp, tp)     attention, dense MLPs, embeddings, lm_heads
+        expert : (pp, efsdp, ep)    experts
+
+    Both views cover the same world, so pp * fsdp * tp == pp * efsdp * ep.
+    efsdp is not something you pick, it is whatever is left once ep is fixed:
+    efsdp = fsdp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
+
+    There is no etp (expert tensor parallel) axis yet meaning experts are never tensor-sharded here.
+    If one were ever added, the identity would become pp * efsdp * ep * etp == pp * fsdp * tp and efsdp would shrink by etp
+    (efsdp = fsdp * tp / (ep * etp))
+
+    Why not reuse fsdp mesh ? When ep_size == tp_size, efsdp == fsdp, both in size and in which
+    ranks are grouped together, so the fsdp axis of the dense mesh would work for experts too.
+    As soon as ep_size != tp_size the two group different ranks and you need a separate axis.
+
+    Regarding ep value, We decide to default it to node width (8 on most machines) so all-to-all never leaves the node.
+    - On a single node, ep == fsdp * tp thus efsdp = 1, the axis does nothing.
+    - On several nodes, we still keep ep at node width, since all-to-all across nodes is expensive.
+    However, each node then holds a full copy of the expert group and efsdp is the number of copies, which is where FSDP happens for the experts
+    i.e: 2 nodes x 8 GPUs -> efsdp = 16 / 8 = 2, one EP group per node, two copies, sharded over efsdp.
+    """
 
     def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
-        """
-        dense_mesh: (pp, fsdp, tp) -> attention, dense MLPs, embeddings, lm_heads
-        expert_mesh: (pp, efsdp, ep) -> experts
-        """
         self._dense_mesh = dense_mesh
         self._expert_mesh = expert_mesh
 
@@ -242,7 +263,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
 def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
-) -> tuple[torch.device | None, MeshManager | None]:
+) -> tuple[torch.device | None, TransformersDeviceMesh | None]:
     """Create a device mesh containing every configured parallel dimension."""
     mesh_shape = (distributed_config.pp_size, distributed_config.fsdp_size, distributed_config.tp_size)
     if mesh_shape == (1, 1, 1):
@@ -277,7 +298,7 @@ def initialize_distributed_mesh(
         (distributed_config.pp_size, distributed_config.efsdp_size, distributed_config.ep_size),
         mesh_dim_names=("pp", "efsdp", "ep"),
     )
-    return device_map, MeshManager(dense_mesh, expert_mesh)
+    return device_map, TransformersDeviceMesh(dense_mesh, expert_mesh)
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
