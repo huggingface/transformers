@@ -204,7 +204,7 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
         import os
         import tempfile
 
-        from tokenizers import Tokenizer, models, pre_tokenizers
+        from tokenizers import Regex, Tokenizer, models, pre_tokenizers
 
         from transformers import AutoTokenizer, TokenizersBackend
 
@@ -220,8 +220,12 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
                 with open(os.path.join(repo_id, "config.json"), "w", encoding="utf-8") as f:
                     f.write('{"model_type": "cohere2"}')
 
-                tok = Tokenizer(models.BPE(vocab={"1": 0, "234": 1, "567": 2, "1234567": 3}, merges=[]))
-                tok.pre_tokenizer = pre_tokenizers.Whitespace()
+                vocab = {c: i for i, c in enumerate("1234567")}
+                vocab.update({"23": 7, "234": 8, "56": 9, "567": 10})
+                merges = [("2", "3"), ("23", "4"), ("5", "6"), ("56", "7")]
+                tok = Tokenizer(models.BPE(vocab=vocab, merges=merges))
+                # digits are grouped in threes from the right, like tiny-aya's tokenizer.json
+                tok.pre_tokenizer = pre_tokenizers.Split(Regex(r"\d{1,3}(?=(?:\d{3})*\b)"), behavior="isolated")
                 tok.save(os.path.join(repo_id, "tokenizer.json"))
 
                 auto_tok = AutoTokenizer.from_pretrained(repo_id)
