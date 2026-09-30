@@ -1348,9 +1348,12 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(deepstack_image_embeds, deepstack_video_embeds):
-                embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1]).to(img_embed.device)
-                embed_joint[image_mask_joint, :] = torch.cat(img_embed, dim=0)
-                embed_joint[video_mask_joint, :] = torch.cat(vid_embed, dim=0)
+                img_embed = torch.cat(img_embed, dim=0)
+                vid_embed = torch.cat(vid_embed, dim=0)
+                embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
+
+                embed_joint[image_mask_joint, :] = img_embed
+                embed_joint[video_mask_joint, :] = vid_embed
                 deepstack_visual_embeds.append(embed_joint)
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
@@ -1450,6 +1453,7 @@ class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, Genera
         mm_token_type_ids: torch.IntTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -1511,6 +1515,7 @@ class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, Genera
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
