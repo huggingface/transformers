@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Qwen3VLMoe model."""
 
 import copy
+import tempfile
 import unittest
 
 import pytest
@@ -28,6 +29,8 @@ from transformers import (
 from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 from transformers.testing_utils import (
     Expectations,
+    backend_device_count,
+    get_cpu_ram_total_gib,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -347,6 +350,40 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
 class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     maxDiff = None
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.offload_dir = None
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
+
+    @classmethod
+    def get_model(cls):
+        # device_map auto fills GPUs ~100%, causing CUDA OOM from the ~768 MiB
+        # MergeModulelist/Transpose gate_up_proj buffer in from_pretrained on multi-GPU;
+        # cap max_memory at 70% per GPU (#48668 / #48776).
+        if cls.offload_dir is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
+        n = backend_device_count(torch_device)
+        if n > 0 and torch_device != "cpu":
+            torch_accel = getattr(torch, torch_device)
+            per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            max_memory["cpu"] = f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"  # avoid runner exit 137
+        else:
+            max_memory = None
+        return Qwen3VLMoeForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen3-VL-30B-A3B-Instruct",
+            dtype="auto",
+            device_map="auto",
+            max_memory=max_memory,
+            offload_folder=cls.offload_dir.name,
+        )
+
     def setUp(self):
         super().setUp()
 
@@ -397,9 +434,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
 
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -440,9 +475,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
             batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -508,9 +541,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
@@ -528,9 +559,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand_with_video(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         inputs = self.processor.apply_chat_template(
             self.message3, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
@@ -549,9 +578,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
         ]
@@ -579,9 +606,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
             batched_messages,
