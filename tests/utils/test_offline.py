@@ -14,7 +14,6 @@
 
 import subprocess
 import sys
-import unittest
 
 from transformers import BertConfig, BertModel, BertTokenizer, pipeline
 from transformers.testing_utils import TestCasePlus, require_torch
@@ -22,7 +21,6 @@ from transformers.testing_utils import TestCasePlus, require_torch
 
 class OfflineTests(TestCasePlus):
     @require_torch
-    @unittest.skip("This test is failing on main")  # TODO matt/ydshieh, this test needs to be fixed
     def test_offline_mode(self):
         # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
@@ -49,17 +47,12 @@ import socket
 def offline_socket(*args, **kwargs): raise RuntimeError("Offline mode is enabled, we shouldn't access internet")
 socket.socket = offline_socket
         """
+        # First subprocess run to warm the cache (online, no mocking)
+        stdout, _ = self._execute_with_env(load, run)
+        self.assertIn("success", stdout)
 
-        # Force fetching the files so that we can use the cache
-        mname = "hf-internal-testing/tiny-random-bert"
-        BertConfig.from_pretrained(mname)
-        BertModel.from_pretrained(mname)
-        BertTokenizer.from_pretrained(mname)
-        pipeline(task="fill-mask", model=mname)
-
-        # baseline - just load from_pretrained with normal network
-        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
-        stdout, _ = self._execute_with_env(load, run, mock, TRANSFORMERS_OFFLINE="1")
+        # Second subprocess run in offline mode: ensure no network and use local cache only
+        stdout, _ = self._execute_with_env(load, mock, run, HF_HUB_OFFLINE="1")
         self.assertIn("success", stdout)
 
     @require_torch
