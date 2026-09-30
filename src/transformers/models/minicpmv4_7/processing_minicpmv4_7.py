@@ -39,7 +39,6 @@ class MiniCPMV4_7Processor(ProcessorMixin):
     text_kwargs = {
         "padding": True,
         "padding_side": "left",
-        "return_mm_token_type_ids": True,
         "return_tensors": "pt",
     }
     videoss_kwargs = {
@@ -51,6 +50,7 @@ class MiniCPMV4_7Processor(ProcessorMixin):
     videos_kwargs = {
         "return_tensors": "pt",
     }
+    return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)

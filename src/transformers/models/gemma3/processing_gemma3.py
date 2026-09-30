@@ -28,9 +28,6 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 class Gemma3Processor(ProcessorMixin):
     valid_processor_kwargs = Gemma3ProcessorKwargs
 
-    text_kwargs = {
-        "return_mm_token_type_ids": True,
-    }
     images_kwargs = {
         # Values are "null" in preprocessor_config.json
         "do_convert_rgb": True,
@@ -39,6 +36,7 @@ class Gemma3Processor(ProcessorMixin):
         "pan_and_scan_max_num_crops": 4,
         "pan_and_scan_min_ratio_to_activate": 1.2,
     }
+    return_mm_token_type_ids = True
 
     def __init__(
         self,

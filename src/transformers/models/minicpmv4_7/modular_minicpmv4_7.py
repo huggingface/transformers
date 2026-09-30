@@ -759,7 +759,6 @@ class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
     text_kwargs = {
         "padding": True,
         "padding_side": "left",
-        "return_mm_token_type_ids": True,
         "return_tensors": "pt",
     }
     images_kwargs = {
@@ -768,6 +767,7 @@ class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
     videos_kwargs = {
         "return_tensors": "pt",
     }
+    return_mm_token_type_ids = True
 
     def __call__(
         self,

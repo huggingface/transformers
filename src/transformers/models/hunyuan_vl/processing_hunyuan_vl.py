@@ -41,8 +41,8 @@ class HunYuanVLProcessor(ProcessorMixin):
     text_kwargs = {
         "padding": True,
         "add_special_tokens": False,
-        "return_mm_token_type_ids": True,
     }
+    return_mm_token_type_ids = True
 
     def __init__(
         self, image_processor=None, tokenizer=None, chat_template=None, cat_extra_token: bool = True, **kwargs

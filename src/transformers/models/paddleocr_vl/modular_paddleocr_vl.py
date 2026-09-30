@@ -235,9 +235,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
     valid_processor_kwargs = PaddleOCRVLProcessorKwargs
 
-    text_kwargs = {
-        "return_mm_token_type_ids": True,
-    }
+    return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
