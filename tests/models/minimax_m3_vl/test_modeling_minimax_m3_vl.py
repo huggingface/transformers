@@ -54,7 +54,6 @@ if is_torch_available():
     from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLVisionConfig
     from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import (
         MiniMaxM3VLVisionRotaryEmbedding,
-        apply_rotary_pos_emb_vision,
     )
     from transformers.vision_utils import get_vision_position_ids
 
