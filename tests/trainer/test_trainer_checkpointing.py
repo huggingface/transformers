@@ -509,9 +509,7 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 resumed = trainer.train(resume_from_checkpoint=checkpoint)
 
             step_loss = next(
-                log["loss"]
-                for log in trainer.state.log_history
-                if log.get("step") == 6 and "loss" in log
+                log["loss"] for log in trainer.state.log_history if log.get("step") == 6 and "loss" in log
             )
 
             self.assertEqual(resumed.global_step, 6)
