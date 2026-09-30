@@ -18,6 +18,7 @@ from __future__ import annotations
 import pathlib
 import sys
 import unittest
+import warnings
 from dataclasses import replace
 from functools import partial
 from unittest.mock import patch
@@ -186,7 +187,8 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         stereo = np.stack([waveform, waveform[::-1].copy()])
         layouts = {
             "mono": (waveform, {"channels_first": waveform[None, :], "channels_last": waveform[:, None]}),
-            "stereo": (stereo, {"channels_last": np.ascontiguousarray(stereo.T)}),
+            # a list states "one multi-channel clip", which a lone 2-D array would warn about
+            "stereo": ([stereo], {"channels_last": [np.ascontiguousarray(stereo.T)]}),
         }
         for backend, cls in self.audio_processing_classes.items():
             ap = cls(**init_dict)
@@ -209,6 +211,34 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
                                 self.assertTrue(
                                     torch.equal(self._to_torch(output[key]), self._to_torch(expected[key]))
                                 )
+
+    @require_torch
+    def test_lone_multichannel_array_warns_it_is_not_a_batch(self):
+        """A single 2-D array with more than one channel is one clip, not a batch as the legacy extractors read it.
+
+        That case warns; `[clip]`, a 1-D waveform and a `(1, T)` or `(T, 1)` clip do not."""
+        if self.audio_processor_tester is None:
+            self.skipTest("audio_processor_tester not set; cannot generate fixtures.")
+
+        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
+        waveform = np.asarray(prepare_audio_inputs(batch_size=1, seed=0)[0], dtype=np.float32)
+        stereo = np.stack([waveform, waveform])
+        for backend, cls in self.audio_processing_classes.items():
+            ap = cls(**init_dict)
+            for audio, should_warn in (
+                (stereo, True),
+                (np.ascontiguousarray(stereo.T), True),
+                ([stereo], False),
+                (waveform, False),
+                (waveform[None, :], False),
+                (waveform[:, None], False),
+            ):
+                with self.subTest(backend=backend, shape=getattr(audio, "shape", "list")):
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        ap(audio, sampling_rate=ap.sampling_rate, return_tensors="pt")
+                    warned = any("treated as one clip" in str(w.message) for w in caught)
+                    self.assertEqual(warned, should_warn)
 
     @require_torch
     def test_backends_equivalence_batched(self):

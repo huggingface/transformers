@@ -202,6 +202,17 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 )
             return make_list_of_audio(self.fetch_audio(audio)), self.sampling_rate
 
+        # A lone 2-D array is one clip whose channels `_downmix_to_mono` averages. The legacy feature extractors
+        # read the same array as a batch of mono clips, and the two are indistinguishable once both axes exceed 1.
+        if getattr(audio, "ndim", None) == 2 and min(audio.shape) > 1:
+            warnings.warn(
+                f"Received a single 2-D array of shape {tuple(audio.shape)}: it is treated as one clip with "
+                f"{min(audio.shape)} channels, averaged to mono. The legacy feature extractors read a 2-D array as a "
+                "batch of mono clips; to process a batch, pass a list of 1-D arrays. Wrap a multi-channel clip in a "
+                "list (`[audio]`) to silence this warning.",
+                UserWarning,
+            )
+
         return make_list_of_audio(audio), sampling_rate if sampling_rate is not None else self.sampling_rate
 
     def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
