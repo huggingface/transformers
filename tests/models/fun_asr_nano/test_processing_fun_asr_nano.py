@@ -42,7 +42,7 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if return_tensors == "np":
             self.skipTest("FunAsrNanoProcessor only supports PyTorch tensors")
         self._test_apply_chat_template(
-            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
+            "audio", batch_size, return_tensors, "audio_input_name", "audio_processor", MODALITY_INPUT_DATA["audio"]
         )
 
     def test_chat_template(self):

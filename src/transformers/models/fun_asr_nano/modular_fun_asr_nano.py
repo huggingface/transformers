@@ -88,7 +88,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         chat_template=None,
         audio_token="<|object_ref_start|>",
@@ -98,7 +98,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
             The token used as a placeholder for audio in the text.
         """
         super().__init__(
-            feature_extractor,
+            audio_processor,
             tokenizer,
             chat_template=chat_template,
             audio_token=audio_token,
@@ -110,16 +110,20 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         raise AttributeError("Not needed for Fun-ASR-Nano")
 
     def _process_audio(self, audio, **kwargs):
-        audio_inputs = self.feature_extractor(audio, **kwargs)
-        if "input_features_mask" not in audio_inputs:
-            raise ValueError("FunAsrNanoProcessor requires an audio padding mask; set `return_attention_mask=True`.")
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        if "audio_features_mask" not in audio_inputs:
+            raise ValueError("FunAsrNanoProcessor requires an audio padding mask; set `return_padding_mask=True`.")
+        # The audio processor's keys are renamed to the ones the model's `forward` takes.
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
+        audio_inputs["input_features_mask"] = audio_inputs.pop("audio_features_mask")
         audio_inputs["num_audio_tokens"] = audio_inputs["input_features_mask"].sum(-1)
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
         return audio_inputs, audio_replacements
 
     @property
     def model_input_names(self) -> list[str]:
-        return super().model_input_names
+        input_names = self.tokenizer.model_input_names + ["input_features", "input_features_mask"]
+        return [name for name in input_names if name not in self.unused_input_names]
 
     def apply_transcription_request(
         self,
