@@ -46,6 +46,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     Trainer,
+    TrainerCallback,
     TrainerState,
     TrainingArguments,
     default_data_collator,
@@ -705,6 +706,31 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
             trainer.train()
         self.assertEqual(trainer._train_batch_size, 14)
+
+    def test_auto_batch_size_eval_oom_fails_fast(self):
+        # An eval OOM must not be caught by the batch size finder, which only shrinks the train batch size
+        class MockEvalOOMCallback(TrainerCallback):
+            def on_evaluate(self, args, state, control, **kwargs):
+                raise RuntimeError("CUDA out of memory.")
+
+        train_dataset = RegressionDataset(length=128)
+        eval_dataset = RegressionDataset(length=16)
+        model = RegressionRandomPreTrainedModel(RegressionModelConfig(a=0, b=2))
+        args = RegressionTrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            max_steps=2,
+            eval_strategy="steps",
+            eval_steps=1,
+            save_strategy="no",
+            per_device_train_batch_size=16,
+            auto_find_batch_size=True,
+        )
+        trainer = Trainer(
+            model, args, train_dataset=train_dataset, eval_dataset=eval_dataset, callbacks=[MockEvalOOMCallback()]
+        )
+        with self.assertRaisesRegex(RuntimeError, "per_device_eval_batch_size"):
+            trainer.train()
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)
