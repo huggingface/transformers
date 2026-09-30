@@ -201,9 +201,11 @@ class TextKwargs(TypedDict, total=False):
         padding_side (`str`, *optional*):
             The side on which padding will be applied.
         return_mm_token_type_ids (`bool`, *optional*):
-            Deprecated. Whether to return multimodal token type ids indicating mm placeholder token positions.
+            Deprecated, use [`ProcessingKwargs.return_mm_token_type_ids`] instead.
+            Whether to return multimodal token type ids indicating mm placeholder token positions.
         return_text_replacement_offsets (`bool`, *optional*):
-            Deprecated. Whether to return character offsets for each mm placeholder and its replacement.
+            Deprecated, use [`ProcessingKwargs.return_text_replacement_offsets`] instead.
+            Whether to return character offsets for each mm placeholder and its replacement.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
