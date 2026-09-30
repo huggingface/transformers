@@ -16,12 +16,12 @@
 import unittest
 
 import pytest
-
+import copy
 from transformers import MraConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, MODEL_MAPPING_NAMES, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -283,11 +283,6 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_inputs_embeds_matches_input_ids(self):
-        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
-        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
-        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

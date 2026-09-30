@@ -21,7 +21,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -865,14 +864,6 @@ class MraModel(MraPreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-        )
-
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=embedding_output[:, 0:1, :],  # Force q_len == 1
-            attention_mask=attention_mask,
-            # Always materialize the mask; the encoder below consumes it as a tensor.
-            allow_is_bidirectional_skip=False,
         )
 
         encoder_outputs = self.encoder(

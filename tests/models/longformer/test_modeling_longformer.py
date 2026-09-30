@@ -359,6 +359,11 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester = LongformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=32)
 
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
+
     # Without this, 0.01% failure rate.
     @is_flaky(
         max_attempts=2,
