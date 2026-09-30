@@ -43,32 +43,14 @@ if is_vision_available():
 
 
 class IdeficsImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.image_mean = image_mean
-        self.image_std = image_std
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("image_size", 18)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "image_size": self.image_size,
-        }
+        return {**super().prepare_image_processor_dict(), "image_size": self.image_size}
 
     def expected_output_image_shape(self, images):
         return (self.num_channels, self.image_size, self.image_size)
@@ -77,28 +59,7 @@ class IdeficsImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = IdeficsImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "image_size"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertNotEqual(image_processor.image_size, 30)
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, image_size=42)
-            self.assertEqual(image_processor.image_size, 42)
+    image_processor_tester_class = IdeficsImageProcessingTester
 
     @require_torchvision
     def test_torchvision_numpy_transforms_equivalency(self):

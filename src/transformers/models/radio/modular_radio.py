@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -20,16 +21,17 @@ from torch import nn
 
 from ... import initialization as init
 from ...modeling_outputs import BaseModelOutput, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov2.modeling_dinov2 import (
     Dinov2Attention,
     Dinov2Layer,
     Dinov2LayerScale,
     Dinov2MLP,
+    eager_attention_forward,
 )
 from .configuration_radio import RadioConfig
 
@@ -46,9 +48,11 @@ class RadioModelOutput(ModelOutput):
     summary (`torch.FloatTensor` of shape `(batch_size, num_summary_idxs * hidden_size)`):
         Flattened summary embedding, gathered from the cls tokens selected by `config.summary_idxs`.
     features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
-        Dense spatial patch features.
+        Dense spatial patch features. For packed inputs (`image_grid_hw` given), the patch features of all images
+        concatenated, of shape `(total_patches, hidden_size)`.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Full token sequence (prefix tokens + patches) from the final encoder layer.
+        Full token sequence (prefix tokens + patches) from the final encoder layer. For packed inputs, the
+        sequences of all images concatenated, of shape `(total_sequence_length, hidden_size)`.
     """
 
     summary: torch.FloatTensor | None = None
@@ -81,15 +85,19 @@ class RadioPatchEmbeddings(nn.Module):
     def __init__(self, config: RadioConfig):
         super().__init__()
         self.patch_size = config.patch_size
-        self.embed_dim = config.hidden_size
-        self.num_cls_tokens = config.num_cls_tokens
-        self.num_registers = config.num_registers
+        self.num_channels = config.num_channels
 
         self.max_rows = config.max_img_size // config.patch_size
         self.max_cols = config.max_img_size // config.patch_size
         num_positions = self.max_rows * self.max_cols
 
-        self.patch_projection = nn.Linear(config.num_channels * config.patch_size**2, config.hidden_size, bias=False)
+        self.patch_projection = nn.Linear(config.patch_dim, config.hidden_size, bias=False)
+        self.video_patch_projection = (
+            # CODEPATH: video model `nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16` vs image-only `nvidia/C-RADIOv4-H`
+            nn.Linear(config.video_patch_dim, config.hidden_size, bias=False)
+            if config.video_temporal_patch_size is not None
+            else None
+        )
         self.position_embedding = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
         self.cls_register_token = nn.Parameter(
             torch.zeros(config.num_cls_tokens + config.num_registers, config.hidden_size)
@@ -115,12 +123,45 @@ class RadioPatchEmbeddings(nn.Module):
             pos = F.interpolate(pos.float(), size=tuple(input_dims), mode="bilinear", align_corners=False).to(dtype)
         return pos.flatten(2).permute(0, 2, 1)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        patches = self.patch_projection(self._image_to_patches(pixel_values))
+    def forward(self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor | None = None) -> torch.Tensor:
+        # temporally-packed video stacks `video_temporal_patch_size` frames along the channel dim
+        if image_grid_hw is None and pixel_values.shape[1] != self.num_channels:
+            return self.embed_video(pixel_values)
+        return self.embed_image(pixel_values, image_grid_hw)
+
+    def embed_image(self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor | None = None) -> torch.Tensor:
+        """Embed images, given either as a dense `(batch, channels, height, width)` batch or, when
+        `image_grid_hw` is set, as the concatenated patches of images with differing grids."""
+        if image_grid_hw is not None:
+            return self._embed_packed_patches(pixel_values, image_grid_hw)
+        return self._embed_dense_patches(pixel_values, self.patch_projection)
+
+    def embed_video(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        """Embed temporally-packed video frames, which carry `video_temporal_patch_size` frames per channel group."""
+        if self.video_patch_projection is None:
+            raise ValueError(
+                f"Expected {self.num_channels} input channels, got {pixel_values.shape[1]}. Temporally-packed "
+                "video input requires `config.video_temporal_patch_size` to be set."
+            )
+        return self._embed_dense_patches(pixel_values, self.video_patch_projection)
+
+    def _embed_dense_patches(self, pixel_values: torch.Tensor, projection: nn.Linear) -> torch.Tensor:
+        patches = projection(self._image_to_patches(pixel_values))
         input_dims = (pixel_values.shape[-2] // self.patch_size, pixel_values.shape[-1] // self.patch_size)
         patches = patches + self._interpolate_position_embedding(input_dims, patches.dtype)
         prefix = self.cls_register_token.unsqueeze(0).expand(patches.shape[0], -1, -1)
         return torch.cat([prefix, patches], dim=1)
+
+    def _embed_packed_patches(self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor) -> torch.Tensor:
+        """Embeds the concatenated patches of images with differing grids into one `(1, total_length, hidden)` sequence."""
+        patches = self.patch_projection(pixel_values)
+        embeddings = []
+        for (grid_height, grid_width), image_patches in zip(
+            image_grid_hw.tolist(), patches.split(image_grid_hw.prod(-1).tolist())
+        ):
+            position_embedding = self._interpolate_position_embedding((grid_height, grid_width), patches.dtype)
+            embeddings.extend([self.cls_register_token, image_patches + position_embedding[0]])
+        return torch.cat(embeddings).unsqueeze(0)
 
 
 class RadioMLP(Dinov2MLP):
@@ -132,7 +173,76 @@ class RadioLayerScale(Dinov2LayerScale):
 
 
 class RadioAttention(Dinov2Attention):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        r"""
+        cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`, *optional*):
+            Boundaries of the image sequences packed into `hidden_states`; each image only attends to itself.
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attention_kwargs = {"dropout": 0.0 if not self.training else self.attention_dropout, "scaling": self.scaling}
+
+        if cu_seqlens is None:
+            attn_output, attn_weights = attention_interface(
+                self, query_states, key_states, value_states, attention_mask, **attention_kwargs, **kwargs
+            )
+        elif is_flash_attention_requested(self.config):
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs)
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                **attention_kwargs,
+                **kwargs,
+            )
+        else:
+            # without a varlen kernel, attend within each image separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+            outputs = [
+                attention_interface(self, query, key, value, attention_mask=None, **attention_kwargs, **kwargs)
+                for query, key, value in zip(*splits)
+            ]
+            attn_output = torch.cat([output[0] for output in outputs], dim=1)
+            attn_weights = None
+            # eager returns per-image probabilities; lay them out block-diagonally over the packed sequence
+            if outputs[0][1] is not None:
+                total_length = query_states.shape[2]
+                attn_weights = query_states.new_zeros(
+                    query_states.shape[0], self.num_attention_heads, total_length, total_length
+                )
+                start = 0
+                for _, weights in outputs:
+                    end = start + weights.shape[-1]
+                    attn_weights[..., start:end, start:end] = weights
+                    start = end
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
 
 
 class RadioLayer(Dinov2Layer):
@@ -189,7 +299,7 @@ class RadioEncoder(RadioPreTrainedModel):
     @auto_docstring
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         for layer in self.layer:
-            hidden_states = layer(hidden_states)
+            hidden_states = layer(hidden_states, **kwargs)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
@@ -216,7 +326,22 @@ class RadioModel(RadioPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> RadioModelOutput:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_hw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> RadioModelOutput:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)` or `(total_patches, num_channels * patch_size**2)`):
+            Images of one size, or, with `image_grid_hw`, the flattened patches of images of different sizes
+            concatenated. Each patch is laid out channel-major, i.e. `(num_channels, patch_size, patch_size)`.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            Patch grid `(height, width)` of each image in packed `pixel_values`.
+        """
+        if image_grid_hw is not None:
+            return self._forward_packed(pixel_values, image_grid_hw, **kwargs)
+
         pixel_values = self.input_conditioner(pixel_values)
         hidden_states = self.embeddings(pixel_values)
         encoder_outputs: BaseModelOutput = self.encoder(hidden_states, **kwargs)
@@ -226,6 +351,36 @@ class RadioModel(RadioPreTrainedModel):
         all_summary = last_hidden_state[:, : self.config.num_cls_tokens]
         summary = all_summary[:, self.summary_idxs].flatten(1)
         features = last_hidden_state[:, num_skip:]
+
+        return RadioModelOutput(
+            summary=summary,
+            features=features,
+            last_hidden_state=last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+    def _forward_packed(
+        self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> RadioModelOutput:
+        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        pixel_values = self.input_conditioner(pixel_values.view(-1, num_channels, patch_size, patch_size))
+        hidden_states = self.embeddings(pixel_values.flatten(1), image_grid_hw)
+
+        num_prefix_tokens = self.config.num_summary_tokens
+        sequence_lengths = image_grid_hw.prod(-1) + num_prefix_tokens
+        cu_seqlens = F.pad(sequence_lengths.cumsum(0), (1, 0)).to(torch.int32)
+        # a single image is a plain dense sequence and needs no packed attention
+        encoder_outputs: BaseModelOutput = self.encoder(
+            hidden_states, cu_seqlens=cu_seqlens if len(sequence_lengths) > 1 else None, **kwargs
+        )
+        last_hidden_state = encoder_outputs.last_hidden_state[0]
+
+        starts = cu_seqlens[:-1].long()
+        summary = last_hidden_state[starts[:, None] + self.summary_idxs[None, :]].flatten(1)
+        positions = torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device)
+        positions_in_image = positions - starts.repeat_interleave(sequence_lengths)
+        features = last_hidden_state[positions_in_image >= num_prefix_tokens]
 
         return RadioModelOutput(
             summary=summary,

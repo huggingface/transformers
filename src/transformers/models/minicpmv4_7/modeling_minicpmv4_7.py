@@ -681,6 +681,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -695,32 +696,43 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            # Pixels are always `1` in first dim due to NaViT packing, and we don't
-            # want to waste compute processing the same image `num_beams` times. Hack until
-            # @raushan adds support for encoding images once same way as in enc-dec models
-            num_beams = pixel_values.shape[0]
-            vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
-            image_features = (
-                torch.cat(vision_output.pooler_output, dim=0)
-                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                .repeat(num_beams, 1)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if (
+            mm_encoder_outputs.get("image") is None
+            and pixel_values is not None
+            and self.config.image_token_id is not None
+        ):
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values[:1], target_sizes, downsample_mode=downsample_mode
+            )
+
+        if (
+            mm_encoder_outputs.get("video") is None
+            and pixel_values_videos is not None
+            and self.config.video_token_id is not None
+        ):
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
-        if pixel_values_videos is not None:
-            num_beams = pixel_values_videos.shape[0]
-            vision_output = self.get_video_features(
-                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
-            )
-            video_features = (
-                torch.cat(vision_output.pooler_output, dim=0)
-                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                .repeat(num_beams, 1)
+        if mm_encoder_outputs.get("video") is not None:
+            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
@@ -1226,6 +1238,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -1253,6 +1266,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             use_cache=use_cache,
             downsample_mode=downsample_mode,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1315,37 +1329,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["target_sizes_videos"] = target_sizes_videos
         return model_inputs
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        target_sizes: torch.LongTensor | None = None,
-        target_sizes_videos: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Taking these as explicit arguments keeps them out of the dim-0 `repeat_interleave` that
-        # `super()` applies to every tensor left in `model_kwargs`: `target_sizes*` are indexed by
-        # crop instead of by batch item, and canvas M-RoPE position ids are `(3, batch, seq)` so they
-        # expand along dim 1. Note that `mm_token_type_ids` is deliberately *not* listed here: it is
-        # `(batch, seq)`, so the default dim-0 expansion is exactly what it needs.
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-
-        if target_sizes is not None:
-            model_kwargs["target_sizes"] = target_sizes
-        if target_sizes_videos is not None:
-            model_kwargs["target_sizes_videos"] = target_sizes_videos
-        if position_ids is not None:
-            batch_dim = 1 if position_ids.ndim == 3 else 0
-            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
-        return input_ids, model_kwargs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- canvas M-RoPE needs 4D position ids [text, T, H, W].

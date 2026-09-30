@@ -90,11 +90,7 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         )
         position_ids_expanded = position_ids[None, None, :].float()
 
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             sin = freqs.sin()
@@ -332,10 +328,7 @@ class ParakeetEncoderAttention(nn.Module):
         matrix_bd = matrix_bd * self.scaling
 
         if attention_mask is not None:
-            # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
-            # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
-            # we rather went for a straight-forward approach with float("-inf")
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), torch.finfo(matrix_bd.dtype).min)
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(

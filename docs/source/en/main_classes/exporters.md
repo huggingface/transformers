@@ -63,6 +63,10 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.configs.ExecutorchConfig
 
+## OpenVINOConfig
+
+[[autodoc]] exporters.configs.OpenVINOConfig
+
 ## Utilities
 
 Lower-level functions that power `export_for_generation`, useful when you need to intervene

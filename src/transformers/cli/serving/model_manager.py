@@ -342,7 +342,7 @@ class ModelManager:
                     progress_callback({"status": "ready", "model": key, "cached": True})
         return model, processor
 
-    async def load_model_streaming(self, model_id_and_revision: str):
+    async def load_model_streaming(self, model_id_and_revision: str, gguf_file: str | None = None):
         """Load a model and stream progress as SSE events.
 
         Handles three cases:
@@ -352,11 +352,12 @@ class ModelManager:
 
         Args:
             model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
+            gguf_file (`str`, *optional*): GGUF file to load from the repository.
 
         Yields:
             `str`: SSE ``data: ...`` lines with progress updates.
         """
-        mid = model_id_and_revision
+        mid = model_id_and_revision if gguf_file is None else f"{model_id_and_revision}:{gguf_file}"
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         # Case 1: already cached
@@ -402,9 +403,10 @@ class ModelManager:
                 try:
                     await asyncio.to_thread(
                         self.load_model_and_processor,
-                        mid,
+                        model_id_and_revision,
                         progress_callback=enqueue,
                         tqdm_class=tqdm_class,
+                        gguf_file=gguf_file,
                     )
                 finally:
                     logging.set_tqdm_hook(previous_hook)

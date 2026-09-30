@@ -76,6 +76,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_kernels,
     require_non_hpu,
+    require_rocm,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -1289,7 +1290,7 @@ class ModelUtilsTest(TestCasePlus):
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -3321,6 +3322,19 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue(MixtralModel._can_set_experts_implementation())
         self.assertFalse(LlamaModel._can_set_experts_implementation())
+
+    @require_kernels
+    @require_rocm
+    def test_flash_fallback_skips_implementations_not_built_for_the_device(self):
+        # The CUDA-only kernel comes first, so the fallback must skip it and pick the ROCm one
+        compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "kernels-community/aiter-flash-attn"]
+        with patch.object(MistralForCausalLM, "_compatible_flash_implementations", compatible_flash_implementations):
+            model = MistralForCausalLM.from_pretrained(TINY_MISTRAL, attn_implementation="flash_attention_2")
+            self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+            model.set_attn_implementation("eager")
+            model.set_attn_implementation("flash_attention_2")
+            self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
 
 
 @require_torch
