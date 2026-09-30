@@ -332,7 +332,9 @@ class Transpose(ConversionOps):
         # In this case, check the shapes before transposing
         else:
             # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
-            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            param = kwargs["model"].get_parameter(kwargs["full_layer_name"])
+            # a sharded parameter arrives as this rank's slice
+            expected_shape = param._local_tensor.shape if is_dtensor(param) else param.shape
             # The shapes are the same: do NOT transpose
             if tensor.shape == expected_shape:
                 return {target_pattern: tensor}
@@ -1709,9 +1711,14 @@ def convert_and_load_state_dict_in_model(
             tensor_idx = (
                 len(mapping.collected_tensors.get(source_pattern, []))
                 if isinstance(mapping, WeightConverter)
-                and any(isinstance(op, MergeModulelist) for op in mapping.operations)
+                and any(
+                    isinstance(op, (MergeModulelist, ErnieFuseAndSplitTextVisionExperts)) for op in mapping.operations
+                )
                 else None
             )
+            if tensor_idx is not None and empty_param is not None:
+                # the index runs over every stack one converter splits into (Ernie's text, then vision experts)
+                tensor_idx %= empty_param.shape[0]
 
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
