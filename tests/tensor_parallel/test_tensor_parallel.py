@@ -181,7 +181,7 @@ class TestParallelPlanResolution(TestCasePlus):
             for key in ("layers.*.mlp.experst", "layers.*.mlp.experts.missing_weight", "model.layers.*.mlp.experts"):
                 with self.subTest(plan_name=plan_name, key=key):
                     config = DistributedConfig(tp_size=4, ep_size=4, **{plan_name: {key: "grouped_gemm"}})
-                    with self.assertRaisesRegex(ValueError, f"The `{plan_name}` pattern .* does not match") as error:
+                    with self.assertRaisesRegex(ValueError, f"`{plan_name}` keys .* match nothing in") as error:
                         tensor_parallel.resolve_parallel_plans(self.model, config)
                     self.assertIn(key, str(error.exception))
                     self.assertIn("Qwen3MoeModel", str(error.exception))
@@ -191,7 +191,7 @@ class TestParallelPlanResolution(TestCasePlus):
     def test_override_keys_can_match_modules_parameters_or_existing_plan_keys(self):
         for plan_name in ("tp_plan", "ep_plan"):
             # `gate_proj` is in the predefined TP plan even though this MoE model has no such module.
-            for key in ("layers.*.mlp", "layers.0.self_attn.q_proj.weight", "layers.*.mlp.gate_proj"):
+            for key in ("layers.*.mlp", "layers.*.self_attn.q_proj.weight", "layers.*.mlp.gate_proj"):
                 with self.subTest(plan_name=plan_name, key=key):
                     original = getattr(self.model, plan_name).copy()
                     if plan_name == "ep_plan":
@@ -205,7 +205,7 @@ class TestParallelPlanResolution(TestCasePlus):
         with torch.device("meta"):
             model = Qwen3MoeForCausalLM(self.config)
         config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.gate": "ep_router"})
-        with self.assertRaisesRegex(ValueError, "including any 'model.' prefix"):
+        with self.assertRaisesRegex(ValueError, "match nothing in Qwen3MoeForCausalLM"):
             tensor_parallel.resolve_parallel_plans(model, config)
 
         config = DistributedConfig(
