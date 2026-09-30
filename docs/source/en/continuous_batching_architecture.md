@@ -84,31 +84,39 @@ cb_config = ContinuousBatchingConfig(scheduler_type="prefill_first")
 
 ## Memory management
 
-The KV cache is paged so requests of different lengths can share a fixed memory pool without fragmentation. The cache divides memory into fixed-size blocks, and each request holds a list of block IDs that the attention kernel reads from and writes to.
+The KV cache is paged so requests of different lengths can share a fixed memory pool without fragmentation. A shared pool of memory chunks, implemented as `CachePool`, supplies those chunks to each attention type allocator, which divides them into blocks and pages.
 
 ```text
-Paged KV cache (num_blocks × block_size tokens per block)
+Shared pool (first two chunks reserved for padding / never allocated)
 
-    0   1   2   3   4   5   6   7   8   9   …
-  ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
-  │ B │ · │ A │ B │ · │ A │ · │ A │ · │ · │
-  └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
-  A  request A: 2, 5, 7   B  request B: 0, 3   ·  free: 1, 4, 6, 8, 9, …
+  chunk N  [ ======================================== ]
+               |                            |
+    full attn: [ FULL BLOCK 0 | FULL BLOCK 1 | … ]
+               [ page L0 | page L0 | … ]   (one page per full layer)
+
+    sliding:   [ ----------- SLIDING BLOCK 0 ----------- ]
+               [ page L1 | page L2 | page L3 | … ]  (one page per sliding layer)
+
+  page  = page_size tokens of KV for one layer
+  block = one page per layer of that attention type
+  chunk = pool unit sized so full and sliding blocks tile the same bytes
 ```
 
-A page holds the key/value state for one token in one layer. A block is a span of `block_size` pages (default 256) and is the unit of allocation. Blocks are allocated per layer group. Layers within a group share a block ID, which keeps bookkeeping uniform for mixed-attention models.
+Continuous batching supports two attention types only: `full_attention` (`FullAttentionCacheAllocator`) and `sliding_attention` (`SlidingAttentionCacheAllocator`). Hybrid models get one allocator of each kind. Attention type comes from the model (`layer_types` / `sliding_window`), not from [`ContinuousBatchingConfig`].
 
-The cache reserves two extra blocks on top of `num_blocks` for padding tokens to read from and write to, plus a sentinel index for sliding window groups. This reservation requires `block_size` to be at least 4, so the manager rejects smaller values.
+Sliding layers keep only a fixed window of recent tokens by recycling a small set of pages. They do not support kernel block tables or block sharing.
+
+The cache reserves two chunks ahead of the data chunks for padding reads and writes that requests never use. Those chunks are never allocated to requests. `page_size` must be at least `4`, or initialization raises a `ValueError`.
 
 ### Cache sizing
 
-The manager infers the number of blocks at startup from free GPU memory. The manager solves an equation that accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` (default 0.9) of the available memory.
+The manager infers how many chunks fit at startup from free GPU memory. It accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` of the available memory. When unset, that resolves to `0.9`, or `0.8` if logit processors are active. `num_blocks` expresses capacity as whole model blocks of `page_size` tokens when you set it explicitly.
 
-You can pin the values explicitly in [`ContinuousBatchingConfig`].
+You can pin the values in [`ContinuousBatchingConfig`].
 
 ```py
 cb_config = ContinuousBatchingConfig(
-    block_size=256,
+    page_size=256,
     num_blocks=4096,
     max_batch_tokens=512,
     max_memory_percent=0.8,
@@ -117,15 +125,15 @@ cb_config = ContinuousBatchingConfig(
 
 ### Admission
 
-Before a request joins the batch, the scheduler checks that enough free blocks exist for every layer group. If any group would fall short, the request is rejected and nothing is allocated.
+Before a request joins the batch, the scheduler checks that enough free capacity exists for every attention type allocator. If any allocator would fall short, the request is rejected and nothing is allocated.
 
-To avoid filling the cache until [offloading](#offloading) is the only option, the scheduler enforces a `safety_margin`. Once free blocks fall below `safety_margin * num_blocks`, new prefills are held back and only active decodes continue. The FIFO scheduler defaults to `0.15` (15% of blocks held in reserve), while `prefill_first` defaults to `0.0`. Set `safety_margin` in [`ContinuousBatchingConfig`] to tune it, where `0` disables the margin.
+To avoid filling the cache until [offloading](#offloading) is the only option, the scheduler enforces a `safety_margin`. Once free cache capacity falls below `safety_margin`, new prefills are held back and only active decodes continue. The FIFO scheduler defaults to `0.15` (15% of capacity held in reserve), while `prefill_first` defaults to `0.0`. Set `safety_margin` in [`ContinuousBatchingConfig`] to tune it, where `0` disables the margin.
 
 ### Prefix caching
 
 When two requests share a prompt prefix, they can share the blocks that hold the KV for that prefix. Each completed block is content-hashed. A later request with a matching prefix reuses the block and skips the prefill for those tokens. Shared blocks are reference-counted and only return to the free pool once every request using them has finished.
 
-Prefix caching is enabled by default and is active only when a model has exclusively full-attention layers. Set `allow_block_sharing=False` in [`ContinuousBatchingConfig`] for workloads with short prompts and long generations, where the bookkeeping outweighs the savings.
+`allow_block_sharing` defaults to `True`. Prefix sharing is active only when every allocator supports sharing, so only full-attention-only models use it. Pure sliding and hybrid models disable it. Set `allow_block_sharing=False` for workloads with short prompts and long generations, where the bookkeeping outweighs the savings.
 
 ### Eviction
 
