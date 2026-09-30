@@ -1585,6 +1585,7 @@ class Trainer:
         epochs_trained, steps_trained_in_current_epoch = self._init_training_state(
             max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
         )
+        initial_global_step = self.state.global_step
         model, train_dataloader = self._prepare_for_training(max_steps, train_dataloader, resume_from_checkpoint)
 
         # Train!
@@ -1644,7 +1645,7 @@ class Trainer:
             if self.control.should_training_stop:
                 break
 
-        return self._finalize_training(trial, num_train_samples, start_time)
+        return self._finalize_training(trial, num_train_samples, start_time, initial_global_step)
 
     def _init_training_state(
         self, max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
@@ -1952,20 +1953,23 @@ class Trainer:
             learning_rate=learning_rate,
         )
 
-    def _finalize_training(self, trial, num_train_samples, start_time):
+    def _finalize_training(self, trial, num_train_samples, start_time, initial_global_step):
         """Finalize training: metrics, best-model loading, cleanup. Returns TrainOutput."""
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-
         # add remaining tr_loss
         self._total_loss_scalar += self._tr_loss.item()
-        effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
-        train_loss = self._total_loss_scalar / effective_global_step
+        num_steps_trained = self.state.global_step - initial_global_step
+        train_loss = self._total_loss_scalar / max(num_steps_trained, 0.001)
 
+        if initial_global_step > 0:
+            num_train_samples *= num_steps_trained / max(self.state.max_steps, 1)
+
+        num_steps = num_steps_trained if initial_global_step > 0 else self.state.max_steps
         metrics = speed_metrics(
             "train",
             start_time,
             num_samples=num_train_samples,
-            num_steps=self.state.max_steps,
+            num_steps=num_steps,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos

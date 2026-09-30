@@ -485,6 +485,40 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+    def test_resume_training_reports_metrics_for_resumed_steps(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer_kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 6,
+                "max_steps": 6,
+                "per_device_train_batch_size": 1,
+                "save_steps": 5,
+                "logging_steps": 1,
+                "disable_tqdm": True,
+                "use_cpu": True,
+            }
+
+            trainer = get_regression_trainer(**trainer_kwargs)
+            trainer.train()
+
+            trainer = get_regression_trainer(**trainer_kwargs)
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            with patch("transformers.trainer.speed_metrics") as mock_speed_metrics:
+                mock_speed_metrics.return_value = {}
+                resumed = trainer.train(resume_from_checkpoint=checkpoint)
+
+            step_loss = next(
+                log["loss"]
+                for log in trainer.state.log_history
+                if log.get("step") == 6 and "loss" in log
+            )
+
+            self.assertEqual(resumed.global_step, 6)
+            self.assertAlmostEqual(resumed.training_loss, step_loss, places=3)
+            self.assertEqual(mock_speed_metrics.call_args.kwargs["num_steps"], 1)
+            self.assertEqual(mock_speed_metrics.call_args.kwargs["num_samples"], 1)
+
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_gradient_accumulation(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
