@@ -636,10 +636,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.multi_modal_projector = nn.Linear(
-            config.audio_config.hidden_size * config.encoder_stacking,
-            config.text_config.hidden_size,
-        )
+        self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
         self.post_init()
 
     @can_return_tuple

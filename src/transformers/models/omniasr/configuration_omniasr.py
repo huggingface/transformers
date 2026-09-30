@@ -164,22 +164,13 @@ class OmniASRCTCConfig(PreTrainedConfig):
 @strict
 class OmniASRConfig(PreTrainedConfig):
     r"""
-    encoder_stacking (`int`, *optional*, defaults to 1):
-        Number of consecutive encoder frames stacked together before being projected to the text decoder. Used by
-        the Zero-Shot variant, see
-        https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1024
-    language_token_id (`int`, *optional*, defaults to 10288):
-        Id of the LID marker token (`<extra_id_0>`), which opens the language slot of the decoder context. It is
-        followed by one of the language tokens that close the vocabulary, both written by [`OmniASRProcessor`] when
-        it builds the prompt.
-
     Example:
 
     ```python
-    >>> from transformers import OmniASRForConditionalGeneration, OmniASRLLMConfig
+    >>> from transformers import OmniASRForConditionalGeneration, OmniASRConfig
 
     >>> # Initializing an OmniASR-LLM configuration
-    >>> configuration = OmniASRLLMConfig()
+    >>> configuration = OmniASRConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
     >>> model = OmniASRForConditionalGeneration(configuration)
@@ -192,20 +183,8 @@ class OmniASRConfig(PreTrainedConfig):
     model_type = "omniasr"
     sub_configs = {"audio_config": OmniASREncoderConfig, "text_config": AutoConfig}
 
-    _default_text_config_kwargs = {
-        "vocab_size": 11984,
-        "hidden_size": 4096,
-        "num_hidden_layers": 12,
-        "num_key_value_heads": 8,
-        "rope_theta": 10000.0,
-        "rms_norm_eps": 1e-05,
-        "intermediate_size": 2816,
-    }
-
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    encoder_stacking: int = 1
-    language_token_id: int = 10288
     audio_token_id: int = 10289
     bos_token_id: int | None = 0
     pad_token_id: int | None = 1
@@ -219,11 +198,17 @@ class OmniASRConfig(PreTrainedConfig):
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **self.text_config}
-            )
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
+            self.text_config = CONFIG_MAPPING["llama"](
+                vocab_size=11984,
+                hidden_size=4096,
+                intermediate_size=2816,
+                num_hidden_layers=12,
+                num_key_value_heads=8,
+                rope_theta=10000.0,
+                rms_norm_eps=1e-05,
+            )
 
         self.initializer_range = self.audio_config.initializer_range
         super().__post_init__(**kwargs)

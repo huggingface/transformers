@@ -394,6 +394,10 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
                 "language embedding table unnamed, so it cannot be given a token."
             )
 
+        # Frame stacking is only used by the zero-shot variant, which is not supported.
+        if original_config_llm.encoder_stacking != 1:
+            raise ValueError(f"`encoder_stacking` must be 1, got {original_config_llm.encoder_stacking}.")
+
         llama_config = LlamaConfig(
             vocab_size=original_config_llm.llama_config.vocab_size + NUM_RESERVED_TOKENS + num_language_embeddings,
             hidden_size=original_config_llm.llama_config.model_dim,
@@ -407,27 +411,24 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             rms_norm_eps=1e-5,
         )
 
+        # The reserved rows sit right after the base vocabulary, in the order the tokenizer declares them:
+        # `<extra_id_0>` is the LID marker the original model already used, and `<extra_id_1>` is the
+        # placeholder that `OmniASRProcessor` writes into `input_ids` for the audio frames. The language
+        # tokens follow, one per row of the original language embedding table.
+        lid_marker_id = original_config_llm.llama_config.vocab_size
         config = OmniASRConfig(
             audio_config=encoder_config,
             text_config=llama_config,
-            encoder_stacking=original_config_llm.encoder_stacking,
             bos_token_id=original_config_llm.bos_idx,
             pad_token_id=original_config_llm.pad_idx,
             eos_token_id=original_config_llm.eos_idx,
-            # The reserved rows sit right after the base vocabulary, in the order the tokenizer declares them:
-            # `<extra_id_0>` is the LID marker the original model already used, and `<extra_id_1>` is the
-            # placeholder that `OmniASRProcessor` writes into `input_ids` for the audio frames. The language
-            # tokens follow, one per row of the original language embedding table.
-            language_token_id=original_config_llm.llama_config.vocab_size,
-            audio_token_id=original_config_llm.llama_config.vocab_size + 1,
+            audio_token_id=lid_marker_id + 1,
         )
         hf_model = OmniASRForConditionalGeneration(config)
         # None of the tokens past the tokenizer's vocabulary is a valid target: the audio placeholder stands for an
         # embedding that is scattered in, and the LID marker and language tokens only ever open a prompt. Their
         # `lm_head` rows are zeroed rather than trained, so they have to be suppressed rather than left to score.
-        hf_model.generation_config.suppress_tokens = list(
-            range(config.language_token_id, config.text_config.vocab_size)
-        )
+        hf_model.generation_config.suppress_tokens = list(range(lid_marker_id, config.text_config.vocab_size))
     hf_model.to(device).to(dtype)
 
     # 3) Convert weights
@@ -493,7 +494,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         }
     processor = OmniASRProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer, **processor_kwargs)
     if "LLM" in model_card:
-        prompt_ids = [config.audio_token_id, config.language_token_id, config.bos_token_id]
+        prompt_ids = [config.audio_token_id, lid_marker_id, config.bos_token_id]
         if processor.tokenizer.convert_tokens_to_ids(["<extra_id_1>", "<extra_id_0>", "<s>"]) != prompt_ids:
             raise ValueError(f"The chat template's prompt tokens do not match the config's ids {prompt_ids}.")
 

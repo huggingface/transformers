@@ -52,23 +52,15 @@ class OmniASRModelTester(ALMModelTester):
     audio_mask_key = "padding_mask"
 
     def __init__(self, parent, **kwargs):
-        # seq_length 20 = BOS + 12 audio placeholders + 7 text, which keeps the tail of each sequence text-only
-        # (the resize_token_embeddings test overwrites column -2).
         kwargs.setdefault("seq_length", 20)
-        # 80 raw samples through the two convolutions below -> 12 encoder frames.
         kwargs.setdefault("feat_seq_length", 80)
         kwargs.setdefault("conv_dim", [16, 16])
         kwargs.setdefault("conv_kernel", [5, 3])
         kwargs.setdefault("conv_stride", [3, 2])
         kwargs.setdefault("num_conv_pos_embeddings", 8)
         kwargs.setdefault("num_conv_pos_embedding_groups", 2)
-        # Low placeholder ids on purpose: `test_resize_tokens_embeddings` clamps `input_ids` from above, which
-        # would wipe out placeholders sitting at the end of the table (where the real checkpoints keep them).
         kwargs.setdefault("audio_token_id", 0)
-        kwargs.setdefault("language_token_id", 4)
-        # Keeps a training-mode forward deterministic: no layer dropped by the encoder.
         kwargs.setdefault("layerdrop", 0.0)
-        # Llama needs head_dim
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
 
@@ -80,7 +72,7 @@ class OmniASRModelTester(ALMModelTester):
         return "input_values"
 
     def get_audio_embeds_mask(self, audio_mask):
-        # Mirrors `OmniASRPreTrainedModel._get_feat_extract_output_lengths`.
+        # Mirrors `OmniASRPreTrainedModel._get_subsampling_output_length`.
         lengths = audio_mask.sum(-1)
         for kernel, stride in zip(self.conv_kernel, self.conv_stride):
             lengths = torch.div(lengths - kernel, stride, rounding_mode="floor") + 1
@@ -108,7 +100,6 @@ class OmniASRForCTCModelTester:
         self.pad_token_id = pad_token_id
         self.is_training = is_training
 
-        # 80 raw samples through the two convolutions below -> 12 encoder frames.
         self.conv_dim = [16, 16]
         self.conv_kernel = [5, 3]
         self.conv_stride = [3, 2]
@@ -309,7 +300,6 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                 **inputs,
                 max_new_tokens=256,
             )
-        # the audio prompt is part of `input_ids`, so `generate` returns it back before the transcription
         generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
 
         torch.testing.assert_close(generated_ids.cpu(), EXPECTED_TOKEN_IDS)
@@ -339,11 +329,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                 **inputs,
                 max_new_tokens=256,
             )
-        # the audio prompt is part of `input_ids`, so `generate` returns it back before the transcription
         generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
-
-        # The audio context is left-padded, so each sample decodes exactly as it would on its own. Compare each
-        # hypothesis over its own length; what follows it is padding.
         for idx, length in enumerate(EXPECTED_HYPOTHESIS_LENS):
             torch.testing.assert_close(
                 generated_ids[idx, :length].cpu(), torch.tensor(EXPECTED_TOKEN_IDS[idx][:length])
@@ -370,7 +356,6 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             inputs.to(model.device, dtype=self.dtype)
             with torch.no_grad():
                 generated_ids = model.generate(**inputs, max_new_tokens=200)
-            # the audio prompt is part of `input_ids`, so `generate` returns it back before the transcription
             return generated_ids[:, inputs["input_ids"].shape[1] :]
 
         alone = generate([shortest])[0].cpu()

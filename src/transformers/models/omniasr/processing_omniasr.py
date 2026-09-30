@@ -31,15 +31,9 @@ LANGUAGE_AGNOSTIC = "auto"
 
 class OmniASRProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
     _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-        },
-        "text_kwargs": {
-            "padding": True,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
+        "audio_kwargs": {"sampling_rate": 16000},
+        "text_kwargs": {"padding": True},
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -53,7 +47,6 @@ class OmniASRProcessor(ProcessorMixin):
         tokenizer,
         chat_template=None,
         audio_token="<extra_id_1>",
-        group_tokens=None,
         conv_kernel=None,
         conv_stride=None,
     ):
@@ -61,10 +54,6 @@ class OmniASRProcessor(ProcessorMixin):
         audio_token (`str`, *optional*, defaults to `"<extra_id_1>"`):
             The placeholder token that stands for one speech encoder frame in the LLM variant's prompt, i.e. the
             token of [`OmniASRConfig.audio_token_id`].
-        group_tokens (`bool`, *optional*):
-            Whether [`~OmniASRProcessor.decode`] collapses runs of identical tokens. This is what CTC decoding
-            requires, and what the autoregressive LLM variant must not do. Defaults to `True` for the CTC variant
-            and `False` for the LLM variant, i.e. to whether a chat template is set.
         conv_kernel (`list[int]`, *optional*):
             Kernel size of each convolution of the speech encoder's feature encoder, i.e.
             [`OmniASREncoderConfig.conv_kernel`]. Needed by the LLM variant to count the frames an audio input is
@@ -76,11 +65,19 @@ class OmniASRProcessor(ProcessorMixin):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
-        # Only the LLM variant is prompted, so only its checkpoints ship a chat template.
-        self.group_tokens = group_tokens if group_tokens is not None else chat_template is None
-        # Lists rather than tuples, so that saving and reloading the processor round-trips to an equal object.
         self.conv_kernel = list(conv_kernel) if conv_kernel is not None else None
         self.conv_stride = list(conv_stride) if conv_stride is not None else None
+        # Only the LLM variant is prompted, so only its checkpoints ship a chat template.
+        if self.chat_template is None:
+            # CTC decoding which require tokens to be grouped
+            self.group_tokens = True
+        else:
+            self.group_tokens = False
+            if self.conv_kernel is None or self.conv_stride is None:
+                raise ValueError(
+                    f"{self.__class__.__name__} needs `conv_kernel` and `conv_stride` to count the audio placeholders of "
+                    "the LLM variant's prompt."
+                )
 
     @auto_docstring
     def __call__(
@@ -107,12 +104,9 @@ class OmniASRProcessor(ProcessorMixin):
         if self.chat_template is None:
             return self._call_ctc(audio, text=text, **kwargs)
 
-        if output_labels:
-            kwargs["return_mm_token_type_ids"] = True
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            model_inputs.pop("mm_token_type_ids")
             input_ids = model_inputs["input_ids"]
             # The prompt closes with the BOS the transcription is decoded from, so everything up to it (the audio
             # placeholders, the language markers and the left padding) is masked out of the loss.
@@ -139,7 +133,6 @@ class OmniASRProcessor(ProcessorMixin):
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
             labels = encodings["input_ids"]
             # Mask padding positions with -100 so the CTC loss ignores them.
-            # (pad_token_id=0 satisfies labels >= 0, which would otherwise inflate target_lengths.)
             if "attention_mask" in encodings:
                 labels[encodings["attention_mask"] == 0] = -100
             inputs["labels"] = labels
@@ -169,14 +162,8 @@ class OmniASRProcessor(ProcessorMixin):
     def _get_num_audio_tokens(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
         """
         Number of speech encoder frames each audio length is subsampled to, i.e. how many audio placeholders its
-        prompt holds. Mirrors `OmniASRPreTrainedModel._get_feat_extract_output_lengths`.
+        prompt holds. Mirrors `OmniASRPreTrainedModel._get_subsampling_output_length`.
         """
-        # TODO remove guard and check in init?
-        if self.conv_kernel is None or self.conv_stride is None:
-            raise ValueError(
-                f"{self.__class__.__name__} needs `conv_kernel` and `conv_stride` to count the audio placeholders of "
-                "the LLM variant's prompt; they are saved alongside its checkpoints."
-            )
         for kernel, stride in zip(self.conv_kernel, self.conv_stride):
             audio_lengths = torch.div(audio_lengths - kernel, stride, rounding_mode="floor") + 1
         return audio_lengths
