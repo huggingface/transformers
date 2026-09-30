@@ -1084,8 +1084,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self.response_template = kwargs.pop("response_template", None)
         kwargs.pop("response_schema", None)  # Silently drop the legacy response parser if present
 
-        # Non-special added tokens that the chat format uses as control tokens, see `apply_chat_template`. If `None`,
-        # they are inferred from the chat template
+        # We use a heuristic for sanitizing control tokens in chats, an explicit list can override it
         self.chat_control_tokens = kwargs.pop("chat_control_tokens", None)
         if self.chat_control_tokens is not None and not isinstance(self.chat_control_tokens, (list, tuple)):
             raise TypeError(f"`chat_control_tokens` should be a list of strings, got {self.chat_control_tokens!r}")
