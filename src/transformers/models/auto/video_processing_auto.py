@@ -59,6 +59,7 @@ else:
             ("exaone4_5", "Qwen2VLVideoProcessor"),
             ("hyperclovax_vision_v2", "Qwen2VLVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
+            ("minicpmv4_7", "MiniCPMV4_6VideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),

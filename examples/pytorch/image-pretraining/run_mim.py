@@ -71,7 +71,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: str | None = field(
-        default="cifar10", metadata={"help": "Name of a dataset from the datasets package"}
+        default="uoft-cs/cifar10", metadata={"help": "Name of a dataset from the datasets package"}
     )
     dataset_config_name: str | None = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
@@ -462,6 +462,8 @@ def main():
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
+
+    trainer.end()
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -85,7 +85,7 @@ class PixtralVisionRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, ...].float()
         position_ids_expanded = position_ids[..., None].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded @ inv_freq_expanded
             cos = freqs.cos() * self.attention_scaling
@@ -325,7 +325,7 @@ class PixtralTransformer(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -347,7 +347,7 @@ class PixtralTransformer(nn.Module):
                 **kwargs,
             )
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -375,10 +375,11 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
     d_min = torch.finfo(dtype).min
     causal_mask = torch.full((seq_len, seq_len), fill_value=d_min, dtype=dtype, device=device)
 
-    block_end_idx = torch.tensor(patch_embeds_list).cumsum(-1)
-    block_start_idx = torch.tensor([0] + patch_embeds_list[:-1]).cumsum(-1)
-    for start, end in zip(block_start_idx, block_end_idx):
+    start = 0
+    for num_patches in patch_embeds_list:
+        end = start + num_patches
         causal_mask[start:end, start:end] = 0
+        start = end
 
     causal_mask = causal_mask[None, None, :, :].expand(tensor.shape[0], 1, -1, -1)
     return causal_mask
@@ -416,7 +417,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         if image_sizes is None:
             batch_size, _, height, width = pixel_values.shape
             image_sizes = [(height, width)] * batch_size

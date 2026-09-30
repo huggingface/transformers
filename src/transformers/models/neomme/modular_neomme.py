@@ -292,7 +292,7 @@ class NeoMMERotaryEmbedding(LagunaRotaryEmbedding):
         inv_freq_expanded = inv_freq[None, None, :, None].float().expand(2, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # (2, batch, 1, seq_len)
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             # (2, batch, seq_len, rotary_dim // 2)
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)

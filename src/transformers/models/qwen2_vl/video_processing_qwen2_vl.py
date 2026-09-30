@@ -19,6 +19,7 @@
 """video processor class for Qwen2-VL."""
 
 import math
+import warnings
 
 import torch
 import torchvision.transforms.v2.functional as tvF
@@ -135,7 +136,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     def __init__(self, **kwargs: Unpack[Qwen2VLVideoProcessorInitKwargs]):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        size = dict(self.size) if size is None else size
         if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
             size["shortest_edge"] = min_pixels
             size.pop("min_pixels", None)
@@ -151,8 +152,19 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
+        if min_pixels is not None or max_pixels is not None:
+            warnings.warn(
+                "Passing `min_pixels` and `max_pixels` to a processor call is deprecated and will be removed in v5.23. "
+                "Pass in `size={'longest_edge': xxx, 'shortest_edge': xxx} to override the target size.`",
+                FutureWarning,
+            )
+
+            size_dict = dict(size) if isinstance(size, (dict, SizeDict)) else {}
+            if min_pixels is not None:
+                size_dict["shortest_edge"] = min_pixels
+            if max_pixels is not None:
+                size_dict["longest_edge"] = max_pixels
+            size = SizeDict(**size_dict)
         return super()._standardize_kwargs(size=size, **kwargs)
 
     def sample_frames(
@@ -185,8 +197,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
@@ -222,7 +233,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
         else:
             indices = torch.arange(0, total_num_frames).int()
-
         return indices
 
     def resize(
@@ -305,7 +315,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -335,8 +344,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     videos=stacked_videos,
@@ -393,20 +400,19 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             videos_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the video processor.
         Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+            `int`: Number of video patches per video.
         """
-        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        size = videos_kwargs.get("size", None) or self.size
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
         merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        grid_t = num_frames // temporal_patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
         return grid_t * grid_h * grid_w
 
 

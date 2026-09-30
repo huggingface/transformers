@@ -142,7 +142,7 @@ class Xcodec2RotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -724,11 +724,7 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # NOTE: could rewrite to pass tensor to a decorator such that device type is handled internally
         original_dtype = hidden_states.dtype
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             hidden_states = hidden_states.float()
             half_width = self.levels // 2

@@ -263,7 +263,7 @@ See here: https://github.com/huggingface/transformers/pull/39793#issue-327740738
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/xcodec/integration_tests.json"
 
-with open(RESULTS_PATH, "r") as f:
+with open(RESULTS_PATH, "r", encoding="utf-8") as f:
     raw_data = json.load(f)
 
 # convert dicts into tuples ordered to match test args
