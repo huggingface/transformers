@@ -1776,6 +1776,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
 
