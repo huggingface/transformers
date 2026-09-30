@@ -1011,7 +1011,9 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
-    def compute_axial_rope_parameters(config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(
+        config: MiniMaxM3VLVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -1021,24 +1023,24 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        # Each axis occupies an even number of dimensions; the remaining head dimensions pass through.
-        axis_dim = 2 * ((head_dim // 3) // 2)
         base = config.rope_parameters["rope_theta"]
-        inv_freq = 1.0 / (base ** (torch.arange(0, axis_dim, 2, dtype=torch.float32, device=device) / axis_dim))
-        return inv_freq, 1.0
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        # We have an per axis based application (THW), see `recomposition_frequencies`
+        spatial_dim = dim // 3
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (tokens, 3), with temporal, height and width coordinates.
-        position_ids_expanded = position_ids.to(device=x.device, dtype=torch.float32)[..., None]
+        # position_ids: (3, N) - with direct THW order
+        position_ids_expanded = position_ids[..., None].float()
         device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            # Rebuild in FP32: model.half()/bfloat16() may have rounded the registered buffers.
-            inv_freq, attention_scaling = self.compute_axial_rope_parameters(self.config, x.device)
-            freqs = position_ids_expanded * inv_freq
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -1048,9 +1050,8 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        # get_vision_position_ids(include_temporal=True) supplies (tokens, 3) in T/H/W order.
-        frequencies = freq.flatten(1)
-        return torch.cat([frequencies, frequencies], dim=-1)
+        freq = freq.flatten(1)  # We already have THW order
+        return torch.cat([freq, freq], dim=-1)
 
 
 def apply_rotary_pos_emb_vision(
@@ -1183,6 +1184,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         "hidden_states": MiniMaxM3VLVisionEncoderLayer,
         "attentions": MiniMaxM3VLVisionAttention,
     }
+    _keep_in_fp32_modules_strict = ["inv_freq"]
 
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
