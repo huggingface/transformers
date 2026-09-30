@@ -31,9 +31,6 @@ class VideoLlama3ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class VideoLlama3Processor(ProcessorMixin):
     valid_processor_kwargs = VideoLlama3ProcessorKwargs
-    text_kwargs = {
-        "padding": False,
-    }
     videos_kwargs = {"return_metadata": True}
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):

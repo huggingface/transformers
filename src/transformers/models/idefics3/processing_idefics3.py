@@ -42,10 +42,6 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
 class Idefics3Processor(ProcessorMixin):
     valid_processor_kwargs = Idefics3ProcessorKwargs
 
-    text_kwargs = {
-        "add_special_tokens": True,
-        "is_split_into_words": False,
-    }
     images_kwargs = {
         "return_row_col_info": True,
     }

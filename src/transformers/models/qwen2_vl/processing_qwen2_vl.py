@@ -35,9 +35,6 @@ class Qwen2VLProcessorKwargs(ProcessingKwargs, total=False):
 class Qwen2VLProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen2VLProcessorKwargs
 
-    text_kwargs = {
-        "padding": False,
-    }
     return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):

@@ -94,7 +94,6 @@ class LightOnOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = LightOnOcrProcessorKwargs
 
     text_kwargs = {
-        "padding": False,
         "return_tensors": "pt",
     }
     images_kwargs = {

@@ -35,9 +35,6 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
 class Qwen2_5_VLProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen2_5_VLProcessorKwargs
 
-    text_kwargs = {
-        "padding": False,
-    }
     return_mm_token_type_ids = True
     videos_kwargs = {"return_metadata": True}
 

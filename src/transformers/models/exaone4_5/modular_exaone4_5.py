@@ -424,8 +424,6 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
 class Exaone4_5_Processor(Qwen2VLProcessor):
     valid_processor_kwargs = Exaone4_5_ProcessorKwargs
 
-    text_kwargs = AttributeError()
-
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = False
 

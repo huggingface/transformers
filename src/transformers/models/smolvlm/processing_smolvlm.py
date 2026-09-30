@@ -98,10 +98,6 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
 class SmolVLMProcessor(ProcessorMixin):
     valid_processor_kwargs = SmolVLMProcessorKwargs
 
-    text_kwargs = {
-        "add_special_tokens": True,
-        "is_split_into_words": False,
-    }
     images_kwargs = {
         "return_row_col_info": True,
     }

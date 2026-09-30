@@ -897,7 +897,6 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
     valid_processor_kwargs = Qwen3VLProcessorKwargs
 
     text_kwargs = {
-        "padding": False,
         "return_token_type_ids": False,
     }
     videos_kwargs = {"return_metadata": True}

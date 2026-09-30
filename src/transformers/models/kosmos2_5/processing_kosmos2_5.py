@@ -37,7 +37,6 @@ class Kosmos2_5Processor(ProcessorMixin):
     text_kwargs = {
         "padding": True,
         "return_token_type_ids": False,
-        "stride": 0,
         "truncation": True,
         "return_tensors": "pt",
     }

@@ -199,10 +199,6 @@ def construct_full_unpacked_stream(
 class FuyuProcessor(ProcessorMixin):
     valid_processor_kwargs = FuyuProcessorKwargs
 
-    text_kwargs = {
-        "add_special_tokens": True,
-    }
-
     @classmethod
     def _load_tokenizer_from_pretrained(
         cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs

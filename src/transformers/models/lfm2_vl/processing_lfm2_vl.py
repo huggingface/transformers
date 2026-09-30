@@ -50,7 +50,6 @@ class Lfm2VlProcessor(ProcessorMixin):
     text_kwargs = {
         "use_image_special_tokens": True,
         "add_special_tokens": False,
-        "is_split_into_words": False,
     }
     images_kwargs = {
         "return_row_col_info": True,

@@ -27,10 +27,6 @@ class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
 class PerceptionLMProcessor(ProcessorMixin):
     valid_processor_kwargs = PerceptionLMProcessorKwargs
 
-    text_kwargs = {
-        "padding": False,
-    }
-
     def __init__(
         self,
         video_processor=None,

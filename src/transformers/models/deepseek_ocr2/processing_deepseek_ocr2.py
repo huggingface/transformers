@@ -35,7 +35,6 @@ class DeepseekOcr2ProcessorKwargs(ProcessingKwargs, total=False):
 class DeepseekOcr2Processor(ProcessorMixin):
     valid_processor_kwargs = DeepseekOcr2ProcessorKwargs
 
-    text_kwargs = {}
     images_kwargs = {
         "crop_to_patches": True,
         "min_patches": 2,

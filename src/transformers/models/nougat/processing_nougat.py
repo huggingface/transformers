@@ -27,11 +27,6 @@ class NougatProcessorKwargs(ProcessingKwargs, total=False):
 class NougatProcessor(ProcessorMixin):
     valid_processor_kwargs = NougatProcessorKwargs
 
-    text_kwargs = {
-        "add_special_tokens": True,
-        "is_split_into_words": False,
-        "verbose": True,
-    }
     images_kwargs = {
         "data_format": "channels_first",
     }

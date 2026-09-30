@@ -1240,8 +1240,6 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
 
     valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
 
-    text_kwargs = AttributeError()
-
     videos_kwargs = {
         "do_resize": False,
         "return_metadata": True,
