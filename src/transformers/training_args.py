@@ -989,6 +989,10 @@ class TrainingArguments:
             )
         },
     )
+    logging_loss_components: bool = field(
+        default=False,
+        metadata={"help": "Whether to log all loss components when the model returns a dictionary of losses."},
+    )
     logging_first_step: bool = field(
         default=False, metadata={"help": "Whether to log the first `global_step` or not."}
     )
