@@ -404,6 +404,17 @@ def _get_template_variables(chat_template: str | None) -> frozenset[str]:
     return frozenset(jinja2.meta.find_undeclared_variables(ast))
 
 
+@lru_cache
+@no_type_check
+def _get_template_literals(chat_template: str) -> frozenset[str]:
+    """Return the literal strings in a chat template: its raw template text, plus every string constant."""
+    compiled = _compile_jinja_template(chat_template)
+    ast = compiled.environment.parse(chat_template)
+    literals = {node.data for node in ast.find_all(jinja2.nodes.TemplateData)}
+    literals |= {node.value for node in ast.find_all(jinja2.nodes.Const) if isinstance(node.value, str)}
+    return frozenset(literals)
+
+
 def _render_with_assistant_indices(
     compiled_template, messages, tools, documents, add_generation_prompt, **template_kwargs
 ):
