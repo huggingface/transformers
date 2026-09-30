@@ -1,4 +1,4 @@
-FROM intel/deep-learning-essentials:2026.0.0-devel-ubuntu24.04 AS base
+FROM intel/deep-learning-essentials:2026.1.2-devel-ubuntu24.04 AS base
 LABEL maintainer="Hugging Face"
 
 SHELL ["/bin/bash", "-c"]
@@ -61,21 +61,21 @@ RUN uv venv --python ${PYTHON_VER} --seed ${VIRTUAL_ENV}
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN pip install --upgrade pip wheel
-RUN pip install triton==3.7.1
+RUN pip install triton==3.8.0
 
-RUN pip install torch==2.13.0+xpu torchvision==0.28.0+xpu torchaudio==2.11.0+xpu torchao==0.17.0+xpu --index-url https://download.pytorch.org/whl/xpu --no-cache-dir
+RUN pip install torch==2.14.0+xpu torchvision==0.29.0+xpu torchaudio==2.11.0+xpu torchao==0.18.0+xpu --index-url https://download.pytorch.org/whl/xpu --no-cache-dir
 
-RUN pip install torchcodec==0.15.0 --index-url https://download.pytorch.org/whl/cpu
+RUN pip install torchcodec==0.16.0 --index-url https://download.pytorch.org/whl/cpu
 
 RUN pip install torchdata --no-cache-dir
 
 RUN pip install evaluate pyctcdecode pytesseract decord fire scipy scikit-learn sentencepiece sacremoses nltk rouge_score librosa soundfile g2p_en mpi4py requests_mock onnx deepspeed kenlm opencv-python albumentations --no-cache-dir
 RUN pip install pretty_midi essentia resampy Levenshtein av sacrebleu phonemizer invisible_watermark schedulefree parameterized mistral-common --no-cache-dir
 
-RUN pip install gguf hqq fp-quant compressed_tensors bitsandbytes --no-cache-dir --extra-index-url https://download.pytorch.org/whl/xpu "torch==2.13.0+xpu" "triton==3.7.1"
+RUN pip install gguf hqq fp-quant compressed_tensors bitsandbytes --no-cache-dir --extra-index-url https://download.pytorch.org/whl/xpu "torch==2.14.0+xpu" "triton==3.8.0"
 RUN pip install gptqmodel --no-cache-dir
 RUN pip install auto-round --no-cache-dir
-RUN pip install hf_transfer optimum-quanto optimum hf-doc-builder transformers[all] diffusers trl sentence_transformers pytorch_msssim --no-cache-dir
+RUN pip install hf_transfer optimum-quanto optimum hf-doc-builder transformers[dev] diffusers trl sentence_transformers pytorch_msssim --no-cache-dir
 RUN pip install pydantic openai uvicorn fastapi --no-cache-dir
 
 # install liger-kernel
@@ -84,18 +84,9 @@ RUN pip install git+https://github.com/linkedin/Liger-Kernel.git --extra-index-u
 # install mergekit
 RUN pip install --no-deps git+https://github.com/arcee-ai/mergekit.git
 
+RUN pip install onnxscript onnxruntime --no-cache-dir
+
 ENV OCL_ICD_VENDORS=/etc/OpenCL/vendors
-ENV I_MPI_ROOT=/usr/local
-ENV CCL_ROOT=/usr/local
-ENV FI_PROVIDER_PATH=/opt/intel/oneapi/2026.0/opt/mpi/libfabric/lib/prov:/opt/intel/oneapi/2026.0/opt/mpi/libfabric
 ENV CCL_ATL_TRANSPORT=ofi
-ENV CLASSPATH=/usr/local/share/java/mpi.jar
-ENV PATH=${I_MPI_ROOT}/bin/libfabric:${PATH}
-ENV LD_LIBRARY_PATH=${I_MPI_ROOT}/lib/libfabric:${LD_LIBRARY_PATH}
-
-RUN touch /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-RUN echo "#!/bin/bash" >> /entrypoint.sh
-RUN echo "source /opt/intel/oneapi/setvars.sh --force && /bin/bash" >> /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+ENV CLASSPATH=/opt/venv/share/java/mpi.jar
+ENV LD_LIBRARY_PATH=/opt/venv/lib
