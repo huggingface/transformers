@@ -38,6 +38,7 @@ class VibevoiceAcousticTokenizerAudioProcessorMixin:
     target_dB_FS = -25
     eps = 1e-6
     normalize_audio = True
+    pad_to_multiple_of = 3200
     # Not in the legacy extractor's signature (feature_size, sampling_rate, padding_value,
     # normalize_audio, target_dB_FS, eps, pad_to_multiple_of): `db_normalize` is superseded by
     # `normalize_audio`, and `speech_tok_compress_ratio` is a modeling ratio, not a feature one.
