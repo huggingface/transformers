@@ -84,7 +84,6 @@ class AriaTextConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        # experts are (num_experts, in, out)
         "layers.*.mlp.experts.gate_up_proj": "packed_rowwise",
         "layers.*.mlp.experts.down_proj": "colwise",
         "layers.*.mlp.experts": "moe_tp_experts",
