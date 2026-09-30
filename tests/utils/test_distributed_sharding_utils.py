@@ -294,6 +294,25 @@ class TestDtensorShardOperation(unittest.TestCase):
             else:
                 torch.testing.assert_close(shard, expected[rank], msg=f"rank {rank}")
 
+    def test_0dim_dense_is_replicated(self):
+        """A 0-dim parameter has no axis to shard, so every rank takes the whole value.
+
+        Reachable in practice: a per-tensor scalar scale, and a ModelOpt NVFP4 model ships one
+        `weight_scale_2` / `input_scale` per expert projection — thousands of 0-dim tensors.
+        """
+        mesh = FakeMesh(2, rank=0)
+        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 4), local_shape=(2, 4))
+        out = op.shard_tensor(torch.tensor(3.5))
+        self.assertEqual(out.shape, torch.Size([]))
+        self.assertEqual(out.item(), 3.5)
+
+    def test_0dim_per_expert_follows_expert_ownership(self):
+        """Per-expert 0-dim scales are dropped on the ranks that do not own the expert."""
+        mesh = FakeMesh(2, rank=1)  # owns experts [2, 4)
+        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 8), local_shape=(2, 8))
+        self.assertEqual(op.shard_tensor(torch.tensor(3.5), tensor_idx=3).item(), 3.5)
+        self.assertIsNone(op.shard_tensor(torch.tensor(3.5), tensor_idx=1))
+
     def test_compute_strided_slice(self):
         # Direct tests for _compute_strided_slice(intervals, rank, world_size, split_factor).
         # Keys: (input_interval, rank, world_size, split_factor) -> expected output list.

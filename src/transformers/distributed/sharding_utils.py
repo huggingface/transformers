@@ -87,9 +87,16 @@ class DtensorShardOperation:
         self.param_ndim = param.ndim
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
-        # [_axis0_offset, _axis0_offset + _axis0_local_size)
-        self._axis0_offset = offsets[0]
-        self._axis0_local_size = local_shape[0]
+        # [_axis0_offset, _axis0_offset + _axis0_local_size); a 0-dim parameter has no axis 0
+        self._axis0_offset = offsets[0] if offsets else 0
+        self._axis0_local_size = local_shape[0] if local_shape else 1
+
+    def _drops_expert(self, tensor_idx: int, dim_placements: list) -> bool:
+        """Whether this rank drops per-expert piece `tensor_idx`: the experts are sharded along axis 0 and this rank's
+        range does not hold it."""
+        has_axis0_shard = any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements)
+        owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
+        return has_axis0_shard and not owns_tensor_idx
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -109,6 +116,13 @@ class DtensorShardOperation:
         dim_placements = [
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
         ]
+
+        # a 0-dim tensor has no axis to slice: every rank takes it whole, unless it is a per-expert value this rank
+        # does not own (`source[...]`, since a lazy safetensors slice rejects `source[()]`)
+        if not source_shape:
+            if tensor_idx is not None and self._drops_expert(tensor_idx, dim_placements):
+                return None
+            return source[...].to(device=device, dtype=dtype)
 
         # Dense path
         if tensor_idx is None:
@@ -138,7 +152,6 @@ class DtensorShardOperation:
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
             # finally fetch from the disk only the slices
-            # finally fetch from the disk only the slices
             if has_strided_shard:
                 # Multi-interval dim: read each piece separately, then concatenate.
                 return self._slice_and_cat(source, intervals_by_dim, device, dtype)
@@ -157,9 +170,7 @@ class DtensorShardOperation:
         ]
 
         # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
-        has_axis0_shard = any(param_dim == 0 for _, _, param_dim in normalized_dim_placements)
-        owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
-        if has_axis0_shard and not owns_tensor_idx:
+        if self._drops_expert(tensor_idx, dim_placements):
             return None
 
         # `param_dim` indexes the full parameter layout [N, in, out] (expert axis first).

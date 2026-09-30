@@ -130,7 +130,11 @@ class TensorParallelLayer:
         pass
 
     def shard_param(self, module, param, mesh):
-        """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
+        """Wrap ONE parameter as a DTensor placeholder. Default: no-op.
+
+        Every style replicates a 0-dim parameter, such as a per-tensor quantization scale: it has no axis to split.
+        """
+        # TODO: have the quantization config declare its scales' placements in the plan instead of this assumption
         pass
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
@@ -192,7 +196,13 @@ class ColwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        placement = Shard(1) if isinstance(module, torch.nn.Embedding) else Shard(meta.ndim - 2)
+        # a 0-dim parameter is replicated (see `TensorParallelLayer.shard_param`)
+        if meta.ndim == 0:
+            placement = Replicate()
+        elif isinstance(module, torch.nn.Embedding):
+            placement = Shard(1)
+        else:
+            placement = Shard(meta.ndim - 2)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -263,7 +273,10 @@ class RowwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        if isinstance(module, torch.nn.Embedding):
+        # a 0-dim parameter is replicated (see `TensorParallelLayer.shard_param`)
+        if meta.ndim == 0:
+            placement = Replicate()
+        elif isinstance(module, torch.nn.Embedding):
             placement = Shard(0)
         else:
             # bias is replicated (added after the row-reduce); weight shards on input dim (-1)
@@ -469,7 +482,10 @@ class PackedColwiseParallel(TensorParallelLayer):
             return
         shard_dim = self._packed_output_shard_dim(meta.ndim)
         # Wrap as a DTensor placeholder. Runs on meta — distribute_tensor builds metadata only.
-        if meta.ndim == 1:
+        # a 0-dim parameter is replicated (see `TensorParallelLayer.shard_param`)
+        if meta.ndim == 0:
+            placement = Replicate()
+        elif meta.ndim == 1:
             placement = Shard(shard_dim)
         else:
             placement = _StridedShard(dim=shard_dim, split_factor=self.split_factor)
@@ -510,7 +526,7 @@ class PackedRowwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        placement = Replicate() if meta.ndim == 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
+        placement = Replicate() if meta.ndim <= 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
