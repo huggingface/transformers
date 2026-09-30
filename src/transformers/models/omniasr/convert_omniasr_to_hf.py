@@ -292,7 +292,6 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     original_tokenizer = pipeline.tokenizer
 
     resolver = get_dependency_resolver()
-    # https://github.com/facebookresearch/omnilingual-asr/blob/9b95719b482d755c8dc9ec1aff7b477f4dd89d6c/src/omnilingual_asr/models/wav2vec2_asr/config.py#L13
     if "300m" in model_card.lower():
         encoder_config_name = "large_lv60k"
     elif "1b" in model_card.lower():
@@ -373,7 +372,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         hf_model = OmniASRForCTC(config)
     else:
         # Compute Llama config
-        # -- Compute intermediate_size according to original: https://github.com/facebookresearch/fairseq2/blob/main/src/fairseq2/models/transformer/ffn.py#L274-L283
+        # -- Compute intermediate_size according to original: https://github.com/facebookresearch/fairseq2/blob/7f06d6f4f5d497eec02b1a238d2071eb5dc48df3/src/fairseq2/models/transformer/ffn.py#L298-L300
         intermediate_size = original_config_llm.llama_config.ffn_inner_dim
         inner_dim_scale = original_config_llm.llama_config.ffn_inner_dim_scale
         inner_dim_to_multiple = original_config_llm.llama_config.ffn_inner_dim_multiple_of

@@ -273,7 +273,7 @@ class OmniASREncoderSubsamplingConv1D(nn.Module):
     def __init__(self, config: OmniASREncoderConfig):
         super().__init__()
         self.conv_layers = nn.ModuleList(
-            [OmniASRLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+            [OmniASRLayerNormConvLayer(config, layer_id=i) for i in range(len(config.conv_dim))]
         )
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
