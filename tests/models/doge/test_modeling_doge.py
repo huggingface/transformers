@@ -313,70 +313,19 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_capture_outputs_decorator(self):
-        # override to test with `cfg.is_moe` which is the only way to activate moe path
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.is_moe = True
+        prepare_config_and_inputs_for_common = self.model_tester.prepare_config_and_inputs_for_common
 
-        COUNTER = defaultdict(lambda: 0)
-        origional_set = CompileableContextVar.set
-        origional_reset = CompileableContextVar.reset
+        def prepare_with_moe():
+            config, inputs_dict = prepare_config_and_inputs_for_common()
+            config.is_moe = True
+            return config, inputs_dict
 
-        # Every time we enter the `capture_outputs` decorator, we first call `set`, and then `reset`. So if we end
-        # up calling `set` twice in a row before `reset`, it means we chained the calls to `capture_outputs` which is
-        # an illegal practice
-        def new_set(self, value):
-            nonlocal COUNTER
-            for k in value.keys():
-                COUNTER[k] += 1
-            if any(v > 1 for v in COUNTER.values()):
-                raise ValueError("You're calling `capture_outputs` several time in a chain!")
-            return origional_set(self, value)
-
-        def new_reset(self, token):
-            nonlocal COUNTER
-            current_val = self.context_var.get()
-            for k in current_val.keys():
-                COUNTER[k] -= 1
-            origional_reset(self, token)
-
-        for model_class in self.all_model_classes:
-            # Reset the counter in case one subtest fails and thus does not clean it up correctly
-            COUNTER = defaultdict(lambda: 0)
-            # Each individual model is a subtest
-            with self.subTest(model_class.__name__):
-                model = model_class(deepcopy(config)).to(device=torch_device)
-                model.eval()
-
-                recordable_outputs = [
-                    (module._can_record_outputs or {}).keys()
-                    for module in model.modules()
-                    if isinstance(module, PreTrainedModel)
-                ]
-                recordable_outputs = set().union(*recordable_outputs)
-                # If we don't use the `capture_outputs` decorator, this test has no use
-                if len(recordable_outputs) == 0:
-                    self.skipTest("No usage of the `capture_outputs` decorator.")
-
-                # Prepare inputs
-                inputs = self._prepare_for_class(inputs_dict, model_class)
-                return_all = {}
-                # For attentions, any of those capturable are captured by `output_attentions`
-                if any(x in recordable_outputs for x in ("attentions", "cross_attentions", "mask_decoder_attentions")):
-                    return_all["output_attentions"] = True
-                if "hidden_states" in recordable_outputs:
-                    return_all["output_hidden_states"] = True
-                if "router_logits" in recordable_outputs:
-                    return_all["output_router_logits"] = True
-
-                # Merge them (SwitchTransformers provides `output_router_logits` in `inputs` as well so we need to avoid
-                # passing it twice)
-                all_inputs = {**inputs, **return_all}
-
-                # If we don't trigger the exception of the new set, then all good
-                with patch.object(CompileableContextVar, "set", new=new_set):
-                    with patch.object(CompileableContextVar, "reset", new=new_reset):
-                        with torch.no_grad():
-                            _ = model(**all_inputs)
+        with unittest.mock.patch.object(
+            self.model_tester,
+            "prepare_config_and_inputs_for_common",
+            side_effect=prepare_with_moe,
+        ):
+            super().test_capture_outputs_decorator()
 
     def test_doge_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -422,9 +371,20 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Doge has MoE only when `cfg.is_moe=True`, not really worth overriding and testing it")
     def test_output_router_logits_from_config(self):
-        pass
+        prepare_config_and_inputs_for_common = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_with_moe():
+            config, inputs_dict = prepare_config_and_inputs_for_common()
+            config.is_moe = True
+            return config, inputs_dict
+
+        with unittest.mock.patch.object(
+            self.model_tester,
+            "prepare_config_and_inputs_for_common",
+            side_effect=prepare_with_moe,
+        ):
+            super().test_output_router_logits_from_config()
 
     def test_sdpa_decoder_is_causal(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
