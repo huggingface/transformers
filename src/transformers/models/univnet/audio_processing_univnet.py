@@ -95,6 +95,7 @@ class UnivNetAudioProcessorMixin:
     compression_factor = 1.0
     compression_clip_val = 1e-5
     max_length_s = 10
+    truncation = True
     valid_kwargs = UnivNetAudioProcessorKwargs
 
     def _validate_preprocess_kwargs(
