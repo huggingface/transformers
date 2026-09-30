@@ -34,7 +34,7 @@ followed by a pre-norm Transformer encoder) with one of two heads:
   conditioning**: passing a language code such as `"eng_Latn"` makes the processor write the matching language token
   into the decoder context, which generally improves transcription quality.
 
-Checkpoints can be found in [this collection](TODO): 4x CTC checkpoints and 4x LLM checkpoints of various sizes. Original weights are released by Meta, and can be found on their [GitHub repo](https://github.com/facebookresearch/omnilingual-asr#model-architectures).
+Checkpoints can be found in [this collection](https://huggingface.co/collections/bezzam/omnilingual-asr-transformers-compatible): 4x CTC checkpoints and 4x LLM checkpoints of various sizes. Original weights are released by Meta, and can be found on their [GitHub repo](https://github.com/facebookresearch/omnilingual-asr#model-architectures).
 
 
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).

@@ -15,6 +15,7 @@
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from transformers import (
     AutoProcessor,
@@ -173,6 +174,17 @@ class OmniASRForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="OmniASRForCTC is an encoder with a CTC head: it takes the waveform, not inputs_embeds.")
     def test_model_get_set_embeddings(self):
         pass
+
+    def test_sdpa_can_dispatch_on_flash(self):
+        # Need to account for `padding_mask`
+        prepare_config_and_inputs = self.model_tester.prepare_config_and_inputs
+
+        def prepare_with_full_ones_mask():
+            config, input_values, padding_mask = prepare_config_and_inputs()
+            return config, input_values, torch.ones_like(padding_mask)
+
+        with patch.object(self.model_tester, "prepare_config_and_inputs", new=prepare_with_full_ones_mask):
+            super().test_sdpa_can_dispatch_on_flash()
 
 
 @require_torch
