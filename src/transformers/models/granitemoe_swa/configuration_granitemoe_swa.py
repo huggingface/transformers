@@ -57,6 +57,12 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
 
     model_type = "granitemoe_swa"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_ep_plan = {
+        "layers.*.block_sparse_moe.router": "ep_router",
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+    }
 
     vocab_size: int = 32000
     hidden_size: int = 4096
@@ -97,14 +103,6 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
         "layers.*.self_attn.sinks": "colwise",
         "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
         "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
-    }
-    # Expert-parallel plan: shard the routed experts across ranks (each rank owns a slice of the
-    # experts) with the router driving the dispatch. The optional shared expert is left replicated.
-    base_model_ep_plan = {
-        "layers.*.block_sparse_moe.router": "ep_router",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
         "layers.*.block_sparse_moe.experts": "moe_tp_experts",
     }
 

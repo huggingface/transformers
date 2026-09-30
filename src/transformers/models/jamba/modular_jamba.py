@@ -19,6 +19,7 @@
 from collections.abc import Callable
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
@@ -287,6 +288,24 @@ class JambaExperts(MixtralExperts):
     pass
 
 
+class JambaTopKRouter(nn.Module):
+    """Top-k of the softmax over the router logits, the selected weights left unnormalized. Returns
+    `(router_logits, top_k_weights, top_k_index)`."""
+
+    def __init__(self, config: JambaConfig):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        router_logits = F.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        return router_logits, top_k_weights.to(hidden_states.dtype), top_k_index
+
+
 class JambaSparseMoeBlock(nn.Module):
     """
     This implementation is
@@ -306,19 +325,13 @@ class JambaSparseMoeBlock(nn.Module):
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
 
-        self.router = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
+        self.router = JambaTopKRouter(config)
         self.experts = JambaExperts(config)
-
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        return top_k_index, top_k_weights.to(hidden_states.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
-        router_logits = self.router(hidden_states)
-        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
@@ -411,7 +424,7 @@ class JambaPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": [JambaAttentionDecoderLayer, JambaMambaDecoderLayer],
         "attentions": JambaAttention,
-        "router_logits": OutputRecorder(nn.Linear, layer_name="router"),
+        "router_logits": OutputRecorder(JambaTopKRouter, index=0),
     }
 
     @torch.no_grad()
@@ -425,6 +438,8 @@ class JambaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, JambaExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, JambaTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
