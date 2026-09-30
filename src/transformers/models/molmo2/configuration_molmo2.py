@@ -52,7 +52,7 @@ class Molmo2VisionConfig(PreTrainedConfig):
     num_position_embeddings: int | None = None
     num_channels: int = 3
     attention_dropout: float = 0.0
-    residual_dropout: float = 0.0
+    attention_bias: bool = True
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -75,11 +75,10 @@ class Molmo2VisionConfig(PreTrainedConfig):
 class Molmo2AdapterConfig(PreTrainedConfig):
     r"""
     vision_feature_layer (`list[int]`, *optional*):
-        Indices of the ViT layers whose outputs are concatenated and pooled, `[24, 18]` when not provided.
+        Indices of the ViT layers whose outputs are concatenated and pooled, `[24, 18]` when not provided. Negative
+        indices count from the last layer.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
-    image_feature_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout rate for image features.
     """
 
     model_type = "molmo2_adapter"
@@ -91,11 +90,11 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     num_key_value_heads: int = 16
     head_dim: int = 72
     attention_dropout: float = 0.0
-    residual_dropout: float = 0.0
+    attention_bias: bool = True
     hidden_act: str = "silu"
     intermediate_size: int = 18944
     text_hidden_size: int = 3584
-    image_feature_dropout: float = 0.0
+    mlp_bias: bool = False
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -116,10 +115,6 @@ class Molmo2TextConfig(PreTrainedConfig):
     qk_norm_type (`str`, *optional*, defaults to `"qwen3"`):
         Query/key normalization layout used by the checkpoint. `"qwen3"` normalizes per head; `"olmo"` normalizes the
         full projected query/key tensors.
-    embedding_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the embedding layer.
-    residual_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio applied after residual connections.
     rope_scaling_layers (`list[int]`, *optional*):
         Indices of the layers that apply the scaled RoPE described by `rope_parameters`. The remaining layers use an
         unscaled RoPE with the same theta. All layers are scaled when not provided.
@@ -148,9 +143,7 @@ class Molmo2TextConfig(PreTrainedConfig):
     num_hidden_layers: int = 36
     intermediate_size: int = 12288
     hidden_act: str = "silu"
-    embedding_dropout: float = 0.0
     attention_dropout: float = 0.0
-    residual_dropout: float = 0.0
     max_position_embeddings: int = 36864
     rope_parameters: RopeParameters | dict | None = None
     rope_scaling_layers: list[int] | None = None
@@ -236,8 +229,8 @@ class Molmo2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
-        # The released checkpoints count `vit_layers` from the end of a 27-layer ViT but only ship the layers up to
-        # the deepest one read.
+        # The hub `config.json` declares a 27-layer ViT, but the released weights stop at layer 24, the deepest one
+        # `vit_layers` reads. Without this trim, layers 25-26 are built with random weights. Do not remove.
         if legacy_vision_config is not None:
             num_vit_layers = self.vision_config.num_hidden_layers
             self.adapter_config.vision_feature_layer = [
@@ -250,7 +243,7 @@ class Molmo2Config(PreTrainedConfig):
     def validate_architecture(self):
         super().validate_architecture()
         num_vit_layers = self.vision_config.num_hidden_layers
-        if not all(0 <= layer < num_vit_layers for layer in self.adapter_config.vision_feature_layer):
+        if not all(-num_vit_layers <= layer < num_vit_layers for layer in self.adapter_config.vision_feature_layer):
             raise ValueError(
                 f"`adapter_config.vision_feature_layer` {self.adapter_config.vision_feature_layer} must index the "
                 f"{num_vit_layers} layers of `vision_config`."

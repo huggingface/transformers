@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -33,56 +32,9 @@ if is_vision_available() and is_torchvision_available():
 
 
 class Molmo2ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=378,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=IMAGENET_STANDARD_MEAN,
-        image_std=IMAGENET_STANDARD_STD,
-        do_convert_rgb=True,
-        max_crops=8,
-        overlap_margins=[4, 4],
-        patch_size=14,
-        pooling_size=[2, 2],
-    ):
-        size = size if size is not None else {"height": 378, "width": 378}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.max_crops = max_crops
-        self.overlap_margins = overlap_margins
-        self.patch_size = patch_size
-        self.pooling_size = pooling_size
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "max_crops": self.max_crops,
-            "overlap_margins": self.overlap_margins,
-            "patch_size": self.patch_size,
-            "pooling_size": self.pooling_size,
-        }
+    def __init__(self, **kwargs):
+        kwargs.setdefault("patch_size", 14)
+        super().__init__(**kwargs)
 
 
 @require_torch
@@ -90,14 +42,7 @@ class Molmo2ImageProcessingTester(ImageProcessingTester):
 @require_torchvision
 class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Molmo2ImageProcessor if (is_vision_available() and is_torchvision_available()) else None
-
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Molmo2ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = Molmo2ImageProcessingTester
 
     def test_image_processor_properties(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)

@@ -157,7 +157,6 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
             image_size=[self.image_size, self.image_size],
             patch_size=self.patch_size,
             attention_dropout=0.0,
-            residual_dropout=0.0,
         )
         adapter_config = Molmo2AdapterConfig(
             vision_feature_layer=[1],
@@ -322,13 +321,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         reason="Multimodal special tokens live in the extra-vocab rows beyond `vocab_size`; standard resize is ill-defined"
     )
     def test_resize_embeddings_untied(self):
-        pass
-
-    @unittest.skip(
-        reason="Multimodal beam search from inputs_embeds would need the flat-concatenated image crops and "
-        "their pooling offsets expanded by beam width; greedy multimodal and text-only beam both work."
-    )
-    def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
     @parameterized.expand([("greedy", 1), ("beam_search", 2)])
@@ -517,6 +509,7 @@ class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_last_logits = Expectations(
             {
                 ("cuda", (8, 0)): [-10.407500, -5.903657, -10.977587, -10.325406, -16.847645, -14.505170, -11.184648, -9.696571, -11.637183, -9.205433],
+                ("cuda", (8, 6)): [-10.407710, -5.903650, -10.977592, -10.325156, -16.847317, -14.505305, -11.184698, -9.697040, -11.636929, -9.205041],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -547,6 +540,7 @@ class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): "In this captivating image, a large, chubby cat",
+                ("cuda", (8, 6)): "In this captivating image, a large, chubby cat",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
@@ -631,6 +625,7 @@ class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_last_logits = Expectations(
             {
                 ("cuda", (8, 0)): [-13.0625, -5.9375, -11.75, -11.0, -12.6875, -16.25, -10.375, -12.3125, -12.6875, -10.625],
+                ("cuda", (8, 6)): [-13.0625, -5.875, -11.6875, -11.0, -12.6875, -16.25, -10.3125, -12.25, -12.6875, -10.625],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -661,6 +656,7 @@ class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): "In this captivating image, a small, chubby cat",
+                ("cuda", (8, 6)): "In this captivating image, a small, chubby cat",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
@@ -745,6 +741,7 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_last_logits = Expectations(
             {
                 ("cuda", (8, 0)): [-15.875, -7.875, -15.5625, -15.0, -16.5, -18.25, -14.4375, -15.8125, -15.4375, -12.4375],
+                ("cuda", (8, 6)): [-15.875, -7.875, -15.625, -15.0, -16.5, -18.25, -14.5, -15.75, -15.4375, -12.5],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -775,6 +772,7 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): "In this captivating image, a snow leopard is captured",
+                ("cuda", (8, 6)): "In this captivating image, a snow leopard is captured",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())

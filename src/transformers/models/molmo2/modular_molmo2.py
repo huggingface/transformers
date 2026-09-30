@@ -24,7 +24,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -64,6 +63,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata
+from ..cohere_asr.modeling_cohere_asr import CohereAsrCrossAttention
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaMLP,
@@ -117,7 +117,7 @@ class Molmo2VisionConfig(PreTrainedConfig):
     num_position_embeddings: int | None = None
     num_channels: int = 3
     attention_dropout: float = 0.0
-    residual_dropout: float = 0.0
+    attention_bias: bool = True
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -140,11 +140,10 @@ class Molmo2VisionConfig(PreTrainedConfig):
 class Molmo2AdapterConfig(PreTrainedConfig):
     r"""
     vision_feature_layer (`list[int]`, *optional*):
-        Indices of the ViT layers whose outputs are concatenated and pooled, `[24, 18]` when not provided.
+        Indices of the ViT layers whose outputs are concatenated and pooled, `[24, 18]` when not provided. Negative
+        indices count from the last layer.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
-    image_feature_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout rate for image features.
     """
 
     model_type = "molmo2_adapter"
@@ -156,11 +155,11 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     num_key_value_heads: int = 16
     head_dim: int = 72
     attention_dropout: float = 0.0
-    residual_dropout: float = 0.0
+    attention_bias: bool = True
     hidden_act: str = "silu"
     intermediate_size: int = 18944
     text_hidden_size: int = 3584
-    image_feature_dropout: float = 0.0
+    mlp_bias: bool = False
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -181,10 +180,6 @@ class Molmo2TextConfig(PreTrainedConfig):
     qk_norm_type (`str`, *optional*, defaults to `"qwen3"`):
         Query/key normalization layout used by the checkpoint. `"qwen3"` normalizes per head; `"olmo"` normalizes the
         full projected query/key tensors.
-    embedding_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the embedding layer.
-    residual_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio applied after residual connections.
     rope_scaling_layers (`list[int]`, *optional*):
         Indices of the layers that apply the scaled RoPE described by `rope_parameters`. The remaining layers use an
         unscaled RoPE with the same theta. All layers are scaled when not provided.
@@ -213,9 +208,7 @@ class Molmo2TextConfig(PreTrainedConfig):
     num_hidden_layers: int = 36
     intermediate_size: int = 12288
     hidden_act: str = "silu"
-    embedding_dropout: float = 0.0
     attention_dropout: float = 0.0
-    residual_dropout: float = 0.0
     max_position_embeddings: int = 36864
     rope_parameters: RopeParameters | dict | None = None
     rope_scaling_layers: list[int] | None = None
@@ -301,8 +294,8 @@ class Molmo2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
-        # The released checkpoints count `vit_layers` from the end of a 27-layer ViT but only ship the layers up to
-        # the deepest one read.
+        # The hub `config.json` declares a 27-layer ViT, but the released weights stop at layer 24, the deepest one
+        # `vit_layers` reads. Without this trim, layers 25-26 are built with random weights. Do not remove.
         if legacy_vision_config is not None:
             num_vit_layers = self.vision_config.num_hidden_layers
             self.adapter_config.vision_feature_layer = [
@@ -315,7 +308,7 @@ class Molmo2Config(PreTrainedConfig):
     def validate_architecture(self):
         super().validate_architecture()
         num_vit_layers = self.vision_config.num_hidden_layers
-        if not all(0 <= layer < num_vit_layers for layer in self.adapter_config.vision_feature_layer):
+        if not all(-num_vit_layers <= layer < num_vit_layers for layer in self.adapter_config.vision_feature_layer):
             raise ValueError(
                 f"`adapter_config.vision_feature_layer` {self.adapter_config.vision_feature_layer} must index the "
                 f"{num_vit_layers} layers of `vision_config`."
@@ -1222,7 +1215,6 @@ class Molmo2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Molmo2TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.norm_after = config.norm_after
-        self.dropout = nn.Dropout(config.residual_dropout)
 
     def forward(
         self,
@@ -1251,7 +1243,7 @@ class Molmo2DecoderLayer(LlamaDecoderLayer):
         )
         if self.norm_after:
             hidden_states = self.input_layernorm(hidden_states)
-        hidden_states = residual + self.dropout(hidden_states)
+        hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
@@ -1260,7 +1252,7 @@ class Molmo2DecoderLayer(LlamaDecoderLayer):
         hidden_states = self.mlp(hidden_states)
         if self.norm_after:
             hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + self.dropout(hidden_states)
+        hidden_states = residual + hidden_states
         return hidden_states
 
 
@@ -1278,23 +1270,19 @@ class Molmo2VisionMLP(Siglip2MLP):
     pass
 
 
-class Molmo2VisionAttention(nn.Module):
+class Molmo2VisionAttention(CohereAsrCrossAttention):
     def __init__(self, config: Molmo2VisionConfig | Molmo2AdapterConfig, hidden_size: int | None = None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = hidden_size or config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = config.head_dim
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size)
+        super().__init__(config, layer_idx=None)
+        del self.layer_idx
+        self.q_proj = nn.Linear(
+            hidden_size or config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            hidden_size or config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            hidden_size or config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
 
     def forward(
         self,
@@ -1382,11 +1370,8 @@ class Molmo2VisionModel(Molmo2PreTrainedModel):
 
 class Molmo2ImageProjectorMLP(LlamaMLP):
     def __init__(self, config: Molmo2AdapterConfig):
-        nn.Module.__init__(self)
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        super().__init__(config)
         self.down_proj = nn.Linear(config.intermediate_size, config.text_hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
 
 
 @auto_docstring(
@@ -1399,25 +1384,30 @@ class Molmo2Adapter(Molmo2PreTrainedModel):
     config_class = Molmo2AdapterConfig
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionAttention"]
+    _can_record_outputs = {"attentions": Molmo2VisionAttention}
 
     def __init__(self, config: Molmo2AdapterConfig):
         super().__init__(config)
         pooling_input_dim = config.hidden_size * len(config.vision_feature_layer)
         self.image_pooling_2d = Molmo2VisionAttention(config, hidden_size=pooling_input_dim)
         self.image_projector = Molmo2ImageProjectorMLP(config)
-        self.image_feature_dropout = nn.Dropout(config.image_feature_dropout)
         self.post_init()
 
     @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
-    def forward(self, image_features: torch.Tensor, pooled_patches_idx: torch.Tensor, **kwargs) -> BaseModelOutput:
+    def forward(
+        self,
+        image_features: torch.Tensor,
+        pooled_patches_idx: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         r"""
         image_features (`torch.Tensor` of shape `(num_crops, num_patches, hidden_size * len(vision_feature_layer))`):
             Concatenated intermediate ViT features of every crop.
         pooled_patches_idx (`torch.Tensor` of shape `(num_tokens, pool_h * pool_w)`):
             Indices into the flattened patch sequence pooled by each output token; `-1` marks padding slots.
         """
-        image_features = self.image_feature_dropout(image_features)
         flat_features = image_features.reshape(-1, image_features.shape[-1])
 
         valid_mask = pooled_patches_idx >= 0
@@ -1433,7 +1423,7 @@ class Molmo2Adapter(Molmo2PreTrainedModel):
         attention_mask = create_bidirectional_mask(
             config=self.config, inputs_embeds=query, attention_mask=valid_mask, encoder_hidden_states=patches_to_pool
         )
-        pooled_features, _ = self.image_pooling_2d(query, patches_to_pool, attention_mask=attention_mask)
+        pooled_features, _ = self.image_pooling_2d(query, patches_to_pool, attention_mask=attention_mask, **kwargs)
         pooled_features = pooled_features.squeeze(1)
         pooled_features = self.image_projector(pooled_features)
         return BaseModelOutput(last_hidden_state=pooled_features[valid_token_mask])
@@ -1448,7 +1438,6 @@ class Molmo2TextModel(LlamaModel):
         # The checkpoint's extra-vocabulary table is concatenated onto the base one at load time
         # (see `conversion_mapping.py`), so the embedding covers `vocab_size + additional_vocab_size`.
         self.embed_tokens = nn.Embedding(config.vocab_size + (config.additional_vocab_size or 0), config.hidden_size)
-        self.embedding_dropout = nn.Dropout(config.embedding_dropout)
         # trf-ignore: TRF034 (false positive: LlamaDecoderLayer subclasses GradientCheckpointingLayer)
         self.layers = nn.ModuleList(
             [Molmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -1483,7 +1472,6 @@ class Molmo2TextModel(LlamaModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        inputs_embeds = self.embedding_dropout(inputs_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -1561,7 +1549,10 @@ class Molmo2Model(LlavaModel):
 
         image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
         image_features = torch.cat(
-            [image_outputs.hidden_states[layer + 1] for layer in self.config.adapter_config.vision_feature_layer],
+            [
+                image_outputs.hidden_states[layer + 1 if layer >= 0 else layer]
+                for layer in self.config.adapter_config.vision_feature_layer
+            ],
             dim=-1,
         )
 
