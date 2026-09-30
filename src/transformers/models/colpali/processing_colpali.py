@@ -59,7 +59,6 @@ class ColPaliProcessor(ProcessorMixin):
         chat_template=None,
         visual_prompt_prefix: str = "Describe the image.",
         query_prefix: str = "Question: ",
-        **kwargs,
     ):
         r"""
         visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):

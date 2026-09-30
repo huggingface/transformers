@@ -39,7 +39,7 @@ class BarkProcessor(ProcessorMixin):
         "fine_prompt": 2,  # 2D array of shape (8,X)
     }
 
-    def __init__(self, tokenizer, speaker_embeddings=None, **kwargs):
+    def __init__(self, tokenizer, speaker_embeddings=None):
         r"""
         speaker_embeddings (`dict[dict[str]]`, *optional*):
             Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g
@@ -48,7 +48,7 @@ class BarkProcessor(ProcessorMixin):
             [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
             a list of `voice_preset_names`.
         """
-        super().__init__(tokenizer, **kwargs)
+        super().__init__(tokenizer)
 
         self.speaker_embeddings = speaker_embeddings
 

@@ -153,8 +153,8 @@ class PPFormulaNetProcessor(NougatProcessor):
     [`~PPFormulaNetProcessor.__call__`] and [`~PPFormulaNetProcessor.decode`] for more information.
     """
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
-        super().__init__(image_processor, tokenizer, **kwargs)
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
 
         # normalize() regex
         self._text_reg = re.compile(r"(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})")

@@ -68,7 +68,6 @@ class GlmAsrProcessor(ProcessorMixin):
         audio_token="<|pad|>",
         default_transcription_prompt="Please transcribe this audio into text",
         max_audio_len=655,
-        **kwargs,
     ):
         r"""
         audio_token (`Optional[str]`, *optional*, defaults to `"<|pad|>`"):
@@ -83,7 +82,7 @@ class GlmAsrProcessor(ProcessorMixin):
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.default_transcription_prompt = default_transcription_prompt
         self.max_audio_len = max_audio_len
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(

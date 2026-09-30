@@ -614,12 +614,6 @@ class ProcessorMixin(PushToHubMixin):
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
-        # Pop processor kwargs and set as attributes
-        processor_kwargs = {
-            key: kwargs.pop(key) for key in list(kwargs) if key in self.valid_processor_kwargs.__annotations__
-        }
-        self._set_attributes(**processor_kwargs)
-
         # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
             proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
@@ -1039,24 +1033,13 @@ class ProcessorMixin(PushToHubMixin):
         dict_to_copy = {k: v for k, v in self.__dict__.items() if k not in tokenizer_attributes}
         output = copy.deepcopy(dict_to_copy)
 
-        # Return None values only when the class defines a non-None default.
-        output = {
-            key: value
-            for key, value in output.items()
-            if value is not None or getattr(self.__class__, key, None) is not None
-        }
-
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
         # or in the attributes
-        attrs_to_save = (
-            set(sig.parameters)
-            .union(self.__class__.get_attributes())
-            .union(self.valid_processor_kwargs.__annotations__)
-        )
+        attrs_to_save = list(sig.parameters) + self.__class__.get_attributes()
         # extra attributes to be kept
-        attrs_to_save.add("auto_map")
+        attrs_to_save += ["auto_map"]
 
         if "chat_template" in output:
             del output["chat_template"]
@@ -1509,28 +1492,11 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict.update(kwargs)
 
         # check if there is an overlap between args and processor_dict
-        init_parameters = inspect.signature(cls.__init__).parameters
-        # Positional or keyword arguments (no **kwargs)
-        accepted_args_and_kwargs = [
-            name
-            for name, parameter in init_parameters.items()
-            if name != "self" and parameter.kind in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
-        ]
-        # Keyword arguments only (no **kwargs)
-        accepted_kwargs = {
-            name
-            for name, parameter in init_parameters.items()
-            if name != "self" and parameter.kind in (parameter.POSITIONAL_OR_KEYWORD, parameter.KEYWORD_ONLY)
-        }
-        # Check if __init__ accepts **kwargs.
-        # Required for BC with remote processors that might not accept **kwargs.
-        if any(parameter.kind == parameter.VAR_KEYWORD for parameter in init_parameters.values()):
-            accepted_kwargs.update(cls.valid_processor_kwargs.__annotations__)
+        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
 
         # validate both processor_dict and given kwargs
         unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
-            processor_config=processor_dict,
-            valid_kwargs=accepted_kwargs,
+            processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
         )
 
         # update args that are already in processor_dict to avoid duplicate arguments
@@ -1549,14 +1515,6 @@ class ProcessorMixin(PushToHubMixin):
             return processor, unused_kwargs
         else:
             return processor
-
-    def _set_attributes(self, **kwargs):
-        """Resolve and set instance attributes from processor kwargs and class-level defaults."""
-        for key in self.valid_processor_kwargs.__annotations__:
-            if key in kwargs:
-                setattr(self, key, kwargs[key])
-            elif hasattr(self, key):
-                setattr(self, key, copy.deepcopy(getattr(self, key)))
 
     def _merge_kwargs(
         self,

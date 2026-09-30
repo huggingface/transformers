@@ -47,8 +47,8 @@ class PPFormulaNetProcessor(ProcessorMixin):
         "data_format": "channels_first",
     }
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
-        super().__init__(image_processor, tokenizer, **kwargs)
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
 
         # normalize() regex
         self._text_reg = re.compile(r"(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})")

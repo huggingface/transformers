@@ -89,12 +89,23 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor, tokenizer, chat_template=None, audio_token="<|object_ref_start|>", **kwargs):
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        chat_template=None,
+        audio_token="<|object_ref_start|>",
+    ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
             The token used as a placeholder for audio in the text.
         """
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, audio_token=audio_token, **kwargs)
+        super().__init__(
+            feature_extractor,
+            tokenizer,
+            chat_template=chat_template,
+            audio_token=audio_token,
+        )
         del self.max_audio_len
         del self.default_transcription_prompt
 

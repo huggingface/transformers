@@ -46,7 +46,7 @@ class ParakeetProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor, tokenizer, blank_token="<blank>", decoder_type=None, **kwargs):
+    def __init__(self, feature_extractor, tokenizer, blank_token="<blank>", decoder_type=None):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
             Blank token for transducer decoding.
@@ -62,7 +62,7 @@ class ParakeetProcessor(ProcessorMixin):
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
         self.decoder_type = decoder_type
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+        super().__init__(feature_extractor, tokenizer)
 
     @property
     def _decoder_type(self):

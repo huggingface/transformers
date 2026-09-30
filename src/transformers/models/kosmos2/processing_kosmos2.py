@@ -80,7 +80,7 @@ class Kosmos2Processor(ProcessorMixin):
         "num_image_tokens": 64,
     }
 
-    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *args, **kwargs):
+    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         r"""
         num_patch_index_tokens (`int`, *optional*, defaults to 1024):
             The number of tokens that represent patch indices.
@@ -127,7 +127,7 @@ class Kosmos2Processor(ProcessorMixin):
             tokens_to_add.append(AddedToken(token, lstrip=True, rstrip=False, normalized=False))
         tokenizer.add_tokens(tokens_to_add)
 
-        super().__init__(image_processor, tokenizer, **kwargs)
+        super().__init__(image_processor, tokenizer)
 
     @auto_docstring
     def __call__(

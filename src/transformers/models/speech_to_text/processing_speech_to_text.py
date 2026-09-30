@@ -21,8 +21,8 @@ from ...utils import auto_docstring
 
 @auto_docstring
 class Speech2TextProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer, **kwargs):
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     @auto_docstring
     def __call__(self, *args, **kwargs):

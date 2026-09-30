@@ -53,8 +53,8 @@ class CohereAsrProcessor(ProcessorMixin):
     }
     skip_tensor_conversion = ["audio_chunk_index"]
 
-    def __init__(self, feature_extractor, tokenizer, **kwargs):
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     def get_decoder_prompt_ids(self, language: str, punctuation: bool = True) -> list[int]:
         """Build the decoder prompt token IDs for the given language and punctuation settings."""

@@ -25,8 +25,8 @@ from ...utils import auto_docstring, to_numpy
 
 @auto_docstring
 class MusicgenProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer, **kwargs):
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)

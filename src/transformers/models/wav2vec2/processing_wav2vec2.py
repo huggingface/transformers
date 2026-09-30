@@ -28,8 +28,8 @@ class Wav2Vec2ProcessorKwargs(ProcessingKwargs, total=False):
 class Wav2Vec2Processor(ProcessorMixin):
     valid_processor_kwargs = Wav2Vec2ProcessorKwargs
 
-    def __init__(self, feature_extractor, tokenizer, **kwargs):
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     @auto_docstring
     def __call__(

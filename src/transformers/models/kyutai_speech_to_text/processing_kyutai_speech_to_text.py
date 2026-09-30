@@ -33,8 +33,8 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor, tokenizer, **kwargs):
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
 
 __all__ = ["KyutaiSpeechToTextProcessor"]

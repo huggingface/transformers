@@ -32,8 +32,8 @@ class BridgeTowerProcessor(ProcessorMixin):
         "do_center_crop": True,
     }
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
-        super().__init__(image_processor, tokenizer, **kwargs)
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
 
 
 __all__ = ["BridgeTowerProcessor"]

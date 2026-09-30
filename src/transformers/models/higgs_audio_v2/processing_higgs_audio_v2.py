@@ -98,7 +98,6 @@ class HiggsAudioV2Processor(ProcessorMixin):
         audio_delay_token="<|reserved_special_token_6|>",
         audio_stream_bos_id=1024,
         audio_stream_eos_id=1025,
-        **kwargs,
     ):
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
@@ -114,7 +113,10 @@ class HiggsAudioV2Processor(ProcessorMixin):
         self.audio_stream_eos_id = audio_stream_eos_id
 
         super().__init__(
-            feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, chat_template=chat_template, **kwargs
+            feature_extractor,
+            tokenizer,
+            audio_tokenizer=audio_tokenizer,
+            chat_template=chat_template,
         )
 
     def get_audio_tokens(self, num_audio_tokens):

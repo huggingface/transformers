@@ -27,8 +27,8 @@ from ...utils.import_utils import requires
 @requires(backends=("torchaudio",))
 @auto_docstring
 class MusicgenMelodyProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer, **kwargs):
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.get_decoder_prompt_ids
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):

@@ -52,7 +52,6 @@ class ColPaliProcessor(PaliGemmaProcessor):
         chat_template=None,
         visual_prompt_prefix: str = "Describe the image.",
         query_prefix: str = "Question: ",
-        **kwargs,
     ):
         r"""
         visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):
@@ -62,7 +61,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         """
         self.visual_prompt_prefix = visual_prompt_prefix
         self.query_prefix = query_prefix
-        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
 
     @property
     def query_augmentation_token(self) -> str:

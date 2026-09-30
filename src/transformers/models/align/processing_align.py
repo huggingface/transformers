@@ -32,8 +32,8 @@ class AlignProcessor(ProcessorMixin):
         "max_length": 64,
     }
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
-        super().__init__(image_processor, tokenizer, **kwargs)
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
 
 
 __all__ = ["AlignProcessor"]

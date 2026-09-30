@@ -63,7 +63,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_token="<sound>",
         default_transcription_prompt="Transcribe the input speech.",
         max_audio_len=600,
-        **kwargs,
     ):
         r"""
         audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
@@ -77,7 +76,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.default_transcription_prompt = default_transcription_prompt
         self.max_audio_len = max_audio_len
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(

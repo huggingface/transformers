@@ -72,7 +72,6 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         feature_extractor: "FeatureExtractionMixin",
         tokenizer: "PreTrainedTokenizerBase",
         decoder: "BeamSearchDecoderCTC",
-        **kwargs,
     ):
         r"""
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
@@ -80,7 +79,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         """
         from pyctcdecode import BeamSearchDecoderCTC
 
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+        super().__init__(feature_extractor, tokenizer)
         if not isinstance(decoder, BeamSearchDecoderCTC):
             raise TypeError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
 

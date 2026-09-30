@@ -69,7 +69,6 @@ class MusicFlamingoProcessor(ProcessorMixin):
         audio_bos_token="<|sound_bos|>",
         audio_eos_token="<|sound_eos|>",
         max_audio_len=1200,
-        **kwargs,
     ):
         r"""
         audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
@@ -84,7 +83,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.max_audio_len = max_audio_len
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_bos_token = audio_bos_token
         self.audio_eos_token = audio_eos_token
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)

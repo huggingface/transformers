@@ -72,7 +72,12 @@ class CsmProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor, tokenizer, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        chat_template=None,
+    ):
         if not hasattr(tokenizer, "audio_token"):
             self.audio_token = "<|AUDIO|>"
             self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
@@ -87,7 +92,7 @@ class CsmProcessor(ProcessorMixin):
             self.audio_eos_token = tokenizer.audio_eos_token
             self.audio_eos_token_id = tokenizer.audio_eos_token_id
 
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     @staticmethod
     def _get_encoded_length(audio_length, kernel_sizes=None, strides=None, dilations=None, use_causal_conv=None):

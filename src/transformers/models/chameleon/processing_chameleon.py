@@ -56,16 +56,14 @@ class ChameleonProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(
-        self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>", **kwargs
-    ):
+    def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         r"""
         image_seq_length (`int`, *optional*, defaults to 1024):
             Sequence length of one image embedding.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             The special token used to indicate image in the text.
         """
-        super().__init__(image_processor, tokenizer, **kwargs)
+        super().__init__(image_processor, tokenizer)
 
         self.image_seq_length = image_seq_length
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token

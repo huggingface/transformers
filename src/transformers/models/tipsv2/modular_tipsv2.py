@@ -158,8 +158,8 @@ class Tipsv2Processor(ProcessorMixin):
         "max_length": 64,
     }
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        super().__init__(image_processor, tokenizer, **kwargs)
+    def __init__(self, image_processor=None, tokenizer=None):
+        super().__init__(image_processor, tokenizer)
 
 
 @auto_docstring(checkpoint="google/tipsv2-b14")

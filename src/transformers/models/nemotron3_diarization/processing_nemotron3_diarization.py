@@ -39,9 +39,7 @@ class Nemotron3DiarizationProcessorKwargs(ProcessingKwargs, total=False):
 class Nemotron3DiarizationProcessor(ProcessorMixin):
     valid_processor_kwargs = Nemotron3DiarizationProcessorKwargs
 
-    def __init__(
-        self, feature_extractor, subsampling_factor=8, streaming_modes=None, streaming_mode="low_latency", **kwargs
-    ):
+    def __init__(self, feature_extractor, subsampling_factor=8, streaming_modes=None, streaming_mode="low_latency"):
         r"""
         subsampling_factor (`int`, *optional*, defaults to 8):
             Number of mel frames per encoder frame, mirroring `Nemotron3DiarizationAudioConfig.subsampling_factor`.
@@ -57,7 +55,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         self.subsampling_factor = subsampling_factor
         self.streaming_modes = streaming_modes if streaming_modes is not None else DEFAULT_STREAMING_MODES
         self.set_streaming_mode(streaming_mode)
-        super().__init__(feature_extractor, **kwargs)
+        super().__init__(feature_extractor)
 
     def set_streaming_mode(self, streaming_mode: str):
         """

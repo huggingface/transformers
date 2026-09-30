@@ -106,8 +106,8 @@ class SamProcessor(ProcessorMixin):
 
     point_pad_value = -10
 
-    def __init__(self, image_processor, **kwargs):
-        super().__init__(image_processor, **kwargs)
+    def __init__(self, image_processor):
+        super().__init__(image_processor)
         self.target_size = self.image_processor.size["longest_edge"]
 
     @auto_docstring

@@ -31,8 +31,8 @@ class NougatProcessor(ProcessorMixin):
         "data_format": "channels_first",
     }
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
-        super().__init__(image_processor, tokenizer, **kwargs)
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
 
     @auto_docstring
     def __call__(self, images=None, text=None, **kwargs):

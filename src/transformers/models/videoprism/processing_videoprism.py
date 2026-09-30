@@ -45,8 +45,8 @@ class VideoPrismProcessor(ProcessorMixin):
         "do_sample_frames": True,
     }
 
-    def __init__(self, video_processor=None, tokenizer=None, **kwargs):
-        super().__init__(video_processor, tokenizer, **kwargs)
+    def __init__(self, video_processor=None, tokenizer=None):
+        super().__init__(video_processor, tokenizer)
 
 
 __all__ = ["VideoPrismProcessor"]

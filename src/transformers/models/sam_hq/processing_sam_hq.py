@@ -107,8 +107,8 @@ class SamHQProcessor(ProcessorMixin):
 
     point_pad_value = None
 
-    def __init__(self, image_processor, **kwargs):
-        super().__init__(image_processor, **kwargs)
+    def __init__(self, image_processor):
+        super().__init__(image_processor)
         # Ensure image_processor is properly initialized
         if not hasattr(self, "image_processor"):
             raise ValueError("image_processor was not properly initialized")

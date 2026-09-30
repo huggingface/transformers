@@ -182,8 +182,8 @@ class OmDetTurboProcessor(ProcessorMixin):
         "task": None,
     }
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
-        super().__init__(image_processor, tokenizer, **kwargs)
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
 
     @auto_docstring
     def __call__(

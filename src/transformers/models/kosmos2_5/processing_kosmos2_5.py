@@ -45,7 +45,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048, **kwargs):
+    def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
         r"""
         num_image_tokens (`int`, *optional*, defaults to 2048):
             Number of image tokens used as a placeholder.
@@ -54,7 +54,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         self.image_end_token = tokenizer.eoi_token  # "</image>" : fixed token for the end of image
         self.image_token = tokenizer.image_token  # "<s>" : within a <image> ... </image> pair, these <s> tokens indicate they are positions reserved for an image
         self.num_image_tokens = num_image_tokens
-        super().__init__(image_processor, tokenizer, **kwargs)
+        super().__init__(image_processor, tokenizer)
 
     @auto_docstring
     def __call__(

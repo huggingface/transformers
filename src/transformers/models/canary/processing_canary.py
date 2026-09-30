@@ -75,8 +75,8 @@ class CanaryProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None, **kwargs):
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
+    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(

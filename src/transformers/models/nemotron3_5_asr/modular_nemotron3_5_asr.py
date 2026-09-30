@@ -184,7 +184,6 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
         default_num_lookahead_tokens=None,
         prompt_dictionary=None,
         num_prompts=128,
-        **kwargs,
     ):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
@@ -215,7 +214,6 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
             decoder_type=decoder_type,
             supported_num_lookahead_tokens=supported_num_lookahead_tokens,
             default_num_lookahead_tokens=default_num_lookahead_tokens,
-            **kwargs,
         )
 
     def _resolve_prompt_ids(self, language: "str | list[str]", batch_size: int) -> "torch.LongTensor":

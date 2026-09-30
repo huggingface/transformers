@@ -40,9 +40,9 @@ class Pix2StructProcessor(ProcessorMixin):
         "max_patches": 2048,
     }
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
+    def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
-        super().__init__(image_processor, tokenizer, **kwargs)
+        super().__init__(image_processor, tokenizer)
 
     @auto_docstring
     def __call__(

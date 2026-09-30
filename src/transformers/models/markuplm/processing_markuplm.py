@@ -25,8 +25,8 @@ from ...utils import auto_docstring
 class MarkupLMProcessor(ProcessorMixin):
     parse_html = True
 
-    def __init__(self, feature_extractor, tokenizer, **kwargs):
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     @auto_docstring
     def __call__(

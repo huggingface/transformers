@@ -107,8 +107,8 @@ class GroundingDinoProcessor(ProcessorMixin):
         "return_token_type_ids": True,
     }
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
-        super().__init__(image_processor, tokenizer, **kwargs)
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         if text is not None:

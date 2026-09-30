@@ -62,7 +62,6 @@ class AriaProcessor(ProcessorMixin):
         tokenizer: AutoTokenizer | str = None,
         chat_template: str | None = None,
         size_conversion: dict[float | int, int] | None = None,
-        **kwargs,
     ):
         r"""
         size_conversion (`Dict`, *optional*):
@@ -77,7 +76,7 @@ class AriaProcessor(ProcessorMixin):
         if tokenizer is not None and tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.unk_token
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         tokens_per_image = self.size_conversion[image_inputs["pixel_values"].shape[2]]

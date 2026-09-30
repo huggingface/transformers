@@ -78,11 +78,15 @@ class VoxtralProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor, tokenizer, **kwargs):
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+    ):
         self.audio_token_id = 24
         self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
 
-        super().__init__(feature_extractor, tokenizer, **kwargs)
+        super().__init__(feature_extractor, tokenizer)
 
     def _retrieve_input_features(self, audio, max_source_positions, **kwargs):
         """

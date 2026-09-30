@@ -719,7 +719,7 @@ class VideoLlama3Processor(Qwen3VLProcessor):
             if getattr(tokenizer, "video_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
-        ProcessorMixin.__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
+        ProcessorMixin.__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_video_tokens = [

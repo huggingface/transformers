@@ -168,7 +168,7 @@ class MllamaProcessor(ProcessorMixin):
         "max_image_tiles": 4,
     }
 
-    def __init__(self, image_processor, tokenizer, chat_template=None, **kwargs):
+    def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"
             self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -179,7 +179,7 @@ class MllamaProcessor(ProcessorMixin):
         self.python_token = "<|python_tag|>"
         self.python_token_id = tokenizer.convert_tokens_to_ids(self.python_token)
         self.bos_token = tokenizer.bos_token
-        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(

@@ -54,7 +54,6 @@ class VibeVoiceProcessor(ProcessorMixin):
         audio_bos_token="<|vision_start|>",
         audio_eos_token="<|vision_end|>",
         audio_token="<|vision_pad|>",
-        **kwargs,
     ):
         r"""
         audio_bos_token (`str`, *optional*, defaults to `"<|vision_start|>"`):
@@ -82,7 +81,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             if getattr(tokenizer, "audio_token_id", None)
             else tokenizer.convert_tokens_to_ids(audio_token)
         )
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         processed_audio = self.feature_extractor(audio, **kwargs)
