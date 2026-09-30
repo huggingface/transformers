@@ -32,7 +32,7 @@ def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, valu
         return _is_torch_greater_or_equal_than_2_8
     elif _is_torch_mps_available:
         return _is_torch_greater_or_equal_than_2_13
-    # CUDA and Ascend NPU require these constraints to avoid falling back to the math kernel.
+    # CUDA and Ascend NPU require no mask and supported head dims to avoid falling back to the math kernel.
     return attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 
