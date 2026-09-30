@@ -3050,13 +3050,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             sanitize_control_tokens (`bool`, defaults to `False`):
                 If set, control tokens that appear in messages, tools or documents are encoded as ordinary text, so
                 only the control tokens written by the chat template itself are encoded as tokens. Control tokens are
-                the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`, or, if that
-                is not set, the added tokens that the chat template contains in full (excluding tokens made only of
-                letters, digits and whitespace). Tokens that only form when message text is joined to template text
-                are not caught, so message roles and tool schema keys, which templates often join to their own
-                text, should come from trusted code. Templates that parse message content, e.g. by splitting it on
-                `</think>`, may render with slightly different whitespace.
-                Requires `tokenize=True` and is not compatible with `return_assistant_tokens_mask`.
+                the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
+                variable is not set, control tokens are inferred by scanning the chat template.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
