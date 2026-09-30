@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .tensor_parallel import replace_layer_number_by_wildcard
+from .tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
 from .utils import _is_torch_distributed_initialized
 
 
@@ -210,8 +210,8 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
     if distributed_config.ep_size > 1 and "ep_dispatch_experts" in model.ep_plan.values():
         expert_mesh = mesh_manager.get_mesh("efsdp")
-        for module in model.modules():
-            if getattr(module, "_is_expert_parallel", False):
+        for module_name, module in model.named_modules():
+            if _get_parameter_plan(module_name, model.ep_plan, is_weight=False) == "ep_dispatch_experts":
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
                 # An expert group spans several data-parallel batches, so an expert's gradient sums over
                 # all of them. FSDP2 would divide by the efsdp group size; dividing by fsdp_size instead
