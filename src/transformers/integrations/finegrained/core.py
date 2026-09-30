@@ -19,7 +19,7 @@ moved onto these modules by `finegrained_conversions`.
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import torch
@@ -277,6 +277,7 @@ def finegrained_linear(
     weight_global_scale: torch.Tensor | None = None,
     input_global_scale: torch.Tensor | None = None,
     activation_format: str | None = None,
+    adapters: Sequence[tuple[torch.Tensor, torch.Tensor, float]] = (),
 ) -> torch.Tensor:
     """End-to-end FP8/FP4 linear used by `FineGrainedLinear` and the eager `FineGrainedExperts` loop.
 
@@ -308,6 +309,8 @@ def finegrained_linear(
             ``input_scale`` (None = quantize against the block scales alone).
         activation_format: the activation format where the weights leave it open
             (``"bf16"`` = weight-only).
+        adapters: low-rank adapters `(A (r, K), B (N, r), scaling)` on the frozen weight, whose term the kernel
+            adds in its epilogue.
     """
     if prefers_deepgemm_linear(
         input,
@@ -319,6 +322,7 @@ def finegrained_linear(
         input_global_scale=input_global_scale,
         activation_format=activation_format,
         allow_deepgemm=allow_deepgemm,
+        adapters=adapters,
     ):
         try:
             return deepgemm_fp8_fp4_linear(
@@ -348,6 +352,7 @@ def finegrained_linear(
         output_dtype=input.dtype,
         a_global_scale=input_global_scale,
         b_global_scale=weight_global_scale,
+        adapters=adapters,
     )
     output = output.reshape(*original_shape[:-1], output.shape[-1])
     if bias is not None:
@@ -423,18 +428,22 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
         _set_optional_parameter(self, "bias", torch.empty(self.out_features) if self.has_bias else None)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return finegrained_linear(
-            input,
-            self.weight,
-            self.weight_scale_inv,
-            block_size=self.block_size,
-            activation_scale=self.activation_scale,
-            bias=self.bias,
-            allow_deepgemm=not self._deepgemm_disabled,
-            weight_global_scale=self.weight_global_scale,
-            input_global_scale=self.input_global_scale,
-            activation_format=self.activation_format,
-        )
+        return finegrained_linear(input, **self._linear_operands(input))
+
+    def _linear_operands(self, input: torch.Tensor) -> dict:
+        """Everything `finegrained_linear` takes from the module for `input`. A method so an adapter library can
+        extend it per module: PEFT adds its LoRA factors as `adapters`, whose term the kernel adds in its epilogue."""
+        return {
+            "weight": self.weight,
+            "weight_scale_inv": self.weight_scale_inv,
+            "block_size": self.block_size,
+            "activation_scale": self.activation_scale,
+            "bias": self.bias,
+            "allow_deepgemm": not self._deepgemm_disabled,
+            "weight_global_scale": self.weight_global_scale,
+            "input_global_scale": self.input_global_scale,
+            "activation_format": self.activation_format,
+        }
 
 
 class FineGrainedEmbedding(nn.Embedding):
@@ -671,10 +680,15 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
     def expert_linear(self, input: torch.Tensor, proj: str, expert_idx: int) -> torch.Tensor:
         """One expert's ``proj`` as a dense linear, over that expert's slice of the projection's operands."""
+        return finegrained_linear(input, **self._linear_operands(input, proj, expert_idx))
+
+    def _linear_operands(self, input: torch.Tensor, proj: str, expert_idx: int) -> dict:
+        """Everything `finegrained_linear` takes for one expert's ``proj`` on `input`: that expert's slice of the
+        projection's operands. A method so an adapter library can extend it, as `_moe_operands` for the fused
+        forwards: PEFT adds its LoRA factors as `adapters`."""
         weight, scale, weight_global, input_global, activation_scale, bias = (
             getattr(self, f"{proj}{slot}") for slot in self._projection_slots
         )
-        weight = weight[expert_idx]
         # one expert's slice of a swizzled stack is the `(1, ...)` artifact `matmul_2d` reads
         scale = scale[expert_idx : expert_idx + 1] if scale.ndim == 5 else scale[expert_idx]
         # None where the checkpoint fills no such slot
@@ -684,19 +698,17 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         # gate_up holds ONE input global, its rows being quantized pre-routing; down one per expert
         if input_global is not None and proj == "down_proj":
             input_global = input_global[expert_idx : expert_idx + 1]
-
-        return finegrained_linear(
-            input,
-            weight,
-            scale,
-            self.block_size,
-            bias=bias,
-            activation_scale=activation_scale,
-            allow_deepgemm=not self._deepgemm_disabled,
-            weight_global_scale=weight_global,
-            input_global_scale=input_global,
-            activation_format=self.activation_format,
-        )
+        return {
+            "weight": weight[expert_idx],
+            "weight_scale_inv": scale,
+            "block_size": self.block_size,
+            "bias": bias,
+            "activation_scale": activation_scale,
+            "allow_deepgemm": not self._deepgemm_disabled,
+            "weight_global_scale": weight_global,
+            "input_global_scale": input_global,
+            "activation_format": self.activation_format,
+        }
 
     def _moe_operands(self, kernel) -> dict:
         """Everything the kernels' MoE forwards take from the module: the two projections with their
@@ -706,8 +718,8 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         kernel change.
 
         A method rather than a function so an adapter library can extend it per module: PEFT overrides
-        it to add its LoRA factors, which the kernels then apply on the routed rows between the GEMMs
-        (`expert_linear` is the eager loop's counterpart)."""
+        it to add its LoRA factors, which the kernels then add in each GEMM's epilogue (`expert_linear`
+        is the eager loop's counterpart)."""
         act_name = self.act_fn_name
         fused = act_name in kernel.get_supported_act_fns() and (self.swiglu_alpha is None or act_name == "silu")
         if fused:
