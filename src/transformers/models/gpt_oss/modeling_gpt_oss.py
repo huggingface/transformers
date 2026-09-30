@@ -389,7 +389,6 @@ class GptOssPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),
         "hidden_states": GptOssDecoderLayer,
@@ -400,6 +399,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "kernels-community/vllm-flash-attn3",
         "flash_attention_4",
         "kernels-community/metal-flash-sdpa",
+        "kernels-community/aiter-flash-attn",
     ]
 
     @torch.no_grad()

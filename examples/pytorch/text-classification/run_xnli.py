@@ -231,7 +231,7 @@ def main():
     if training_args.do_train:
         if model_args.train_language is None:
             train_dataset = load_dataset(
-                "xnli",
+                "facebook/xnli",
                 model_args.language,
                 split="train",
                 cache_dir=model_args.cache_dir,
@@ -239,7 +239,7 @@ def main():
             )
         else:
             train_dataset = load_dataset(
-                "xnli",
+                "facebook/xnli",
                 model_args.train_language,
                 split="train",
                 cache_dir=model_args.cache_dir,
@@ -249,7 +249,7 @@ def main():
 
     if training_args.do_eval:
         eval_dataset = load_dataset(
-            "xnli",
+            "facebook/xnli",
             model_args.language,
             split="validation",
             cache_dir=model_args.cache_dir,
@@ -259,7 +259,7 @@ def main():
 
     if training_args.do_predict:
         predict_dataset = load_dataset(
-            "xnli",
+            "facebook/xnli",
             model_args.language,
             split="test",
             cache_dir=model_args.cache_dir,
@@ -440,6 +440,8 @@ def main():
                 for index, item in enumerate(predictions):
                     item = label_list[item]
                     writer.write(f"{index}\t{item}\n")
+
+    trainer.end()
 
 
 if __name__ == "__main__":

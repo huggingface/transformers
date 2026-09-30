@@ -4269,6 +4269,11 @@ class ModelTesterMixin(ExportTesterMixin):
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
+            # Some models only support a sub set of all FA implementations
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)  # let's construct it here to see if any submodels can't support flash attn
             if not all(
@@ -5924,6 +5929,47 @@ class ModelTesterMixin(ExportTesterMixin):
                 )
                 self.assertIsInstance(router_logits, tuple)
                 self.assertGreater(len(router_logits), 0)
+
+    def test_output_router_logits_from_config(self):
+        """`config.output_router_logits` turns the router logits on, and an explicit forward argument wins over it.
+        A head that wraps a MoE backbone has to resolve the flag against the config like the backbone does, otherwise
+        the config setting is silently ignored."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not hasattr(config.get_text_config(decoder=True), "output_router_logits"):
+            self.skipTest("This model has no `output_router_logits` in its config.")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                return_type = model_class.forward.__annotations__.get("return")
+                output_fields = set().union(
+                    *(getattr(t, "__dataclass_fields__", {}).keys() for t in (get_args(return_type) or (return_type,)))
+                )
+                if "router_logits" not in output_fields:
+                    self.skipTest(f"{model_class.__name__} does not declare router_logits in its output type.")
+
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+                model.config.get_text_config(decoder=True).output_router_logits = False
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                inputs.pop("output_router_logits", None)
+
+                with torch.no_grad():
+                    explicit = model(**inputs, output_router_logits=True)
+                    if not explicit.router_logits:
+                        self.skipTest(f"{model_class.__name__} was built without any sparse layer.")
+                    self.assertFalse(model(**inputs).router_logits, "router logits returned with the flag off")
+
+                    model.config.get_text_config(decoder=True).output_router_logits = True
+                    from_config = model(**inputs)
+                    self.assertTrue(from_config.router_logits, "`config.output_router_logits=True` was ignored")
+                    if getattr(explicit, "aux_loss", None) is not None:
+                        self.assertIsNotNone(
+                            from_config.aux_loss, "`config.output_router_logits=True` skipped the aux loss"
+                        )
+                    self.assertFalse(
+                        model(**inputs, output_router_logits=False).router_logits,
+                        "an explicit `output_router_logits=False` did not win over the config",
+                    )
 
     def test_format_of_can_record_outputs(self):
         """Test that that the attribute `_can_record_outputs` is correctly set for a model. It must either be "None" or
