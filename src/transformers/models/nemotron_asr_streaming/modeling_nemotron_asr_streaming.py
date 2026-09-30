@@ -377,11 +377,7 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
         )
         position_ids_expanded = position_ids[None, None, :].float()
 
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             sin = freqs.sin()

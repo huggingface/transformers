@@ -966,7 +966,7 @@ class GenerationMixin(ContinuousMixin):
                 generation_config=generation_config,
             )
         # multimodal encoding before prefill used only for vision models, early exit if not VLM
-        elif not self._supports_mm_encoder_outputs or not any(
+        elif not self._supports_mm_encoder_outputs() or not any(
             key in self.input_modalities for key in ["image", "video"]
         ):
             return model_kwargs
