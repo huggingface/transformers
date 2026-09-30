@@ -660,7 +660,10 @@ class OmniASRModel(OmniASRPreTrainedModel):
         audio_output = self.audio_tower(input_values, padding_mask=padding_mask, **kwargs)
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
         frames_mask = audio_output.attention_mask
-        audio_embeds = audio_embeds.flatten(0, 1) if frames_mask is None else audio_embeds[frames_mask.bool()]
+        if frames_mask is None:
+            audio_embeds = audio_embeds.flatten(0, 1)
+        else:
+            audio_embeds = audio_embeds[frames_mask.to(audio_embeds.device).bool()]
         audio_output.pooler_output = audio_embeds
         return audio_output
 
