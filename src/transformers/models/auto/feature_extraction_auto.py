@@ -235,16 +235,17 @@ def feature_extractor_class_from_name(class_name: str):
 
 
 def _resolve_audio_backend(backend: str | None) -> str:
-    """Resolve raw backend input to a concrete backend name (`'torch'` or `'numpy'`).
+    """Resolve raw backend input to a backend name.
 
-    Default is `'torch'`; `'numpy'` is the bit-exact CPU-only sibling. If a model has no
-    sibling for the requested backend, `_load_class_with_fallback` warns and falls back to
-    the available one.
+    Default is `'torch'`; `'numpy'` is the bit-exact CPU-only sibling. Any other name is a backend
+    registered through `AutoAudioProcessor.register(..., audio_processor_classes={name: cls})`. If a
+    model has no sibling for the requested backend, `_load_class_with_fallback` warns and falls back
+    to the available one.
     """
     if backend is None:
         return "torch"
-    if backend not in {"torch", "numpy"}:
-        raise ValueError(f"Unknown audio-processor backend: {backend!r}. Expected 'torch' or 'numpy'.")
+    if not isinstance(backend, str):
+        raise TypeError(f"`backend` must be a string, got {type(backend).__name__}.")
     return backend
 
 
@@ -291,13 +292,14 @@ def _find_mapping_for_audio_processor(base_class_name: str) -> dict | None:
             return getattr(val, "__name__", None) == name
         return False
 
-    for mapping_dict in FEATURE_EXTRACTOR_MAPPING_NAMES.values():
-        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
-            return mapping_dict
-
+    # Registered mappings first, so a backend registered on a native config is found.
     for content in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
         if isinstance(content, dict) and any(_value_matches(v, base_class_name) for v in content.values()):
             return content
+
+    for mapping_dict in FEATURE_EXTRACTOR_MAPPING_NAMES.values():
+        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
+            return mapping_dict
 
     return None
 
@@ -515,7 +517,8 @@ class AutoAudioProcessor:
                 a saved audio-processor JSON file.
             backend (`str`, *optional*, defaults to `"torch"`):
                 Which backend sibling to load. `"torch"` returns the `XxxAudioProcessor` class;
-                `"numpy"` returns `XxxAudioProcessorNumpy` when it exists. If the requested
+                `"numpy"` returns `XxxAudioProcessorNumpy` when it exists; any other name selects a
+                backend registered with [`AutoAudioProcessor.register`]. If the requested
                 backend has no sibling for the resolved model, falls back to the available one
                 with a warning.
 
@@ -525,19 +528,47 @@ class AutoAudioProcessor:
         return _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, backend=backend, **kwargs)
 
     @staticmethod
-    def register(config_class, audio_processor_class, exist_ok=False):
+    def register(
+        config_class,
+        audio_processor_class: type | dict[str, type] | None = None,
+        audio_processor_classes: dict[str, type] | None = None,
+        exist_ok: bool = False,
+    ):
         """
         Register a new audio processor for this class.
 
         Args:
             config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
-            audio_processor_class ([`AudioProcessingMixin`] or `dict[str, type]`):
-                Either a single class (treated as the torch backend) or a backend→class dict.
+            audio_processor_class ([`AudioProcessingMixin`], *optional*):
+                A single class, registered as the torch backend. A backend→class dict is also accepted here
+                for backward compatibility; prefer `audio_processor_classes`.
+            audio_processor_classes (`dict[str, type]`, *optional*):
+                Dictionary mapping backend names to audio processor classes. Allows registering custom backends,
+                loaded with `AutoAudioProcessor.from_pretrained(..., backend=name)`.
+                Example: `{"torch": MyTorchProcessor, "numpy": MyNumpyProcessor, "mlx": MyMlxProcessor}`
+            exist_ok (`bool`, *optional*, defaults to `False`):
+                If `True`, allow registering on a config that already has audio processors, including a
+                Transformers config. Backends not named in `audio_processor_classes` are kept.
         """
-        if not isinstance(audio_processor_class, dict):
-            audio_processor_class = {"torch": audio_processor_class}
-        FEATURE_EXTRACTOR_MAPPING.register(config_class, audio_processor_class, exist_ok=exist_ok)
+        if audio_processor_classes is None:
+            if isinstance(audio_processor_class, dict):
+                audio_processor_classes = audio_processor_class
+            elif audio_processor_class is not None:
+                audio_processor_classes = {"torch": audio_processor_class}
+        if not audio_processor_classes:
+            raise ValueError(
+                "You need to specify at least one audio processor class. "
+                "Use `audio_processor_classes={'backend_name': ProcessorClass}`."
+            )
+
+        # Avoid resetting existing processors if we are passing partial updates
+        if config_class in FEATURE_EXTRACTOR_MAPPING:
+            existing_mapping = FEATURE_EXTRACTOR_MAPPING[config_class]
+            if isinstance(existing_mapping, dict):
+                audio_processor_classes = {**existing_mapping, **audio_processor_classes}
+
+        FEATURE_EXTRACTOR_MAPPING.register(config_class, audio_processor_classes, exist_ok=exist_ok)
 
 
 class AutoFeatureExtractor:
