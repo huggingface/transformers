@@ -12,21 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import warnings
 from typing import TYPE_CHECKING, Any, Unpack
 
-import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .audio_processing_base import AudioProcessingMixin, BatchFeature
 from .audio_utils import (
     AudioInput,
     SpectrogramConfig,
-    _array_namespace,
-    _clamp_min,
-    amplitude_to_db,
     make_list_of_audio,
-    power_to_db,
 )
 from .processing_utils import AudioKwargs
 from .tokenization_utils_base import TruncationStrategy
@@ -34,6 +30,7 @@ from .utils import PaddingStrategy, TensorType, logging
 
 
 if TYPE_CHECKING:
+    import numpy as np
     import torch
 
 
@@ -221,7 +218,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _preprocess(
         self,
-        audio: list[np.ndarray] | list["torch.Tensor"],
+        audio: list["np.ndarray"] | list["torch.Tensor"],
         padding: bool | str | PaddingStrategy | None,
         max_length: int | None,
         truncation: bool | str | TruncationStrategy | None,
@@ -361,7 +358,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             audio_ranges=audio_ranges,
             **kwargs,
         )
-        audio_lengths = np.asarray([end - start for start, end in audio_ranges])
+        audio_lengths = self._lengths_from_ranges(audio_ranges)
         feature_lengths = self._valid_frame_counts(audio_lengths, spectrogram_config)
         if self.feature_normalization is None:
             return features, feature_lengths
@@ -388,13 +385,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         The NeMo recipe (Parakeet, Cohere-ASR): unbiased variance, `eps` added to the standard deviation.
         """
-        xp = _array_namespace(features)
-        counts = self._astype(self._as_backend_array(np.asarray(frame_counts), like=features), "float32")[:, None]
+        counts = self._astype(self._as_backend_array(frame_counts, like=features), "float32")[:, None]
         mask = (self._arange(features.shape[1], like=features)[None, :] < counts)[..., None]
         masked = features * mask
         mean = (masked.sum(axis=1) / counts)[:, None, :]
         variance = ((masked - mean) ** 2 * mask).sum(axis=1) / (counts - 1)
-        return (features - mean) / (xp.sqrt(variance)[:, None, :] + eps) * mask
+        return (features - mean) / (self._sqrt(variance)[:, None, :] + eps) * mask
 
     def _resolve_padding_strategy(self, padding=False, max_length=None, *, padding_value):
         if padding is not False:
@@ -423,7 +419,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def pad(
         self,
-        audio: list[np.ndarray] | list["torch.Tensor"],
+        audio: list["np.ndarray"] | list["torch.Tensor"],
         padding: bool | str | PaddingStrategy = True,
         max_length: int | None = None,
         truncation: bool = False,
@@ -681,13 +677,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         stft_cfg = spectrogram_config.stft_config
         if spectrogram_config.computation_dtype and stft_cfg.fft_dtype in (None, "complex64"):
             # with `fft_dtype="float64"` / `"native"`, the cast happens at the FFT boundary instead
-            dtype_str = spectrogram_config.computation_dtype
-            if isinstance(audio, np.ndarray):
-                audio = audio.astype(dtype_str)
-            else:
-                import torch
-
-                audio = audio.to(getattr(torch, dtype_str))
+            audio = self._astype(audio, spectrogram_config.computation_dtype)
         if dither > 0:
             audio = self._dither_waveform(audio, audio_ranges, dither=dither)
         if spectrogram_config.waveform_scale is not None:
@@ -867,18 +857,18 @@ class BaseAudioProcessor(AudioProcessingMixin):
             if spectrogram_config.pre_log_offset is not None:
                 result = features + spectrogram_config.pre_log_offset
             else:
-                result = _clamp_min(features, spectrogram_config.mel_floor)
+                result = self._clamp_min(features, spectrogram_config.mel_floor)
 
             if log_mel == "log":
-                result = self._astype(_array_namespace(result).log(result), "float32")
+                result = self._astype(self._log(result), "float32")
             elif log_mel == "log10":
-                result = self._astype(_array_namespace(result).log10(result), "float32")
+                result = self._astype(self._log10(result), "float32")
             elif log_mel == "dB":
                 power = spectrogram_config.stft_config.power
                 if power == 2.0:
-                    result = power_to_db(result, reference, min_value, db_range)
+                    result = self._to_db(result, 10.0, reference, min_value, db_range)
                 elif power == 1.0:
-                    result = amplitude_to_db(result, reference, min_value, db_range)
+                    result = self._to_db(result, 20.0, reference, min_value, db_range)
                 else:
                     raise ValueError(f"Cannot use log_mel option 'dB' with power {power}")
                 result = self._astype(result, "float32")
@@ -892,13 +882,31 @@ class BaseAudioProcessor(AudioProcessingMixin):
             result = result.swapaxes(-2, -1)
         return result
 
+    def _to_db(self, spectrogram, multiplier, reference, min_value, db_range):
+        """`multiplier * log10(spectrogram / reference)`: 10 for a power spectrogram, 20 for an amplitude one.
+
+        Same arithmetic as `audio_utils.power_to_db` / `audio_utils.amplitude_to_db`, through the backend primitives.
+        """
+        if reference <= 0.0:
+            raise ValueError("reference must be greater than zero")
+        if min_value <= 0.0:
+            raise ValueError("min_value must be greater than zero")
+        reference = max(min_value, reference)
+        spectrogram = self._clamp_min(spectrogram, min_value)
+        spectrogram = multiplier * (self._log10(spectrogram) - math.log10(reference))
+        if db_range is not None:
+            if db_range <= 0.0:
+                raise ValueError("db_range must be greater than zero")
+            spectrogram = self._clamp_min(spectrogram, spectrogram.max() - db_range)
+        return spectrogram
+
     def _shape_log_features(self, result, spectrogram_config, **kwargs):
         """Hook: rescale the log-domain features. Runs after the log and before any transpose."""
         if spectrogram_config.subtract_mean:
             result = result - result.mean(axis=-1, keepdims=True)
         if spectrogram_config.floor_below_peak is not None:
             max_vals = self._amax_over_features(result)
-            result = _array_namespace(result).maximum(result, max_vals - spectrogram_config.floor_below_peak)
+            result = self._maximum(result, max_vals - spectrogram_config.floor_below_peak)
         if spectrogram_config.log_shift is not None:
             result = result + spectrogram_config.log_shift
         if spectrogram_config.log_scale is not None:
@@ -941,6 +949,27 @@ class BaseAudioProcessor(AudioProcessingMixin):
         raise NotImplementedError
 
     def _concat_last(self, parts):
+        raise NotImplementedError
+
+    def _lengths_from_ranges(self, ranges):
+        """Host-side integer array of `end - start` per `(start, end)` range."""
+        raise NotImplementedError
+
+    def _log(self, x):
+        raise NotImplementedError
+
+    def _log10(self, x):
+        raise NotImplementedError
+
+    def _sqrt(self, x):
+        raise NotImplementedError
+
+    def _maximum(self, x, y):
+        """Element-wise maximum of two arrays."""
+        raise NotImplementedError
+
+    def _clamp_min(self, x, min_value):
+        """Element-wise `max(x, min_value)` for a scalar or 0-d array `min_value`."""
         raise NotImplementedError
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):

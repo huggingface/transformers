@@ -70,6 +70,24 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _squeeze_axis0(self, x):
         return np.squeeze(x, axis=0)
 
+    def _lengths_from_ranges(self, ranges):
+        return np.asarray([end - start for start, end in ranges])
+
+    def _log(self, x):
+        return np.log(x)
+
+    def _log10(self, x):
+        return np.log10(x)
+
+    def _sqrt(self, x):
+        return np.sqrt(x)
+
+    def _maximum(self, x, y):
+        return np.maximum(x, y)
+
+    def _clamp_min(self, x, min_value):
+        return np.maximum(x, min_value)
+
     def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
         requires_backends(self._resample, ["soxr"])
         import soxr
@@ -507,6 +525,26 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _squeeze_axis0(self, x):
         return x.squeeze(0)
+
+    def _lengths_from_ranges(self, ranges):
+        # Host-side, like the numpy backend: lengths feed Python-side frame arithmetic and are copied to the
+        # device only where a mask needs them (`_get_mask_from_lengths`).
+        return np.asarray([end - start for start, end in ranges])
+
+    def _log(self, x):
+        return torch.log(x)
+
+    def _log10(self, x):
+        return torch.log10(x)
+
+    def _sqrt(self, x):
+        return torch.sqrt(x)
+
+    def _maximum(self, x, y):
+        return torch.maximum(x, y)
+
+    def _clamp_min(self, x, min_value):
+        return x.clamp(min=min_value)
 
     def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
         requires_backends(self._resample, ["torchaudio"])
