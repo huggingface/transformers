@@ -853,30 +853,34 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
             top_k_weights = top_k_weights.to_local()
         if tp_mesh is None or tp_mesh.size() == 1:
             return (hidden_states, top_k_index, top_k_weights), kwargs
-
-        tp_group = tp_mesh.get_group()
-        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
-        top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
-        # TP ranks share the same batch. Slice tokens here so each is dispatched only once, then restore the full output in the post hook
-        num_tokens, tp_rank, tp_size = hidden_states.size(0), tp_mesh.get_local_rank(), tp_mesh.size()
-        rows = slice(num_tokens * tp_rank // tp_size, num_tokens * (tp_rank + 1) // tp_size)
-        return (hidden_states[rows], top_k_index[rows], top_k_weights[rows]), kwargs
+        # TP ranks share the same batch, so keep only this rank's rows and each token is dispatched once.
+        # Replicate -> Shard(0) is a local chunk (no communication); its backward all-gathers the row gradients.
+        hidden_states = DTensor.from_local(hidden_states, tp_mesh, [Replicate()], run_check=False)
+        top_k_index = DTensor.from_local(top_k_index, tp_mesh, [Replicate()], run_check=False)
+        top_k_weights = DTensor.from_local(top_k_weights, tp_mesh, [Replicate()], run_check=False)
+        
+        hidden_states = hidden_states.redistribute(tp_mesh, [Shard(0)]).to_local()
+        top_k_index = top_k_index.redistribute(tp_mesh, [Shard(0)]).to_local()
+        top_k_weights = top_k_weights.redistribute(tp_mesh, [Shard(0)]).to_local()
+        return (hidden_states, top_k_index, top_k_weights), kwargs
 
     def transform_output_post_forward(self, module, output, mesh, *, tp_mesh=None, num_tokens=None):
         if tp_mesh is None or tp_mesh.size() == 1:
             return output
-        tp_rank, tp_size = tp_mesh.get_local_rank(), tp_mesh.size()
-        rows = slice(num_tokens * tp_rank // tp_size, num_tokens * (tp_rank + 1) // tp_size)
-        full_output = output.new_zeros(num_tokens, output.size(-1))
-        full_output[rows] = output
-        return _AllReduceForward.apply(full_output, tp_mesh.get_group())
+        # Shard(0) -> Replicate is one all-gather of the row slices, which also handles uneven and empty slices.
+        hidden_dim = output.size(-1)
+        output = DTensor.from_local(
+            output.contiguous(), tp_mesh, [Shard(0)], shape=(num_tokens, hidden_dim), stride=(hidden_dim, 1)
+        )
+        return output.full_tensor()
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None):
+        """Experts stay whole (Shard(0) on `ep_mesh`); `tp_mesh` is only the group of ranks holding the same batch."""
         experts_forward = module.forward
         ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
 
-        def tp_forward(hidden_states, top_k_index, top_k_weights):
-            # Read the full token count before the pre hook slices the inputs on TP.
+        def ep_forward(hidden_states, top_k_index, top_k_weights):
+            # Read the full token count before the pre hook slices the inputs across the batch replicas.
             num_tokens = hidden_states.size(0)
             (hidden_states, top_k_index, top_k_weights), _ = self.transform_inputs_pre_forward(
                 module, (hidden_states, top_k_index, top_k_weights), {}, ep_mesh, tp_mesh=tp_mesh
@@ -892,7 +896,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
 
             return self.transform_output_post_forward(module, output, ep_mesh, tp_mesh=tp_mesh, num_tokens=num_tokens)
 
-        module.forward = tp_forward
+        module.forward = ep_forward
         return module
 
 
