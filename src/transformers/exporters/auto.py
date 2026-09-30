@@ -35,13 +35,7 @@ from .runner_openvino import OpenVINOModelRunner
 
 @dataclass
 class ExportBackend:
-    """What one export format is made of: the config that parameterizes it, the exporter that writes it,
-    and the runner that runs what was written.
-
-    One entry per format rather than three parallel tables keyed by the same strings, so a backend cannot be
-    half-registered without it being visible — which it was: there used to be no way to register a runner at
-    all, so a third-party backend could export and save artifacts that nothing could load.
-    """
+    """One export format's config, exporter, and runner."""
 
     config: type[ExportConfigMixin] | None = None
     exporter: type[HfExporter] | None = None
@@ -57,11 +51,7 @@ EXPORT_BACKENDS: dict[str, ExportBackend] = {
 
 
 def export_backend(export_format, part: str | None = None):
-    """The registered backend for a format, or one named part of it, with an error that says what is missing.
-
-    `export_format` takes an [`ExportFormat`] or its string value, since a manifest carries the string and
-    a config carries the enum.
-    """
+    """The registered backend for a format (an [`ExportFormat`] or its string value), or one named part of it."""
     if export_format is None:
         raise ValueError(f"No export format given — registered formats are {sorted(EXPORT_BACKENDS)}.")
     name = export_format.value if isinstance(export_format, ExportFormat) else export_format
@@ -83,23 +73,15 @@ logger = logging.get_logger(__name__)
 
 
 class AutoExportConfig:
-    """
-    The Auto-HF export config class that takes care of automatically dispatching to the correct
-    export config given an export config stored in a dictionary.
-    """
+    """Dispatches an export config stored as a dict to the right config class."""
 
     @classmethod
     def from_dict(cls, export_config_dict: dict):
-        # `export_backend` takes the enum or its string value, and says what is missing if anything is --
-        # including the key itself, so the absent case is not re-checked here.
         return export_backend(export_config_dict.get("export_format"), "config").from_dict(export_config_dict)
 
 
 class AutoHfExporter:
-    """
-    The Auto-HF exporter class that takes care of automatically instantiating to the correct
-    `HfExporter` given the `ExportConfig`.
-    """
+    """Instantiates the `HfExporter` matching an export config."""
 
     @classmethod
     def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter:
@@ -108,18 +90,13 @@ class AutoHfExporter:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter:
-        """Build the exporter a checkpoint's own export recipe asks for.
-
-        A model owner publishes an `export_config.json` next to their weights (or an `export_config` field
-        in `config.json`) recording the settings they validated for their architecture — the target format,
-        the dynamic-shape spec, opset, ExecuTorch backend, and the rest of what otherwise lives in a README.
-        Consumers get that export in one call instead of re-deriving it:
+        """Build the exporter a checkpoint's export recipe (`export_config.json`, or an `export_config` field in
+        `config.json`) asks for:
 
             exporter = AutoHfExporter.from_pretrained("org/model-name")
             program = exporter.export(model, inputs)
 
-        `kwargs` are split: anything naming an export-config field overrides the recipe, everything else is
-        forwarded to the download and to the exporter's constructor.
+        `kwargs` naming an export-config field override the recipe; the rest go to the download and the exporter.
         """
         config_dict = cls._load_export_config_dict(pretrained_model_name_or_path, **kwargs)
         overrides = {key: kwargs.pop(key) for key in list(kwargs) if key in config_dict}
@@ -128,8 +105,7 @@ class AutoHfExporter:
 
     @staticmethod
     def _load_export_config_dict(pretrained_model_name_or_path, **kwargs) -> dict:
-        """Find the export recipe: a standalone `export_config.json`, else an `export_config` field on the
-        model config. Local directories and Hub repos both go through `cached_file`, which resolves either."""
+        """Find the export recipe: `export_config.json`, else the model config's `export_config` field."""
         from .base import resolve_export_file, split_download_kwargs
 
         download_kwargs, _ = split_download_kwargs(dict(kwargs))
@@ -150,12 +126,7 @@ class AutoHfExporter:
 
 
 class AutoExportedModel:
-    """Load a saved export as whatever it was exported as.
-
-    The manifest records what each saved component is, so this picks the same shape the export produced
-    without the caller having to remember: an [`ExportedGenerator`] where a decode graph was saved (a
-    decomposed, cache-driven export), an [`ExportedModel`] for a single graph (a classifier, an encoder,
-    a feature extractor).
+    """Load a saved export as an [`ExportedGenerator`] if it has a decode graph, else an [`ExportedModel`].
 
     Example:
         runtime = AutoExportedModel.from_pretrained("out/")
@@ -169,7 +140,6 @@ class AutoExportedModel:
 
         download_kwargs, _ = split_download_kwargs(dict(kwargs))
         manifest = read_export_manifest(save_directory, **download_kwargs)
-        # The same question `ExportArtifacts.runtime` asks of an export it just produced: is there a decode graph?
         can_generate = ComponentRole.DECODE in saved_roles(manifest).values()
         target = ExportedGenerator if can_generate else ExportedModel
         return target.from_pretrained(save_directory, **kwargs)
@@ -201,10 +171,7 @@ def register_export_config(name: str):
 
 
 def register_runner(name: str):
-    """Register the runner that runs a saved artifact of a format.
-
-    Without one a backend can export and save, but nothing can load what it wrote.
-    """
+    """Register the runner that loads and runs a format's saved artifacts."""
     return _register(name, "runner", ModelRunner)
 
 

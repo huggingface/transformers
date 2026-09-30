@@ -22,18 +22,14 @@ if is_torch_available():
 
 
 def _executorch_constant(value):
-    """A constant slot's value as ExecuTorch can take it.
-
-    The graph specialized on the constant, so the slot is vestigial — it declares a position but the value is
-    already baked in. A type the runtime cannot represent as an `EValue` (a `str`: llava_next's
-    `vision_feature_select_strategy`) therefore goes in as `None` rather than failing the call."""
+    """A constant slot's value as ExecuTorch can take it; the value is baked in, so a non-`EValue` is `None`."""
     return value if value is None or isinstance(value, (int, float, bool, torch.Tensor)) else None
 
 
 def _feed_mismatches(method, feed: tuple, names: list[str]) -> list[str]:
-    """Slots whose fed tensor cannot fit the method's declared signature: wrong rank, wrong dtype, or an
-    axis past its bound. ExecuTorch reports every one of these as a bare `execute() failed with error 0x12`
-    without naming the argument, which makes an otherwise one-line shape bug unattributable.
+    """Slots whose fed tensor does not fit the method's signature (rank, dtype, bound).
+
+    ExecuTorch reports all of these as a bare `execute() failed with error 0x12`, without naming the argument.
     """
     metadata = method.metadata
     mismatches = []
@@ -67,16 +63,12 @@ def _baked_export_metadata(program) -> str | None:
 class ExecutorchModelRunner(ModelRunner):
     """`ModelRunner` backed by a loaded ExecuTorch program (`Runtime.get().load_program(...)`).
 
-    A `.pte` binds its inputs positionally and returns the lowering's mutated-input copies before the model's
-    own outputs, reporting only counts and shapes; the names and the user-output count come from the metadata
-    the exporter baked in as a constant method. Cache inputs are named by flat leaf index
-    (`past_key_values_<N>`), and outputs come back under the names the trace recorded.
+    A `.pte` binds inputs positionally and reports only counts and shapes; names come from the metadata baked in
+    as a constant method. Cache inputs are named by flat leaf index (`past_key_values_<N>`).
     """
 
     def __init__(self, program, export_metadata=None):
         self._method = program.load_method("forward")
-        # A `.pte` binds inputs positionally and reports only counts and shapes, so everything about what it
-        # takes and returns comes from the metadata the exporter baked in.
         self.export_metadata = self.resolve_metadata(
             export_metadata, lambda: ExportMetadata.from_json(_baked_export_metadata(program))
         )
@@ -86,17 +78,13 @@ class ExecutorchModelRunner(ModelRunner):
         recorded_user_outputs = self.export_metadata.num_user_outputs
         num_user_outputs = total_outputs if recorded_user_outputs is None else recorded_user_outputs
         self._user_output_indices = range(total_outputs - num_user_outputs, total_outputs)
-        # What the method declares, for choosing among the names a pytree kwarg could go in under.
         self._session_input_names = set(self.input_names)
-        # Per cache kwarg, the leaf inputs it declares, matched exactly (`<kwarg>_<N>`) so two caches whose
-        # names share a prefix cannot claim each other's leaves.
+        # Matched exactly so two caches whose names share a prefix cannot claim each other's leaves.
         self._cache_names = {
             cache_input: [name for name in self.input_names if re.fullmatch(rf"{re.escape(cache_input)}_\d+", name)]
             for cache_input in self.cache_inputs
         }
-        # The model's cache outputs (`past_key_values.layers.0.keys`), by their leaf path in the cache, where the
-        # runtime lets us point them at our own tensors: the export left them unplanned (`alloc_graph_output=False`)
-        # and the runtime can bind them (`Method.set_output`).
+        # Cache outputs the export left unplanned (`alloc_graph_output=False`), bindable via `Method.set_output`.
         can_bind = hasattr(self._method, "set_output")
         self._cache_outputs = [
             (index, kwarg, path.split("."))
@@ -107,8 +95,7 @@ class ExecutorchModelRunner(ModelRunner):
 
     @classmethod
     def from_artifact(cls, artifact, export_metadata=None, device=None, **kwargs) -> ExecutorchModelRunner:
-        """Load an in-memory `ExecutorchProgramManager` through its serialized buffer — the runtime takes no
-        program object."""
+        """Load an in-memory `ExecutorchProgramManager` through its serialized buffer."""
         return cls._load(artifact.buffer, export_metadata, **kwargs)
 
     @classmethod
@@ -120,7 +107,6 @@ class ExecutorchModelRunner(ModelRunner):
     def _load(cls, source, export_metadata, **kwargs) -> ExecutorchModelRunner:
         from executorch.runtime import Runtime, Verification
 
-        # Minimal verification, as the export tests load with: a full walk of a program we just wrote buys nothing.
         program = Runtime.get().load_program(source, verification=Verification.Minimal)
         return cls(program, export_metadata=export_metadata, **kwargs)
 
@@ -131,24 +117,17 @@ class ExecutorchModelRunner(ModelRunner):
             if cache is None:
                 continue
             caches[cache_input] = cache
-            # Cache inputs are named by flat leaf index (`<kwarg>_<N>`) — index rather than zip,
-            # since the lowering may have pruned leaves it left unused (sliding caches' scalars).
+            # By index, not zip: the lowering may have pruned unused leaves (sliding caches' scalars).
             leaves = _cache_tensors(cache)
             kwargs.update({name: leaves[int(name.rsplit("_", 1)[-1])] for name in declared})
-        # Remaining non-tensor kwargs are pytrees (`encoder_outputs`, mask dicts) — the graph names their
-        # leaves by underscore-joined path (`encoder_outputs_last_hidden_state`).
         for name in [n for n, v in kwargs.items() if not isinstance(v, torch.Tensor)]:
             value = kwargs.pop(name)
             leaves = get_leaf_tensors(value)
-            # Leaf names by path (`encoder_outputs_last_hidden_state`), with a positional fallback
-            # (`image_0`): a container the graph flattened by *index* rather than by attribute — an
-            # ImageList holding one `.tensor` — declares the slot under a name no path spells.
+            # Pytree leaves by underscore-joined path, else by position (`image_0`) for containers flattened by index.
             for index, (leaf, tensor) in enumerate(leaves.items()):
                 by_path = f"{name}_{leaf.replace('.', '_')}"
                 kwargs[by_path if by_path in self._session_input_names else f"{name}_{index}"] = tensor
-        # Positional bind, so every declared slot is filled. A slot the trace recorded as a *constant* (a
-        # `None` mask entry it kept) takes that value whatever the feed carries — the program baked it, so a
-        # caller offering a tensor there is offering one the graph never had.
+        # A slot recorded as a constant takes that value whatever the feed carries: the program baked it.
         constants = self.export_metadata.constant_inputs
         feed = tuple(
             _executorch_constant(constants[name]) if name in constants else kwargs[name].contiguous()
@@ -165,10 +144,7 @@ class ExecutorchModelRunner(ModelRunner):
         return dict(zip(self._output_names, (outputs[i] for i in self._user_output_indices)))
 
     def _bind_cache_outputs(self, caches: dict) -> None:
-        """Point each of the model's cache outputs at the cache tensor it updates, so the step writes the cache
-        where it lives and hands back those very tensors, leaving the generation loop nothing to copy. The
-        runtime keeps a mutated input's own write-back on the fed tensor by itself; the model's copy of it is
-        a separate output, matched here by its leaf path the way ONNX matches `output.<name>`."""
+        """Point each cache output at the cache tensor it updates, so the step writes the cache in place."""
         for index, kwarg, path in self._cache_outputs:
             tensor = _read_cache_entry(caches[kwarg], path) if kwarg in caches else None
             if isinstance(tensor, torch.Tensor) and tensor.is_contiguous():
@@ -176,8 +152,7 @@ class ExecutorchModelRunner(ModelRunner):
 
 
 def _is_memory_planned(method, index: int) -> bool:
-    """Whether output `index` lives in the method's planned arena, where no caller tensor can be bound. A
-    non-tensor output has no tensor metadata and counts as planned."""
+    """Whether output `index` lives in the planned arena, where no caller tensor can be bound."""
     try:
         return method.metadata.output_tensor_meta(index).is_memory_planned()
     except Exception:

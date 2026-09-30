@@ -20,31 +20,25 @@ if is_torch_available():
 
 
 class DynamoModelRunner(ModelRunner):
-    """`ModelRunner` backed by a `torch.export` unlifted module (`ExportedProgram.module()`) — the
-    runnable, like ORT's session. Kwargs pass straight through (the KV-cache stays a `Cache` pytree the
-    graph consumes natively); the output object is flattened to its named tensor leaves."""
+    """`ModelRunner` backed by a `torch.export` unlifted module (`ExportedProgram.module()`).
+
+    Kwargs pass straight through (the cache stays a `Cache` pytree); outputs are flattened to named tensor leaves."""
 
     def __init__(self, module, export_metadata=None):
         self._module = module
-        # `graph_module.meta` survives `.module()`, so the exporter's account of the trace rides along here
-        # exactly as it does inside an artifact — precision, cache layout, traced shapes and all.
-        # Passed in by a load (the saved `export_metadata.json`), else whatever the artifact carries:
-        # `torch.export.save` drops `meta`, so a program that has been through disk has none of its own.
+        # `graph_module.meta` survives `.module()`, but not `torch.export.save`.
         self.export_metadata = self.resolve_metadata(
             export_metadata,
             lambda: ExportMetadata.from_dict(getattr(module, "meta", {}).get(EXPORT_METADATA_KEY)),
         )
-        # The one thing the metadata cannot give: this module rejects any kwarg set but the one it was traced
-        # with, *including* baked scalars (`max_seqlen`) that never became graph placeholders — so the
-        # recorded graph inputs are too few, and its own pytree spec is the contract.
+        # The pytree spec, not the metadata: the module also requires baked scalars (`max_seqlen`).
         self.input_names = tuple(module._in_spec.child(1).context)
-        # Outputs land wherever the exported weights live.
         weight = next(self._module.parameters(), None)
         if weight is not None:
             self.device, self.dtype = weight.device, weight.dtype
 
     def to(self, device) -> DynamoModelRunner:
-        """Move the unlifted module -- a `torch.export` program is a module, so this is the ordinary move."""
+        """Move the unlifted module."""
         self._module.to(device)
         weight = next(self._module.parameters(), None)
         self.device = weight.device if weight is not None else torch.device(device)
@@ -52,8 +46,7 @@ class DynamoModelRunner(ModelRunner):
 
     @classmethod
     def from_artifact(cls, artifact, export_metadata=None, device=None, **kwargs) -> DynamoModelRunner:
-        """Run an `ExportedProgram` straight from memory: the module is what `.module()` unlifts. `device`
-        moves it, which is also where its outputs then land."""
+        """Run an `ExportedProgram` straight from memory, moved to `device` if given."""
         module = artifact.module()
         if device is not None:
             module = module.to(device)
@@ -61,12 +54,7 @@ class DynamoModelRunner(ModelRunner):
 
     @classmethod
     def from_pretrained(cls, path, export_metadata=None, device=None, **kwargs) -> DynamoModelRunner:
-        """Load a saved `.pt2` and unlift it, putting the metadata back where an in-memory program carries it.
-
-        `torch.export.save` drops `meta` keys it does not know, so the exporter parks the payload in
-        `extra_files`; reading it back onto the graph module is what makes a reloaded runner answer about
-        precision and cache layout the way the one built straight from `export` does.
-        """
+        """Load a saved `.pt2` and unlift it, restoring the metadata the exporter parked in `extra_files`."""
         extra_files = {EXPORT_METADATA_KEY: ""}
         exported_program = torch.export.load(str(path), extra_files=extra_files)
         payload = extra_files.get(EXPORT_METADATA_KEY)
@@ -75,8 +63,7 @@ class DynamoModelRunner(ModelRunner):
         return cls.from_artifact(exported_program, export_metadata=export_metadata, device=device, **kwargs)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
-        # The module rejects kwargs it wasn't traced with — e.g. a prefill graph whose capture predates the
-        # cache (models that create it inside the first forward); its cache still rides out on the outputs.
+        # A prefill graph traced before the cache existed rejects `past_key_values`.
         if "past_key_values" not in self.input_names:
             kwargs.pop("past_key_values", None)
         return get_leaf_tensors(self._module(**kwargs))

@@ -160,7 +160,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     def test_decode_accepts_variable_query_length(self):
         """The multi-token decode's query axis stays dynamic: the exported graph runs at query lengths
-        other than the one it was captured with, returning logits for every query position."""
+        other than the one it was captured with, returning the logits `generate` asks for (the last position)."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         torch.manual_seed(0)
@@ -183,9 +183,9 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                         attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
                         position_ids=positions[None],
                         past_key_values=past_key_values,
+                        logits_to_keep=decode_inputs["logits_to_keep"],
                     )
-                logits = out["logits"]
-                self.assertEqual(logits.shape[:2], (1, query_len))
+                self.assertEqual(out["logits"].shape[:2], (1, 1))
 
     @pytest.mark.torch_export_test
     def test_static_cache_mutated_in_place_dynamo(self):
@@ -213,6 +213,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                     attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
                     position_ids=positions[None],
                     past_key_values=past_key_values,
+                    logits_to_keep=decode_inputs["logits_to_keep"],
                 )
 
         self.assertEqual(int(past_key_values.get_seq_length()), 0)
@@ -273,6 +274,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                     attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
                     position_ids=positions[None],
                     past_key_values=cache,
+                    logits_to_keep=decode_inputs["logits_to_keep"],
                 ).logits
 
         eager_cache = copy.deepcopy(decode_inputs["past_key_values"])

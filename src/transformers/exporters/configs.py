@@ -35,43 +35,20 @@ class ExportFormat(Enum):
 
 @dataclass
 class ExportConfigMixin:
-    """
-    Base class for all export configuration dataclasses.
-
-    Provides `to_dict` / `from_dict` serialisation so configs can be saved and round-tripped
-    without knowing the concrete subclass. The `export_format` field identifies the subclass
-    during deserialisation.
-    """
+    """Base class for export configs; `export_format` identifies the subclass when deserialising."""
 
     export_format: ExportFormat
 
     @classmethod
     def from_dict(cls, config_dict):
-        """
-        Instantiates a [`ExportConfigMixin`] from a Python dictionary of parameters.
-
-        Args:
-            config_dict (`dict[str, Any]`):
-                Dictionary that will be used to instantiate the configuration object.
-
-        Returns:
-            [`ExportConfigMixin`]: The configuration object instantiated from those parameters.
-        """
+        """Instantiates a [`ExportConfigMixin`] from a dictionary of parameters."""
         config_dict = dict(config_dict)
-        # Back to the enum, so a config built from a dictionary is the one built directly.
         if isinstance(config_dict.get("export_format"), str):
             config_dict["export_format"] = ExportFormat(config_dict["export_format"])
         return cls(**config_dict)
 
     def to_dict(self) -> dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        # The format as its value, so the dictionary is JSON as it stands — a saved `export_config.json` is
-        # read back by name (`AutoExportConfig.from_dict`), and an enum repr is not a name.
+        """Serializes this instance to a JSON-compatible dictionary."""
         fields = copy.deepcopy(self.__dict__)
         fields["export_format"] = self.export_format.value
         return fields
@@ -84,23 +61,14 @@ class DynamoConfig(ExportConfigMixin):
 
     Args:
         dynamic (`bool`, *optional*, defaults to `False`):
-            Whether to export with dynamic (symbolic) shapes. When `True` and
-            `dynamic_shapes` is not set, all tensor dimensions are set to
-            `Dim.AUTO` automatically.
+            Export with dynamic shapes; without `dynamic_shapes`, every dimension is `Dim.AUTO`.
         strict (`bool`, *optional*, defaults to `False`):
-            Whether to enable strict mode in `torch.export`. Runs the full
-            symbolic trace and catches more errors, but is slower and more
-            likely to fail on complex models.
+            Enable `torch.export` strict mode.
         dynamic_shapes (`dict[str, Any]`, *optional*):
-            Explicit per-input dynamic shape specifications passed to
-            `torch.export`. Takes precedence over `dynamic`.
+            Explicit per-input dynamic shapes passed to `torch.export`. Takes precedence over `dynamic`.
         prefer_deferred_runtime_asserts_over_guards (`bool`, *optional*, defaults to `False`):
-            When `True`, data-dependent shape guards are emitted as runtime asserts in the exported
-            graph instead of failing the export at trace time when a guard wouldn't hold across the
-            full symbolic shape range. Most transformer LLMs need this set to `True` when using
-            fine-grained ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``,
-            where ``torch.export`` infers shape relations instead of verifying them against the
-            user-stated bounds.
+            Emit data-dependent shape guards as runtime asserts instead of failing the trace. Usually needed
+            with explicit `Dim(min=, max=)` bounds, not with `Dim.AUTO`.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
@@ -114,30 +82,19 @@ class DynamoConfig(ExportConfigMixin):
 @dataclass
 class OnnxConfig(DynamoConfig):
     """
-    Configuration class for exporting models to ONNX via `torch.onnx.export`.
-
-    Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`,
-    `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
+    Configuration class for exporting models to ONNX via `torch.onnx.export`. Inherits the [`DynamoConfig`] fields.
 
     Args:
         output_path (`str` or `PathLike`, *optional*):
-            Output path for the `.onnx` file. When `None` (default) the
-            exported model is kept in memory as an `ONNXProgram` and not
-            written to disk.
+            Output `.onnx` path. When `None`, the `ONNXProgram` is kept in memory.
         opset_version (`int`, *optional*):
-            ONNX opset version to target. Defaults to the latest opset
-            supported by the installed `onnxscript` version.
+            ONNX opset to target. Defaults to the latest one the installed `onnxscript` supports.
         external_data (`bool`, *optional*, defaults to `True`):
-            Store large weight tensors in a separate `.onnx_data` sidecar
-            file instead of embedding them in the protobuf. Required for
-            models whose weights exceed the 2 GB protobuf limit.
+            Store weights in a `.onnx_data` sidecar; required past the 2 GB protobuf limit.
         optimize (`bool`, *optional*, defaults to `True`):
-            Run `onnxscript` optimisation passes (constant folding, dead-code
-            elimination, …) on the exported graph. Disable for models that
-            hit upstream `onnxscript` optimiser bugs.
+            Run `onnxscript` optimisation passes on the exported graph.
         export_params (`bool`, *optional*, defaults to `True`):
-            Embed model weights in the ONNX graph. Set to `False` to export
-            a weight-free graph (weights must be supplied at runtime).
+            Embed weights in the graph; `False` exports a weight-free graph.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
@@ -152,43 +109,27 @@ class OnnxConfig(DynamoConfig):
 @dataclass
 class ExecutorchConfig(DynamoConfig):
     """
-    Configuration class for exporting models to ExecuTorch format.
-
-    Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`,
-    `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
+    Configuration class for exporting models to ExecuTorch format. Inherits the [`DynamoConfig`] fields.
 
     Args:
         backend (`str`, *optional*, defaults to `"xnnpack"`):
-            Target ExecuTorch backend. Supported values:
-
-            - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
-            - `"openvino"` — CPU inference via the ExecuTorch OpenVINO delegate.
-            - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
-            - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
+            Target ExecuTorch backend: `"xnnpack"` (CPU), `"openvino"` (CPU), `"cuda"` (GPU) or `"mlx"`
+            (Apple Silicon GPU).
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
-            Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
-            the runtime uses the caller-provided input buffers directly instead of copying into the
-            arena — so an in-place `USER_INPUT_MUTATION` (e.g. a `StaticCache` write) lands in the
-            caller's tensor rather than an arena copy.
+            Reserve arena memory for graph inputs. When `False` the caller's buffers are used directly, so an
+            in-place input mutation (a `StaticCache` write) lands in the caller's tensor.
         alloc_graph_output (`bool`, *optional*, defaults to `True`):
-            Whether the memory-planning pass reserves arena memory for graph outputs. When `False`,
-            the caller binds output buffers at runtime (`Method::set_output_data_ptr`, `Method.set_output`
-            from Python); binding an output to its mutated input's buffer avoids the copy-out roundtrip,
-            which [`ExecutorchModelRunner`] does for the cache when the runtime supports it.
+            Reserve arena memory for graph outputs. When `False` the caller binds output buffers at runtime,
+            which [`ExecutorchModelRunner`] uses to skip the cache copy-out.
         alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
-            Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
-            state). Passed through to the `MemoryPlanningPass`.
+            Reserve arena memory for mutable buffers; passed to the `MemoryPlanningPass`.
         partition (`bool`, *optional*, defaults to `True`):
-            Whether to hand eligible subgraphs to the backend's partitioner. When `False` the whole graph
-            lowers to the portable kernels — slower, and the way past a backend whose compiler refuses a
-            partition its own partitioner claimed (XNNPACK does this at method load, so the refusal only
-            shows up when the program is run).
+            Delegate eligible subgraphs to the backend. When `False` everything lowers to the portable kernels,
+            which gets past a backend refusing a partition it claimed (XNNPACK, at method load).
         partition_exclude (`tuple[str, ...]`, *optional*):
-            Names of the backend partitioner's per-op configs to withhold, e.g.
-            `("ViewCopyConfig",)`. Those ops lower to the portable kernels while everything else stays
-            delegated — the targeted form of `partition=False`, for a backend that refuses a partition
-            because of one op pattern rather than the whole graph. XNNPACK only; names come from
-            `executorch.backends.xnnpack.partition.config.ALL_PARTITIONER_CONFIGS`.
+            XNNPACK partitioner configs to withhold (e.g. `("ViewCopyConfig",)`), from
+            `executorch.backends.xnnpack.partition.config.ALL_PARTITIONER_CONFIGS`; those ops lower to the
+            portable kernels.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
@@ -204,26 +145,18 @@ class ExecutorchConfig(DynamoConfig):
 @dataclass
 class OpenVINOConfig(DynamoConfig):
     """
-    Configuration class for exporting models to OpenVINO IR via ``openvino.convert_model``.
-
-    Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`, `dynamic_shapes`,
-    `prefer_deferred_runtime_asserts_over_guards`).
+    Configuration class for exporting models to OpenVINO IR via `openvino.convert_model`. Inherits the
+    [`DynamoConfig`] fields.
 
     Args:
         output_path (`str` or `PathLike`, *optional*):
-            Output path for the `.xml` file (the matching `.bin` is written alongside). When
-            `None` (default) the converted model is kept in memory as an ``openvino.Model``.
+            Output `.xml` path (`.bin` alongside). When `None`, the `openvino.Model` is kept in memory.
         compress_to_fp16 (`bool`, *optional*, defaults to `False`):
-            Halve `float32` weights to `float16` when saving. Off by default: an export answers like the
-            model it came from, and `float16` carries a narrower exponent range than the `float32` it
-            replaces. `bfloat16` weights are left alone either way — only `float32` is compressed.
+            Compress `float32` weights to `float16` when saving (off by default for its narrower range).
         stateful (`bool`, *optional*, defaults to `True`):
-            Fold round-tripped state tensors (KV cache, SSM states, …) into internal OV
-            variables (``ReadValue``/``Assign``). The runtime then carries state across
-            ``infer()`` calls instead of marshalling cache tensors through inputs/outputs on
-            every step, and a fused ``beam_idx`` input reorders state in-graph for beam search.
-            No-op for models without round-tripped state (encoders, prefill-only exports). Set it
-            to `False` for targets that take no stateful model, such as the NPU plugin.
+            Fold round-tripped state (KV cache, SSM states) into internal variables carried across `infer()`
+            calls, with a `beam_idx` input for beam search. Set `False` for targets without stateful support
+            (NPU).
     """
 
     export_format: ExportFormat = ExportFormat.OPENVINO
