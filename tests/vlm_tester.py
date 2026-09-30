@@ -22,6 +22,7 @@ from .test_modeling_common import (
     is_torch_available,
     torch_device,
 )
+from .test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -122,7 +123,7 @@ class VLMModelTester(MultiModalModelTester):
         return self.vision_config_class(**kwargs)
 
 
-class VLMModelTest(MultiModalModelTest):
+class VLMModelTest(MultiModalModelTest, TensorParallelTesterMixin):
     """
     Base test class for Vision-Language Models.
 
