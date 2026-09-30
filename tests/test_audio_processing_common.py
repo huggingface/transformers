@@ -175,6 +175,42 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
             self._assert_outputs_bit_exact(reference_output, output, atol=self.parity_atol, rtol=self.parity_rtol)
 
     @require_torch
+    def test_channel_layouts_are_equivalent(self):
+        """A 2-D clip is read in either layout: `(1, T)` and `(T, 1)` match the 1-D waveform, and
+        `(T, 2)` (soundfile's layout) matches `(2, T)` (torchaudio's) exactly."""
+        if self.audio_processor_tester is None:
+            self.skipTest("audio_processor_tester not set; cannot generate fixtures.")
+
+        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
+        waveform = np.asarray(prepare_audio_inputs(batch_size=1, seed=0)[0], dtype=np.float32)
+        stereo = np.stack([waveform, waveform[::-1].copy()])
+        layouts = {
+            "mono": (waveform, {"channels_first": waveform[None, :], "channels_last": waveform[:, None]}),
+            "stereo": (stereo, {"channels_last": np.ascontiguousarray(stereo.T)}),
+        }
+        for backend, cls in self.audio_processing_classes.items():
+            ap = cls(**init_dict)
+
+            def call(audio):
+                np.random.seed(0)
+                torch.manual_seed(0)
+                return ap(audio, sampling_rate=ap.sampling_rate, return_tensors="pt")
+
+            for name, (reference, variants) in layouts.items():
+                expected = call(reference)
+                for layout, audio in variants.items():
+                    with self.subTest(backend=backend, audio=name, layout=layout):
+                        output = call(audio)
+                        self.assertEqual(set(output.keys()), set(expected.keys()))
+                        for key in expected:
+                            if key in self._metadata_keys():
+                                self.assertEqual(output[key], expected[key])
+                            else:
+                                self.assertTrue(
+                                    torch.equal(self._to_torch(output[key]), self._to_torch(expected[key]))
+                                )
+
+    @require_torch
     def test_backends_equivalence_batched(self):
         if len(self.audio_processing_classes) < 2:
             self.skipTest("Only one backend registered; cross-backend parity test skipped.")

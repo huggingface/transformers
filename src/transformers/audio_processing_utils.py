@@ -489,8 +489,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=padding_value)
 
     def _downmix_to_mono(self, audio_el):
-        """Average any channel axis away. To change the waveform itself, override `_prepare_waveform`."""
+        """Average any channel axis away. To change the waveform itself, override `_prepare_waveform`.
+
+        A 2-D waveform is one clip, in either layout: `(channels, samples)` as torchaudio loads it, or
+        `(samples, channels)` as soundfile does. The longer axis is time; a square array is read as
+        channels-first.
+        """
         audio_el = self._as_backend_array(audio_el)
+        if audio_el.ndim == 2 and audio_el.shape[0] > audio_el.shape[1]:
+            audio_el = audio_el.T
         if audio_el.ndim > 1:
             # Multi-channel input is always averaged down to mono.
             audio_el = self._squeeze_axis0(audio_el) if audio_el.shape[0] == 1 else self._mean_axis0(audio_el)
