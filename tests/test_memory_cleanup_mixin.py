@@ -93,8 +93,11 @@ def _install_class_baseline_hook(cls) -> None:
         return
 
     def set_up_class(inner_cls, *args, **kwargs):
-        # Preserve the first reading when TestHubKernels calls super().setUpClass().
-        # `__dict__` excludes a parent's baseline that getattr(Child, ...) would inherit.
+        # Handles the case where class Foo(MemoryCleanupTestCase) defines setUpClass and calls
+        # super().setUpClass() after loading a model (or other heavy object): both Foo's wrapper
+        # and MemoryCleanupTestCase's wrapper fire with inner_cls=Foo, but the first (clean)
+        # baseline must win.
+        # See https://github.com/huggingface/transformers/pull/48976#issuecomment-5819088503
         if _memory_leak_settings()[0] is not None and "_memory_cleanup_class_baseline" not in inner_cls.__dict__:
             inner_cls._memory_cleanup_class_baseline = _device_memory_allocated()
         return original(inner_cls, *args, **kwargs)
