@@ -95,12 +95,6 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
         "layers.*.block_sparse_moe.experts": "moe_tp_experts",
     }
-    base_model_ep_plan = {
-        "layers.*.block_sparse_moe.router": "ep_router",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
-    }
 
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
