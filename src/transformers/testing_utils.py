@@ -3458,7 +3458,7 @@ if is_torch_xpu_available():
     BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
 
 
-if is_torch_tpu_available():
+if is_torch_available() and is_torch_tpu_available():
     # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
     # falls back to the `default` entry of its table rather than being faked here.
     BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
