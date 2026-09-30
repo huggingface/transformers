@@ -4076,16 +4076,22 @@ class _FakeHandle:
 
 class _FakeLoader:
     def __init__(self, tensors, plan):
-        self.tensors, self.plan, self.taken, self.closed = tensors, plan, [], False
+        self.tensors, self.plan, self.taken, self.returned, self.closed = tensors, plan, [], [], False
 
     def take(self, name):
         from safetensors import SafetensorError
 
+        from transformers.distributed.sharding_utils import read_intervals
+
         if name not in self.plan or name in self.taken:
             raise SafetensorError(f"{name}: not planned or already delivered")
         self.taken.append(name)
-        rows = self.plan[name]
-        return self.tensors[name] if rows is None else self.tensors[name][rows]
+        region, tensor = self.plan[name], self.tensors[name]
+        if region is not None:
+            intervals = [[(s.start, s.stop) for s in dim] for dim in region]
+            tensor = read_intervals(lambda index: tensor[index], intervals)
+        self.returned.append(tensor)
+        return tensor
 
     def close(self):
         self.closed = True
@@ -4133,12 +4139,12 @@ class SafetensorsPrefetchLoadingTest(unittest.TestCase):
             ("b", 0, [[(2, 4)], [(0, 3)]]),  # rank keeps rows 2:4
             ("c", "cpu", [[(0, 2)], [(1, 3)]]),
         )
-        (prefetch,) = attach_prefetch([a, b, c], dict.fromkeys(self.tensors, handle), copy_full=False)
+        (prefetch,) = attach_prefetch([a, b, c], dict.fromkeys(self.tensors, handle))
         self.assertIsNone(c.reader)
         self.assertEqual(handle.plans, [])
 
         whole = self._read(a)
-        self.assertEqual(handle.plans, [("cuda:0", {"a": None, "b": slice(2, 4)})])
+        self.assertEqual(handle.plans, [("cuda:0", {"a": None, "b": ([slice(2, 4)], [slice(0, 3)])})])
         self.assertEqual(whole.data_ptr(), self.tensors["a"].data_ptr())
         rows = self._read(b)
         torch.testing.assert_close(rows, self.tensors["b"][2:4])
@@ -4148,27 +4154,32 @@ class SafetensorsPrefetchLoadingTest(unittest.TestCase):
         prefetch.close()
         self.assertTrue(handle.loaders[0].closed)
 
-    def test_partial_and_copy_full_takes_are_copies(self):
+    def test_regions_are_planned_and_taken_as_is(self):
+        # any region, not just rows, goes to safetensors as planned; the take is the final tensor, no copy on top
         from transformers.integrations.safetensors_prefetch import attach_prefetch
 
-        storage = self.tensors["a"].untyped_storage().data_ptr()
-        (columns,) = self._loads(("a", "cuda:0", [[(0, 4)], [(1, 3)]]))  # full dim 0: no row plan
-        attach_prefetch([columns], {"a": _FakeHandle(self.tensors)}, copy_full=False)
+        handle = _FakeHandle(self.tensors)
+        columns, interleaved = self._loads(
+            ("a", "cuda:0", [[(0, 4)], [(1, 3)]]),
+            ("b", "cuda:0", [[(0, 1), (2, 4)], [(0, 3)]]),
+        )
+        attach_prefetch([columns, interleaved], dict.fromkeys(self.tensors, handle))
         part = self._read(columns)
+        self.assertEqual(
+            handle.plans,
+            [("cuda:0", {"a": ([slice(0, 4)], [slice(1, 3)]), "b": ([slice(0, 1), slice(2, 4)], [slice(0, 3)])})],
+        )
         torch.testing.assert_close(part, self.tensors["a"][:, 1:3])
-        self.assertNotEqual(part.untyped_storage().data_ptr(), storage)
-
-        (replicated,) = self._loads(("a", "cuda:0", None))
-        attach_prefetch([replicated], {"a": _FakeHandle(self.tensors)}, copy_full=True)
-        full = self._read(replicated)
-        torch.testing.assert_close(full, self.tensors["a"])
-        self.assertNotEqual(full.untyped_storage().data_ptr(), storage)
+        rows = self._read(interleaved)
+        torch.testing.assert_close(rows, torch.cat([self.tensors["b"][0:1], self.tensors["b"][2:4]]))
+        self.assertIs(part, handle.loaders[0].returned[0])
+        self.assertIs(rows, handle.loaders[0].returned[1])
 
     def test_prefetch_failure_falls_back_to_the_default_read(self):
         from transformers.integrations.safetensors_prefetch import attach_prefetch
 
         (load,) = self._loads(("a", "cuda:0", None))
-        attach_prefetch([load], {"a": _FakeHandle(self.tensors, refuse=True)}, copy_full=False)
+        attach_prefetch([load], {"a": _FakeHandle(self.tensors, refuse=True)})
         with self.assertLogs("transformers.integrations.safetensors_prefetch", level="WARNING") as logs:
             load.device = "cpu"  # the fallback reads the slice as the default loader would; keep it off CUDA here
             tensor = self._read(load)

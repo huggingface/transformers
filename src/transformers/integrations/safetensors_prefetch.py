@@ -25,8 +25,8 @@ like so:
 
 The new prefetch loader, instead of lazily loading when slicing the tensor, loads in the background. Calls to
 `take` yield the bytes or wait for them to be loaded, but the rest of loading keeps going while bytes load. You
-can precisely define which tensors, and which rows of them, you want when you call `prefetch` on the `safe_open`
-handle. The prefetch pipeline looks like so:
+can precisely define which tensors, and which region of each (one list of slices per dimension), you want when
+you call `prefetch` on the `safe_open` handle. The prefetch pipeline looks like so:
 
     chunked disk `pread`
       -> page cache
@@ -45,7 +45,7 @@ loading for that given tensor/slice is finished.
 How transformers uses it: `from_pretrained` first works out, for every checkpoint tensor, which of the model's
 weights it becomes, on which device, and which rows this process keeps (one process per GPU under tensor
 parallelism). Each checkpoint file then gets a `FilePrefetch`, which starts one prefetch loader per device with
-exactly those tensors and rows, the first time one of them is needed. Tensors that don't go to a CUDA device, and
+exactly those tensors and regions, the first time one of them is needed. Tensors that don't go to a CUDA device, and
 every tensor of a file whose loaders fail to start, are read the usual way from the same handle.
 """
 
@@ -57,7 +57,6 @@ from functools import partial
 import torch
 from safetensors import SafetensorError, safe_open
 
-from ..distributed.sharding_utils import read_intervals
 from ..utils import is_rocm_platform, logging
 
 
@@ -113,7 +112,7 @@ def should_prefetch(load_config, state_dict, checkpoint_files) -> bool:
     return applies
 
 
-def attach_prefetch(loads, handles: dict, copy_full: bool) -> list["FilePrefetch"]:
+def attach_prefetch(loads, handles: dict) -> list["FilePrefetch"]:
     """Read every load going to a CUDA device through a prefetch loader of its file. `handles` maps checkpoint
     keys to the `safe_open` handle of their file."""
     by_file = defaultdict(list)
@@ -122,9 +121,18 @@ def attach_prefetch(loads, handles: dict, copy_full: bool) -> list["FilePrefetch
         device = cuda_device(load.device)
         if load.owned and handle is not None and device is not None:
             by_file[id(handle)].append((load, device))
-    return [
-        FilePrefetch(handles[file_loads[0][0].source_key], file_loads, copy_full) for file_loads in by_file.values()
-    ]
+    return [FilePrefetch(handles[file_loads[0][0].source_key], file_loads) for file_loads in by_file.values()]
+
+
+def planned_region(intervals, shape) -> tuple | None:
+    """The part of a tensor of `shape` this process keeps, as a prefetch plan entry: one list of slices per
+    dimension, or `None` for the whole tensor."""
+    if not intervals:
+        return None
+    region = tuple([slice(start, end) for start, end in dim] for dim in intervals)
+    if all(dim == [slice(0, n)] for dim, n in zip(region, shape)):
+        return None
+    return region
 
 
 class FilePrefetch:
@@ -133,33 +141,21 @@ class FilePrefetch:
     They start the first time one of the file's tensors is taken, so files start in the order the loader needs
     them. If they fail to start, the file's tensors are read as usual.
 
-    With `copy_full` (tensor parallelism), every take is a copy rather than a view of safetensors' memory. That
-    memory is freed per range of neighbouring tensors once no view of it is left, and a process under tensor
-    parallelism keeps only slices of most tensors, so keeping views would keep whole ranges alive for as long as
-    the model exists.
+    Each tensor is planned as exactly the part this process keeps, so a take is already the final tensor: a view
+    of safetensors' memory holding nothing else, which is freed once every tensor sharing it is dropped.
     """
 
-    def __init__(self, handle, loads, copy_full: bool):
+    def __init__(self, handle, loads):
         self._handle = handle
-        self._copy_full = copy_full
-        self._plans: dict[torch.device, dict[str, slice | None]] = defaultdict(dict)
+        self._plans: dict[torch.device, dict[str, tuple | None]] = defaultdict(dict)
         self._loaders: dict | None = None
         self._lock = threading.Lock()
         for load, device in loads:
-            rows = self._planned_rows(load)
-            self._plans[device][load.source_key] = rows
-            load.reader = partial(self.take, device, rows)
+            shape = handle.get_tensor_meta(load.source_key).shape
+            self._plans[device][load.source_key] = planned_region(load.intervals, shape)
+            load.reader = partial(self.take, device)
 
-    def _planned_rows(self, load) -> slice | None:
-        """The rows this rank keeps when they're one contiguous run, `None` to read the whole tensor."""
-        if not load.intervals or len(load.intervals[0]) != 1:
-            return None
-        start, end = load.intervals[0][0]
-        if (start, end) == (0, self._handle.get_tensor_meta(load.source_key).shape[0]):
-            return None
-        return slice(start, end)
-
-    def take(self, device: torch.device, rows: slice | None, load) -> torch.Tensor | None:
+    def take(self, device: torch.device, load) -> torch.Tensor | None:
         """`load`'s tensor from its loader, `None` if prefetch isn't running."""
         with self._lock:
             if self._loaders is None:
@@ -167,16 +163,7 @@ class FilePrefetch:
         loader = self._loaders.get(device)
         if loader is None:
             return None
-        tensor = loader.take(load.source_key)
-        intervals = load.intervals
-        if rows is not None:
-            # we only got these rows, shift the intervals to match
-            intervals = [[(s - rows.start, e - rows.start) for s, e in intervals[0]], *intervals[1:]]
-        result = read_intervals(lambda index: tensor[index], intervals)
-        shares_storage = result.untyped_storage().data_ptr() == tensor.untyped_storage().data_ptr()
-        if shares_storage and (self._copy_full or result.numel() < tensor.numel()):
-            result = result.clone()  # a view would keep the whole range alive
-        return result.to(dtype=load.dtype)  # already on its device
+        return loader.take(load.source_key).to(dtype=load.dtype)  # already on its device
 
     def _start(self) -> dict:
         loaders = {}
