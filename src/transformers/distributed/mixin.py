@@ -29,7 +29,7 @@ from .tensor_parallel import (
     gather_state_dict_for_save,
 )
 from .utils import (
-    MeshManager,
+    TransformersDeviceMesh,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
@@ -50,7 +50,7 @@ class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
-    _mesh_manager: MeshManager | None = None
+    _mesh_manager: TransformersDeviceMesh | None = None
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
@@ -144,7 +144,7 @@ class DistributedMixin:
         cls,
         distributed_config: DistributedConfig | dict | None,
         device_map=None,
-    ) -> tuple[DistributedConfig | None, object, MeshManager | None]:
+    ) -> tuple[DistributedConfig | None, object, TransformersDeviceMesh | None]:
         if distributed_config is None:
             return None, device_map, None
 
@@ -174,7 +174,7 @@ class DistributedMixin:
         cls,
         model: nn.Module,
         distributed_config: DistributedConfig | None,
-        mesh_manager: MeshManager | None,
+        mesh_manager: TransformersDeviceMesh | None,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
         if mesh_manager is not None:
