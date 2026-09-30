@@ -46,7 +46,7 @@ from transformers.models.neucodec.audio_processing_numpy_neucodec import NeuCode
 output = NeuCodecAudioProcessorNumpy()(
     np.random.RandomState(0).randn(1600).astype(np.float32), return_tensors='np'
 )
-assert output['audio_values'].shape == (1, 1, 1920)
+assert output['audio_values'].shape == (1, 1920)
 assert output['audio_features'].shape == (1, 5, 160)
 assert output['audio_features_mask'].shape == (1, 5)
 from transformers.models.nemotron_asr_streaming.audio_processing_numpy_nemotron_asr_streaming import NemotronAsrStreamingAudioProcessorNumpy
