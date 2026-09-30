@@ -302,6 +302,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
                 tokenizer = BertTokenizer.from_pretrained(repo)
                 self.assertIn("<deprecated>", tokenizer.all_special_tokens)
+
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):
