@@ -27,16 +27,6 @@ class ViltProcessorKwargs(ProcessingKwargs, total=False):
 class ViltProcessor(ProcessorMixin):
     valid_processor_kwargs = ViltProcessorKwargs
 
-    text_kwargs = {
-        "add_special_tokens": True,
-        "stride": 0,
-        "return_overflowing_tokens": False,
-        "return_special_tokens_mask": False,
-        "return_offsets_mapping": False,
-        "return_length": False,
-        "verbose": True,
-    }
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

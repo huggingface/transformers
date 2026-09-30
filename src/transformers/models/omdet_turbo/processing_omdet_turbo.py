@@ -175,17 +175,10 @@ class OmDetTurboProcessor(ProcessorMixin):
     valid_processor_kwargs = OmDetTurboProcessorKwargs
 
     text_kwargs = {
-        "add_special_tokens": True,
         "padding": "max_length",
         "truncation": True,
         "max_length": 77,
-        "stride": 0,
-        "return_overflowing_tokens": False,
-        "return_special_tokens_mask": False,
-        "return_offsets_mapping": False,
         "return_token_type_ids": False,
-        "return_length": False,
-        "verbose": True,
         "task": None,
     }
 

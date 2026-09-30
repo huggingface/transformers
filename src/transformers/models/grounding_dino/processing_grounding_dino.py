@@ -104,14 +104,7 @@ class GroundingDinoProcessor(ProcessorMixin):
     valid_processor_kwargs = GroundingDinoProcessorKwargs
 
     text_kwargs = {
-        "add_special_tokens": True,
-        "stride": 0,
-        "return_overflowing_tokens": False,
-        "return_special_tokens_mask": False,
-        "return_offsets_mapping": False,
         "return_token_type_ids": True,
-        "return_length": False,
-        "verbose": True,
     }
 
     def __init__(self, image_processor, tokenizer, **kwargs):
