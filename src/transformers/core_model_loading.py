@@ -1646,7 +1646,8 @@ def convert_and_load_state_dict_in_model(
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
-    # Resolve every tensor first, so prefetch knows exactly what to read, then start the reads
+    # Without prefetch, each read is spawned as soon as its tensor is resolved, so reads overlap resolution. With it,
+    # loads are collected and spawned after `attach_prefetch` (see below)
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     loads: list[TensorLoad] = []
     stacked_counts: dict[tuple[WeightConverter, str], int] = {}
@@ -1724,11 +1725,13 @@ def convert_and_load_state_dict_in_model(
             elif isinstance(mapping, WeightConverter) and mapping.force_cpu:
                 param_device = "cpu"
 
-            loads.append(
-                TensorLoad(
-                    mapping, renamed_key, original_key, source_pattern, tensor, param_device, _dtype, intervals, owned
-                )
+            load = TensorLoad(
+                mapping, renamed_key, original_key, source_pattern, tensor, param_device, _dtype, intervals, owned
             )
+            if prefetch_handles:
+                loads.append(load)
+            else:
+                mapping.add_tensor(renamed_key, original_key, source_pattern, spawn_materialize(thread_pool, load))
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
@@ -1740,6 +1743,8 @@ def convert_and_load_state_dict_in_model(
         else:
             _add_unmatched_checkpoint_key(renamed_key, model, loading_info)
 
+    # A prefetch loader takes its whole plan when it's created, and one file's keys aren't contiguous in sorted order,
+    # so a file can only be planned once every tensor has been resolved: attach after the loop, then spawn the reads
     prefetches = []
     if prefetch_handles:
         from .integrations.safetensors_prefetch import attach_prefetch
