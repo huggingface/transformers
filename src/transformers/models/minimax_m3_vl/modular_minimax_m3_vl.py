@@ -886,7 +886,6 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         "hidden_states": MiniMaxM3VLVisionEncoderLayer,
         "attentions": MiniMaxM3VLVisionAttention,
     }
-    _keep_in_fp32_modules_strict = ["inv_freq"]
 
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
