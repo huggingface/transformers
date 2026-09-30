@@ -1,8 +1,8 @@
 from collections.abc import Callable, Sequence
-from functools import partial
-from typing import Any, Union, cast
+from functools import lru_cache, partial
+from typing import Any, TypedDict, Union, cast
 
-from huggingface_hub.dataclasses import as_validated_field
+from huggingface_hub.dataclasses import as_validated_field, validate_typed_dict
 
 from ..tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ..video_utils import VideoMetadataType
@@ -19,6 +19,25 @@ if is_torch_available():
     from ..activations import ACT2FN
 else:
     ACT2FN = {}
+
+
+@lru_cache
+def _schema_restricted_to(schema: type, keys: frozenset[str]) -> type:
+    annotations = {key: value for key, value in schema.__annotations__.items() if key in keys}
+    restricted = TypedDict(schema.__name__, annotations, total=False)
+    restricted.__module__ = schema.__module__
+    return restricted
+
+
+def validate_present_kwargs(schema: type, kwargs: dict) -> None:
+    """Type- and value-validate the keys of `kwargs` against the `TypedDict` `schema`, and only those.
+
+    `huggingface_hub`'s `validate_typed_dict` gives every schema key absent from the dict an internal
+    placeholder and still runs that key's `Annotated` validator on it, so a validator that rejects
+    unknown values (`resampling_validator`, `device_validator`, ...) fails for a key nobody passed.
+    Validating against the schema restricted to the passed keys checks everything given and nothing else.
+    """
+    validate_typed_dict(_schema_restricted_to(schema, frozenset(kwargs)), kwargs)
 
 
 def positive_any_number(value: int | float | None = None):

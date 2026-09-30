@@ -21,13 +21,13 @@ import math
 from functools import partial
 
 import numpy as np
-from huggingface_hub.dataclasses import validate_typed_dict
 
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict, validate_kwargs
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, is_torch_available, logging
+from ...utils.type_validators import validate_present_kwargs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -303,7 +303,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         )
 
         # Perform type validation on received kwargs
-        validate_typed_dict(self.valid_kwargs, kwargs)
+        validate_present_kwargs(self.valid_kwargs, kwargs)
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.

@@ -33,7 +33,6 @@ from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
 import numpy as np
 import typing_extensions
 from huggingface_hub import is_offline_mode
-from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import AudioInput, SpectrogramConfig, load_audio, make_list_of_audio
@@ -81,6 +80,7 @@ from .utils.type_validators import (
     resampling_validator,
     tensor_type_validator,
     truncation_validator,
+    validate_present_kwargs,
     video_metadata_validator,
 )
 from .video_utils import VideoInput, VideoMetadataType, make_batched_videos
@@ -1772,7 +1772,7 @@ class ProcessorMixin(PushToHubMixin):
                     continue
                 preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
                 typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
-            validate_typed_dict(typed_dict_obj, output_kwargs[key])
+            validate_present_kwargs(typed_dict_obj, output_kwargs[key])
         return output_kwargs
 
     @classmethod

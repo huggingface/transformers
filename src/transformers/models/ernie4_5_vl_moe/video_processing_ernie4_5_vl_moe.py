@@ -20,7 +20,6 @@ from typing import Any
 import numpy as np
 import torch
 from huggingface_hub import is_offline_mode
-from huggingface_hub.dataclasses import validate_typed_dict
 from PIL import ImageDraw, ImageFont
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 
@@ -46,6 +45,7 @@ from ...utils import (
 )
 from ...utils.hub import cached_file
 from ...utils.import_utils import is_torchvision_available, is_tracing, requires
+from ...utils.type_validators import validate_present_kwargs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -546,7 +546,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         )
 
         # Perform type validation on received kwargs
-        validate_typed_dict(self.valid_kwargs, kwargs)
+        validate_present_kwargs(self.valid_kwargs, kwargs)
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
