@@ -456,7 +456,8 @@ def build_banded_attention_mask(geometry: WeatherNext2Geometry) -> torch.Tensor:
 
 def load_fiddle_config(path: str) -> dict[str, Any]:
     """Materializes a Fiddle JSON graph into plain Python containers."""
-    document = json.load(open(path))
+    with open(path, encoding="utf-8") as config_file:
+        document = json.load(config_file)
     objects = document["objects"]
 
     def field_name(key: str) -> str:

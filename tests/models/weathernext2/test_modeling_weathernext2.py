@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 from unittest.mock import patch
 
 import numpy as np
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.utils import is_torch_flex_attn_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -38,7 +41,11 @@ if is_torch_available():
     import torch
 
     from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Model
-    from transformers.models.weathernext2.modeling_weathernext2 import WeatherNext2Attention
+    from transformers.models.weathernext2.modeling_weathernext2 import (
+        WeatherNext2Attention,
+        WeatherNext2BipartiteGraphNetwork,
+        WeatherNext2ConditionedMlp,
+    )
 
 
 class WeatherNext2ModelTester:
@@ -199,6 +206,66 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skipUnless(is_torch_flex_attn_available(), "Flex attention is not available")
+    def test_flex_attention_kernel_options(self):
+        from transformers.integrations import flex_attention
+
+        config = self.model_tester.get_config()
+        config._attn_implementation = "flex_attention"
+        attention = WeatherNext2Attention(config, layer_idx=0)
+        hidden_states = torch.randn(1, 2, 3, config.hidden_size)
+
+        def compiled_attention(query, key, value, **kwargs):
+            return query
+
+        for use_backend in (True, False):
+            default = {"BACKEND": "TRITON"} if use_backend else {"FORCE_USE_FLEX_ATTENTION": True}
+            for options in (None, {}, {"BLOCK_M": 64}, {"BACKEND": "AUTO"}, {"FORCE_USE_FLEX_ATTENTION": False}):
+                with self.subTest(use_backend=use_backend, options=options):
+                    original = copy.deepcopy(options)
+                    expected = dict(options or {})
+                    if "BACKEND" not in expected and "FORCE_USE_FLEX_ATTENTION" not in expected:
+                        expected.update(default)
+                    with (
+                        patch.object(flex_attention, "_TORCH_FLEX_USE_BACKEND", use_backend),
+                        patch.object(flex_attention, "compile_friendly_flex_attention") as compile_attention,
+                    ):
+                        compile_attention.side_effect = compiled_attention
+                        attention(hidden_states, attention_mask=None, kernel_options=options)
+                        self.assertEqual(compile_attention.call_args.kwargs["kernel_options"], expected)
+                        attention.use_flex_attention_decoding = True
+                        attention(hidden_states, attention_mask=None, kernel_options=options)
+                        self.assertEqual(compile_attention.call_args.kwargs["kernel_options"], options)
+                        attention.use_flex_attention_decoding = False
+                    self.assertEqual(options, original)
+
+    @require_torch_accelerator
+    @unittest.skipUnless(is_torch_flex_attn_available(), "Flex attention is not available")
+    def test_flex_attention_matches_eager_forward_and_backward(self):
+        config = self.model_tester.get_config()
+        config.hidden_size = 32
+        config._attn_implementation = "eager"
+        eager = WeatherNext2Attention(config, layer_idx=0).to(torch_device).eval()
+        flex = copy.deepcopy(eager)
+        flex.config._attn_implementation = "flex_attention"
+        block_size = config.attention_bandwidth
+        hidden_states = torch.randn(1, 2, block_size, config.hidden_size, device=torch_device)
+        attention_mask = torch.full((2, 1, block_size, 3 * block_size), -float("inf"), device=torch_device)
+        attention_mask[..., block_size : 2 * block_size] = 0
+
+        outputs, gradients = [], []
+        for attention in (eager, flex):
+            inputs = hidden_states.detach().clone().requires_grad_()
+            output, _ = attention(inputs, attention_mask)
+            output.square().mean().backward()
+            outputs.append(output.detach())
+            gradients.append(inputs.grad)
+
+        torch.testing.assert_close(outputs[0], outputs[1], atol=1e-5, rtol=1e-4)
+        torch.testing.assert_close(gradients[0], gradients[1], atol=1e-5, rtol=1e-4)
+        for eager_parameter, flex_parameter in zip(eager.parameters(), flex.parameters()):
+            torch.testing.assert_close(eager_parameter.grad, flex_parameter.grad, atol=1e-5, rtol=1e-4)
+
     def test_forward_shapes(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
@@ -209,6 +276,34 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             (self.model_tester.batch_size, config.num_output_channels, config.grid_latitudes, config.grid_longitudes),
         )
         self.assertTrue(torch.isfinite(outputs.prediction).all())
+
+    def test_banded_mask_broadcasting_matches_vmap(self):
+        from transformers.masking_utils import create_bidirectional_mask
+        from transformers.models.weathernext2.modeling_weathernext2 import banded_mask_function
+
+        for implementation in ("eager", "sdpa"):
+            config = self.model_tester.get_config()
+            config._attn_implementation = implementation
+            model = WeatherNext2Model(config).to(torch_device).eval()
+            mask = model.attention_mask
+            blocks, _, block_size, kv_length = mask.shape
+            for batch_size in (1, 2):
+                with self.subTest(implementation=implementation, batch_size=batch_size):
+                    states = torch.randn(batch_size, config.num_mesh_nodes, config.hidden_size, device=torch_device)
+                    conditioning = torch.randn(batch_size, config.noise_channels, device=torch_device)
+                    queries = states.new_empty((batch_size * blocks, block_size, config.hidden_size))
+                    keys = states.new_empty((batch_size * blocks, kv_length, 0))
+                    expected = create_bidirectional_mask(
+                        config, queries, None, encoder_hidden_states=keys, and_mask_function=banded_mask_function(mask)
+                    )
+                    captured = []
+                    hook = model.mesh_transformer.layers[0].register_forward_pre_hook(
+                        lambda module, args: captured.append(args[1])
+                    )
+                    with torch.no_grad():
+                        model.mesh_transformer(states, mask, conditioning)
+                    hook.remove()
+                    torch.testing.assert_close(captured[0], expected, atol=0, rtol=0)
 
     def test_noise_drives_the_ensemble(self):
         """Two members that share inputs but not noise must differ; two that share both must not."""
@@ -337,6 +432,115 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(
             sum(levels for _, _, levels in config.input_channel_layout) + 3, config.num_grid_input_channels
         )
+
+    def test_grid_encoder_preserves_weights_and_computation(self):
+        config = self.model_tester.get_config()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device)
+        encoder = model.model.grid_encoder
+        reference = WeatherNext2ConditionedMlp(
+            config, config.num_grid_input_channels, config.hidden_size, config.hidden_size
+        ).to(torch_device)
+        reference.load_state_dict(encoder.state_dict(), strict=True)
+        grid = torch.randn(2, config.num_grid_input_channels - 3, config.num_grid_points, device=torch_device)
+        grid = grid.transpose(1, 2)
+        spatial = torch.randn(config.num_grid_points, config.num_node_spatial_features, device=torch_device)
+        conditioning = torch.randn(2, config.noise_channels, device=torch_device)
+        inputs = torch.cat([spatial.unsqueeze(0).expand(2, -1, -1), grid], dim=-1)
+        expected = reference(inputs, conditioning)
+        actual = encoder(grid, spatial, conditioning)
+        torch.testing.assert_close(actual, expected)
+        expected.sum().backward()
+        actual.sum().backward()
+        for original, replacement in zip(reference.parameters(), encoder.parameters()):
+            torch.testing.assert_close(replacement.grad, original.grad)
+
+    @parameterized.expand([("grid_to_mesh", True, 16), ("mesh_to_grid", False, 8)])
+    def test_graph_chunking(self, name, grid_to_mesh, chunk_size):
+        config = self.model_tester.get_config()
+        for device in dict.fromkeys(("cpu", torch_device)):
+            for dtype in (torch.float32, torch.bfloat16):
+                with self.subTest(device=device, dtype=dtype):
+                    layer = (
+                        WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh).to(device=device, dtype=dtype).eval()
+                    )
+                    reference = copy.deepcopy(layer)
+                    reference.chunk_size_graph = 0
+                    layer.chunk_size_graph = chunk_size
+                    args = (
+                        torch.randn(2, 19, config.hidden_size, device=device, dtype=dtype),
+                        torch.randn(2, 11, config.hidden_size, device=device, dtype=dtype),
+                        torch.randn(2, 57, config.num_edge_spatial_features, device=device, dtype=dtype),
+                        torch.randint(19 if grid_to_mesh else 11, (57,), device=device),
+                        torch.randint(11, (57,), device=device).sort().values
+                        if grid_to_mesh
+                        else torch.arange(19, device=device).repeat_interleave(3),
+                        torch.randn(2, config.noise_channels, device=device, dtype=dtype),
+                    )
+                    sizes = []
+                    hook = layer.edge_encoder.register_forward_pre_hook(
+                        lambda module, inputs: sizes.append(inputs[0].shape[1])
+                    )
+                    with torch.no_grad():
+                        expected = reference(*args)
+                        actual = layer(*args)
+                    hook.remove()
+                    expected_sizes = [16, 16, 16, 9] if grid_to_mesh else [24, 24, 9]
+                    self.assertEqual(sizes, expected_sizes if dtype == torch.float32 else [57])
+                    for result, target in zip(actual, expected):
+                        torch.testing.assert_close(result, target)
+
+    @parameterized.expand(
+        [
+            (direction, reason)
+            for direction in (True, False)
+            for reason in ("training", "autocast", "gradients", "disabled")
+        ]
+        + [(False, "placeholder")]
+    )
+    def test_graph_chunking_fallback(self, grid_to_mesh, reason):
+        config = self.model_tester.get_config()
+        layer = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh).eval()
+        layer.chunk_size_graph = 8
+        reference = copy.deepcopy(layer)
+        reference.chunk_size_graph = 0
+        args = (
+            torch.randn(2, 19, config.hidden_size),
+            torch.randn(2, 11, config.hidden_size),
+            torch.randn(2, 57, config.num_edge_spatial_features),
+            torch.randint(19 if grid_to_mesh else 11, (57,)),
+            torch.randint(11, (57,)).sort().values if grid_to_mesh else torch.arange(19).repeat_interleave(3),
+            torch.randn(2, config.noise_channels),
+        )
+        if reason == "training":
+            layer.train()
+            reference.train()
+        elif reason == "disabled":
+            layer.chunk_size_graph = 0
+        elif reason == "placeholder":
+            args = (*args[:4], torch.zeros_like(args[4]), args[5])
+        sizes = []
+        hook = layer.edge_encoder.register_forward_pre_hook(lambda module, inputs: sizes.append(inputs[0].shape[1]))
+        with (
+            torch.set_grad_enabled(reason == "gradients"),
+            torch.autocast("cpu", dtype=torch.bfloat16, enabled=reason == "autocast"),
+        ):
+            expected = reference(*args)
+            actual = layer(*args)
+            for result, target in zip(actual, expected):
+                torch.testing.assert_close(result, target)
+            if reason == "gradients":
+                sum(value.sum() for value in expected).backward()
+                sum(value.sum() for value in actual).backward()
+                for original, replacement in zip(reference.parameters(), layer.parameters()):
+                    self.assertIsNotNone(replacement.grad)
+                    torch.testing.assert_close(replacement.grad, original.grad)
+        hook.remove()
+        self.assertEqual(sizes, [57])
+
+    def test_graph_chunk_sizes_validation(self):
+        for name in ("chunk_size_grid_to_mesh", "chunk_size_mesh_to_grid"):
+            with self.subTest(name=name), self.assertRaisesRegex(StrictDataclassClassValidationError, "nonnegative"):
+                WeatherNext2Config(**{name: -1})
 
     def test_attention_outputs(self):
         """Same contract as the shared test, with this model's block-local attention shape.

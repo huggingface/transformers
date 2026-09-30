@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-09-21.*
+*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-09-30.*
 
 # WeatherNext 2
 
@@ -49,6 +49,13 @@ the root and the rest in `model2`/`model3`/`model4` subfolders, so `from_pretrai
 one. Combining them into a multi-model ensemble - loading each in turn and pooling its members - is left to the caller,
 as it is upstream. The examples below use the Mini checkpoint because it runs anywhere; the 0.25° models need roughly
 50 GB per ensemble member.
+
+Graph inference uses PyTorch chunking inspired by
+[Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext).
+`chunk_size_grid_to_mesh` controls the number of encoder edges per chunk and
+`chunk_size_mesh_to_grid` the number of decoder grid points. Their defaults are
+65,536 and 32,768 respectively; set either to `0` to disable that path. Chunking
+applies to fp32 inference without gradients, not training or autocast.
 
 ## Getting initial conditions
 

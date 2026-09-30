@@ -420,6 +420,26 @@ if is_kernels_available():
                 }
                 for device in ("cuda", "rocm", "xpu")
             },
+            "WeatherNext2GridEncoder": {
+                device: {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/weathernext2-banded-attention",
+                        layer_name="WeatherNext2GridEncoder",
+                        version=2,
+                    )
+                }
+                for device in ("cuda", "rocm", "xpu")
+            },
+            "WeatherNext2ForecastHead": {
+                device: {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/weathernext2-banded-attention",
+                        layer_name="WeatherNext2ForecastHead",
+                        version=2,
+                    )
+                }
+                for device in ("cuda", "rocm", "xpu")
+            },
             "EsmFold2TriangleMultiplication": {
                 "cuda": {
                     Mode.INFERENCE: LayerRepository(
