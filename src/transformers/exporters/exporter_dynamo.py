@@ -143,8 +143,6 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
     - Applies `output_flags` (popped from inputs by `prepare_for_export`) onto
       `model.config.<flag>` so the model picks them up via its usual `<flag> if <flag> is
       not None else self.config.<flag>` fallback.
-    - Disables `use_mamba_kernels` on every submodel's config that declares it (mamba/jamba
-      kernels are not exportable).
 
     Originals are restored on exit. Flags whose value is `None`, or that the config doesn't
     declare, are silently skipped — useful for submodels that don't accept every parent flag.
@@ -154,9 +152,6 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
         if value is None or not hasattr(model, "config") or not hasattr(model.config, flag):
             continue
         config_patches.append((model.config, flag, lambda _original, v=value: v))
-    for module in model.modules():
-        if hasattr(module, "config") and hasattr(module.config, "use_mamba_kernels"):
-            config_patches.append((module.config, "use_mamba_kernels", lambda _original: False))
     with patch_attributes(config_patches):
         yield
 
@@ -608,20 +603,27 @@ def _iter_subclasses(cls: type):
         yield from _iter_subclasses(subclass)
 
 
+def is_cache_class(cls: type) -> bool:
+    """Whether ``cls`` is a cache type — a [`Cache`] subclass, or a model-specific class following
+    the ``*Cache`` naming convention (e.g. ``xLSTMCache``, ``MimiConv1dPaddingCache``)."""
+    return issubclass(cls, Cache) or cls.__name__.endswith("Cache")
+
+
+def is_cache_object(value: Any) -> bool:
+    """Whether ``value`` is a cache, by the same rule [`register_cache_pytrees_for_model`] uses to
+    decide what to register as a pytree node."""
+    return is_cache_class(type(value))
+
+
 def register_cache_pytrees_for_model(model: PreTrainedModel):
     """Register all relevant cache types as pytree nodes for torch.export."""
     # All transformers Cache subclasses
     for cache_type in _iter_subclasses(Cache):
         register_pytree_node(cache_type)
 
-    # Model-specific cache classes not inheriting from Cache (e.g. custom per-model caches)
+    # Model-specific cache classes (e.g. custom per-model caches not inheriting from Cache)
     for _, obj in inspect.getmembers(inspect.getmodule(model)):
-        if (
-            inspect.isclass(obj)
-            and obj.__module__ == model.__class__.__module__
-            and obj.__name__.endswith("Cache")
-            and not issubclass(obj, Cache)
-        ):
+        if inspect.isclass(obj) and obj.__module__ == model.__class__.__module__ and is_cache_class(obj):
             register_pytree_node(obj)
 
     # detectron2 ImageList (used by layoutlmv2)

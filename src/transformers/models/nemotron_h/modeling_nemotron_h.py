@@ -44,10 +44,13 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.zamba2.modeling_zamba2 import Zamba2RMSNormGated
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_nemotron_h import NemotronHConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 # Helper methods for segment sum computation
@@ -424,6 +427,12 @@ class NemotronHMamba2Mixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
         self.layer_type = config.layer_types[layer_idx]
+        if not config.use_mamba_kernels:
+            logger.warning_once(
+                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
+                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
+                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
+            )
         self.use_mem_eff_path = True
 
     @torch.no_grad()
@@ -596,7 +605,9 @@ class NemotronHRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        # Unlike Llama, the weight multiply is kept in fp32 and only the result is cast back to the input
+        # dtype, matching the reference implementation.
+        return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"

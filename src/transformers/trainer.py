@@ -3005,6 +3005,25 @@ class Trainer:
 
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
+    def end(self):
+        """
+        Finish the trackers and destroy the distributed process group.
+
+        Call this once, at the very end of a script, after everything that needs the other processes:
+        [`~Trainer.train`], [`~Trainer.evaluate`], [`~Trainer.predict`], [`~Trainer.save_model`] and
+        [`~Trainer.push_to_hub`] all communicate between processes and will fail once the group is gone.
+
+        Example:
+
+        ```python
+        trainer.train()
+        trainer.evaluate()
+        trainer.push_to_hub()
+        trainer.end()
+        ```
+        """
+        self.accelerator.end_training()
+
     def predict(
         self, test_dataset: Dataset, ignore_keys: list[str] | None = None, metric_key_prefix: str = "test"
     ) -> PredictionOutput:
@@ -3833,7 +3852,10 @@ class Trainer:
                     # We use the CPU when training on one GPU to avoid OOM for GPU RAM when training big models.
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
-                    map_location = self.args.device if self.args.world_size > 1 else "cpu"
+                    # An indexed CPU device (e.g. "cpu:0") can't be restored by torch - use plain "cpu".
+                    map_location = (
+                        self.args.device if self.args.world_size > 1 and self.args.device.type != "cpu" else "cpu"
+                    )
                     if self.is_fsdp_enabled:
                         load_fsdp_optimizer(
                             self.accelerator.state.fsdp_plugin,

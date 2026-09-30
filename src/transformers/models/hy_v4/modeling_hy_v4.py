@@ -120,7 +120,7 @@ class HYV4RotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -632,7 +632,7 @@ class HYV4HyperConnection(nn.Module):
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Independent HC implementation with forced fp32 application"""
         # Key difference is to force fp32 in any case
-        device_type = hidden_streams.device.type if hidden_streams.device.type != "mps" else "cpu"
+        device_type = hidden_streams.device.type
         with maybe_autocast(device_type=device_type, enabled=False):
             flat = hidden_streams.flatten(2).float()
             # Norm as residual
@@ -665,7 +665,7 @@ class HYV4HyperHead(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
-        device_type = x.device.type if x.device.type != "mps" else "cpu"
+        device_type = x.device.type
         with maybe_autocast(device_type=device_type, enabled=False):
             flat = x.flatten(2).float()
             # Norm as residual

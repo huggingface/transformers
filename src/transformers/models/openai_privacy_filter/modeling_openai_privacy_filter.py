@@ -106,7 +106,7 @@ class OpenAIPrivacyFilterRotaryEmbedding(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = freqs
@@ -405,12 +405,12 @@ class OpenAIPrivacyFilterPreTrainedModel(PreTrainedModel):
         "attentions": OpenAIPrivacyFilterAttention,
     }
     _keep_in_fp32_modules = []
-    # metal-flash-sdpa carries the sliding-window + attention-sink path on MPS (Apple Silicon);
-    # the others remain the defaults on CUDA.
+    # metal-flash-sdpa covers MPS and aiter-flash-attn ROCm, the others CUDA
     _compatible_flash_implementations = [
         "kernels-community/vllm-flash-attn3",
         "flash_attention_4",
         "kernels-community/metal-flash-sdpa",
+        "kernels-community/aiter-flash-attn",
     ]
     _keep_in_fp32_modules_strict = ["sinks"]
 

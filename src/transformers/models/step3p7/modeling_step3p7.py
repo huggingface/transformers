@@ -90,7 +90,7 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids_expanded * self.inv_freq.float()
             cos = freqs.cos() * self.attention_scaling
@@ -496,7 +496,7 @@ class Step3p7RotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -1048,6 +1048,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Step3p7ModelOutputWithPast:
         r"""
@@ -1056,16 +1057,21 @@ class Step3p7Model(Step3p7PreTrainedModel):
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.
         """
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features = None
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
-            ).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -1084,7 +1090,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features,
+            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
         )
 
 
@@ -1174,6 +1180,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Step3p7CausalLMOutputWithPast:
         r"""
@@ -1192,6 +1199,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
