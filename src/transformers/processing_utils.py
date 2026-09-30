@@ -1775,15 +1775,14 @@ class ProcessorMixin(PushToHubMixin):
 
         # Validate modality-specific kwargs
         for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
-            if key == "common_kwargs" or key in flat_kwargs:
-                # common_kwargs has been merged into modality-specific dicts
+            if key not in map_preprocessor_kwargs:
                 continue
-            if key in map_preprocessor_kwargs:
-                preprocessor = getattr(self, map_preprocessor_kwargs[key], None)
-                if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
-                    continue
-                preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
-                typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
+
+            preprocessor = getattr(self, map_preprocessor_kwargs[key], None)
+            if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
+                continue
+            preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
+            typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
             validate_typed_dict(typed_dict_obj, output_kwargs[key])
         return output_kwargs
 
