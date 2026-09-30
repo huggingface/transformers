@@ -13,6 +13,7 @@
 # limitations under the License.
 """Blt modular model, inheriting from Mllama where appropriate."""
 
+import copy
 from collections.abc import Callable
 
 import torch
@@ -980,8 +981,16 @@ class BltModel(BltPreTrainedModel):
             position_ids = torch.arange(encoder_embeds.shape[1], device=encoder_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
+        # Byte-level mask, shared by the local encoder and local decoder. BLT trains these with a
+        # 512-byte local attention window (`local_attention_window_len`); the released config
+        # declares it, so it must be applied here. The global patch-level mask below stays causal.
+        byte_mask_fn, byte_mask_config = create_causal_mask, self.config
+        if getattr(self.config, "local_attention_window_len", None):
+            byte_mask_fn = create_sliding_window_causal_mask
+            byte_mask_config = copy.copy(self.config)
+            byte_mask_config.sliding_window = self.config.local_attention_window_len
+        causal_mask = byte_mask_fn(
+            config=byte_mask_config,
             inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
