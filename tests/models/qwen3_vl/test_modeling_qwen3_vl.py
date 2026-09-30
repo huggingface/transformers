@@ -398,6 +398,7 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
             self.assertIsNotNone(outputs)
 
     def test_image_video_forward(self):
+        """Regression test for when we pass both image and video at the same time"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         B = self.model_tester.batch_size
