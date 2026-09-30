@@ -826,24 +826,14 @@ def resolve_parallel_plans(
     are dropped: expert weights are sharded once, by the EP plan.
     """
     # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
-    layer_names = {name for name, _ in model.named_modules()} | {name for name, _ in model.named_parameters()}
-    layer_names |= {replace_layer_number_by_wildcard(name) for name in layer_names}
+    names = {replace_layer_number_by_wildcard(n) for n, _ in chain(model.named_modules(), model.named_parameters())}
     for plan_name in ("tp_plan", "ep_plan"):
         override = getattr(distributed_config, plan_name)
         if isinstance(override, dict):
-            valid_names = layer_names | set(getattr(model, plan_name))
-            for pattern in override:
-                if pattern not in valid_names:
-                    raise ValueError(
-                        f"The `{plan_name}` pattern {pattern!r} does not match any module, parameter, "
-                        f"or existing plan entry in {type(model).__name__}. "
-                        "Check the full path, including any 'model.' prefix."
-                    )
-
-    if isinstance(distributed_config.tp_plan, dict):
-        model._tp_plan = model.tp_plan | distributed_config.tp_plan
-    if isinstance(distributed_config.ep_plan, dict):
-        model._ep_plan = model.ep_plan | distributed_config.ep_plan
+            plan = getattr(model, plan_name)
+            if unknown := override.keys() - names - plan.keys():
+                raise ValueError(f"`{plan_name}` keys {sorted(unknown)} match nothing in {type(model).__name__}.")
+            setattr(model, f"_{plan_name}", plan | override)
 
     tp_plan = dict(model.tp_plan) if distributed_config.tp_size > 1 else {}
     ep_plan = dict(model.ep_plan) if distributed_config.ep_size > 1 else {}
