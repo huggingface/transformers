@@ -44,11 +44,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
     padding_value = 0.0
     return_padding_mask = True
     do_batch_spectrogram = True
-    # Keys `_finalize_output` adds on top of the derived ones, for `model_input_names`.
-    extra_model_input_names: list[str] = []
+    
     dither: float = 0.0
     feature_normalization: str | None = None
     feature_normalization_eps: float = 1e-5
+
+    # Keys `_finalize_output` adds on top of the derived ones, for `model_input_names`.
+    extra_model_input_names: list[str] = []
+
     # Output keys left untouched by `convert_to_tensors`, for non-array metadata a model
     # returns alongside its features (e.g. Cohere-ASR's `audio_chunk_index`).
     skip_tensor_conversion: list[str] = []
