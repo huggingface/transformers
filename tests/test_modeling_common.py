@@ -4894,6 +4894,39 @@ class ModelTesterMixin(ExportTesterMixin):
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
+    def test_moe_parallel_plans_shard_experts(self):
+        """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
+        A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
+        """
+        moe_classes = [cls for cls in self.all_model_classes if cls._can_set_experts_implementation()]
+        if not moe_classes:
+            self.skipTest("Not an MoE model")
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # a class-level `_tp_plan` (e.g. `lm_head` alone) is not a plan for the experts: only a base-model one is
+        has_tp_plan = config.base_model_tp_plan is not None or any(
+            getattr(getattr(config, key), "base_model_tp_plan", None) is not None for key in config.sub_configs
+        )
+        for model_class in moe_classes:
+            model = model_class(copy.deepcopy(config))
+            param_names = {name for name, _ in model.named_parameters()}  # a tied tensor once, under its first name
+            expert_weights = {
+                f"{name}.{param_name}"
+                for name, module in model.named_modules()
+                if hasattr(module, "_is_expert_parallel")
+                for param_name, param in module.named_parameters(recurse=False)
+                if param.ndim == 3 and f"{name}.{param_name}" in param_names
+            }
+            plans = {"TP": model._tp_plan if has_tp_plan else None, "EP": model._ep_plan}
+            plans = {kind: plan for kind, plan in plans.items() if plan}
+            self.assertTrue(plans, f"{model_class.__name__} is an MoE model without a TP or an EP plan")
+            for kind, plan in plans.items():
+                unsharded = sorted(
+                    n for n in expert_weights if _get_parameter_tp_plan(n, plan, is_weight=True) is None
+                )
+                self.assertFalse(
+                    unsharded, f"{model_class.__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
+                )
+
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
         mapping.
