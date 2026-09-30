@@ -249,8 +249,8 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
                 would have produced for those frames.
             is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
                 Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio
-                is then zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the
-                whole utterance reaches past the audio at most, so that this frame is kept rather than dropped.
+                is then zero-padded by `n_fft // 2`, as a `center=True` pass over the whole utterance pads its end, so
+                that its last frame is kept rather than dropped.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -322,7 +322,8 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
             # the last frame a `center=True` pass counts reaches up to `n_fft // 2 - hop` past the audio; padded
             # after the preemphasis, which would otherwise turn the first zero into `-preemphasis * audio[-1]`
             num_padding = self.n_fft // 2 - self.hop_length
-            input_features = torch.nn.functional.pad(input_features, (0, num_padding))
+            # padded by `n_fft // 2` as a `center=True` pass does, so a last chunk under `n_fft` still has a window
+            input_features = torch.nn.functional.pad(input_features, (0, self.n_fft // 2))
             audio_lengths = audio_lengths + num_padding
 
         input_features = self._torch_extract_fbank_features(input_features, device, center=center)
