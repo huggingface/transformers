@@ -112,8 +112,7 @@ class DtensorShardOperation:
 
         # Dense path
         if tensor_idx is None:
-            # nothing to slice: a 0-dim tensor has no axis, and no placement names one
-            # (`source[...]`, since a lazy safetensors slice rejects `source[()]`)
+            # on no dim, return early parameter is replicated
             if not source_shape or not dim_placements:
                 return source[...].to(device=device, dtype=dtype)
 
