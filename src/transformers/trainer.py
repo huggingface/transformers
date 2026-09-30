@@ -230,7 +230,7 @@ if is_accelerate_available():
         save_fsdp_model,
         save_fsdp_optimizer,
     )
-    from accelerate.utils.memory import clear_device_cache
+    from accelerate.utils.memory import clear_device_cache, should_reduce_batch_size
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
@@ -3201,7 +3201,17 @@ class Trainer:
         skip_scheduler: bool = False,
     ) -> dict[str, float]:
         """Run evaluation, report to HP search, and step ReduceLROnPlateau/GreedyLR if needed."""
-        metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+        try:
+            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+        except RuntimeError as e:
+            # `auto_find_batch_size` only shrinks the train batch size, so letting an eval OOM reach the batch size
+            # finder would restart training with a smaller train batch size until it hits zero.
+            if self.args.auto_find_batch_size and should_reduce_batch_size(e):
+                raise RuntimeError(
+                    "Evaluation hit an out-of-memory error. `auto_find_batch_size` only adjusts the training batch size, "
+                    "reduce `per_device_eval_batch_size` instead."
+                ) from e
+            raise
         self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         # Run delayed LR scheduler now that metrics are populated
