@@ -1613,6 +1613,8 @@ class Trainer:
         start_time = time.time()
         # needed to calculate tokens/s
         self._initial_num_input_tokens_seen = self.state.num_input_tokens_seen
+        # needed to report loss and throughput for this `train()` call only when resuming from a checkpoint
+        self._initial_global_step = self.state.global_step
         # Logging state: _tr_loss accumulates on-device between logging steps (avoiding costly .item() syncs
         # on TPUs), then gets drained into _total_loss_scalar at each logging step.
         self._tr_loss = torch.tensor(0.0, device=args.device)
@@ -1958,14 +1960,15 @@ class Trainer:
 
         # add remaining tr_loss
         self._total_loss_scalar += self._tr_loss.item()
-        effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
-        train_loss = self._total_loss_scalar / effective_global_step
+        num_steps_trained = self.state.global_step - self._initial_global_step
+        train_loss = self._total_loss_scalar / max(num_steps_trained, 0.001)  # Avoid ZeroDivisionError
 
         metrics = speed_metrics(
             "train",
             start_time,
-            num_samples=num_train_samples,
-            num_steps=self.state.max_steps,
+            # `num_train_samples` covers the whole schedule: only count the share of the steps run in this call
+            num_samples=num_train_samples * num_steps_trained / max(self.state.max_steps, 1),
+            num_steps=num_steps_trained,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
