@@ -29,7 +29,6 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Exaone4_5_Processor(ProcessorMixin):
     valid_processor_kwargs = Exaone4_5_ProcessorKwargs
-    return_mm_token_type_ids = False
 
     videos_kwargs = {"return_metadata": True}
 

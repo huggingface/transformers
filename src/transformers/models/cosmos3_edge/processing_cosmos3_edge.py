@@ -34,7 +34,6 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
     """Construct a Cosmos3 Edge multimodal prompt from image, video, and text inputs."""
 
     valid_processor_kwargs = ProcessingKwargs
-    return_mm_token_type_ids = False
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token

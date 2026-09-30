@@ -425,7 +425,7 @@ class Exaone4_5_Processor(Qwen2VLProcessor):
     valid_processor_kwargs = Exaone4_5_ProcessorKwargs
 
     videos_kwargs = {"return_metadata": True}
-    return_mm_token_type_ids = False
+    return_mm_token_type_ids = AttributeError()
 
     @property
     def model_input_names(self):

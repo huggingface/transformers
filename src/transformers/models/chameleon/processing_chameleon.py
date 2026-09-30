@@ -48,7 +48,6 @@ class ChameleonProcessor(ProcessorMixin):
     valid_processor_kwargs = ChameleonProcessorKwargs
 
     text_kwargs = {
-        "padding": False,
         "return_for_text_completion": False,
         "return_tensors": "pt",
     }

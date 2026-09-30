@@ -41,13 +41,10 @@ class MiniCPMV4_7Processor(ProcessorMixin):
         "padding_side": "left",
         "return_tensors": "pt",
     }
-    videoss_kwargs = {
+    videos_kwargs = {
         "return_tensors": "pt",
     }
     images_kwargs = {
-        "return_tensors": "pt",
-    }
-    videos_kwargs = {
         "return_tensors": "pt",
     }
     return_mm_token_type_ids = True

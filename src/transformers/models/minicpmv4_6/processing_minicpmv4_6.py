@@ -37,7 +37,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         "padding_side": "left",
         "return_tensors": "pt",
     }
-    videoss_kwargs = {
+    videos_kwargs = {
         "return_tensors": "pt",
     }
     images_kwargs = {
