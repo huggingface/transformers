@@ -77,7 +77,17 @@ FLASH_ATTN_KERNEL_VERSIONS = {
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
     "kernels-community/flash-attn4": 0,
-    "kernels-community/metal-flash-sdpa": 1,
+    "kernels-community/metal-flash-sdpa": 2,
+}
+
+# Devices each hub flash kernel ships builds for, unlisted kernels are assumed to run everywhere
+FLASH_ATTN_KERNEL_DEVICES = {
+    "kernels-community/flash-attn2": ("cuda", "xpu"),
+    "kernels-community/flash-attn3": ("cuda",),
+    "kernels-community/vllm-flash-attn3": ("cuda",),
+    "kernels-community/aiter-flash-attn": ("rocm",),
+    "kernels-community/flash-attn4": ("cuda",),
+    "kernels-community/metal-flash-sdpa": ("mps",),
 }
 
 # Meta information on each mainline FA compatibility:
@@ -784,11 +794,6 @@ def _flash_attention_forward(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
 
-        # TODO for now this is required to work with
-        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-        if "mps" in str(q.device):
-            cu_seq_lens_k = cu_seq_lens_k.clone()
-
         out_unpad = flash_varlen_fn(
             q,
             k,
@@ -812,11 +817,6 @@ def _flash_attention_forward(
             q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
             k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
             v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
-
-        # TODO for now this is required to work with
-        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
-        if "mps" in str(q.device):
-            cu_seq_lens_k = cu_seq_lens_k.clone()
 
         out = flash_varlen_fn(
             q,

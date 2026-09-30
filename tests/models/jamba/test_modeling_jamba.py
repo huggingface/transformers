@@ -177,7 +177,6 @@ class JambaModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             num_experts=2,
         )
 
@@ -524,7 +523,6 @@ class JambaModelIntegrationTest(unittest.TestCase):
         cls.model = JambaForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
-            use_mamba_kernels=False,
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
         cls.device_properties = get_device_properties()
