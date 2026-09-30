@@ -308,21 +308,6 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_capture_outputs_decorator(self):
-        prepare_config_and_inputs_for_common = self.model_tester.prepare_config_and_inputs_for_common
-
-        def prepare_with_moe():
-            config, inputs_dict = prepare_config_and_inputs_for_common()
-            config.is_moe = True
-            return config, inputs_dict
-
-        with unittest.mock.patch.object(
-            self.model_tester,
-            "prepare_config_and_inputs_for_common",
-            side_effect=prepare_with_moe,
-        ):
-            super().test_capture_outputs_decorator()
-
     def test_doge_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
