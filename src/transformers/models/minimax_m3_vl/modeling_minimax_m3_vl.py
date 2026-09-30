@@ -993,11 +993,7 @@ class MiniMaxM3VLVisionEmbeddings(nn.Module):
 
 
 class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
-    """
-    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
-    pre-computed using `head-dim//4` which is later used to concat H and W positions.
-    The final angles rotate over the whole head dim, no partial rotation involved.
-    """
+    """Partial 3D RoPE with equal frequency bands for temporal, height and width coordinates."""
 
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MiniMaxM3VLVisionConfig, device=None):
@@ -1029,7 +1025,8 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        spatial_dim = dim // 2
+        # We have an per axis based application (THW), see `recomposition_frequencies`; the rest passes through
+        spatial_dim = 2 * ((dim // 3) // 2)
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
@@ -1037,7 +1034,7 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (3, N) - with direct THW order
         position_ids_expanded = position_ids[..., None].float()
         device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
@@ -1053,9 +1050,8 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)  # We already have THW order
+        return torch.cat([freq, freq], dim=-1)
 
 
 def apply_rotary_pos_emb_vision(
