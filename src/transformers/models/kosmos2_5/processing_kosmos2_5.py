@@ -70,7 +70,6 @@ class Kosmos2_5Processor(ProcessorMixin):
             raise ValueError("Kosmos2_5Processor requires images to be passed.")
 
         output_kwargs = self._merge_kwargs(
-            Kosmos2_5ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

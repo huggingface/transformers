@@ -113,7 +113,6 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         kwargs["return_token_type_ids"] = True
         kwargs = self._merge_kwargs(
-            PaliGemmaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

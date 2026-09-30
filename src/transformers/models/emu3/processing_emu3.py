@@ -80,7 +80,6 @@ class Emu3Processor(ProcessorMixin):
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            Emu3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

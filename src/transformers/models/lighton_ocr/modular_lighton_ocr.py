@@ -176,7 +176,7 @@ class LightOnOcrProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size

@@ -141,7 +141,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             raise ValueError("You need to specify either a `text` input to process.")
 
         output_kwargs = self._merge_kwargs(
-            Qwen3OmniMoeProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

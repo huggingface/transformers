@@ -186,7 +186,6 @@ class PPFormulaNetProcessor(NougatProcessor):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            PPFormulaNetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

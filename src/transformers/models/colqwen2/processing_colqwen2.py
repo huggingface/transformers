@@ -95,7 +95,6 @@ class ColQwen2Processor(ProcessorMixin):
             raise ValueError("Only one of text or images can be processed at a time")
 
         output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -161,7 +160,7 @@ class ColQwen2Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [

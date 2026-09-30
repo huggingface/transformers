@@ -71,7 +71,6 @@ class UdopProcessor(ProcessorMixin):
     ) -> BatchFeature:
         # verify input
         output_kwargs = self._merge_kwargs(
-            UdopProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -44,7 +44,6 @@ class TrOCRProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         output_kwargs = self._merge_kwargs(
-            TrOCRProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

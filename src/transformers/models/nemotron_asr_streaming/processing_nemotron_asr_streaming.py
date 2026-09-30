@@ -124,7 +124,6 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            NemotronAsrStreamingProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -184,7 +183,6 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
             timestamps = durations.cumsum(dim=-1) - durations
 
             output_kwargs = self._merge_kwargs(
-                NemotronAsrStreamingProcessorKwargs,
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
@@ -249,9 +247,7 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
 
     @property
     def _subsampling_factor(self) -> int:
-        output_kwargs = self._merge_kwargs(
-            NemotronAsrStreamingProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs)
         return output_kwargs["audio_kwargs"]["subsampling_factor"]
 
     @property

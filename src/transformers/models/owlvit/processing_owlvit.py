@@ -83,7 +83,6 @@ class OwlViTProcessor(ProcessorMixin):
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            OwlViTProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

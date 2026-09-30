@@ -154,7 +154,6 @@ class CsmProcessor(ProcessorMixin):
             raise ValueError("The number of audio and saving paths must be the same")
 
         output_kwargs = self._merge_kwargs(
-            CsmProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
@@ -195,7 +194,6 @@ class CsmProcessor(ProcessorMixin):
         """
 
         output_kwargs = self._merge_kwargs(
-            CsmProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

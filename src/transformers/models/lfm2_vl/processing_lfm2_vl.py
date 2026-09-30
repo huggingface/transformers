@@ -84,7 +84,6 @@ class Lfm2VlProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )

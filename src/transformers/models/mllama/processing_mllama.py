@@ -203,7 +203,6 @@ class MllamaProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
-            MllamaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

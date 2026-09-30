@@ -84,7 +84,6 @@ class Owlv2Processor(ProcessorMixin):
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            Owlv2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

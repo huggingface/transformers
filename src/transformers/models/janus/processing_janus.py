@@ -98,9 +98,7 @@ class JanusProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        output_kwargs = self._merge_kwargs(
-            JanusProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
         generation_mode = output_kwargs["text_kwargs"].pop("generation_mode")
         if self.use_default_system_prompt and generation_mode == "text":

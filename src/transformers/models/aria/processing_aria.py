@@ -96,7 +96,7 @@ class AriaProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             max_size = images_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
             num_image_patches = [

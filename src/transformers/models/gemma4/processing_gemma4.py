@@ -214,7 +214,7 @@ class Gemma4Processor(ProcessorMixin):
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
-        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
+        merged_kwargs = self._merge_kwargs(**kwargs)
         images_kwargs = merged_kwargs.get("images_kwargs", {})
 
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size

@@ -108,7 +108,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(VibeVoiceAsrProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":

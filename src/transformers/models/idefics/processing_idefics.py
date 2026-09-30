@@ -282,7 +282,6 @@ class IdeficsProcessor(ProcessorMixin):
                 prompts = list(zip(images, text))
 
         output_kwargs = self._merge_kwargs(
-            IdeficsProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

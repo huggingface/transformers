@@ -115,7 +115,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
                 )
 
         audio = make_list_of_audio(audio)
-        output_kwargs = self._merge_kwargs(Nemotron3DiarizationProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         inputs = self.feature_extractor(
             audio, sampling_rate=sampling_rate, center=is_first_audio_chunk, **output_kwargs["audio_kwargs"]
         )

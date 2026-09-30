@@ -249,7 +249,6 @@ class FuyuProcessor(ProcessorMixin):
         requires_backends(self, ["torch"])
 
         merged_kwargs = self._merge_kwargs(
-            FuyuProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

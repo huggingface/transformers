@@ -660,7 +660,6 @@ class ProcessorMixin(PushToHubMixin):
         self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
@@ -1518,7 +1517,7 @@ class ProcessorMixin(PushToHubMixin):
 
     def _merge_kwargs(
         self,
-        ModelProcessorKwargs: ProcessingKwargs,
+        ModelProcessorKwargs: ProcessingKwargs | None = None,
         tokenizer_init_kwargs: dict | None = None,
         **kwargs,
     ) -> dict[str, dict]:
@@ -1590,6 +1589,9 @@ class ProcessorMixin(PushToHubMixin):
                 Dictionary of per-modality kwargs to be passed to each modality-specific processor.
 
         """
+        if ModelProcessorKwargs is None:
+            ModelProcessorKwargs = self.valid_processor_kwargs
+
         # holding a copy to avoid mutating user-provided arguments
         # Use deepcopy to also copy nested dicts (like videos_kwargs) that will be modified via pop()
         kwargs = copy.deepcopy(kwargs)

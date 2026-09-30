@@ -196,7 +196,6 @@ class OmDetTurboProcessor(ProcessorMixin):
             raise ValueError("You have to specify both `images` and `text`")
 
         output_kwargs = self._merge_kwargs(
-            OmDetTurboProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

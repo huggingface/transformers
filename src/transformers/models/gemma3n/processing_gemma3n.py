@@ -80,7 +80,6 @@ class Gemma3nProcessor(ProcessorMixin):
             raise ValueError("Provide at least one of `text`, `images`, or `audio`.")
 
         output_kwargs = self._merge_kwargs(
-            Gemma3nProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

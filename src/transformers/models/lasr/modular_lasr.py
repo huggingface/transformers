@@ -188,7 +188,6 @@ class LasrProcessor(ProcessorMixin):
             issued and the default sampling rate will be assumed.
         """
         output_kwargs = self._merge_kwargs(
-            LasrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

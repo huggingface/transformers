@@ -123,7 +123,6 @@ class SamHQProcessor(ProcessorMixin):
         **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            SamHQProcessorKwargs,
             tokenizer_init_kwargs={},
             **kwargs,
         )

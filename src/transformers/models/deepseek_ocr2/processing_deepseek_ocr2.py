@@ -122,7 +122,6 @@ class DeepseekOcr2Processor(ProcessorMixin):
             raise ValueError("`text` is required for `DeepseekOcr2Processor`. Example: `'<image>\\nFree OCR.'`")
 
         output_kwargs = self._merge_kwargs(
-            DeepseekOcr2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

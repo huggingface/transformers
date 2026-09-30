@@ -110,7 +110,6 @@ class GlmImageProcessor(ProcessorMixin):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            GlmImageProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

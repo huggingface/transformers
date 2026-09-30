@@ -140,7 +140,6 @@ class Kosmos2Processor(ProcessorMixin):
             raise ValueError("You have to specify either images or text.")
 
         output_kwargs = self._merge_kwargs(
-            Kosmos2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

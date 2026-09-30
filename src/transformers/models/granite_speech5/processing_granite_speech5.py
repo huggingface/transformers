@@ -48,7 +48,6 @@ class GraniteSpeech5Processor(ProcessorMixin):
             issued and the default sampling rate will be assumed.
         """
         output_kwargs = self._merge_kwargs(
-            GraniteSpeech5ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

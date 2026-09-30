@@ -111,7 +111,7 @@ class Kimi_K25Processor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
             images_kwargs = merged_kwargs["images_kwargs"]

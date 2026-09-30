@@ -160,7 +160,6 @@ class GotOcr2Processor(ProcessorMixin):
         """
 
         output_kwargs = self._merge_kwargs(
-            GotOcr2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

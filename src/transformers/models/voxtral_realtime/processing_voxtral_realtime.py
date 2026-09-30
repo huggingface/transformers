@@ -161,7 +161,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
             - **input_features** -- Mel spectrogram features extracted from the audio input.
             - **num_delay_tokens** -- The number of delay tokens used for streaming.
         """
-        output_kwargs = self._merge_kwargs(VoxtralRealtimeProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
 
         if not is_streaming and not is_first_audio_chunk:
             raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")

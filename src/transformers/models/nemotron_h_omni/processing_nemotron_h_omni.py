@@ -95,7 +95,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         **kwargs: Unpack[NemotronH_Omni_Reasoning_V3ProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            NemotronH_Omni_Reasoning_V3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

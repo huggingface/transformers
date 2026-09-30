@@ -91,7 +91,6 @@ class ParakeetProcessor(ProcessorMixin):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            ParakeetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -146,7 +145,6 @@ class ParakeetProcessor(ProcessorMixin):
             timestamps = durations.cumsum(dim=-1) - durations
 
             output_kwargs = self._merge_kwargs(
-                ParakeetProcessorKwargs,
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (

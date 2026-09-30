@@ -125,7 +125,6 @@ class ColModernVBertProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -303,7 +302,7 @@ class ColModernVBertProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_row_cols = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -361,7 +360,6 @@ class ColModernVBertProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -426,7 +424,6 @@ class ColModernVBertProcessor(ProcessorMixin):
               `None`).
         """
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

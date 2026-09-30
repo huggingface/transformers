@@ -55,7 +55,6 @@ class MoonshineStreamingProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         output_kwargs = self._merge_kwargs(
-            MoonshineStreamingProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -102,7 +102,6 @@ class Idefics2Processor(ProcessorMixin):
             raise ValueError("You must provide either `text` or `images`.")
 
         output_kwargs = self._merge_kwargs(
-            Idefics2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -55,7 +55,6 @@ class Pix2StructProcessor(ProcessorMixin):
             raise ValueError("You have to specify either images or text.")
 
         output_kwargs = self._merge_kwargs(
-            Pix2StructProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

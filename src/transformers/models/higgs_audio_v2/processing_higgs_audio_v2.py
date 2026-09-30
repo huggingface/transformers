@@ -136,7 +136,6 @@ class HiggsAudioV2Processor(ProcessorMixin):
         **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
         output_kwargs = self._merge_kwargs(
-            HiggsAudioV2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -346,7 +345,6 @@ class HiggsAudioV2Processor(ProcessorMixin):
             raise ValueError("The number of audio and saving paths must be the same")
 
         output_kwargs = self._merge_kwargs(
-            HiggsAudioV2ProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]

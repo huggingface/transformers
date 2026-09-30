@@ -113,7 +113,6 @@ class ColPaliProcessor(ProcessorMixin):
 
         kwargs["return_token_type_ids"] = True
         output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

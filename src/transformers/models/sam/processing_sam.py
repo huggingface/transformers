@@ -118,7 +118,6 @@ class SamProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         output_kwargs = self._merge_kwargs(
-            SamProcessorKwargs,
             tokenizer_init_kwargs={},
             **kwargs,
         )

@@ -154,7 +154,7 @@ class DiaProcessor(ProcessorMixin):
             computation (padding and BOS tokens), and `-101` for audio frames used only for the backbone model (when
             `depth_decoder_labels_ratio < 1.0`). Cannot be used together with `generation=True`.
         """
-        output_kwargs = self._merge_kwargs(DiaProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         audio_kwargs = output_kwargs["audio_kwargs"]
         generation = audio_kwargs.get("generation", True)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
@@ -257,7 +257,6 @@ class DiaProcessor(ProcessorMixin):
             audio_prompt_len (`int`): The audio prefix length (e.g. when using voice cloning).
         """
         output_kwargs = self._merge_kwargs(
-            DiaProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
@@ -337,7 +336,6 @@ class DiaProcessor(ProcessorMixin):
     ) -> int:
         """Utility function to get the audio prompt length."""
         output_kwargs = self._merge_kwargs(
-            DiaProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
@@ -373,7 +371,6 @@ class DiaProcessor(ProcessorMixin):
             raise ValueError("The number of audio and saving paths must be the same")
 
         output_kwargs = self._merge_kwargs(
-            DiaProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]

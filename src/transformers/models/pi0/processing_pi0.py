@@ -113,9 +113,7 @@ class PI0Processor(ProcessorMixin):
             - **state** -- Robot state compatible with model if `state` is not None
             - **actions** -- Label-actions compatible with training if `actions` is not None
         """
-        output_kwargs = self._merge_kwargs(
-            PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
         if text is None:
             logger.warning_once("You are using PI0 without a text prefix. The processor will use an empty prompt.")
