@@ -1001,7 +1001,7 @@ class Molmo2Processor(ProcessorMixin):
             text = [prompt if prompt.startswith(bos_token) else bos_token + prompt for prompt in text]
         return super().__call__(images=images, text=text, videos=videos, **kwargs)
 
-    def get_video_string(self, video_grid: torch.Tensor, timestamps) -> str:
+    def get_video_string(self, video_grid, timestamps) -> str:
         start_token = "<frame_start>" if self.use_frame_special_tokens else "<im_start>"
         end_token = "<frame_end>" if self.use_frame_special_tokens else "<im_end>"
 
