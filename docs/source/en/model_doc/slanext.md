@@ -64,6 +64,10 @@ print(result['structure_score'])
 
 [[autodoc]] SLANeXtConfig
 
+## SLANeXtVisionConfig
+
+[[autodoc]] SLANeXtVisionConfig
+
 ## SLANeXtForTableRecognition
 
 [[autodoc]] SLANeXtForTableRecognition
