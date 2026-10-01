@@ -21,7 +21,7 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_kernels, require_torch, require_torch_accelerator, slow, torch_device
 from transformers.utils import is_torch_flex_attn_available
 
 from ...test_configuration_common import ConfigTester
@@ -318,6 +318,24 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                 actual = banded_mask_function(mask)(batch, None, queries, keys)
                 expected = mask[:, 0][batch % 3, queries, keys]
                 torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+
+    @require_kernels
+    def test_hub_kernels_map_attention_with_its_mask(self):
+        """The kernel attention reads the mask the kernel mask layer prepares, so one is never swapped alone."""
+        from transformers.integrations import hub_kernels
+
+        model = WeatherNext2Model(self.model_tester.get_config())
+        layer_names = {getattr(module, "kernel_layer_name", None) for module in model.modules()}
+        kernel_mapping = hub_kernels._build_kernel_mapping()
+        self.assertIn("WeatherNext2AttentionMask", layer_names)
+        attention = kernel_mapping["WeatherNext2Attention"]
+        mask = kernel_mapping["WeatherNext2AttentionMask"]
+        self.assertEqual(attention.keys(), mask.keys())
+        for device in attention:
+            self.assertEqual(attention[device].keys(), mask[device].keys())
+            for mode, repo in attention[device].items():
+                self.assertEqual(repo._repo_id, mask[device][mode]._repo_id)
+                self.assertEqual(repo._version, mask[device][mode]._version)
 
     def test_noise_drives_the_ensemble(self):
         """Two members that share inputs but not noise must differ; two that share both must not."""
