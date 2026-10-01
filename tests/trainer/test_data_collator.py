@@ -411,6 +411,39 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         batch = collator(features)
         self.assertEqual(batch["labels"].shape, (1, 5))
 
+    def test_single_example_tensor_batch_dimension(self):
+        for tensor in (torch.tensor, np.array):
+            for with_labels in (False, True):
+                for return_tensors in ("pt", "np"):
+                    with self.subTest(tensor=tensor, with_labels=with_labels, return_tensors=return_tensors):
+                        features = [{"input_ids": tensor([[1, 2, 3]])}, {"input_ids": tensor([[4, 5]])}]
+                        if with_labels:
+                            features[0]["labels"] = tensor([[10, 11, 12]])
+                            features[1]["labels"] = tensor([[13, 14]])
+                        collator = DataCollatorWithFlattening(
+                            return_tensors=return_tensors, return_flash_attn_kwargs=True, return_seq_idx=True
+                        )
+                        batch = collator(features)
+                        self.assertEqual(batch["input_ids"].tolist(), [[1, 2, 3, 4, 5]])
+                        expected_labels = [[-100, 11, 12, -100, 14]] if with_labels else [[-100, 2, 3, -100, 5]]
+                        self.assertEqual(batch["labels"].tolist(), expected_labels)
+                        self.assertEqual(batch["position_ids"].tolist(), [[0, 1, 2, 0, 1]])
+                        self.assertEqual(batch["seq_idx"].tolist(), [[0, 0, 0, 1, 1]])
+                        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 5])
+                        self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 5])
+                        self.assertEqual(batch["max_length_q"], 3)
+                        self.assertEqual(batch["max_length_k"], 3)
+                        self._check_immutability(collator, features)
+
+    def test_tokenizer_tensor_output(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        example = tokenizer("A test sentence", return_tensors="pt")
+        batch = DataCollatorWithFlattening()([example, example])
+        input_ids = example["input_ids"][0].tolist()
+        self.assertEqual(batch["input_ids"].tolist(), [input_ids * 2])
+        self.assertEqual(batch["labels"].tolist(), [([-100] + input_ids[1:]) * 2])
+        self.assertEqual(batch["position_ids"].tolist(), [list(range(len(input_ids))) * 2])
+
     def test_numpy_output(self):
         """Test flattening with NumPy output."""
         collator = DataCollatorWithFlattening(return_tensors="np")

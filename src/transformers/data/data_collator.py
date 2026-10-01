@@ -1373,6 +1373,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - optionally returns the kwargs contained in FlashAttentionKwargs
     - optionally returns seq_idx indicating which sequence each token belongs to
 
+    Each feature may contain one-dimensional token lists or tensors, including tensors with a leading singleton
+    batch dimension as returned by a tokenizer for a single example.
+
     Args:
         return_position_ids (`bool`, *optional*, defaults to `True`):
             Whether to return `position_ids`, which restart at `position_ids_start` for every flattened sequence.
@@ -1441,6 +1444,8 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             input_ids = sample["input_ids"]
             # Convert to list if tensor
             if hasattr(input_ids, "tolist"):
+                if input_ids.ndim == 2 and input_ids.shape[0] == 1:
+                    input_ids = input_ids[0]
                 input_ids = input_ids.tolist()
             batch["input_ids"] += input_ids
 
@@ -1448,6 +1453,8 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 labels = sample["labels"]
                 # Convert to list if tensor
                 if hasattr(labels, "tolist"):
+                    if labels.ndim == 2 and labels.shape[0] == 1:
+                        labels = labels[0]
                     labels = labels.tolist()
                 batch["labels"] += [separator_id] + labels[1:]
             else:
