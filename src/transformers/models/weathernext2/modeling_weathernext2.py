@@ -171,8 +171,8 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
     its own features alone. Both updates are residual, so the two directions share this class and
     differ only in which node set receives messages and whether the receiver contributes to them.
 
-    Larger graphs are chunked in inference using the configured chunk sizes. Training and autocast
-    retain the unchunked path.
+    Larger graphs are chunked in fp32 inference using the configured chunk sizes. Training,
+    autocast and other dtypes retain the unchunked path.
     """
 
     def __init__(self, config: WeatherNext2Config, grid_to_mesh: bool):
@@ -211,6 +211,7 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             and num_items > self.chunk_size_graph
             and not self.training
             and not torch.is_grad_enabled()
+            and grid_states.dtype == torch.float32
             and not torch.is_autocast_enabled(grid_states.device.type)
         )
         if chunked and not self.grid_to_mesh:

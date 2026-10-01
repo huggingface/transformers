@@ -500,8 +500,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     @parameterized.expand([("grid_to_mesh", True, 16), ("mesh_to_grid", False, 8)])
     def test_graph_chunking(self, name, grid_to_mesh, chunk_size):
         config = self.model_tester.get_config()
-        # A chunked bf16 matmul rounds differently from a whole-graph one, by up to a few bf16 ulps.
-        tolerances = {torch.float32: {}, torch.bfloat16: {"atol": 1e-1, "rtol": 1e-2}}
         for device in dict.fromkeys(("cpu", torch_device)):
             for dtype in (torch.float32, torch.bfloat16):
                 with self.subTest(device=device, dtype=dtype):
@@ -530,9 +528,9 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                         actual = layer(*args)
                     hook.remove()
                     expected_sizes = [16, 16, 16, 9] if grid_to_mesh else [24, 24, 9]
-                    self.assertEqual(sizes, expected_sizes)
+                    self.assertEqual(sizes, expected_sizes if dtype == torch.float32 else [57])
                     for result, target in zip(actual, expected):
-                        torch.testing.assert_close(result, target, **tolerances[dtype])
+                        torch.testing.assert_close(result, target)
 
     @parameterized.expand(
         [
