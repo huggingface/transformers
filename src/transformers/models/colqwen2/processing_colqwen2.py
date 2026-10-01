@@ -24,7 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available
+from ...utils import auto_docstring, is_torch_available, logging
 
 
 if is_torch_available():
@@ -32,8 +32,16 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
+logger = logging.get_logger(__name__)
+
+
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    """
+    suffix (`str`, *optional*):
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 @auto_docstring
@@ -48,6 +56,8 @@ class ColQwen2Processor(ProcessorMixin):
         "padding": "longest",
         "return_tensors": "pt",
     }
+
+    suffix: str | None = None
 
     def __init__(
         self,
@@ -98,7 +108,14 @@ class ColQwen2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", output_kwargs["suffix"])
         output_kwargs["text_kwargs"]["return_token_type_ids"] = suffix is not None
 
         if text is not None:

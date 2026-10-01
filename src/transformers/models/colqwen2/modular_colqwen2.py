@@ -33,11 +33,18 @@ logger = logging.get_logger(__name__)
 
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    """
+    suffix (`str`, *optional*):
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 class ColQwen2Processor(ColPaliProcessor):
     valid_processor_kwargs = ColQwen2ProcessorKwargs
+
+    suffix: str | None = None
 
     text_kwargs = {
         "padding": "longest",
@@ -84,7 +91,14 @@ class ColQwen2Processor(ColPaliProcessor):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", output_kwargs["suffix"])
         output_kwargs["text_kwargs"]["return_token_type_ids"] = suffix is not None
 
         if text is not None:

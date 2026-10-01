@@ -24,15 +24,23 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available
+from ...utils import auto_docstring, is_torch_available, logging
 
 
 if is_torch_available():
     import torch
 
 
+logger = logging.get_logger(__name__)
+
+
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    """
+    suffix (`str`, *optional*):
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 IMAGE_TOKEN = "<image>"
@@ -116,7 +124,16 @@ class ColPaliProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", self.query_augmentation_token * 10)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop(
+            "suffix", output_kwargs.get("suffix", self.query_augmentation_token * 10)
+        )
 
         if text is not None:
             text = [f"{self.tokenizer.bos_token}{self.query_prefix}{sample}{suffix}\n" for sample in text]

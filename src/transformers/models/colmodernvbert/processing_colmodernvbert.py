@@ -40,7 +40,12 @@ logger = logging.get_logger(__name__)
 
 
 class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    """
+    suffix (`str`, *optional*):
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 @requires(backends=("torch",))
@@ -52,6 +57,8 @@ class ColModernVBertProcessor(ProcessorMixin):
         "data_format": "channels_first",
         "return_tensors": "pt",
     }
+    suffix: str | None = None
+
     text_kwargs = {
         "padding": "longest",
         "return_tensors": "pt",
@@ -347,7 +354,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         """
         Prepare for the model one or several image(s). Handles input validation, RGB conversion,
         and prepends the `visual_prompt_prefix` to each image. Optionally computes labels from
-        `token_type_ids` when a `suffix` is provided in `text_kwargs`.
+        `token_type_ids` when a `suffix` is provided.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -374,7 +381,14 @@ class ColModernVBertProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", output_kwargs["suffix"])
 
         return_token_type_ids = suffix is not None
 
@@ -438,7 +452,14 @@ class ColModernVBertProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", output_kwargs["suffix"])
 
         if isinstance(text, str):
             text = [text]

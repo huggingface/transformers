@@ -30,7 +30,12 @@ logger = logging.get_logger(__name__)
 
 
 class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    """
+    suffix (`str`, *optional*):
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 class ColPaliProcessor(PaliGemmaProcessor):
@@ -87,7 +92,16 @@ class ColPaliProcessor(PaliGemmaProcessor):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", self.query_augmentation_token * 10)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in a future version. "
+                "Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop(
+            "suffix", output_kwargs.get("suffix", self.query_augmentation_token * 10)
+        )
 
         if text is not None:
             text = [f"{self.tokenizer.bos_token}{self.query_prefix}{sample}{suffix}\n" for sample in text]
