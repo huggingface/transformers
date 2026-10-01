@@ -397,7 +397,7 @@ class WeatherNext2Attention(nn.Module):
         key_states = key_states.reshape(-1, *key_states.shape[-3:]).float()
         value_states = value_states.reshape(-1, *value_states.shape[-3:]).float()
 
-        if not self.use_flex_attention_decoding:
+        if self.config._attn_implementation == "flex_attention" and not self.use_flex_attention_decoding:
             kernel_options = dict(kwargs.get("kernel_options") or {})
             if "BACKEND" not in kernel_options and "FORCE_USE_FLEX_ATTENTION" not in kernel_options:
                 if _TORCH_FLEX_USE_BACKEND:

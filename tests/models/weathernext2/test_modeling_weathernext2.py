@@ -240,6 +240,13 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                         attention.use_flex_attention_decoding = False
                     self.assertEqual(options, original)
 
+        # The flex defaults are flex's alone: other backends see only what the caller passed.
+        config._attn_implementation = "eager"
+        with patch.object(modeling_weathernext2, "eager_attention_forward") as eager_attention:
+            eager_attention.return_value = (torch.zeros_like(hidden_states), None)
+            attention(hidden_states, attention_mask=None)
+            self.assertNotIn("kernel_options", eager_attention.call_args.kwargs)
+
     @require_torch_accelerator
     @unittest.skipUnless(is_torch_flex_attn_available(), "Flex attention is not available")
     def test_flex_attention_matches_eager_forward_and_backward(self):
