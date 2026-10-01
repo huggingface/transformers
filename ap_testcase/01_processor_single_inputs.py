@@ -14,9 +14,7 @@ def setup():
     """
     transformers, checkpoint = bootstrap(("AutoProcessor",), processor_only=True)
     processor = transformers.AutoProcessor.from_pretrained(checkpoint)
-    dummy_image = np.random.default_rng(0).integers(
-        0, 255, (300, 200, 3), dtype=np.uint8
-    )  # resized to a 16x16 patch grid
+    dummy_image = np.random.default_rng(0).integers(0, 255, (300, 200, 3), dtype=np.uint8)
     dummy_audio = (0.5 * np.sin(2 * np.pi * 440.0 * np.arange(24000) / 24000.0)).astype(np.float32)  # 1 s
     return processor, dummy_image, dummy_audio
 

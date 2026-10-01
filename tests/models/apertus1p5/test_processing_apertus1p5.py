@@ -51,7 +51,7 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         # small pixel budget so test images stay tiny; grids stay >= 2x2
-        return image_processor_class(min_pixels=32 * 32, max_pixels=64 * 64)
+        return image_processor_class(size={"min_pixels": 32 * 32, "max_pixels": 64 * 64})
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -99,6 +99,29 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             with self.subTest(image_size=image_size):
                 out = processor(text="<|image|> describe", images=[self._image(*image_size)], return_tensors="pt")
                 self.assertEqual(processor.tokenizer.decode(out["input_ids"][0]), expected)
+
+    def test_image_expansion_respects_resize_and_spatial_factor(self):
+        processor = self.get_processor()
+        image = self._image(81, 113)
+        for do_resize, spatial_factor, grid in [
+            (True, 16, (3, 4)),
+            (False, 16, (5, 7)),
+            (True, 8, (6, 9)),
+            (False, 8, (10, 14)),
+        ]:
+            with self.subTest(do_resize=do_resize, spatial_factor=spatial_factor):
+                images_kwargs = {"do_resize": do_resize, "spatial_factor": spatial_factor}
+                inputs = processor(text="<|image|>", images=[image], images_kwargs=images_kwargs, return_tensors="pt")
+                decoded = processor.tokenizer.decode(inputs["input_ids"][0])
+                self.assertIn(f"<|img_start|>{grid[0]}*{grid[1]}<|img_token_start|>", decoded)
+                self.assertEqual(decoded.count(processor.image_token), grid[0] * grid[1])
+                self.assertEqual(decoded.count(processor.eol_token), grid[0] - 1)
+                self.assertEqual(
+                    processor._get_num_multimodal_tokens(image_sizes=[image.shape[:2]], **images_kwargs)[
+                        "num_image_tokens"
+                    ],
+                    [grid[0] * grid[1]],
+                )
 
     def test_audio_expansion_matches_reference_layout(self):
         """ceil(samples / hop) placeholder tokens wrapped in audio start/end; no header."""
@@ -359,7 +382,10 @@ class Apertus1p5ProcessorIntegrationTest(unittest.TestCase):
 
         image = np.random.default_rng(0).integers(0, 255, (32, 32, 3), dtype=np.uint8)
         inputs = processor(
-            text="<|image|>", images=[image], images_kwargs={"min_pixels": 32 * 32}, return_tensors="pt"
+            text="<|image|>",
+            images=[image],
+            images_kwargs={"size": {"min_pixels": 32 * 32, "max_pixels": 1400 * 1400}},
+            return_tensors="pt",
         )
         digit_ids = self.tokenizer("2*2", add_special_tokens=False)["input_ids"]
         # the structure tokens have no config ids; the golden ids come from the real vocabulary

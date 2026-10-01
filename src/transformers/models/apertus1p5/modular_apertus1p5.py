@@ -19,15 +19,28 @@ from typing import Any
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ..apertus.configuration_apertus import ApertusConfig
 from ..apertus.modeling_apertus import ApertusForCausalLM, ApertusModel, ApertusPreTrainedModel
 from ..chameleon.modeling_chameleon import (
@@ -35,7 +48,124 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderConvDownsample,
     ChameleonVQVAEEncoderResnetBlock,
 )
+from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..wavtokenizer import WavTokenizerConfig, WavTokenizerEncoderModel
+
+
+class Apertus1p5ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    size (`dict`, *optional*, defaults to `{"min_pixels": 128 * 128, "max_pixels": 1400 * 1400}`):
+        Minimum and maximum pixel areas. Images are resized to approximately this area range.
+    spatial_factor (`int`, *optional*, defaults to 16):
+        Both output sides are rounded to multiples of this factor (the vision tokenizer's downsampling factor);
+        each `spatial_factor x spatial_factor` patch becomes one discrete code.
+    """
+
+    spatial_factor: int
+
+
+@auto_docstring(custom_intro="Constructs an Apertus 1.5 image processor with the training pipeline's resize policy.")
+class Apertus1p5ImageProcessor(TorchvisionBackend):
+    do_resize = True
+    resample = PILImageResampling.BICUBIC
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    # rescale to [0, 1] then (x - 0.5) / 0.5 is exactly pixel / 127.5 - 1, the tokenizer's expected [-1, 1] range
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    do_convert_rgb = True
+    do_pad = True
+    size = {"min_pixels": 128 * 128, "max_pixels": 1400 * 1400}
+    spatial_factor = 16
+    valid_kwargs = Apertus1p5ImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_sizes"]
+
+    def __init__(self, **kwargs: Unpack[Apertus1p5ImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    def _validate_preprocess_kwargs(self, **kwargs):
+        size = kwargs["size"]
+        if size is not None and set(dict(size)) != {"min_pixels", "max_pixels"}:
+            raise ValueError("size must contain exactly min_pixels and max_pixels.")
+        return super()._validate_preprocess_kwargs(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Apertus1p5ImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool,
+        size: SizeDict,
+        spatial_factor: int,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                height, width = stacked_images.shape[-2:]
+                resized_height, resized_width = smart_resize(
+                    height, width, factor=spatial_factor, min_pixels=size.min_pixels, max_pixels=size.max_pixels
+                )
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    resample=resample,
+                )
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        # true per-image sizes; the padded regions below carry no information and the model crops them away
+        image_sizes = [list(image.shape[-2:]) for image in processed_images]
+        if do_pad:
+            processed_images = self.pad(processed_images, disable_grouping=disable_grouping)
+            processed_images = torch.stack(processed_images, dim=0)
+
+        return BatchFeature(
+            data={
+                "pixel_values": processed_images,
+                "image_sizes": torch.tensor(image_sizes, dtype=torch.long),
+            },
+            tensor_type=return_tensors,
+        )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns the number of discrete image codes (placeholder tokens) for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image codes per image.
+        """
+        images_kwargs = images_kwargs if images_kwargs is not None else {}
+        spatial_factor = images_kwargs.get("spatial_factor", self.spatial_factor)
+        if images_kwargs.get("do_resize", self.do_resize):
+            size = self._standardize_kwargs(size=images_kwargs.get("size", self.size))["size"]
+            height, width = smart_resize(
+                height, width, factor=spatial_factor, min_pixels=size.min_pixels, max_pixels=size.max_pixels
+            )
+        return (height // spatial_factor) * (width // spatial_factor)
 
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
@@ -971,6 +1101,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
 
 
 __all__ = [
+    "Apertus1p5ImageProcessor",
     "Apertus1p5Config",
     "Apertus1p5TextConfig",
     "Apertus1p5VisionTokenizerConfig",
