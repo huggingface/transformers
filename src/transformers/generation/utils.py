@@ -2131,6 +2131,7 @@ class GenerationMixin(ContinuousMixin):
         num_cache_layers = text_config.num_hidden_layers - getattr(text_config, "num_kv_shared_layers", 0)
         layer_configs = text_config.per_layer_config[:num_cache_layers]
         if any(getattr(layer_config, "qk_head_dim", None) is not None for layer_config in layer_configs):
+            # MLA models have distinct key (`qk_head_dim`) and value (`v_head_dim`) sizes.
             return None
         num_heads, head_dim = get_head_shapes(text_config)
         tp_size = getattr(self, "_tp_size", None) or 1
