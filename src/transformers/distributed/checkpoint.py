@@ -42,7 +42,7 @@ if is_torch_available():
 
 if _check_distributed_checkpointing_available(raise_if_not=False):
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader, HuggingFaceStorageWriter
-    from torch.distributed.tensor import Shard, distribute_tensor
+    from torch.distributed.tensor import Shard
     from torch.distributed.tensor.placement_types import _StridedShard
 
 
@@ -261,13 +261,8 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consoli
         _distributed_barrier()
 
 
-def load_optimizer_distributed(model, optimizer, checkpoint_dir_or_file: str) -> None:
-    """Load optimizer state from a DCP directory or a consolidated `optimizer.pt` file.
-
-    Passing a directory uses the retained DCP shards. Passing the file loads the
-    full optimizer state on each rank's CPU before distributing it into the current
-    layout. Prefer the directory when memory is limited. All ranks must call.
-    """
+def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
+    """Load optimizer state from a DCP directory."""
     _check_distributed_checkpointing_available()
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
@@ -284,26 +279,7 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir_or_file: str) ->
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
     checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
-    if os.path.isfile(checkpoint_dir_or_file):
-        loaded_state = torch.load(checkpoint_dir_or_file, map_location="cpu", weights_only=True)["optimizer"]
-        missing_keys = checkpoint_state_dict.keys() - loaded_state.keys()
-        if missing_keys:
-            raise ValueError(f"Missing keys in optimizer checkpoint: {sorted(missing_keys)}")
-        for key, target in checkpoint_state_dict.items():
-            value = loaded_state[key]
-            if isinstance(target, torch.Tensor) and (
-                not isinstance(value, torch.Tensor) or value.shape != target.shape
-            ):
-                raise ValueError(f"Optimizer checkpoint tensor {key!r} must have shape {tuple(target.shape)}.")
-        for key, target in checkpoint_state_dict.items():
-            value = loaded_state[key]
-            if is_dtensor(target):
-                value = distribute_tensor(value.to(target.device), target.device_mesh, target.placements)
-            elif isinstance(target, torch.Tensor):
-                value = value.to(target.device)
-            checkpoint_state_dict[key] = value
-    else:
-        dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir_or_file)
+    dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
 
     # tree_map allows to map a function on arbitrarily nested structures.
     optimizer_state_dict = tree_map(
