@@ -59,7 +59,7 @@ def case_2_manual_path(processor, model, image):
     pixels = torch.tensor(np.asarray(resized) / 127.5 - 1.0, dtype=torch.float32).permute(2, 0, 1)[None]
 
     with torch.no_grad():
-        code_grid = model.model.vision_tokenizer.encode(pixels)[0]
+        code_grid = model.model.vision_tokenizer.encode(pixels).image_tokens[0]
 
     expected_shape = (target_h // 16, target_w // 16)
     assert code_grid.shape == expected_shape, f"expected grid {expected_shape}, got {tuple(code_grid.shape)}"

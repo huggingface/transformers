@@ -13,9 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch Apertus 1.5 model."""
 
+import json
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
+
+from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
     Apertus1p5Config,
@@ -27,6 +31,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import ModelOutput
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
@@ -44,6 +49,7 @@ if is_torch_available():
         Apertus1p5TextForCausalLM,
         Apertus1p5TextModel,
     )
+    from transformers.models.apertus1p5.modeling_apertus1p5 import Apertus1p5VisionTokenizerEncoderOutput
     from transformers.models.wavtokenizer.modeling_wavtokenizer import WavTokenizerEncoderOutput
 
 
@@ -238,6 +244,40 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_config_validation_on_init_load_and_save(self):
+        cases = [
+            ({"image_token_offset": 0}, "visual token range"),
+            ({"text_config": {"vocab_size": 262344}}, "audio token range"),
+            ({"text_config": {"output_vocab_size": 0}}, "output_vocab_size"),
+            ({"text_config": {"output_vocab_size": 266753}}, "output_vocab_size"),
+            ({"audio_config": {"model_type": "encodec"}}, "audio_config.model_type"),
+        ]
+        for overrides, message in cases:
+            with self.subTest(overrides=overrides), tempfile.TemporaryDirectory() as directory:
+                with self.assertRaisesRegex(StrictDataclassClassValidationError, message):
+                    Apertus1p5Config(**overrides)
+
+                config = Apertus1p5Config()
+                config.save_pretrained(directory)
+                config_path = os.path.join(directory, "config.json")
+                with open(config_path, encoding="utf-8") as file:
+                    saved_config = json.load(file)
+                for name, value in overrides.items():
+                    if isinstance(value, dict):
+                        saved_config[name].update(value)
+                        for key, item in value.items():
+                            setattr(getattr(config, name), key, item)
+                    else:
+                        saved_config[name] = value
+                        setattr(config, name, value)
+                with open(config_path, "w", encoding="utf-8") as file:
+                    json.dump(saved_config, file)
+
+                with self.assertRaisesRegex(StrictDataclassClassValidationError, message):
+                    Apertus1p5Config.from_pretrained(directory)
+                with self.assertRaisesRegex(StrictDataclassClassValidationError, message):
+                    config.save_pretrained(directory)
+
     @unittest.skip("The encode-only vision tokenizer port does not implement per-block output recording")
     def test_get_image_features_attentions(self):
         pass
@@ -265,7 +305,9 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         # One image code, controlled by the pixels rather than random quantizer weights.
         def encode(image):
-            return image.new_full((1, 1, 1), int(image[0, 0, 0, 0].item()), dtype=torch.long)
+            return Apertus1p5VisionTokenizerEncoderOutput(
+                image_tokens=image.new_full((1, 1, 1), int(image[0, 0, 0, 0].item()), dtype=torch.long)
+            )
 
         logits = []
         for value in (0.0, 1.0):
@@ -304,7 +346,14 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         expected = []
         with torch.no_grad():
             for i, (height, width) in enumerate(sizes):
-                codes = model.vision_tokenizer.encode(pixel_values[i : i + 1, :, :height, :width])[0]
+                output = model.vision_tokenizer.encode(pixel_values[i : i + 1, :, :height, :width])
+                self.assertIsInstance(output, ModelOutput)
+                self.assertEqual(output.image_tokens.shape, (1, height // factor, width // factor))
+                self.assertEqual(output.image_tokens.dtype, torch.long)
+                self.assertTrue(
+                    ((output.image_tokens >= 0) & (output.image_tokens < config.vision_config.codebook_size)).all()
+                )
+                codes = output.image_tokens[0]
                 expected.append(codes.flatten() + config.image_token_offset)
         self.assertTrue(torch.equal(vocab_ids, torch.cat(expected)))
         expected_counts = [(h // factor) * (w // factor) for h, w in sizes]

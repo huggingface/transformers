@@ -168,7 +168,7 @@ def main():
     for name, image in images.items():
         pixel_values = preprocess(image, device)
         with torch.no_grad():
-            ours = port.encode(pixel_values)  # (1, H//16, W//16)
+            ours = port.encode(pixel_values).image_tokens  # (1, H//16, W//16)
         theirs = original_encode(original, pixel_values)  # flat
         our_codes[name] = ours
 
@@ -193,7 +193,7 @@ def main():
 
     # (a) input bf16 -> model fp32: encode() upcasts the (lossily bf16-rounded) input to fp32
     with torch.no_grad():
-        codes = port.encode(pixels_bf16)
+        codes = port.encode(pixels_bf16).image_tokens
     agreement = (codes == baseline).float().mean().item()
     record(INFO, "dtype[input bf16 -> model fp32]", f"{agreement:.1%} agreement (input quantization loss only)")
 
@@ -204,7 +204,7 @@ def main():
     #     the shipped converter's `--verify`.
     port = port.to(torch.bfloat16)
     with torch.no_grad():
-        codes = port.encode(pixels_bf16)
+        codes = port.encode(pixels_bf16).image_tokens
     agreement = (codes == baseline).float().mean().item()
     record(
         INFO,
