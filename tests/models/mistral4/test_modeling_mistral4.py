@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Mistral4 model."""
 
 import gc
+import tempfile
 import unittest
 
 import pytest
@@ -84,8 +85,10 @@ class Mistral4IntegrationTest(unittest.TestCase):
     @slow
     def test_mistral_small_4_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
         model = Mistral3ForConditionalGeneration.from_pretrained(
-            "mistralai/Mistral-Small-4-119B-2603", device_map="auto"
+            "mistralai/Mistral-Small-4-119B-2603", device_map="auto", offload_folder=offload_dir.name
         )
         input_ids = torch.tensor([input_ids]).to(model.device)
         with torch.no_grad():
@@ -119,8 +122,10 @@ class Mistral4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-Small-4-119B-2603")
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
         model = Mistral3ForConditionalGeneration.from_pretrained(
-            "mistralai/Mistral-Small-4-119B-2603", device_map="auto"
+            "mistralai/Mistral-Small-4-119B-2603", device_map="auto", offload_folder=offload_dir.name
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
