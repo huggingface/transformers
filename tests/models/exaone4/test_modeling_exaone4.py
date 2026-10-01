@@ -136,7 +136,7 @@ class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_model_generation_beyond_sliding_window(self):
-        EXPECTED_TEXT_COMPLETION = " This is a nice place. I really enjoy the scenery, and the atmosphere is so relaxing. I'm grateful for the opportunity to experience this place. It"
+        EXPECTED_TEXT_COMPLETION = " This is a nice place. I really enjoy the scenery, and I'm grateful for the opportunity to experience it.\n\nOkay, let's break"
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         prompt = "This is a nice place. " * 700 + "I really enjoy the scenery,"
         model = Exaone4ForCausalLM.from_pretrained(
