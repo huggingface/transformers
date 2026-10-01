@@ -62,6 +62,6 @@ jobs:
       runner_type: "a10"
       report_repo_id: hf-internal-testing/transformers_daily_ci
       commit_sha: ${{ github.sha }}
-      subdirs: '["cohere2_moe", "esm", "exaone4", "flava", "florence2", "fnet", "fun_asr_nano", "gemma3", "gemma4", "generation", "glm4_moe_lite", "glm4v", "glm_moe_dsa", "gpt_bigcode", "nemotron_asr_streaming", "nemotron_h", "neucodec", "nllb_moe", "omdet_turbo", "pegasus_x", "persimmon", "phimoe", "whisper", "xmod", "zamba", "zaya"]'
+      subdirs: '["exaone4", "nemotron_asr_streaming", "phimoe"]'
     secrets: inherit
 
