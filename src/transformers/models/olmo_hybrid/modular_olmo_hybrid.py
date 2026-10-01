@@ -53,6 +53,7 @@ from ..qwen3_next.modeling_qwen3_next import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
+    fla_needs_equal_qk_heads,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -289,6 +290,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.head_v_dim = config.linear_value_head_dim
         self.key_dim = self.head_k_dim * self.num_k_heads
         self.value_dim = self.head_v_dim * self.num_v_heads
+        self.repeat_qk_heads = self.num_v_heads > self.num_k_heads and fla_needs_equal_qk_heads()
         self.layer_idx = layer_idx
         self.conv_kernel_size = config.linear_conv_kernel_dim
         self.allow_neg_eigval = config.linear_allow_neg_eigval
@@ -403,7 +405,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         k = k.view(batch_size, seq_len, -1, self.head_k_dim)
         v = v.view(batch_size, seq_len, -1, self.head_v_dim)
 
-        if self.num_v_heads > self.num_k_heads:
+        if self.repeat_qk_heads:
             expand_ratio = self.num_v_heads // self.num_k_heads
             q = q.repeat_interleave(expand_ratio, dim=2)
             k = k.repeat_interleave(expand_ratio, dim=2)
