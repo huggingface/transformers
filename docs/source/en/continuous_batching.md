@@ -397,7 +397,7 @@ cb_config = ContinuousBatchingConfig(
 
 ## Paged attention
 
-Continuous batching requires a paged-compatible attention backend: we support any flavour of flash attention (official flash attention package, flash attention kernel loaded with `kernels`), `sdpa` and `paged|eager`. Set `attn_implementation` when loading the model.
+Continuous batching requires a paged-compatible attention backend: we support any flavour of flash attention (official flash attention package, flash attention kernel loaded with `kernels`), `sdpa` and `paged|eager`. Regular `eager` is not yet supported but will be in the future, at which point `paged|eager` will be deprecated. Set `attn_implementation` when loading the model.
 
 | Backend | `attn_implementation` | Requirements |
 |---|---|---|

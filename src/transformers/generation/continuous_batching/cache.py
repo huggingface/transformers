@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
+import warnings
 from math import ceil, lcm
 from typing import Any
 
@@ -489,6 +491,41 @@ class PagedAttentionCache:
         """Fills each allocator's row of the kernel block table for the given request."""
         for allocator in self.cache_allocators.values():
             allocator.fill_block_table(request_id, past_length, query_length, block_table[allocator.index])
+
+    # DEPRECATED METHODS
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
+        """Deprecaed method to get the K and V cache views for a block table update. Now baked in "update"."""
+        warnings.warn(
+            "The get_cache_for_block_table function is deprecated and will be removed in v5.32 .",
+            FutureWarning,
+            stacklevel=2,
+        )
+        allocator = self.layer_to_allocator[layer_idx]
+        k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
+        return allocator.index, k_cache, v_cache
+
+    def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
+        """Deprecated method to get the name of the block table key for the given flash_attn_with_kvcache_fn. The
+        function's signature is only inspected once. This is necessary because different version of flash have different
+        names for the block table key."""
+        warnings.warn(
+            "The get_block_table_key function is deprecated and will be removed in v5.32 .",
+            FutureWarning,
+            stacklevel=2,
+        )
+        _block_table_key = getattr(self, "_block_table_key", None)
+        if _block_table_key is None:
+            kwarg_names = inspect.signature(flash_attn_with_kvcache_fn).parameters.keys()
+            if "block_table" in kwarg_names:
+                self._block_table_key = "block_table"
+            elif "page_table" in kwarg_names:
+                self._block_table_key = "page_table"
+            else:
+                raise ValueError(
+                    f"flash_attn_with_kvcache_fn does not have a block_table or page_table argument: "
+                    f"{inspect.signature(flash_attn_with_kvcache_fn)}"
+                )
+        return self._block_table_key
 
 
 # TODO: can we get rid of this class?

@@ -765,8 +765,7 @@ class ContinuousBatchingManager:
                 logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
         # If the implementation is still eager, switch to paged|eager to avoid a crash
-        if target_implem == "eager":
-            target_implem = "paged|eager"
+        target_implem = "paged|eager" if target_implem == "eager" else target_implem
 
         # Check the implementation is valid for CB
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
@@ -776,7 +775,7 @@ class ContinuousBatchingManager:
                 "or a flash implementation instead."
             )
 
-        # Switch to a paged implementation (always entered if conversion to flash happened)
+        # It the target implementation is different from the original, set it and save the original
         if target_implem != original_attn_impl:
             model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
