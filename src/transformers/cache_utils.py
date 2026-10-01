@@ -12,7 +12,6 @@ from .utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from .utils.deprecation import deprecate_kwarg
 
 
 if is_hqq_available():
@@ -171,7 +170,6 @@ class DynamicLayer(CacheLayerMixin):
         self.is_initialized = False
         super().reset()
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer.
@@ -295,7 +293,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         """Return the maximum cache shape of the cache"""
         return self.sliding_window
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
@@ -386,7 +383,6 @@ class DynamicIndexedLayer(DynamicLayer):
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         super().crop(tokens_to_remove)
         if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
@@ -1151,7 +1147,6 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicLayer.reorder_cache(self, beam_idx)
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         LinearAttentionLayer.crop(self, tokens_to_remove)
         DynamicLayer.crop(self, tokens_to_remove)
@@ -1183,7 +1178,6 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
 
-    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         LinearAttentionLayer.crop(self, tokens_to_remove)
         DynamicSlidingWindowLayer.crop(self, tokens_to_remove)
@@ -2081,7 +2075,6 @@ class EncoderDecoderCache(Cache):
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
 
-    @deprecate_kwarg("maximum_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
         Remove `tokens_to_remove` tokens from the current cache layer.
