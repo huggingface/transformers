@@ -32,7 +32,7 @@ if is_torch_available():
     from transformers import LlamaConfig, LlamaForCausalLM
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import (
-        load_checkpoint_in_distributed_model,
+        load_model_checkpoint_distributed,
         load_optimizer_distributed,
         save_optimizer_distributed,
     )
@@ -92,7 +92,7 @@ def _test_save_and_from_pretrained(rank, directory, source_config, destination_c
         torch.testing.assert_close(full_state_dict, reference.state_dict())
 
 
-def _test_load_checkpoint_in_distributed_model(rank, directory):
+def _test_load_model_checkpoint_distributed(rank, directory):
     with _distributed_context(rank, directory):
         reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
         model = LlamaForCausalLM.from_pretrained(
@@ -106,7 +106,7 @@ def _test_load_checkpoint_in_distributed_model(rank, directory):
             with torch.no_grad():
                 for parameter in model.parameters():
                     parameter.zero_()
-            load_checkpoint_in_distributed_model(model, f"{directory}/{checkpoint}")
+            load_model_checkpoint_distributed(model, f"{directory}/{checkpoint}")
             full_state_dict = get_model_state_dict(model, options=StateDictOptions(full_state_dict=True))
             torch.testing.assert_close(full_state_dict, reference.state_dict(), msg=f"checkpoint={checkpoint}")
 
@@ -177,10 +177,10 @@ class DistributedUtilsTest(unittest.TestCase):
                 LlamaForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
             )
 
-    def test_load_checkpoint_in_distributed_model(self):
+    def test_load_model_checkpoint_distributed(self):
         with tempfile.TemporaryDirectory() as directory:
             LlamaForCausalLM(self.config).save_pretrained(f"{directory}/seed")
-            mp.spawn(_test_load_checkpoint_in_distributed_model, args=(directory,), nprocs=4, join=True)
+            mp.spawn(_test_load_model_checkpoint_distributed, args=(directory,), nprocs=4, join=True)
 
     def test_optimizer_checkpoint(self):
         with tempfile.TemporaryDirectory() as directory:

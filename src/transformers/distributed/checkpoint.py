@@ -204,7 +204,7 @@ def _load_sharded_checkpoint_in_distributed_model(model, checkpoint_dir: str | o
     set_model_state_dict(model, state)
 
 
-def load_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
+def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
     """
     Load local safetensors weights into an initialized model, preserving its current mesh and placements.
     """

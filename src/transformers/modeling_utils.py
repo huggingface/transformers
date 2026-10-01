@@ -55,7 +55,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.checkpoint import is_sharded_checkpoint, load_checkpoint_in_distributed_model
+from .distributed.checkpoint import is_sharded_checkpoint, load_model_checkpoint_distributed
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
@@ -4364,7 +4364,7 @@ class PreTrainedModel(
             # DCP loads in place, so every parameter and buffer has to be materialized first.
             model._move_missing_keys_from_meta_to_device(set(model.state_dict()), device_map, device_mesh, None)
             model.tie_weights(recompute_mapping=False)
-            load_checkpoint_in_distributed_model(model, distributed_checkpoint_dir)
+            load_model_checkpoint_distributed(model, distributed_checkpoint_dir)
             # Everything in the state dict was loaded: only initialize what DCP cannot provide (non-persistent buffers).
             for tensor in model.state_dict(keep_vars=True).values():
                 tensor._is_hf_initialized = True
