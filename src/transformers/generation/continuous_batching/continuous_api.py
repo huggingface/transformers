@@ -18,7 +18,7 @@ import queue
 import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from datetime import timedelta
 from time import perf_counter
 from typing import Any
@@ -45,7 +45,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import ThreadLocalCounter, WorkloadHints, drain_queue
+from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, stream_context
 
 
 """
@@ -403,8 +403,8 @@ class ContinuousBatchProcessor:
     def __del__(self) -> None:
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+            device_module.empty_cache()
 
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
@@ -600,9 +600,7 @@ class ContinuousBatchProcessor:
                     self.scheduler.add_waiting_request(child_state)
 
             # Actually perform the block copies
-            compute_stream = self.inputs_and_outputs.compute_stream
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-            with maybe_stream:
+            with stream_context(self.inputs_and_outputs.compute_stream):
                 self.cache.perform_cache_copy(fork_src_and_dst)
 
     def has_pending_requests(self) -> bool:
@@ -859,8 +857,8 @@ class ContinuousBatchingManager:
 
         # In all cases, a little cleanup is good
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+            device_module.empty_cache()
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
         """Wait for the background thread to finish. Wait can be capped using the timeout argument (in seconds)."""

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from contextlib import nullcontext
 from functools import partial
 from itertools import repeat
 from typing import TypedDict
@@ -26,7 +25,15 @@ from .cache import PagedAttentionCache
 from .cache_allocators import FULL_ATTENTION, SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
-from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask, pad_to_pow2
+from .utils import (
+    CudaGraphBuffer,
+    aligned_divide,
+    attn_mask_is_needed,
+    build_attention_mask,
+    create_device_stream,
+    pad_to_pow2,
+    stream_context,
+)
 
 
 class PagedAttentionArgs(TypedDict):
@@ -114,10 +121,11 @@ class ContinuousBatchingIOs:
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer()
-        # Setup static tensors and compute stream
+        # Setup static tensors
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
-        self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
+        # If the device is an accelerator that supports streams, also create a compute stream
+        self.compute_stream = create_device_stream(device) if device.type != "cpu" else None
 
     def _setup_static_tensors(self, logit_processor: ContinuousBatchingLogitsProcessorList) -> None:
         """Allocates static tensors for generation inputs and outputs. This is called only once at init time, to avoid
@@ -227,8 +235,7 @@ class ContinuousBatchingIOs:
         other.max_length_q = self.max_length_q
         other.max_length_k = dict(self.max_length_k)
         # Transfer static tensors
-        maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
-        with maybe_stream:
+        with stream_context(stream):
             other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             # Only transfer block_table for decode-only batches (when it's actually used)
             if self.use_block_table:
@@ -596,24 +603,21 @@ class HostDeviceIOPair:
             model_dtype=model_dtype,
             logit_processor=logit_processor,
         )
-        # Create events only on CUDA devices
-        self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
-        self.compute_over = torch.cuda.Event() if torch.cuda.is_available() else None
-        self.d2h_over = torch.cuda.Event() if torch.cuda.is_available() else None
+        self.h2d_over = torch.Event(device, enable_timing=False)
+        self.compute_over = torch.Event(device, enable_timing=False)
+        self.d2h_over = torch.Event(device, enable_timing=False)
 
     def reset(self) -> None:
         self.host_io.reset()
         self.device_io.reset()
         for event in [self.h2d_over, self.compute_over, self.d2h_over]:
-            if event is not None:
-                event.synchronize()
+            event.synchronize()
 
     def transfer_inputs_h2d(self, stream: torch.cuda.Stream) -> None:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
 
     def transfer_outputs_d2h(self, stream: torch.cuda.Stream | None) -> None:
-        maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
-        with maybe_stream:
+        with stream_context(stream):
             self.host_io.output_ids.copy_(self.device_io.output_ids, non_blocking=True)
 
 
@@ -663,6 +667,8 @@ class ContinuousBatchingAsyncIOs:
     Proper ordering of steps is ensured through the use of CUDA events and streams.
     """
 
+    _supported_device_types = ("cuda", "xpu")
+
     def __init__(
         self,
         cache: PagedAttentionCache,
@@ -672,9 +678,13 @@ class ContinuousBatchingAsyncIOs:
         model_dtype: torch.dtype,
         logit_processor: ContinuousBatchingLogitsProcessorList,
     ) -> None:
-        # Async batching needs streams to function, so check is CUDA is available
-        if not torch.cuda.is_available():
-            raise RuntimeError(f"Async batching requires CUDA, but {torch.cuda.is_available() = }")
+        # Check device module is compatible with async batching
+        if device.type not in self._supported_device_types:
+            raise RuntimeError(
+                f"Async batching requires a device type in {self._supported_device_types} but got {device.type = }"
+            )
+        if not torch.get_device_module(device).is_available():
+            raise RuntimeError("Async batching requires an available device.")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
         self.io_pairs = [
@@ -689,9 +699,11 @@ class ContinuousBatchingAsyncIOs:
             for _ in range(2)
         ]
         # CUDA streams
-        self.h2d_stream = torch.cuda.Stream(device=device)
-        self.d2h_stream = torch.cuda.Stream(device=device)
-        self.compute_stream = torch.cuda.Stream(device=device)
+        self.h2d_stream: torch.cuda.Stream = create_device_stream(device)
+        self.d2h_stream: torch.cuda.Stream = create_device_stream(device)
+        self.compute_stream: torch.cuda.Stream = create_device_stream(device)
+        if self.h2d_stream is None or self.d2h_stream is None or self.compute_stream is None:
+            raise RuntimeError(f"Async batching requires stream to function. Stream creation failed with {device = }.")
         # Set all unused compute streams to None
         self.io_pairs[0].host_io.compute_stream = None
         self.io_pairs[0].device_io.compute_stream = None

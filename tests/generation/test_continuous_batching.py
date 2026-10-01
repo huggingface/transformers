@@ -64,6 +64,7 @@ from transformers.generation.continuous_batching.requests import (
     RequestStatus,
     get_device_and_memory_breakdown,
 )
+from transformers.generation.continuous_batching.utils import DEVICE_TYPE_TO_GRAPH_NAME
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.testing_utils import (
     Expectations,
@@ -1226,9 +1227,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Skip the test if Flash Attention 2 or 3 is required but not available.
         flexible_flash_skip(self, attn_implementation)
-        # Skip the test if cuda graph is on but the device is not CUDA
-        if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
-            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+        # Skip the test if cuda graph is on but the device does not support graph capture
+        device_type = torch_device.type if isinstance(torch_device, torch.device) else torch_device
+        if any(continuous_batching_config.cuda_graph_booleans) and device_type not in DEVICE_TYPE_TO_GRAPH_NAME:
+            supported = list(DEVICE_TYPE_TO_GRAPH_NAME.keys())
+            self.skipTest(f"CUDA graph is only supported on {supported}, but {device_type = }. Skipping test.")
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
@@ -1281,7 +1284,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
 
-        model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
+        model.generation_config.use_cuda_graph = (
+            any(continuous_batching_config.cuda_graph_booleans) and device_type in DEVICE_TYPE_TO_GRAPH_NAME
+        )
         model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
         # Create a static cache if compile_config is set, because regular generate requires a compileable cache
         past_key_values = None
