@@ -7,11 +7,13 @@ on:
 env:
   SLACK_CHANNEL_ID: '#transformers-gh-ci-central'
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   get-python-versions:
+    permissions:
+      contents: read
     name: Get supported Python versions
     runs-on: ubuntu-latest
     outputs:
@@ -35,6 +37,8 @@ jobs:
           echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
 
   test-extras:
+    permissions:
+      contents: read
     name: Test extras on Python ${{ matrix.python-version }}
     needs: get-python-versions
     runs-on: ubuntu-latest
@@ -119,6 +123,7 @@ jobs:
           if-no-files-found: ignore
 
   precheck-slack:
+    permissions: {}
     name: Check Slack token availability
     runs-on: ubuntu-latest
     outputs:
@@ -135,6 +140,8 @@ jobs:
           fi
 
   notify-failures:
+    permissions:
+      contents: read
     name: Notify failures to Slack
     needs: [test-extras, precheck-slack]
     runs-on: ubuntu-latest
@@ -177,22 +184,24 @@ jobs:
         if: env.SLACK_MESSAGE != ''
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c
         with:
-          channel-id: ${{ env.SLACK_CHANNEL_ID }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           payload: |
             {
+              "channel": ${{ toJSON(env.SLACK_CHANNEL_ID) }},
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ env.SLACK_TITLE }}"
+                    "text": ${{ toJSON(env.SLACK_TITLE) }}
                   }
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "${{ env.SLACK_MESSAGE }}"
+                    "text": ${{ toJSON(env.SLACK_MESSAGE) }}
                   }
                 },
                 {
@@ -207,5 +216,3 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

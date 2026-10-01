@@ -98,7 +98,7 @@ def get_results(output_dir):
     results = {}
     path = os.path.join(output_dir, "all_results.json")
     if os.path.exists(path):
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             results = json.load(f)
     else:
         raise ValueError(f"can't find {path}")

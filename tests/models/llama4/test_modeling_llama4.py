@@ -18,12 +18,12 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch_large_accelerator,
     slow,
     torch_device,
 )
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_processing_common import url_to_local_path
 
 
@@ -38,7 +38,7 @@ if is_torch_available():
 
 @slow
 @require_torch_large_accelerator
-class Llama4IntegrationTest(unittest.TestCase):
+class Llama4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "meta-llama/Llama-4-Scout-17B-16E"
 
     @classmethod
@@ -51,6 +51,7 @@ class Llama4IntegrationTest(unittest.TestCase):
         )
 
     def setUp(self):
+        super().setUp()
         self.processor = Llama4Processor.from_pretrained("meta-llama/Llama-4-Scout-17B-16E", padding_side="left")
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
@@ -86,9 +87,6 @@ class Llama4IntegrationTest(unittest.TestCase):
                 ],
             },
         ]
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def test_model_17b_16e_fp32(self):
         EXPECTED_TEXTS = Expectations(

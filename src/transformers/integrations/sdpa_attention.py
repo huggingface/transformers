@@ -1,6 +1,6 @@
 import torch
 
-from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
+from ..utils import is_torch_mps_available, is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
 
@@ -8,8 +8,10 @@ logger = logging.get_logger(__name__)
 
 
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
+_is_torch_greater_or_equal_than_2_13 = is_torch_greater_or_equal("2.13", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
+_is_torch_mps_available = is_torch_mps_available()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -25,14 +27,12 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
-    # GQA can only be used under the following conditions
-    # 1.cuda or Ascend NPU
-    #   - attention_mask is None (otherwise it will fall back to the math kernel)
-    #   - key head_dim == value head_dim <= 256 (otherwise it will fall back to the math kernel)
-    # 2.xpu
-    #   - torch version >= 2.8
+    # XPU and MPS support masked GQA under more recent torch versions
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
+    elif _is_torch_mps_available:
+        return _is_torch_greater_or_equal_than_2_13
+    # CUDA and Ascend NPU require no mask and supported head dims to avoid falling back to the math kernel.
     return attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 

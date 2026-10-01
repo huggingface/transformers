@@ -99,7 +99,7 @@ class EsmcRotaryEmbedding(nn.Module):
         )
         position_ids_expanded = position_ids[:, None, :].float()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
         # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
@@ -360,8 +360,8 @@ class EsmcModel(EsmcPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, EsmcModel
 
-        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
+        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
         >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.last_hidden_state.shape
@@ -463,8 +463,8 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         >>> from transformers import AutoTokenizer, EsmcForMaskedLM
         >>> import torch
 
-        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
+        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
         >>> inputs = tokenizer(["MLKNVQ<mask>LV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.logits.shape
