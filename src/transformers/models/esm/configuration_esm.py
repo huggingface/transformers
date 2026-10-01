@@ -192,7 +192,7 @@ class EsmConfig(PreTrainedConfig):
     model_type = "esm"
     sub_configs = {"esmfold_config": EsmFoldConfig}
 
-    vocab_size: int | None = None
+    vocab_size: int = 33
     mask_token_id: int | None = None
     pad_token_id: int | None = None
     hidden_size: int = 768

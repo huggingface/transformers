@@ -385,6 +385,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
     """
 )
 class Aimv2TextModel(Aimv2PreTrainedModel):
+    config: Aimv2TextConfig
     main_input_name = "input_ids"
 
     _can_record_outputs = {

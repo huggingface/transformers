@@ -110,6 +110,8 @@ class SmolVLMConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING["llama"](
                 rms_norm_eps=1e-5,
                 pad_token_id=self.pad_token_id,
+                # large enough to cover the special tokens (`pad_token_id`, `image_token_id`, ...)
+                vocab_size=128259,
             )
 
         super().__post_init__(**kwargs)
