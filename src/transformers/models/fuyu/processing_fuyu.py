@@ -277,6 +277,13 @@ class FuyuProcessor(ProcessorMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
+            for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
+                if key in merged_kwargs["text_kwargs"]:
+                    logger.warning_once(
+                        f"Passing `{key}` in `text_kwargs` is deprecated "
+                        "and will be removed in a future version. "
+                        "Pass it directly to the processor instead."
+                    )
             # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
                 "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]

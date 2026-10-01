@@ -29,12 +29,14 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
+
+logger = logging.get_logger(__name__)
 
 
 class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
@@ -130,6 +132,14 @@ class ColModernVBertProcessor(ProcessorMixin):
         )
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+
+        for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
+            if key in output_kwargs["text_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `text_kwargs` is deprecated "
+                    "and will be removed in a future version. "
+                    "Pass it directly to the processor instead."
+                )
         # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
         return_text_replacement_offsets = output_kwargs["text_kwargs"].pop(
             "return_text_replacement_offsets", output_kwargs["return_text_replacement_offsets"]
