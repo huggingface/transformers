@@ -235,9 +235,9 @@ class SubConfigSpec:
             model_type = subconfig.get("model_type", self.model_type) if subconfig is not None else self.model_type
             if not model_type:
                 raise ValueError(f"Cannot resolve `{key}`: no `model_type` found inputs or in `sub_configs_defaults`.")
-            subconfig_cls = self.config_class
-        else:
             subconfig_cls = self.get_config_class(model_type)
+        else:
+            subconfig_cls = self.config_class
 
         # Copy the dict to not mutate it in-place
         if isinstance(subconfig, dict):
