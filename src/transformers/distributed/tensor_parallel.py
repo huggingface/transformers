@@ -858,7 +858,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         hidden_states = DTensor.from_local(hidden_states, tp_mesh, [Replicate()], run_check=False)
         top_k_index = DTensor.from_local(top_k_index, tp_mesh, [Replicate()], run_check=False)
         top_k_weights = DTensor.from_local(top_k_weights, tp_mesh, [Replicate()], run_check=False)
-        
+
         hidden_states = hidden_states.redistribute(tp_mesh, [Shard(0)]).to_local()
         top_k_index = top_k_index.redistribute(tp_mesh, [Shard(0)]).to_local()
         top_k_weights = top_k_weights.redistribute(tp_mesh, [Shard(0)]).to_local()
