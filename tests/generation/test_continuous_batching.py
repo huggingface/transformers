@@ -1228,8 +1228,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Skip the test if Flash Attention 2 or 3 is required but not available.
         flexible_flash_skip(self, attn_implementation)
         # Skip the test if cuda graph is on but the device does not support graph capture
+        device_type = torch_device.type if isinstance(torch_device, torch.device) else torch_device
         if any(continuous_batching_config.cuda_graph_booleans) and device_type not in DEVICE_TYPE_TO_GRAPH_NAME:
             supported = list(DEVICE_TYPE_TO_GRAPH_NAME.keys())
+            self.skipTest(f"CUDA graph is only supported on {supported}, but {device_type = }. Skipping test.")
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
@@ -1282,7 +1284,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
 
-        device_type = torch_device.type if isinstance(torch_device, torch.device) else torch_device
         model.generation_config.use_cuda_graph = (
             any(continuous_batching_config.cuda_graph_booleans) and device_type in DEVICE_TYPE_TO_GRAPH_NAME
         )
