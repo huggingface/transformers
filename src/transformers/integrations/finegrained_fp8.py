@@ -721,7 +721,7 @@ class FP8Experts(nn.Module):
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).view(-1)
 
-        for expert_idx in expert_hit:
+        for expert_idx in expert_hit.tolist():
             if expert_idx == self.num_experts:
                 continue
 
