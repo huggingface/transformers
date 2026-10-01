@@ -203,8 +203,8 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
     its own features alone. Both updates are residual, so the two directions share this class and
     differ only in which node set receives messages and whether the receiver contributes to them.
 
-    Larger graphs are chunked in fp32 inference using the configured chunk sizes. Training,
-    autocast and other dtypes retain the unchunked path.
+    Larger graphs are chunked in inference using the configured chunk sizes. Training and autocast
+    retain the unchunked path.
     """
 
     def __init__(self, config: WeatherNext2Config, grid_to_mesh: bool):
@@ -243,7 +243,6 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             and num_items > self.chunk_size_graph
             and not self.training
             and not torch.is_grad_enabled()
-            and grid_states.dtype == torch.float32
             and not torch.is_autocast_enabled(grid_states.device.type)
         )
         if chunked and not self.grid_to_mesh:
@@ -299,7 +298,8 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
         del projected_grid
         if self.aggregate_normalization is not None:
             aggregated = aggregated / self.aggregate_normalization
-        inputs = torch.cat([mesh_states, aggregated], dim=-1)
+        # Summed in float32 like the unchunked path, then cast back for the node update.
+        inputs = torch.cat([mesh_states, aggregated.to(mesh_states.dtype)], dim=-1)
         mesh_states = mesh_states + self.mesh_node_update(inputs, conditioning)
         grid_states = grid_states + self.grid_node_update(grid_states, conditioning)
         return grid_states, mesh_states
@@ -326,7 +326,7 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
             aggregated.index_add_(1, local_receivers, messages.float())
             if self.aggregate_normalization is not None:
                 aggregated = aggregated / self.aggregate_normalization
-            inputs = torch.cat([grid_block, aggregated], dim=-1)
+            inputs = torch.cat([grid_block, aggregated.to(grid_block.dtype)], dim=-1)
             output[:, start:end] = grid_block + self.grid_node_update(inputs, conditioning)
         mesh_states = mesh_states + self.mesh_node_update(mesh_states, conditioning)
         return output, mesh_states
