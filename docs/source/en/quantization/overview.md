@@ -26,7 +26,7 @@ Use the [quantization picker](https://huggingface.co/spaces/stevhliu/quantizatio
 	src="https://stevhliu-quantization-picker.hf.space"
 	frameborder="0"
 	width="100%"
-	height="900"
+	height="420"
 ></iframe>
 
 ## Resources

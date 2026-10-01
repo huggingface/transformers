@@ -23,6 +23,6 @@ Use the **Modality** row to filter by text, vision, audio, video, multimodal, or
 	src="https://stevhliu-model-timeline.hf.space"
 	frameborder="0"
 	width="125%"
-	height="1150"
-	style="transform: scale(0.8); transform-origin: top left; max-width: calc(100%/0.8); height: 1150px; margin-bottom: calc(-0.2*1150px);"
+	height="650"
+	style="transform: scale(0.8); transform-origin: top left; max-width: calc(100%/0.8); height: 650px; margin-bottom: calc(-0.2*650px);"
 ></iframe>
