@@ -218,18 +218,20 @@ def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, 
             _load_sharded_checkpoint_in_distributed_model(model, dcp_dir, strict=strict)
             return
 
+    checkpoint_files = []
     if os.path.isfile(safe_index_file):
         with open(safe_index_file, "r", encoding="utf-8") as f:
             index = json.load(f)
-        shard_paths = []
         for shard_file in sorted(set(index["weight_map"].values())):
             shard_path = os.path.join(checkpoint_dir, shard_file)
             if not os.path.isfile(shard_path):
                 raise ValueError(f"Shard file {shard_path} not found in {checkpoint_dir}.")
-            shard_paths.append(shard_path)
-        _load_consolidated_checkpoint_in_distributed_model(model, shard_paths, strict=strict)
+            checkpoint_files.append(shard_path)
     elif os.path.isfile(safe_weights_file):
-        _load_consolidated_checkpoint_in_distributed_model(model, safe_weights_file, strict=strict)
+        checkpoint_files.append(safe_weights_file)
+
+    if checkpoint_files:
+        _load_consolidated_checkpoint_in_distributed_model(model, checkpoint_files, strict=strict)
     else:
         raise ValueError(f"No distributed, sharded, or safetensors checkpoint found in {checkpoint_dir}.")
 
