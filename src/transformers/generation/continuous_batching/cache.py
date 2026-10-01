@@ -494,9 +494,9 @@ class PagedAttentionCache:
 
     # DEPRECATED METHODS
     def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
-        """Deprecaed method to get the K and V cache views for a block table update. Now baked in "update"."""
+        """Deprecated method to get the K and V cache views for a block table update. Now baked in "update"."""
         warnings.warn(
-            "The get_cache_for_block_table function is deprecated and will be removed in v5.32 .",
+            "The get_cache_for_block_table function is deprecated and will be removed in v5.23 .",
             FutureWarning,
             stacklevel=2,
         )
@@ -509,7 +509,7 @@ class PagedAttentionCache:
         function's signature is only inspected once. This is necessary because different version of flash have different
         names for the block table key."""
         warnings.warn(
-            "The get_block_table_key function is deprecated and will be removed in v5.32 .",
+            "The get_block_table_key function is deprecated and will be removed in v5.23 .",
             FutureWarning,
             stacklevel=2,
         )

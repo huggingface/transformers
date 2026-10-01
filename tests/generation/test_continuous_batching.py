@@ -1369,17 +1369,20 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            (False, False),  # _supports_flash_attn=False opts out: stays on sdpa
-            (False, True),  # _supports_flash_attn=False opts out: stays on sdpa
+            (False, False),  # _supports_flash_attn=False: stays on sdpa
+            (False, True),  # same, even with auto switch on: stay on SDPA
             (True, False),  # flash-capable model on a non-flash impl, but auto switch off: stay on SDPA
-            (True, True),  # flash-capable model on a non-flash impl, with auto switch on: switched to flash
+            (True, True),  # flash-capable model on a non-flash impl, with auto switch on: switch to flash
         ]
     )
     @slow
     def test_switch_to_cb_friendly_attn(self, supports_flash_attn: bool, auto_switch_to_flash: bool) -> None:
         """Continuous batching switches to a paged (ideally flash) attention and restores the original on stop."""
 
-        if is_flash_attn_2_available(kernels_fallback_ok=True) or is_flash_attn_3_available(kernels_fallback_ok=True):
+        flash_available = (
+            is_flash_attn_2_available(kernels_fallback_ok=True) or is_flash_attn_3_available(kernels_fallback_ok=True)
+        )
+        if not flash_available:
             self.skipTest("Flash attention is unavailable, cannot test the auto-switch to flash.")
 
         # Retrieve the model

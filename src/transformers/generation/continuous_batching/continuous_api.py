@@ -744,7 +744,8 @@ class ContinuousBatchingManager:
 
         # Check if flash attention is supported and available
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
-        if not is_flash and model._supports_flash_attn and auto_switch_to_flash:
+        is_paged = target_implem == "paged|eager"
+        if not is_flash and not is_paged and model._supports_flash_attn and auto_switch_to_flash:
             # Try to use FA3, then FA2, then give up. Both regular package or kernels is fine.
             if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
@@ -775,7 +776,7 @@ class ContinuousBatchingManager:
                 "or a flash implementation instead."
             )
 
-        # It the target implementation is different from the original, set it and save the original
+        # If the target implementation is different from the original, set it and save the original
         if target_implem != original_attn_impl:
             model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
