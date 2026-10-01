@@ -193,7 +193,6 @@ class RadioModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (RadioModel,) if is_torch_available() else ()
     pipeline_model_mapping = {}
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = RadioModelTester(self)
