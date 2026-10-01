@@ -29,7 +29,6 @@ from .sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .utils import (
     _check_distributed_checkpointing_available,
     _distributed_barrier,
-    _get_torch_distributed_rank,
     is_dtensor,
 )
 
@@ -234,12 +233,8 @@ def load_checkpoint_in_distributed_model(model, checkpoint_dir: str | os.PathLik
         raise ValueError(f"No distributed, sharded, or safetensors checkpoint found in {checkpoint_dir}.")
 
 
-def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consolidate: bool = False) -> None:
-    """Save optimizer state via DCP, optionally also writing `optimizer.pt`.
-
-    Native DCP files are retained in `checkpoint_dir` in both cases. Consolidation
-    materializes the full optimizer state in rank 0's CPU memory. All ranks must call.
-    """
+def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
+    """Save optimizer state via DCP. All ranks must call."""
     _check_distributed_checkpointing_available()
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
@@ -253,12 +248,6 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consoli
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer, options=options))
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
-    if consolidate:
-        if _get_torch_distributed_rank() == 0:
-            from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
-
-            dcp_to_torch_save(checkpoint_dir, os.path.join(checkpoint_dir, "optimizer.pt"))
-        _distributed_barrier()
 
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
