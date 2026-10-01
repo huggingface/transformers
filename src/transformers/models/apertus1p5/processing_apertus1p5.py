@@ -149,8 +149,8 @@ class Apertus1p5Processor(ProcessorMixin):
                 )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        # the grid comes from the image processor's output, so per-call `spatial_factor` overrides stay consistent
-        grid_height, grid_width = (int(side) for side in image_inputs["image_grids"][image_idx])
+        spatial_factor = kwargs.get("spatial_factor", self.image_processor.spatial_factor)
+        grid_height, grid_width = (int(side) // spatial_factor for side in image_inputs["image_sizes"][image_idx])
         rows = self.eol_token.join([self.image_token * grid_width] * grid_height)
         return f"{self.boi_token}{grid_height}*{grid_width}{self.image_wrapper_token}{rows}{self.eoi_token}"
 
@@ -238,7 +238,7 @@ class Apertus1p5Processor(ProcessorMixin):
     @property
     def unused_input_names(self) -> list[str]:
         """Input names returned always by subprocessors but not used in the model's `forward`"""
-        return ["image_grids", "num_audio_codes"]
+        return ["num_audio_codes"]
 
 
 __all__ = ["Apertus1p5Processor"]

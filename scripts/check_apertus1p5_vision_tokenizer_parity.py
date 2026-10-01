@@ -42,7 +42,7 @@ commit 40a5516b7), and the current design-v2 loads it under `set_default_torch_d
 all other cells are measured against our fp32/fp32 baseline.
 
 Inputs are preprocessed exactly like the vLLM/Apertus pipeline feeds the encoder: RGB, float32, `x/127.5 - 1`.
-(The resize policy, smart_resize to multiples of 16 within [256^2, 1400^2], is processor scope and not
+(The resize policy, smart_resize to multiples of 16 around [128^2, 1400^2], is processor scope and not
 exercised here; sizes are chosen directly.)
 
 Requirements: downloads the original weights (~1.8 GB, float32) and executes the original repo's remote code
