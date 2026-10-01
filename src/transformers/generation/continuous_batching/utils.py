@@ -25,6 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 from .requests import FutureRequestState, RequestState, RequestStatus
 
 
+# NOTE: AMD GPUs are supported under the "cuda" module
 DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
 
 
