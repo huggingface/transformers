@@ -125,8 +125,7 @@ class Glm5NextTextExperts(nn.Module):
         with torch.no_grad():
             mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
-            expert_idx = expert_idx[0]
+        for expert_idx in hit[:, 0].tolist():
             if expert_idx == self.num_experts:
                 continue
             top_k_pos, token_idx = torch.where(mask[expert_idx])
