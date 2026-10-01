@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..wavtokenizer import WavTokenizerConfig
+from ..auto import CONFIG_MAPPING
 
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
@@ -155,15 +155,9 @@ class Apertus1p5TextConfig(PreTrainedConfig):
     output_vocab_size: int | None = None
 
     def __post_init__(self, **kwargs):
-        if self.output_vocab_size is not None:
-            if not 1 <= self.output_vocab_size <= self.vocab_size:
-                raise ValueError(
-                    f"`output_vocab_size` ({self.output_vocab_size}) must be in `[1, vocab_size]` "
-                    f"(vocab_size is {self.vocab_size})."
-                )
-            if self.output_vocab_size == self.vocab_size:
-                # Represent a full-width head with the canonical unpruned configuration.
-                self.output_vocab_size = None
+        if self.output_vocab_size == self.vocab_size and self.vocab_size > 0:
+            # Represent a full-width head with the canonical unpruned configuration.
+            self.output_vocab_size = None
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
@@ -177,6 +171,13 @@ class Apertus1p5TextConfig(PreTrainedConfig):
                 "high_freq_factor": 4.0,
             }
         super().__post_init__(**kwargs)
+
+    def validate_output_vocab_size(self):
+        if self.output_vocab_size is not None and not 1 <= self.output_vocab_size <= self.vocab_size:
+            raise ValueError(
+                f"`output_vocab_size` ({self.output_vocab_size}) must be in `[1, vocab_size]` "
+                f"(vocab_size is {self.vocab_size})."
+            )
 
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
@@ -224,12 +225,12 @@ class Apertus1p5Config(PreTrainedConfig):
     sub_configs = {
         "text_config": Apertus1p5TextConfig,
         "vision_config": Apertus1p5VisionTokenizerConfig,
-        "audio_config": WavTokenizerConfig,
+        "audio_config": CONFIG_MAPPING["wavtokenizer"],
     }
 
     text_config: dict | Apertus1p5TextConfig | None = None
     vision_config: dict | Apertus1p5VisionTokenizerConfig | None = None
-    audio_config: dict | WavTokenizerConfig | None = None
+    audio_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 131079
     audio_token_id: int = 131085
     image_token_offset: int = 131272
@@ -237,7 +238,7 @@ class Apertus1p5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        """Resolve nested configs and validate multimodal token ranges."""
+        """Resolve nested configs."""
         if isinstance(self.text_config, dict):
             self.text_config = Apertus1p5TextConfig(**self.text_config)
         elif self.text_config is None:
@@ -250,16 +251,14 @@ class Apertus1p5Config(PreTrainedConfig):
             self.vision_config = Apertus1p5VisionTokenizerConfig()
 
         if isinstance(self.audio_config, dict):
-            model_type = self.audio_config.get("model_type", WavTokenizerConfig.model_type)
-            if model_type != WavTokenizerConfig.model_type:
-                raise ValueError(
-                    f"`audio_config.model_type` must be 'wavtokenizer', got {model_type!r}. Apertus 1.5 audio "
-                    "tokens use the WavTokenizer codebook."
-                )
-            self.audio_config = WavTokenizerConfig(**self.audio_config)
+            self.audio_config = CONFIG_MAPPING["wavtokenizer"](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = WavTokenizerConfig()
+            self.audio_config = CONFIG_MAPPING["wavtokenizer"]()
+        super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        super().validate_architecture()
+        self.text_config.validate_output_vocab_size()
         if self.image_token_offset + self.vision_config.codebook_size != self.audio_token_offset:
             raise ValueError(
                 "The visual token range must end where the audio token range begins: expected "
@@ -272,7 +271,13 @@ class Apertus1p5Config(PreTrainedConfig):
                 f"The audio token range ends at {audio_vocab_end}, beyond the vocabulary "
                 f"(`text_config.vocab_size` = {self.text_config.vocab_size})."
             )
-        super().__post_init__(**kwargs)
+
+    def validate_backbones(self):
+        if self.audio_config.model_type != "wavtokenizer":
+            raise ValueError(
+                f"`audio_config.model_type` must be 'wavtokenizer', got {self.audio_config.model_type!r}. "
+                "Apertus 1.5 audio tokens use the WavTokenizer codebook."
+            )
 
 
 __all__ = ["Apertus1p5Config", "Apertus1p5TextConfig", "Apertus1p5VisionTokenizerConfig"]
