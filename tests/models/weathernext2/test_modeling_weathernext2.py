@@ -209,7 +209,11 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skipUnless(is_torch_flex_attn_available(), "Flex attention is not available")
     def test_flex_attention_kernel_options(self):
         from transformers.integrations import flex_attention
+        from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
         from transformers.models.weathernext2 import modeling_weathernext2
+
+        self.assertIsNot(modeling_weathernext2.ALL_ATTENTION_FUNCTIONS, ALL_ATTENTION_FUNCTIONS)
+        self.assertIs(ALL_ATTENTION_FUNCTIONS["flex_attention"], flex_attention.flex_attention_forward)
 
         config = self.model_tester.get_config()
         config._attn_implementation = "flex_attention"

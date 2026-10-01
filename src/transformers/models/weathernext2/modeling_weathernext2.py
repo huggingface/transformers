@@ -29,10 +29,11 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
+from ...integrations.flex_attention import flex_attention_forward
 from ...masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available
 from ...utils.generic import merge_with_config_defaults
@@ -332,6 +333,29 @@ _TORCH_FLEX_USE_BACKEND = is_torch_flex_attn_available() and "BACKEND" in getatt
 )
 
 
+def weathernext2_flex_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask,
+    **kwargs,
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    if not module.use_flex_attention_decoding:
+        kernel_options = dict(kwargs.get("kernel_options") or {})
+        if "BACKEND" not in kernel_options and "FORCE_USE_FLEX_ATTENTION" not in kernel_options:
+            if _TORCH_FLEX_USE_BACKEND:
+                kernel_options["BACKEND"] = "TRITON"
+            else:
+                kernel_options["FORCE_USE_FLEX_ATTENTION"] = True
+        kwargs["kernel_options"] = kernel_options
+    return flex_attention_forward(module, query, key, value, attention_mask, **kwargs)
+
+
+ALL_ATTENTION_FUNCTIONS = AttentionInterface()
+ALL_ATTENTION_FUNCTIONS["flex_attention"] = weathernext2_flex_attention_forward
+
+
 def gather_neighbouring_blocks(states: torch.Tensor) -> torch.Tensor:
     """Concatenates each block of nodes with the block before and after it, zero-padded at the ends.
 
@@ -396,15 +420,6 @@ class WeatherNext2Attention(nn.Module):
         query_states = query_states.reshape(-1, *query_states.shape[-3:]).float()
         key_states = key_states.reshape(-1, *key_states.shape[-3:]).float()
         value_states = value_states.reshape(-1, *value_states.shape[-3:]).float()
-
-        if self.config._attn_implementation == "flex_attention" and not self.use_flex_attention_decoding:
-            kernel_options = dict(kwargs.get("kernel_options") or {})
-            if "BACKEND" not in kernel_options and "FORCE_USE_FLEX_ATTENTION" not in kernel_options:
-                if _TORCH_FLEX_USE_BACKEND:
-                    kernel_options["BACKEND"] = "TRITON"
-                else:
-                    kernel_options["FORCE_USE_FLEX_ATTENTION"] = True
-            kwargs["kernel_options"] = kernel_options
 
         attn_output, attn_weights = attention_interface(
             self,
