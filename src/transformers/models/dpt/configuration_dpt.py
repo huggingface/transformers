@@ -141,14 +141,14 @@ class DPTConfig(PreTrainedConfig):
         if self.is_hybrid:
             if isinstance(self.backbone_config, dict):
                 self.backbone_config.setdefault("model_type", "bit")
-            self.backbone_config = self.sub_configs_defaults["backbone_config"].create_subconfig(
+            self.backbone_config, kwargs = self.sub_configs_defaults["backbone_config"].create_subconfig(
                 "backbone_config", self.backbone_config, **kwargs
             )
             if self.readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
 
         elif kwargs.get("backbone") is not None:
-            self.backbone_config = self.sub_configs_defaults["backbone_config"].create_subconfig(
+            self.backbone_config, kwargs = self.sub_configs_defaults["backbone_config"].create_subconfig(
                 "backbone_config", self.backbone_config, **kwargs
             )
             self.backbone_out_indices = None

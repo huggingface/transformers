@@ -67,7 +67,7 @@ def get_jobs_to_run():
                 # TODO: for files in `quantizers`, the processed item above may not exist. Try using a fuzzy matching
                 if item in repo_content:
                     jobs_to_run.append(item)
-                if multimodal_parents := get_composite_files(get_composite_files):
+                if multimodal_parents := get_composite_files(item):
                     jobs_to_run.extend(multimodal_parents)
                 break
     jobs_to_run = sorted(set(jobs_to_run))

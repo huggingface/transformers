@@ -248,7 +248,7 @@ class SubConfigSpec:
         else:
             raise TypeError(f"`{key}` must be a `dict`, `PreTrainedConfig`, or `None`, got `{type(subconfig)}`")
 
-        return subconfig_cls(**subconfig)
+        return subconfig_cls(**subconfig), kwargs
 
     @property
     def default_config(self):
@@ -400,7 +400,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 subconfig = getattr(self, key)
                 if subconfig is None and specs.optional:
                     continue
-                subconfig = specs.create_subconfig(key, subconfig, **kwargs)
+                subconfig, kwargs = specs.create_subconfig(key, subconfig, **kwargs)
                 setattr(self, key, subconfig)
 
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
