@@ -138,8 +138,7 @@ class NemotronHExperts(nn.Module):
             # Only iterate over experts that have at least one token assigned
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero().squeeze(-1)
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx.item()
+        for expert_idx in expert_hit.tolist():
             # Find which tokens are routed to this expert
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
 
