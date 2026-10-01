@@ -126,16 +126,15 @@ class TestHeterogeneousMasking(unittest.TestCase):
             is_causal=is_causal,
             per_layer_config={
                 0: {"sliding_window": 3},
-                1: {"sliding_window": 3},
+                1: {"sliding_window": 5},
             },
         )
         config._attn_implementation = "eager"
         config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
         cache = DynamicCache(config=config)
-        layer_0_states = torch.randn(1, config.num_key_value_heads, 1, config.head_dim)
-        layer_1_states = torch.randn(1, config.num_key_value_heads, 4, config.head_dim)
-        cache.update(layer_0_states, layer_0_states, layer_idx=0)
-        cache.update(layer_1_states, layer_1_states, layer_idx=1)
+        states = torch.randn(1, config.num_key_value_heads, 6, config.head_dim)
+        for layer_idx in range(config.num_hidden_layers):
+            cache.update(states, states, layer_idx=layer_idx)
 
         mask = create_sliding_window_causal_mask(
             config,
@@ -145,8 +144,8 @@ class TestHeterogeneousMasking(unittest.TestCase):
             allow_is_causal_skip=False,
         )
 
-        self.assertEqual(mask[0].shape[-1], 2)
-        self.assertEqual(mask[1].shape[-1], 3)
+        self.assertEqual(mask[0].shape[-1], 3)
+        self.assertEqual(mask[1].shape[-1], 5)
 
     def test_mask_reuse_does_not_recompile_when_cache_grows(self):
         config = tiny_llama_config(
