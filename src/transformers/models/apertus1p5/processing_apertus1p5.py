@@ -52,14 +52,14 @@ class Apertus1p5Processor(ProcessorMixin):
     valid_processor_kwargs = Apertus1p5ProcessorKwargs
 
     def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None, chat_template=None, **kwargs):
-        self.image_token = getattr(tokenizer, "image_token", None) or "<|image|>"
-        self.audio_token = getattr(tokenizer, "audio_token", None) or "<|audio|>"
-        self.boi_token = getattr(tokenizer, "boi_token", None) or "<|img_start|>"
-        self.eoi_token = getattr(tokenizer, "eoi_token", None) or "<|img_end|>"
-        self.image_wrapper_token = getattr(tokenizer, "image_wrapper_token", None) or "<|img_token_start|>"
-        self.eol_token = getattr(tokenizer, "eol_token", None) or "<|img_end_of_row|>"
-        self.boa_token = getattr(tokenizer, "boa_token", None) or "<|audio_start|>"
-        self.eoa_token = getattr(tokenizer, "eoa_token", None) or "<|audio_end|>"
+        self.image_token = tokenizer.image_token
+        self.audio_token = tokenizer.audio_token
+        self.boi_token = tokenizer.boi_token
+        self.eoi_token = tokenizer.eoi_token
+        self.image_wrapper_token = tokenizer.image_wrapper_token
+        self.eol_token = tokenizer.eol_token
+        self.boa_token = tokenizer.boa_token
+        self.eoa_token = tokenizer.eoa_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         unk_token_id = getattr(tokenizer, "unk_token_id", None)

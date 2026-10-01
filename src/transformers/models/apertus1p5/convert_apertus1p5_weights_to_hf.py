@@ -70,7 +70,7 @@ logger = logging.get_logger(__name__)
 
 # The named media special-token attributes are expected to come from the backbone tokenizer itself
 # (apertus-omni-tokenizer emits them in tokenizer_config.json's `extra_special_tokens`); the converter
-# only warns when a legacy backbone lacks them, and the processor falls back to its built-in defaults.
+# requires them rather than supplying its own defaults.
 NAMED_SPECIAL_TOKEN_ATTRIBUTES = (
     "image_token",
     "audio_token",
@@ -184,15 +184,13 @@ def _check_output_is_not_a_source(output_dir: str, *source_dirs: str) -> None:
 
 
 def build_processor(apertus_checkpoint: str, audio_config: dict) -> Apertus1p5Processor:
-    """Build the composite processor, warning when the backbone tokenizer lacks expected multimodal metadata."""
+    """Build the composite processor from a tokenizer with named media special tokens."""
     tokenizer = AutoTokenizer.from_pretrained(apertus_checkpoint)
     missing = [name for name in NAMED_SPECIAL_TOKEN_ATTRIBUTES if getattr(tokenizer, name, None) is None]
     if missing:
-        logger.warning(
-            f"The backbone tokenizer does not declare the named media special tokens {missing} "
-            "(it predates the apertus-omni-tokenizer `extra_special_tokens` emission). The processor "
-            "falls back to its built-in defaults, but the converted tokenizer will not expose these "
-            "named attributes."
+        raise ValueError(
+            f"The backbone tokenizer is missing named media special tokens: {missing}. "
+            "Use a tokenizer with these attributes declared in `extra_special_tokens`."
         )
     # the tokenizer is taken as-is from the backbone; the converter only checks, never modifies
     if tokenizer.padding_side != "left":
