@@ -150,79 +150,16 @@ class _LowerHook(Protocol):
 def _default_lower_to_executorch(config, exported_program, sample_inputs, partitioner):
     """The plain edge lowering every backend uses unless it registers its own."""
 
-    def _get_backend_config(config):
-        """Build the ``ExecutorchBackendConfig`` for ``to_executorch``, or ``None`` for defaults.
-
-        Only overrides the memory-planning pass when the caller changed an ``alloc_*`` flag. Turning off
-        ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
-        (see [`ExecutorchConfig`]) — the prerequisite for zero-copy in-place ``USER_INPUT_MUTATION``.
-        """
-        if config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
-            return None
-        return ExecutorchBackendConfig(
-            memory_planning_pass=MemoryPlanningPass(
-                alloc_graph_input=config.alloc_graph_input,
-                alloc_graph_output=config.alloc_graph_output,
-                alloc_mutable_buffers=config.alloc_mutable_buffers,
-            )
-        )
-
     edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-        exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
+        exported_program,
+        partitioner=partitioner,
+        compile_config=_get_edge_compile_config(config.backend),
+        transform_passes=_get_transform_passes(config.backend),
     )
     executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
         config=_get_backend_config(config)
     )
     return executorch_programs_manager
-
-
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
-    """CPU inference via XNNPACK.
-
-    Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
-    require a CPU-typed graph, and tracing on CPU also sidesteps per-model device bugs — models
-    create in-``forward`` tensors (``arange``/``zeros``/sinusoids) without ``device=``, which
-    default to CPU and would mismatch a CUDA model (``FakeTensor Device Propagation ... cuda, cpu``).
-    ``prepare_for_export`` then casts the inputs to CPU during the trace."""
-
-    model.requires_grad_(False)
-    model = model.to(device="cpu")
-    # Force MoE experts to `batched_mm`: on this CPU fp32 trace the "grouped_mm" implementation
-    # dispatches to the opaque `transformers.grouped_mm_fallback` custom op, which has no ExecuTorch
-    # lowering (`aten._grouped_mm` itself is bf16-only at trace time).
-    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
-        model.set_experts_implementation("batched_mm")
-    partitioner = [XnnpackPartitioner()]
-    return model, _make_contiguous(sample_inputs), partitioner
-
-
-def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchQnnConfig):
-    from executorch.backends.qualcomm.hf_transformers.api import prepare_for_qnn as _prepare_for_qnn
-
-    model.requires_grad_(False)
-    model = model.to(device="cpu")
-    model = model.eval()
-    qnn_decoder_model = _prepare_for_qnn(model, config)
-    return qnn_decoder_model, _make_contiguous(qnn_decoder_model.get_example_inputs()), None
-
-
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
-    """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
-
-    The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
-    kernels compiled by AOTInductor, which needs a GPU to compile/autotune. The model itself can
-    stay on any device (e.g. CPU): AOTInductor targets the machine's GPU regardless of where the
-    traced tensors live, so no `.to("cuda")` is needed."""
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
-
-    model.requires_grad_(False)
-    dtype = module_dtype(model)
-    if dtype is not None and dtype != torch.bfloat16:
-        logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
-        model = model.to(dtype=torch.bfloat16)
-    partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
-    return model, _make_contiguous(sample_inputs), partitioner
 
 
 def _qnn_quantize(exporter, exported_program, config, sample_inputs, dynamic_shapes):
@@ -242,26 +179,6 @@ class _ExecutorchBackend:
     prepare: _PrepareHook
     quantize: _QuantizeHook
     lower: _LowerHook
-
-
-_BACKENDS = {
-    "xnnpack": _ExecutorchBackend(
-        prepare=prepare_for_xnnpack,
-        # The inherited generic PT2E recipe, referenced as an unbound method.
-        quantize=DynamoExporter._quantize,
-        lower=_default_lower_to_executorch,
-    ),
-    "cuda": _ExecutorchBackend(
-        prepare=prepare_for_cuda,
-        quantize=DynamoExporter._quantize,
-        lower=_default_lower_to_executorch,
-    ),
-    "qnn": _ExecutorchBackend(
-        prepare=prepare_for_qnn,
-        quantize=_qnn_quantize,
-        lower=_qnn_lower_to_executorch,
-    ),
-}
 
 
 def _get_backend(config: ExecutorchConfig) -> _ExecutorchBackend:
@@ -317,6 +234,22 @@ class ExecutorchExporter(DynamoExporter):
 
         return executorch_programs_manager
 
+    def _quantize(
+        self,
+        exported_program: ExportedProgram,
+        config: ExecutorchConfig,
+        sample_inputs: Any,
+        dynamic_shapes: Any,
+    ) -> ExportedProgram:
+        """Dispatch to the backend's quantize hook (see `_BACKENDS`).
+
+        Overrides `DynamoExporter._quantize`: `DynamoExporter.export` (invoked via
+        `super().export(...)` above) calls `self._quantize(...)` directly, so without this
+        override every backend would silently fall back to the generic PT2E recipe instead
+        of a backend-specific one like QNN's `_qnn_quantize`.
+        """
+        return _get_backend(config).quantize(self, exported_program, config, sample_inputs, dynamic_shapes)
+
 
 def _get_transform_passes(backend: str):
     """Return backend-specific graph transforms, or ``None`` for defaults."""
@@ -325,9 +258,6 @@ def _get_transform_passes(backend: str):
 
         return get_default_passes()
     return None
-
-def _quantize(self, exported_program, config, sample_inputs, dynamic_shapes):
-    return _get_backend(config).quantize(self, exported_program, config, sample_inputs, dynamic_shapes)
 
 
 def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
@@ -364,6 +294,24 @@ def _lower_to_executorch(config, exported_program, sample_inputs, partitioner):
     return _get_backend(config).lower(config, exported_program, sample_inputs, partitioner)
 
 
+def _get_backend_config(config):
+    """Build the ``ExecutorchBackendConfig`` for ``to_executorch``, or ``None`` for defaults.
+
+    Only overrides the memory-planning pass when the caller changed an ``alloc_*`` flag. Turning off
+    ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
+    (see [`ExecutorchConfig`]) — the prerequisite for zero-copy in-place ``USER_INPUT_MUTATION``.
+    """
+    if config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
+        return None
+    return ExecutorchBackendConfig(
+        memory_planning_pass=MemoryPlanningPass(
+            alloc_graph_input=config.alloc_graph_input,
+            alloc_graph_output=config.alloc_graph_output,
+            alloc_mutable_buffers=config.alloc_mutable_buffers,
+        )
+    )
+
+
 def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     """Materialise input tensors to contiguous for ExecuTorch.
 
@@ -374,6 +322,101 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     their identity for in-place static-cache writes.
     """
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
+
+
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
+    """CPU inference via XNNPACK.
+
+    Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
+    require a CPU-typed graph, and tracing on CPU also sidesteps per-model device bugs — models
+    create in-``forward`` tensors (``arange``/``zeros``/sinusoids) without ``device=``, which
+    default to CPU and would mismatch a CUDA model (``FakeTensor Device Propagation ... cuda, cpu``).
+    ``prepare_for_export`` then casts the inputs to CPU during the trace."""
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
+    partitioner = [XnnpackPartitioner()]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
+    """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
+
+    The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
+    kernels compiled by AOTInductor, which needs a GPU to compile/autotune. The model itself can
+    stay on any device (e.g. CPU): AOTInductor targets the machine's GPU regardless of where the
+    traced tensors live, so no `.to("cuda")` is needed."""
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
+
+    model.requires_grad_(False)
+    dtype = module_dtype(model)
+    if dtype is not None and dtype != torch.bfloat16:
+        logger.warning(f"ExecuTorch CUDA backend requires bfloat16; upcasting model from {dtype}.")
+        model = model.to(dtype=torch.bfloat16)
+    partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
+    """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
+    for value in sample_inputs.values():
+        caches = [value]
+        if isinstance(value, EncoderDecoderCache):
+            caches = [value.self_attention_cache, value.cross_attention_cache]
+        if any(isinstance(cache, StaticCache) for cache in caches):
+            raise ValueError(
+                "StaticCache is not supported by the ExecuTorch MLX backend. "
+                "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
+            )
+
+    from executorch.backends.mlx import MLXPartitioner
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    # MLX does not support grouped MoE kernels.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
+    partitioner = [MLXPartitioner()]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
+def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchQnnConfig):
+    from executorch.backends.qualcomm.hf_transformers.api import prepare_for_qnn as _prepare_for_qnn
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    model = model.eval()
+    qnn_decoder_model = _prepare_for_qnn(model, config)
+    return qnn_decoder_model, _make_contiguous(qnn_decoder_model.get_example_inputs()), None
+
+
+_BACKENDS = {
+    "xnnpack": _ExecutorchBackend(
+        prepare=prepare_for_xnnpack,
+        # The inherited generic PT2E recipe, referenced as an unbound method.
+        quantize=DynamoExporter._quantize,
+        lower=_default_lower_to_executorch,
+    ),
+    "cuda": _ExecutorchBackend(
+        prepare=prepare_for_cuda,
+        quantize=DynamoExporter._quantize,
+        lower=_default_lower_to_executorch,
+    ),
+    "mlx": _ExecutorchBackend(
+        prepare=prepare_for_mlx,
+        quantize=DynamoExporter._quantize,
+        lower=_default_lower_to_executorch,
+    ),
+    "qnn": _ExecutorchBackend(
+        prepare=prepare_for_qnn,
+        quantize=_qnn_quantize,
+        lower=_qnn_lower_to_executorch,
+    ),
+}
 
 
 # ── Stage 2: Torch patches ────────────────────────────────────────────────────
@@ -811,10 +854,14 @@ def _patch_dim_order_from_stride(_original):
     deep inside ``spec_prop_pass``. Use ``guard_or_true`` / ``guard_or_false``
     so the sort still produces *a* dim order when the comparison is unbacked —
     the exact order on unbacked dims doesn't affect correctness, just memory layout.
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
 
-    def patch(stride):
+    Also accepts the optional ``sizes`` argument added upstream (some call
+    sites, e.g. ``build_quant_io``, now pass it) and reproduces the
+    channels-last correction it enables for 4D/5D tensors.
+    """
+    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true, statically_known_true
+
+    def patch(stride, sizes=None):
         for s in stride:
             if guard_or_false(s == 0):
                 raise ValueError("0 in strides is not supported for ExecuTorch.")
@@ -829,6 +876,15 @@ def _patch_dim_order_from_stride(_original):
                 return guard_or_true(self.stride < other.stride)
 
         sorted_dims = [i[0] for i in sorted(enumerate(stride), key=lambda x: K(x[1]), reverse=True)]
+
+        ndim = len(stride)
+        if sizes is not None and len(sizes) == ndim and ndim in (4, 5) and sorted_dims != list(range(ndim)):
+            from torch._prims_common import make_channels_last_strides_for
+
+            expected = make_channels_last_strides_for(sizes)
+            if all(statically_known_true(s == e) for s, e in zip(stride, expected)):
+                sorted_dims = [0, *range(2, ndim), 1]
+
         return tuple(sorted_dims)
 
     return patch
