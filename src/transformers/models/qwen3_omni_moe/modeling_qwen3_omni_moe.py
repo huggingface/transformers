@@ -1336,8 +1336,7 @@ class Qwen3OmniMoeThinkerTextExperts(nn.Module):
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
+        for expert_idx in expert_hit[:, 0].tolist():
             if expert_idx == self.num_experts:
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
@@ -2784,8 +2783,7 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
+        for expert_idx in expert_hit[:, 0].tolist():
             if expert_idx == self.num_experts:
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])

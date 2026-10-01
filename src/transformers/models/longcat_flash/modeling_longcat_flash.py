@@ -198,8 +198,7 @@ class LongcatFlashExperts(nn.Module):
         expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.total_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False)
-        for expert_idx_tensor in expert_hit:
-            expert_idx = int(expert_idx_tensor.item())
+        for expert_idx in expert_hit[:, 0].tolist():
             selection_idx, token_idx = torch.where(expert_mask[expert_idx].squeeze(0))
             if token_idx.numel() == 0:
                 continue

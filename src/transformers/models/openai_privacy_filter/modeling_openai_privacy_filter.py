@@ -288,9 +288,7 @@ class OpenAIPrivacyFilterExperts(nn.Module):
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         # Key change to original gpt oss is to stay in fp32 precision for all linear projections / muls
-        for expert_idx in expert_hit:
-            # expert_idx only have 1 element, so we can use scale for fast indexing
-            expert_idx = expert_idx[0]
+        for expert_idx in expert_hit[:, 0].tolist():
             # skip masking index
             if expert_idx == self.num_experts:
                 continue
