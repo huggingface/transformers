@@ -1615,11 +1615,13 @@ class Trainer:
         self._initial_num_input_tokens_seen = self.state.num_input_tokens_seen
         # needed to report loss and throughput for this `train()` call only when resuming from a checkpoint
         self._initial_global_step = self.state.global_step
+        self._initial_optimizer_step_attempts = self.state.optimizer_step_attempts
         # Logging state: _tr_loss accumulates on-device between logging steps (avoiding costly .item() syncs
         # on TPUs), then gets drained into _total_loss_scalar at each logging step.
         self._tr_loss = torch.tensor(0.0, device=args.device)
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
+        self._optimizer_step_attempts_last_logged = self.state.optimizer_step_attempts
 
         model.zero_grad()
 
@@ -1628,7 +1630,12 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
-        for epoch in range(epochs_trained, num_train_epochs):
+        epoch = epochs_trained
+        while (args.max_steps > 0 and self.state.global_step < max_steps) or (
+            args.max_steps <= 0 and epoch < num_train_epochs
+        ):
+            if epoch >= self.state.num_train_epochs:
+                self.state.num_train_epochs = epoch + 1
             self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
             self._run_epoch(
                 model=model,
@@ -1645,6 +1652,7 @@ class Trainer:
             )
             if self.control.should_training_stop:
                 break
+            epoch += 1
 
         return self._finalize_training(trial, num_train_samples, start_time)
 
@@ -1676,10 +1684,14 @@ class Trainer:
                 self.state.best_model_checkpoint = None
             compare_trainer_and_checkpoint_args(self.args, self.state)
             self._load_callback_state()
-            epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
+            if self.state.optimizer_step_attempts is None:
+                self.state.optimizer_step_attempts = self.state.global_step
+            epochs_trained = int(self.state.optimizer_step_attempts // num_update_steps_per_epoch)
             if not self.args.ignore_data_skip:
-                steps_trained_in_current_epoch = self.state.global_step % num_update_steps_per_epoch
+                steps_trained_in_current_epoch = self.state.optimizer_step_attempts % num_update_steps_per_epoch
                 steps_trained_in_current_epoch *= self.args.gradient_accumulation_steps
+        else:
+            self.state.optimizer_step_attempts = 0
 
         self.state.init_training_references(self, max_steps, num_train_epochs, trial)
 
@@ -1878,7 +1890,9 @@ class Trainer:
                     and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
                 ):
                     # if loss is nan or inf simply add the average of previous logged losses
-                    self._tr_loss += self._tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    self._tr_loss += self._tr_loss / (
+                        1 + self.state.optimizer_step_attempts - self._optimizer_step_attempts_last_logged
+                    )
                 else:
                     if self._tr_loss.device != tr_loss_step.device:
                         raise ValueError(
@@ -1897,30 +1911,34 @@ class Trainer:
 
                     self.control = self.callback_handler.on_pre_optimizer_step(self.args, self.state, self.control)
                     self.optimizer.step()
-                    self.control = self.callback_handler.on_optimizer_step(self.args, self.state, self.control)
+                    optimizer_step_was_skipped = self.accelerator.optimizer_step_was_skipped
+                    self.state.optimizer_step_attempts += 1
+                    if not optimizer_step_was_skipped:
+                        self.control = self.callback_handler.on_optimizer_step(self.args, self.state, self.control)
 
                     # get leaning rate before update
                     learning_rate = self._get_learning_rate()
 
-                    if not self.accelerator.optimizer_step_was_skipped:
+                    if not optimizer_step_was_skipped:
                         # Delay optimizer scheduling until metrics are generated
                         if not isinstance(self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)):
                             self.lr_scheduler.step()
 
                     model.zero_grad()
-                    self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
-                    self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
-                    self._maybe_log_save_evaluate(
-                        self._tr_loss,
-                        grad_norm,
-                        model,
-                        trial,
-                        epoch,
-                        ignore_keys_for_eval,
-                        start_time,
-                        learning_rate=learning_rate,
-                    )
+                    if not optimizer_step_was_skipped:
+                        self.state.global_step += 1
+                        self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
+                        self._maybe_log_save_evaluate(
+                            self._tr_loss,
+                            grad_norm,
+                            model,
+                            trial,
+                            epoch,
+                            ignore_keys_for_eval,
+                            start_time,
+                            learning_rate=learning_rate,
+                        )
                 else:
                     self.control = self.callback_handler.on_substep_end(self.args, self.state, self.control)
 
@@ -1961,13 +1979,14 @@ class Trainer:
         # add remaining tr_loss
         self._total_loss_scalar += self._tr_loss.item()
         num_steps_trained = self.state.global_step - self._initial_global_step
-        train_loss = self._total_loss_scalar / max(num_steps_trained, 0.001)  # Avoid ZeroDivisionError
+        num_attempts = self.state.optimizer_step_attempts - self._initial_optimizer_step_attempts
+        train_loss = self._total_loss_scalar / max(num_attempts, 0.001)  # Avoid ZeroDivisionError
 
         metrics = speed_metrics(
             "train",
             start_time,
             # `num_train_samples` covers the whole schedule: only count the share of the steps run in this call
-            num_samples=num_train_samples * num_steps_trained / max(self.state.max_steps, 1),
+            num_samples=num_train_samples * num_attempts / max(self.state.max_steps, 1),
             num_steps=num_steps_trained,
         )
         self.store_flos()
@@ -2209,7 +2228,9 @@ class Trainer:
             # reset tr_loss to zero
             tr_loss -= tr_loss
 
-            logs["loss"] = tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged)
+            logs["loss"] = tr_loss_scalar / (
+                self.state.optimizer_step_attempts - self._optimizer_step_attempts_last_logged
+            )
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
@@ -2219,6 +2240,7 @@ class Trainer:
 
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
+            self._optimizer_step_attempts_last_logged = self.state.optimizer_step_attempts
             self.store_flos()
 
             self.log(logs, start_time)

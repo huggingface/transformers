@@ -51,6 +51,9 @@ class TrainerState:
             percentage of the current epoch completed).
         global_step (`int`, *optional*, defaults to 0):
             During training, represents the number of update steps completed.
+        optimizer_step_attempts (`int`, *optional*):
+            The number of optimizer steps attempted, including steps skipped by gradient scaling. Used to restore the
+            dataloader position when resuming from a checkpoint.
         max_steps (`int`, *optional*, defaults to 0):
             The number of update steps to do during the current training.
         logging_steps (`int`, *optional*, defaults to 500):
@@ -94,6 +97,7 @@ class TrainerState:
 
     epoch: float = 0
     global_step: int = 0
+    optimizer_step_attempts: int | None = None
     max_steps: int = 0
     logging_steps: int = 500
     eval_steps: int = 500

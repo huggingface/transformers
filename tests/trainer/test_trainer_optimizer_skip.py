@@ -1,0 +1,269 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Regression tests for optimizer updates skipped by AMP gradient scaling."""
+
+import json
+
+import pytest
+import torch
+from torch import nn
+
+from transformers import Trainer, TrainerCallback, TrainingArguments
+
+
+class _Dataset(torch.utils.data.Dataset):
+    def __init__(self, length=12, poison_id=4, poison_all=False):
+        self.length = length
+        self.poison_id = poison_id
+        self.poison_all = poison_all
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        value = torch.tensor([index / 10], dtype=torch.float32)
+        return {
+            "input_ids": value,
+            "labels": value / 2,
+            "sample_id": index,
+            "poison": self.poison_all or index == self.poison_id,
+        }
+
+
+class _Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(1, 1, bias=False)
+        self.linear.weight.register_hook(self._poison_gradient)
+        self.poison_next_gradient = False
+        self.seen_ids = []
+        self.losses = []
+
+    def _poison_gradient(self, gradient):
+        if self.poison_next_gradient:
+            gradient = gradient.clone()
+            gradient.view(-1)[0] = float("inf")
+        return gradient
+
+    def forward(self, input_ids, labels, sample_id, poison):
+        self.seen_ids.extend(sample_id.tolist())
+        self.poison_next_gradient = bool(poison.any())
+        loss = nn.functional.mse_loss(self.linear(input_ids).float(), labels)
+        self.losses.append(loss.item())
+        return {"loss": loss}
+
+
+class _Recorder(TrainerCallback):
+    def __init__(self):
+        self.attempts = 0
+        self.optimizer_steps = 0
+        self.completed_steps = []
+        self.logged_steps = []
+
+    def on_pre_optimizer_step(self, args, state, control, **kwargs):
+        self.attempts += 1
+
+    def on_optimizer_step(self, args, state, control, **kwargs):
+        self.optimizer_steps += 1
+
+    def on_step_end(self, args, state, control, **kwargs):
+        self.completed_steps.append(state.global_step)
+
+    def on_log(self, args, state, control, logs, **kwargs):
+        if "loss" in logs:
+            self.logged_steps.append(state.global_step)
+
+
+class _RecordingTrainer(Trainer):
+    def __init__(self, *args, **kwargs):
+        self.skip_flags = []
+        super().__init__(*args, **kwargs)
+
+    def _get_learning_rate(self):
+        self.skip_flags.append(self.accelerator.optimizer_step_was_skipped)
+        return super()._get_learning_rate()
+
+
+def _make_trainer(
+    output_dir,
+    *,
+    length=12,
+    poison_id=4,
+    poison_all=False,
+    accumulation=1,
+    max_steps=6,
+    save_steps=500,
+    epochs=3,
+    save_strategy=None,
+):
+    torch.manual_seed(0)
+    model = _Model()
+    recorder = _Recorder()
+    args = TrainingArguments(
+        output_dir=str(output_dir),
+        per_device_train_batch_size=2 if accumulation == 1 else 1,
+        gradient_accumulation_steps=accumulation,
+        max_steps=max_steps,
+        num_train_epochs=epochs,
+        fp16=True,
+        use_cpu=True,
+        optim="adamw_torch",
+        learning_rate=1e-2,
+        train_sampling_strategy="sequential",
+        save_strategy=save_strategy or ("steps" if save_steps < max_steps else "no"),
+        save_steps=save_steps,
+        logging_steps=1,
+        disable_tqdm=True,
+        report_to=[],
+        remove_unused_columns=False,
+    )
+    trainer = _RecordingTrainer(
+        model=model, args=args, train_dataset=_Dataset(length, poison_id, poison_all), callbacks=[recorder]
+    )
+    trainer.accelerator.scaler = torch.amp.GradScaler("cpu", init_scale=16.0)
+    trainer.accelerator.native_amp = True
+    return trainer, recorder
+
+
+def _applied_steps(trainer):
+    return max(int(state["step"]) for state in trainer.optimizer.optimizer.state.values())
+
+
+def test_skipped_update_does_not_count_toward_max_steps(tmp_path):
+    trainer, recorder = _make_trainer(tmp_path)
+    output = trainer.train()
+
+    assert _applied_steps(trainer) == 6
+    assert trainer.lr_scheduler.last_epoch == 6
+    assert trainer.state.global_step == 6
+    assert trainer.state.num_train_epochs == 2
+    assert trainer.state.optimizer_step_attempts == 7
+    assert recorder.attempts == 7
+    assert recorder.optimizer_steps == 6
+    assert recorder.completed_steps == list(range(1, 7))
+    assert recorder.logged_steps == list(range(1, 7))
+    assert trainer.skip_flags.count(True) == 1
+    assert len(trainer.model.seen_ids) == 14
+    assert output.training_loss == pytest.approx(sum(trainer.model.losses) / 7)
+    assert output.metrics["train_samples_per_second"] * output.metrics["train_runtime"] == pytest.approx(14, abs=0.5)
+
+
+def test_resume_after_skipped_update_uses_consumed_batch_position(tmp_path):
+    baseline, _ = _make_trainer(tmp_path / "baseline", save_steps=3)
+    baseline.train()
+    checkpoint = tmp_path / "baseline" / "checkpoint-3"
+    state = json.loads((checkpoint / "trainer_state.json").read_text(encoding="utf-8"))
+    assert state["optimizer_step_attempts"] == 4
+
+    resumed, _ = _make_trainer(tmp_path / "resumed", save_steps=3)
+    resumed_output = resumed.train(resume_from_checkpoint=str(checkpoint))
+
+    assert resumed.model.seen_ids == baseline.model.seen_ids[8:]
+    assert resumed.state.global_step == baseline.state.global_step == 6
+    assert resumed.state.optimizer_step_attempts == baseline.state.optimizer_step_attempts == 7
+    assert _applied_steps(resumed) == _applied_steps(baseline) == 6
+    assert resumed.lr_scheduler.last_epoch == baseline.lr_scheduler.last_epoch == 6
+    torch.testing.assert_close(resumed.model.linear.weight, baseline.model.linear.weight, rtol=0, atol=0)
+    assert resumed_output.training_loss == pytest.approx(sum(resumed.model.losses) / 3)
+
+    finished, _ = _make_trainer(tmp_path / "finished", save_steps=3)
+    finished.train(resume_from_checkpoint=str(tmp_path / "baseline" / "checkpoint-6"))
+    assert finished.state.global_step == 6
+    assert finished.model.seen_ids == []
+
+
+def test_resume_old_checkpoint_without_attempt_counter(tmp_path):
+    baseline, _ = _make_trainer(tmp_path / "baseline", poison_id=None, save_steps=3)
+    baseline.train()
+    checkpoint = tmp_path / "baseline" / "checkpoint-3"
+    state_path = checkpoint / "trainer_state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    del state["optimizer_step_attempts"]
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    resumed, _ = _make_trainer(tmp_path / "resumed", poison_id=None, save_steps=3)
+    resumed.train(resume_from_checkpoint=str(checkpoint))
+
+    assert resumed.state.optimizer_step_attempts == resumed.state.global_step == 6
+    assert resumed.model.seen_ids == baseline.model.seen_ids[6:]
+    torch.testing.assert_close(resumed.model.linear.weight, baseline.model.linear.weight, rtol=0, atol=0)
+
+
+def test_resume_after_skip_with_partial_accumulation_group(tmp_path):
+    settings = {"length": 7, "poison_id": 2, "accumulation": 2, "max_steps": 4, "save_steps": 2}
+    baseline, _ = _make_trainer(tmp_path / "baseline", **settings)
+    baseline.train()
+    checkpoint = tmp_path / "baseline" / "checkpoint-2"
+    state = json.loads((checkpoint / "trainer_state.json").read_text(encoding="utf-8"))
+    assert state["optimizer_step_attempts"] == 3
+
+    resumed, _ = _make_trainer(tmp_path / "resumed", **settings)
+    resumed.train(resume_from_checkpoint=str(checkpoint))
+
+    assert resumed.model.seen_ids == baseline.model.seen_ids[6:]
+    assert resumed.state.optimizer_step_attempts == baseline.state.optimizer_step_attempts == 5
+    assert resumed.state.global_step == _applied_steps(resumed) == 4
+    assert resumed.lr_scheduler.last_epoch == baseline.lr_scheduler.last_epoch == 4
+    torch.testing.assert_close(resumed.model.linear.weight, baseline.model.linear.weight, rtol=0, atol=0)
+
+
+def test_resume_at_epoch_boundary_after_skip(tmp_path):
+    baseline, _ = _make_trainer(tmp_path / "baseline", save_strategy="epoch")
+    baseline.train()
+    checkpoint = tmp_path / "baseline" / "checkpoint-5"
+    state = json.loads((checkpoint / "trainer_state.json").read_text(encoding="utf-8"))
+    assert state["optimizer_step_attempts"] == 6
+
+    resumed, _ = _make_trainer(tmp_path / "resumed", save_strategy="epoch")
+    resumed.train(resume_from_checkpoint=str(checkpoint))
+
+    assert resumed.model.seen_ids == [0, 1]
+    assert resumed.state.global_step == _applied_steps(resumed) == 6
+    assert resumed.state.optimizer_step_attempts == 7
+    torch.testing.assert_close(resumed.model.linear.weight, baseline.model.linear.weight, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("poison_id, expected_attempts", [(2, 4), (None, 3)])
+def test_skipped_update_with_partial_accumulation_group(tmp_path, poison_id, expected_attempts):
+    trainer, recorder = _make_trainer(tmp_path, length=5, poison_id=poison_id, accumulation=2, max_steps=3)
+    trainer.train()
+
+    assert trainer.state.global_step == _applied_steps(trainer) == trainer.lr_scheduler.last_epoch == 3
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == expected_attempts
+    assert recorder.optimizer_steps == 3
+    assert len(trainer.model.seen_ids) == (7 if poison_id is not None else 5)
+
+
+def test_epoch_based_training_stops_after_requested_epoch(tmp_path):
+    trainer, recorder = _make_trainer(tmp_path, max_steps=-1, epochs=1)
+    trainer.train()
+
+    assert trainer.state.global_step == _applied_steps(trainer) == 5
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == 6
+    assert len(trainer.model.seen_ids) == 12
+
+
+def test_callback_can_stop_persistent_skips(tmp_path):
+    class StopAfterThreeAttempts(TrainerCallback):
+        def on_pre_optimizer_step(self, args, state, control, **kwargs):
+            if state.optimizer_step_attempts == 2:
+                control.should_training_stop = True
+
+    trainer, recorder = _make_trainer(tmp_path, poison_all=True)
+    trainer.add_callback(StopAfterThreeAttempts())
+    trainer.train()
+
+    assert trainer.state.global_step == 0
+    assert trainer.state.optimizer_step_attempts == recorder.attempts == 3
