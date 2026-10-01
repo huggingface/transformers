@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
 
-import os
 import tempfile
 import unittest
 
@@ -76,7 +75,10 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
         cls.model = None
         cls.tokenizer = None
         cls.offload_dir = None
@@ -151,4 +153,3 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(self.EXPECTED_TEXT_COMPLETION, static_compiled_text)
-# CI: investigate Xet FUSE OOM on bucket runners

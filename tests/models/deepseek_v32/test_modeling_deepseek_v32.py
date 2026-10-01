@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
-import os
 import unittest
 
 import pytest
@@ -226,7 +225,10 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 class DeepseekV32IntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
 
     def test_deepseek_v32(self):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip
@@ -334,4 +336,3 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         gen_right = model.generate(**inputs_right, max_new_tokens=40, do_sample=False)
         text_right = tok_right.batch_decode(gen_right, skip_special_tokens=True)
         self.assertEqual(EXPECTED_LEFT[1], text_right[1])
-# CI: investigate Xet FUSE OOM on bucket runners

@@ -508,7 +508,10 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
 
     def _load_model(self):
         # The indexer feeds SDPA an additive float mask (the block-sparse bias). On B200 + this
@@ -622,8 +625,6 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         self.assertGreater(len(decoded.strip()), 0)
 
     def test_real_image_apple_recognition(self):
-        import os
-
         model = self._load_model()
         processor = self._load_processor()
 
@@ -794,4 +795,3 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         self.assertIsInstance(decoded, str)
         self.assertGreater(len(decoded.strip()), 0)
         self.assertIn("red", decoded.lower())
-# CI: investigate Xet FUSE OOM on bucket runners

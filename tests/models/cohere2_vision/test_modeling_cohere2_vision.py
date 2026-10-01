@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch GotOcr2 model."""
 
-import os
 import unittest
 
 from transformers import (
@@ -176,7 +175,10 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
 
     def setUp(self):
         super().setUp()
@@ -488,7 +490,10 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -564,4 +569,3 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
 
         expected = "<|START_THINKING|><|END_THINKING|><|START_TEXT|>The image shows two tabby cats sleeping on a bright pink blanket or couch. Both"
         self.assertEqual(decoded, expected, f"Decoded: {decoded!r}")
-# CI: investigate Xet FUSE OOM on bucket runners

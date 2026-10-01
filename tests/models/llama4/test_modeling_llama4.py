@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llama4 model."""
 
-import os
 import unittest
 
 from transformers import is_torch_available
@@ -44,7 +43,10 @@ class Llama4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        # TODO: temporary fix for exit 137 OOM on bucket cache runners; remove once Xet-infra resolves the issue.
+        import huggingface_hub.constants as _hf_constants
+
+        _hf_constants.HF_HUB_DISABLE_XET = True
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
             "meta-llama/Llama-4-Scout-17B-16E",
             device_map="auto",
@@ -126,4 +128,3 @@ class Llama4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             'system\n\nYou are a helpful assistant.user\n\nAre these images identical?assistant\n\nNo, these images are not identical. The first image shows a cow standing on a beach with a blue sky and a white cloud in the background.'
         ]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
-# CI: investigate Xet FUSE OOM on bucket runners
