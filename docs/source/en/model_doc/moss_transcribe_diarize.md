@@ -344,6 +344,10 @@ print(transcription)
 
 [[autodoc]] MossTranscribeDiarizeConfig
 
+## MossTranscribeDiarizeEncoderConfig
+
+[[autodoc]] MossTranscribeDiarizeEncoderConfig
+
 ## MossTranscribeDiarizeFeatureExtractor
 
 [[autodoc]] MossTranscribeDiarizeFeatureExtractor

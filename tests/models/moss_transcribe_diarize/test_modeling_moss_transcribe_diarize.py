@@ -21,10 +21,10 @@ from pathlib import Path
 from transformers import (
     AutoProcessor,
     MossTranscribeDiarizeConfig,
+    MossTranscribeDiarizeEncoderConfig,
     MossTranscribeDiarizeForConditionalGeneration,
     MossTranscribeDiarizeModel,
     Qwen3Config,
-    WhisperConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -46,17 +46,13 @@ class MossTranscribeDiarizeModelTester(ALMModelTester):
     base_model_class = MossTranscribeDiarizeModel
     conditional_generation_class = MossTranscribeDiarizeForConditionalGeneration
     text_config_class = Qwen3Config
-    audio_config_class = WhisperConfig
+    audio_config_class = MossTranscribeDiarizeEncoderConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("feat_seq_length", 128)
         kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
-        kwargs.setdefault("d_model", 16)
         kwargs.setdefault("hidden_size", 16)
         kwargs.setdefault("intermediate_size", 32)
-        kwargs.setdefault("encoder_layers", 1)
-        kwargs.setdefault("encoder_attention_heads", 2)
-        kwargs.setdefault("encoder_ffn_dim", 32)
         kwargs.setdefault("num_attention_heads", 2)
         kwargs.setdefault("num_key_value_heads", 2)
         kwargs.setdefault("head_dim", 8)
@@ -93,13 +89,6 @@ class MossTranscribeDiarizeForConditionalGenerationModelTest(ALMModelTest, unitt
     pipeline_model_mapping = (
         {"audio-text-to-text": MossTranscribeDiarizeForConditionalGeneration} if is_torch_available() else {}
     )
-
-    # Override, see qwen3_asr tests for more info.
-    def _audio_features_get_expected_num_attentions(self, model_tester=None):
-        return self.model_tester.encoder_layers
-
-    def _audio_features_get_expected_num_hidden_states(self, model_tester=None):
-        return self.model_tester.encoder_layers + 1
 
     @unittest.skip(
         reason="This test does not apply to MossTranscribeDiarize since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
