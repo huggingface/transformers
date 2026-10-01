@@ -65,7 +65,7 @@ class Qwen3MoeExperts(Qwen2MoeExperts):
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        # .tolist() avoids per-expert GPU syncs;
+        # .tolist() avoids per-expert GPU syncs
         for expert_idx in expert_hit[:, 0].tolist():
             if expert_idx == self.num_experts:
                 continue
