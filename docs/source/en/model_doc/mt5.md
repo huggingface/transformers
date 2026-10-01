@@ -88,7 +88,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- mT5 must be fine-tuned for downstream tasks because it was only pretrained on the [mc4](https://huggingface.co/datasets/legacy-datasets/mc4) dataset.
+- mT5 must be fine-tuned for downstream tasks because it was only pretrained on the [mC4](https://huggingface.co/datasets/allenai/c4/viewer/multilingual) dataset (the `multilingual` config of `allenai/c4`).
 
 ## MT5Config
 

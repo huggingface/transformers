@@ -16,8 +16,8 @@ def paged_attention_forward(
     cache: PagedAttentionCache,
     cu_seq_lens_q: torch.Tensor,
     cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor],
-    max_seqlen_q: int,
-    max_seqlen_k: int | dict[str, int],
+    max_length_q: int,
+    max_length_k: int | dict[str, int],
     block_table: torch.Tensor | None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
@@ -34,8 +34,8 @@ def paged_attention_forward(
            of the sequences in the batch, used to index into q.
         cu_seq_lens_k: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
            of the sequences in the batch, used to index into kv.
-        max_seqlen_q: int. Maximum query sequence length in the batch.
-        max_seqlen_k: int. Maximum key sequence length in the batch.
+        max_length_q: int. Maximum query sequence length in the batch.
+        max_length_k: int. Maximum key sequence length in the batch.
         block_table: (num_groups, batch_size, max_blocks_per_seq), dtype int32. Block table for paged KV cache.
             If provided, uses flash_attn_with_kvcache for fused attention + cache update. For each request, the block
             table is a vector of size (max_blocks_per_seq,) with indices indicating the physical location of the cache
@@ -59,11 +59,11 @@ def paged_attention_forward(
     layer_type = "full_attention" if sliding_window == (-1, -1) else "sliding_attention"
     if isinstance(cu_seq_lens_k, dict):
         cu_seq_lens_k = cu_seq_lens_k[layer_type]
-        max_seqlen_k = max_seqlen_k[layer_type]
+        max_length_k = max_length_k[layer_type]
 
     # If no block table is provided, use flash_attn_varlen_func with read/write indices
     if block_table is None:
-        # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
+        # Paged cache update uses the same format as the regular Cache update so that one day they can be unified.
         k, v = cache.update(
             key_states=k,
             value_states=v,
@@ -71,15 +71,17 @@ def paged_attention_forward(
             read_index=kwargs["read_index"],
             write_index=kwargs["write_index"],
         )
+        # Because of the update format, we have to squeeze and transpose again, but it's cheap as they are CPU ops
+        q, k, v = (x.squeeze(0).transpose(0, 1).contiguous() for x in (q, k, v))
         custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
         attn_output = flash_attn_varlen_func(
-            q.transpose(1, 2).squeeze(0).contiguous(),
-            k.contiguous(),
-            v.contiguous(),
+            q,
+            k,
+            v,
             cu_seq_lens_q.to(torch.int32),
             cu_seq_lens_k.to(torch.int32).clone(),
-            max_seqlen_q,
-            max_seqlen_k,
+            max_length_q,
+            max_length_k,
             softmax_scale=module.scaling,
             causal=True,  # kind of a must, it automatically aligns the mask for q < k
             window_size=sliding_window,  # -1 means infinite context window
@@ -97,10 +99,6 @@ def paged_attention_forward(
 
     if v_head_dim != head_dim:
         attn_output = attn_output[..., :v_head_dim]
-        # flash_kwargs = {"s_aux": kwargs["s_aux"]} if "s_aux" in kwargs else {}  # this is only available in VLLM's FA3
-        # attn_output = _paged_decode_forward(
-        #     module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **flash_kwargs
-        # )
     return attn_output, None
 
 

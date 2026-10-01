@@ -25,7 +25,7 @@ This kernel has no mechanism to interact with the paged cache directly, so the c
 
 ### Indexing mechanism
 
-The kernel uses maximum sequence length (`max_seqlen_q`, `max_seqlen_k`) and cumulative sequence lengths (`cu_seq_lens_q`, `cu_seq_lens_k`) to compute attention for each sequence.
+The kernel uses maximum sequence length (`max_length_q`, `max_length_k`) and cumulative sequence lengths (`cu_seq_lens_q`, `cu_seq_lens_k`) to compute attention for each sequence.
 
 ### Example
 
@@ -34,8 +34,8 @@ Consider a batch of 3 sequences with query lengths `[10, 3, 1]` and key lengths 
 ```
 cu_seq_lens_q = [0, 10, 13, 14]
 cu_seq_lens_k = [0, 0, 1, 8]
-max_seqlen_q = 10
-max_seqlen_k = 7
+max_length_q = 10
+max_length_k = 7
 ```
 
 Input shapes:
