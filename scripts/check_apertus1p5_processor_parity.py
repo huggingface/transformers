@@ -12,19 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-End-to-end parity of the Apertus 1.5 processor stack against the original reference vLLM implementation
-(vllm_swissai, `vllm/model_executor/models/apertus.py` at `apertus_integration` commit 40a5516b7; all
-`apertus.py:NNN` references below resolve at that pinned commit).
+Checks Apertus 1.5 resize geometry against the training pipeline and token layout against reference vLLM.
+Resize reference: swiss-ai/benchmark-image-tokenzier at f32cc20e5aeeb22460383ced277b534a89c69050,
+`vision_tokenization/utils/image_geometry.py`. Token layout reference: vllm_swissai,
+`vllm/model_executor/models/apertus.py` at `apertus_integration` commit 40a5516b7.
 
 Note on the reference: newer vllm_swissai branches (`apertus-1-5`, design v2) deleted this independent
 implementation and instead consume the transformers processor directly via `get_hf_processor()` in
-`apertus_mm.py`. The verbatim reimplementations below are therefore the surviving executable record of
-the original token layout, and this script guards it against regressions on the transformers side.
+`apertus_mm.py`. The layout helpers below preserve that independent token-layout reference.
 
 Checks (PASS/FAIL), in run order:
-  1. smart_resize parity: target sizes must match the reference math exactly for fixed, random, and
-     degenerate input sizes. The one documented deviation: for extreme aspect ratios the reference rounds
-     a side to 0 (and would crash PIL); our implementation floors each side at the 16-pixel factor.
+  1. smart_resize parity: target sizes must match the training pipeline for fixed and random sizes in
+     the shared supported range. The reused Qwen helper additionally rejects aspect ratios above 200
+     and floors shrinking dimensions at one spatial factor; these are not training-parity cases.
   2. Structural token-stream parity: the processor's placeholder expansion must equal the reference
      `build_apertus_image_prompt` / `encode_audios` layout (reimplemented here verbatim as the ground truth,
      matching the golden test in vllm_swissai/tests/models/multimodal/processing/test_apertus.py, which also
@@ -49,6 +49,7 @@ Example:
 """
 
 import argparse
+import math
 
 import numpy as np
 import torch
@@ -68,18 +69,24 @@ def report(name, passed, detail="", informational=False):
     print(f"[{tag}] {name}: {detail}")
 
 
-# --- reference implementations, kept verbatim from vllm_swissai apertus.py @ apertus_integration 40a5516b7 --
+# --- independent reference implementations ---
 
 
-def reference_smart_resize(height, width, ds_factor=16, min_pixels=256 * 256, max_pixels=1400 * 1400):
-    """`ApertusImageTokenizer.smart_resize` (apertus.py:184-191) plus its call-site area clamp (apertus.py:291)."""
-    target_area = max(min(max_pixels, height * width), min_pixels)
-    aspect_ratio = width / height
-    new_height = int((target_area / aspect_ratio) ** 0.5)
-    new_width = int(new_height * aspect_ratio)
-    new_height = ((new_height + ds_factor // 2) // ds_factor) * ds_factor
-    new_width = ((new_width + ds_factor // 2) // ds_factor) * ds_factor
-    return new_height, new_width
+def reference_smart_resize(height, width, ds_factor=16, min_pixels=128 * 128, max_pixels=1400 * 1400):
+    """Training pipeline's `smart_resize_dims`, with the configured Apertus area limits."""
+    if height < ds_factor or width < ds_factor:
+        raise ValueError("height/width must be at least the spatial factor")
+    resized_height = round(height / ds_factor) * ds_factor
+    resized_width = round(width / ds_factor) * ds_factor
+    if resized_height * resized_width > max_pixels:
+        scale = math.sqrt((height * width) / max_pixels)
+        resized_height = math.floor(height / scale / ds_factor) * ds_factor
+        resized_width = math.floor(width / scale / ds_factor) * ds_factor
+    elif resized_height * resized_width < min_pixels:
+        scale = math.sqrt(min_pixels / (height * width))
+        resized_height = math.ceil(height * scale / ds_factor) * ds_factor
+        resized_width = math.ceil(width * scale / ds_factor) * ds_factor
+    return resized_height, resized_width
 
 
 def reference_image_prompt(image_tokens: torch.Tensor) -> str:
@@ -95,48 +102,35 @@ def reference_audio_prompt(num_codes: int) -> str:
     return "<|audio_start|>" + "<placeholder>" * num_codes + "<|audio_end|>"
 
 
-def reference_preprocess(pil_image: Image.Image) -> torch.Tensor:
-    """The reference image preprocessing (apertus.py:288-302): PIL BICUBIC resize, /127.5 - 1, fp32 CHW."""
+def reference_preprocess(pil_image: Image.Image, *, min_pixels: int, max_pixels: int) -> torch.Tensor:
+    """Training preprocessing: RGB, PIL BICUBIC resize, then float32 normalization to [-1, 1]."""
     pil_image = pil_image.convert("RGB")
-    new_height, new_width = reference_smart_resize(pil_image.height, pil_image.width)
+    new_height, new_width = reference_smart_resize(
+        pil_image.height, pil_image.width, min_pixels=min_pixels, max_pixels=max_pixels
+    )
     resized = pil_image.resize((new_width, new_height), Image.BICUBIC)
-    array = np.asarray(resized).astype(np.float64) / 127.5 - 1.0
-    return torch.tensor(array, dtype=torch.float32).permute(2, 0, 1)[None]
+    pixels = torch.tensor(np.array(resized), dtype=torch.float32).permute(2, 0, 1)
+    return pixels.div_(127.5).sub_(1.0)[None]
 
 
 # --- checks -------------------------------------------------------------------------------------------------
 
 
 def check_smart_resize_parity():
-    """Our `smart_resize` must match the reference target sizes exactly across a size sweep.
-
-    Covers fixed edge cases, 200 random sizes, and degenerate aspect ratios. The degenerate cases are the
-    documented deviation: where the reference computes a 0-sized side, ours must return that side floored
-    at the 16-pixel factor while still matching the reference on the other side.
-    """
+    """Check training resize parity across alignment ties, budget boundaries, and 200 random sizes."""
     rng = np.random.default_rng(0)
-    sizes = [(256, 256), (250, 230), (2000, 2000), (720, 1280), (33, 47), (1400, 1400), (100, 1600)]
+    sizes = [(128, 128), (264, 264), (250, 230), (2000, 2000), (720, 1280), (33, 47), (1400, 1400), (100, 1600)]
     sizes += [tuple(rng.integers(17, 2500, 2)) for _ in range(200)]
-    # extreme aspect ratios where the reference rounds one side to 0 (and would crash PIL);
-    # our documented deviation floors each side at `factor` instead
-    sizes += [(1, 10000), (10000, 1), (2, 4000)]
-    mismatches, floor_cases = [], 0
+    mismatches = []
     for height, width in sizes:
         reference = reference_smart_resize(int(height), int(width))
-        ours = smart_resize(int(height), int(width))
-        if min(reference) <= 0:
-            floor_cases += 1
-            # the floored side must be exactly `factor`; the other side must still match the reference
-            expected = tuple(max(side, 16) for side in reference)
-            if ours != expected:
-                mismatches.append((height, width))
-        elif ours != reference:
+        ours = smart_resize(int(height), int(width), factor=16, min_pixels=128 * 128, max_pixels=1400 * 1400)
+        if ours != reference:
             mismatches.append((height, width))
     report(
         "smart_resize parity",
         not mismatches,
-        f"{len(sizes)} sizes checked ({floor_cases} degenerate, floor engaged), {len(mismatches)} mismatches "
-        f"{mismatches[:3]}",
+        f"{len(sizes)} sizes checked, {len(mismatches)} mismatches {mismatches[:3]}",
     )
 
 
@@ -151,7 +145,10 @@ def check_structural_parity(processor):
     for grid_height, grid_width in [(2, 2), (16, 16), (2, 4), (7, 3)]:
         codes = torch.zeros(grid_height, grid_width, dtype=torch.long)
         expected = reference_image_prompt(codes).replace("<|visual token 0|>", processor.image_token)
-        actual = processor.replace_image_token({"image_grids": [[grid_height, grid_width]]}, image_idx=0)
+        factor = processor.image_processor.spatial_factor
+        actual = processor.replace_image_token(
+            {"image_sizes": [[grid_height * factor, grid_width * factor]]}, image_idx=0
+        )
         if actual != expected:
             report("image structural parity", False, f"grid {grid_height}x{grid_width}:\n {actual}\n {expected}")
             return
@@ -173,7 +170,7 @@ def check_spliced_stream_parity(processor, vision_tokenizer, device):
     image = Image.fromarray(rng.integers(0, 255, (300, 200, 3), dtype=np.uint8))
 
     # reference: PIL preprocessing -> VQ codes -> reference prompt string
-    reference_pixels = reference_preprocess(image).to(device)
+    reference_pixels = reference_preprocess(image, **dict(processor.image_processor.size)).to(device)
     with torch.no_grad():
         reference_codes = vision_tokenizer.encode(reference_pixels)[0].cpu()
     reference = reference_image_prompt(reference_codes)
@@ -212,7 +209,7 @@ def check_backend_drift(processor, vision_tokenizer, device):
     agreements = []
     for height, width in [(300, 200), (513, 289), (1024, 768)]:
         image = Image.fromarray(rng.integers(0, 255, (height, width, 3), dtype=np.uint8))
-        reference_pixels = reference_preprocess(image).to(device)
+        reference_pixels = reference_preprocess(image, **dict(processor.image_processor.size)).to(device)
         inputs = processor(text=processor.image_token, images=[image], return_tensors="pt")
         torchvision_pixels = inputs["pixel_values"].to(device)
         if reference_pixels.shape != torchvision_pixels.shape:

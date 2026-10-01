@@ -13,6 +13,7 @@
 # limitations under the License.
 """Focused tests for Apertus 1.5 image preprocessing."""
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -30,16 +31,59 @@ if is_torch_available():
 @require_torchvision
 class Apertus1p5ImageProcessingTest(unittest.TestCase):
     def setUp(self):
-        self.image_processor = Apertus1p5ImageProcessor(min_pixels=32**2, max_pixels=64**2, spatial_factor=16)
+        self.image_processor = Apertus1p5ImageProcessor(
+            size={"min_pixels": 32**2, "max_pixels": 64**2}, spatial_factor=16
+        )
 
-    def test_resize_and_grid_metadata(self):
-        for input_size, expected_size in [((16, 16), (32, 32)), ((128, 128), (64, 64)), ((32, 64), (32, 64))]:
+    def test_resize_and_image_sizes(self):
+        for input_size, expected_size in [
+            ((16, 16), (32, 32)),
+            ((128, 128), (64, 64)),
+            ((32, 64), (32, 64)),
+            ((40, 40), (32, 32)),
+            ((16, 32), (32, 48)),
+            ((96, 64), (64, 48)),
+        ]:
             with self.subTest(input_size=input_size):
                 image = np.zeros((*input_size, 3), dtype=np.uint8)
                 output = self.image_processor(image, return_tensors="pt")
                 self.assertEqual(output.pixel_values.shape, (1, 3, *expected_size))
                 self.assertEqual(output.image_sizes.tolist(), [list(expected_size)])
-                self.assertEqual(output.image_grids.tolist(), [[side // 16 for side in expected_size]])
+                self.assertEqual(
+                    self.image_processor.get_number_of_image_patches(*input_size),
+                    (expected_size[0] // 16) * (expected_size[1] // 16),
+                )
+
+    def test_patch_count_respects_do_resize(self):
+        image = np.zeros((32, 48, 3), dtype=np.uint8)
+        for default in (True, False):
+            processor = Apertus1p5ImageProcessor(do_resize=default)
+            for kwargs in ({}, {"do_resize": True}, {"do_resize": False, "size": None}):
+                with self.subTest(default=default, kwargs=kwargs):
+                    output = processor(image, return_tensors="pt", **kwargs)
+                    expected_count = 70 if kwargs.get("do_resize", default) else 6
+                    height, width = output.pixel_values.shape[-2:]
+                    self.assertEqual(
+                        (height // processor.spatial_factor) * (width // processor.spatial_factor), expected_count
+                    )
+                    self.assertEqual(processor.get_number_of_image_patches(32, 48, kwargs), expected_count)
+
+    def test_size_override_and_save_load(self):
+        image = np.zeros((16, 16, 3), dtype=np.uint8)
+        size = {"min_pixels": 48**2, "max_pixels": 64**2}
+        output = self.image_processor(image, size=size, return_tensors="pt")
+        self.assertEqual(output.image_sizes.tolist(), [[48, 48]])
+        self.assertEqual(self.image_processor.get_number_of_image_patches(16, 16, {"size": size}), 9)
+        self.assertEqual(self.image_processor(image, return_tensors="pt").image_sizes.tolist(), [[32, 32]])
+
+        with tempfile.TemporaryDirectory() as directory:
+            processor = Apertus1p5ImageProcessor(size=size)
+            processor.save_pretrained(directory)
+            restored = Apertus1p5ImageProcessor.from_pretrained(directory)
+        self.assertEqual(restored.to_dict()["size"], size)
+        self.assertNotIn("min_pixels", restored.to_dict())
+        self.assertNotIn("max_pixels", restored.to_dict())
+        torch.testing.assert_close(restored(image, return_tensors="pt").pixel_values, output.pixel_values)
 
     def test_normalization(self):
         for pixel_value, expected_value in [(0, -1.0), (255, 1.0)]:
@@ -57,7 +101,6 @@ class Apertus1p5ImageProcessingTest(unittest.TestCase):
                 output = self.image_processor(images, disable_grouping=disable_grouping, return_tensors="pt")
                 self.assertEqual(output.pixel_values.shape, (3, 3, 48, 48))
                 self.assertEqual(output.image_sizes.tolist(), [list(size) for size in sizes])
-                self.assertEqual(output.image_grids.tolist(), [[2, 3], [3, 2], [2, 3]])
                 for index, (image, (height, width)) in enumerate(zip(images, sizes)):
                     individual = self.image_processor(image, return_tensors="pt").pixel_values[0]
                     expected = torch.zeros_like(output.pixel_values[index])
