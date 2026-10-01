@@ -184,6 +184,39 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_default_decoder_dropout_train_eval_parity(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.ffn_dim = 32
+        self.assertEqual(config.dropout, 0.0)
+        dtypes = (torch.float32, torch.float64) if torch_device != "mps" else (torch.float32,)
+        for dtype in dtypes:
+            with self.subTest(dtype=dtype):
+                model = MusicgenForCausalLM(config).to(device=torch_device, dtype=dtype)
+                model_inputs = dict(inputs, encoder_hidden_states=inputs["encoder_hidden_states"].to(dtype))
+                with torch.no_grad():
+                    eval_logits = model.eval()(**model_inputs).logits
+                    train_logits = model.train()(**model_inputs).logits
+                torch.testing.assert_close(train_logits, eval_logits)
+
+    def test_explicit_decoder_dropout_is_preserved(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.ffn_dim = 32
+        for dropout in (0.0, 0.1):
+            with self.subTest(dropout=dropout):
+                config.dropout = dropout
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    config.save_pretrained(tmpdirname)
+                    restored_config = MusicgenDecoderConfig.from_pretrained(tmpdirname)
+                self.assertEqual(restored_config.dropout, dropout)
+                model = MusicgenForCausalLM(restored_config).to(torch_device).train()
+                with torch.no_grad():
+                    first_logits = model(**inputs).logits
+                    second_logits = model(**inputs).logits
+                if dropout == 0.0:
+                    torch.testing.assert_close(first_logits, second_logits)
+                else:
+                    self.assertFalse(torch.equal(first_logits, second_logits))
+
     # special case for labels
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)

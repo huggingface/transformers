@@ -25,6 +25,12 @@ from ..auto.configuration_auto import AutoConfig
 @auto_docstring(checkpoint="facebook/musicgen-small")
 @strict
 class MusicgenDecoderConfig(PreTrainedConfig):
+    r"""
+    dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the embeddings and residual connections. The original MusicGen models were trained
+        without decoder dropout.
+    """
+
     model_type = "musicgen_decoder"
     base_config_key = "decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -38,7 +44,7 @@ class MusicgenDecoderConfig(PreTrainedConfig):
     use_cache: bool = True
     activation_function: str = "gelu"
     hidden_size: int = 1024
-    dropout: float | int = 0.1
+    dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_dropout: float | int = 0.0
     initializer_factor: float = 0.02

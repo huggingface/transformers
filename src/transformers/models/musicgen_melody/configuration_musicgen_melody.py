@@ -24,6 +24,9 @@ from ..auto.configuration_auto import AutoConfig
 @strict
 class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     r"""
+    dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the embeddings and residual connections. The original MusicGen Melody models were
+        trained without decoder dropout.
     audio_channels (`int`, *optional*, defaults to 1):
         Number of audio channels used by the model (either mono or stereo). Stereo models generate a separate
         audio stream for the left/right output channels. Mono models generate a single audio stream output.
@@ -42,7 +45,7 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     use_cache: bool = True
     activation_function: str = "gelu"
     hidden_size: int = 1024
-    dropout: float | int = 0.1
+    dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_dropout: float | int = 0.0
     initializer_factor: float = 0.02

@@ -270,6 +270,23 @@ Tips:
 * MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.
 * Sampling mode tends to deliver better results than greedy - you can toggle sampling with the variable `do_sample` in the call to [`MusicgenForConditionalGeneration.generate`]
 
+### Decoder dropout when fine-tuning
+
+The original MusicGen models were trained without decoder dropout. Older checkpoint configs may explicitly set
+`decoder.dropout=0.1`, which enables dropout when calling `model.train()`. The default for newly created decoder configs
+is `0.0`, but loading a checkpoint preserves its saved value. To match the original training configuration, override it
+before constructing the model:
+
+```python
+from transformers import AutoConfig, MusicgenForConditionalGeneration
+
+config = AutoConfig.from_pretrained("facebook/musicgen-small")
+config.decoder.dropout = 0.0
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", config=config)
+```
+
+Changing `model.config.decoder.dropout` after loading does not update the dropout values stored on the decoder layers.
+
 ## MusicgenDecoderConfig
 
 [[autodoc]] MusicgenDecoderConfig
