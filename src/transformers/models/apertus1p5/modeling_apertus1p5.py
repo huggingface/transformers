@@ -37,12 +37,25 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..wavtokenizer import WavTokenizerEncoderModel
 from .configuration_apertus1p5 import Apertus1p5Config, Apertus1p5TextConfig, Apertus1p5VisionTokenizerConfig
+
+
+@auto_docstring
+@dataclass
+class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
+    r"""
+    image_tokens (`torch.LongTensor` of shape `(batch_size, height // factor, width // factor)`):
+        Discrete codebook indices in `[0, config.codebook_size)`, with one index per spatial cell.
+        `height` and `width` are the input pixel dimensions and `factor` is `config.spatial_scale_factor`
+        (16 by default). The indices have no language-vocabulary offset applied.
+    """
+
+    image_tokens: torch.LongTensor | None = None
 
 
 @auto_docstring
@@ -311,24 +324,26 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
 
         self.post_init()
 
-    def encode(self, pixel_values: torch.Tensor) -> torch.LongTensor:
+    def encode(self, pixel_values: torch.Tensor) -> Apertus1p5VisionTokenizerEncoderOutput:
         """
         Tokenizes images into a grid of discrete codebook indices.
 
         Args:
             pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-                RGB images normalized to `[-1, 1]`, with sides that are multiples of the spatial factor.
+                RGB images normalized to `[-1, 1]`.
 
         Returns:
-            `torch.LongTensor` of shape `(batch_size, height // factor, width // factor)` with values in
-            `[0, codebook_size)`.
+            `Apertus1p5VisionTokenizerEncoderOutput`: The `image_tokens` field contains discrete codebook
+            indices of shape `(batch_size, height // factor, width // factor)`, where `factor` is
+            `config.spatial_scale_factor`. Values are in `[0, config.codebook_size)`, before applying the
+            language-vocabulary offset.
         """
         # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
         # cast the input to the encoder's dtype so callers can pass fp16/bf16 pixel values
         pixel_values = pixel_values.to(self.encoder.conv_in.weight.dtype)
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
-        return self.quantize(hidden_states)
+        return Apertus1p5VisionTokenizerEncoderOutput(image_tokens=self.quantize(hidden_states))
 
 
 @auto_docstring
@@ -815,12 +830,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
         Tokenizes each unpadded image and returns flattened shared-vocabulary ids.
@@ -837,7 +846,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         vocab_ids_list = []
         for image, size in zip(pixel_values, image_sizes):
             image = image[None, :, : int(size[0]), : int(size[1])]
-            codes = self.vision_tokenizer.encode(image)[0]
+            codes = self.vision_tokenizer.encode(image).image_tokens[0]
             vocab_ids_list.append(codes.flatten() + self.config.image_token_offset)
         return torch.cat(vocab_ids_list)
 
@@ -1046,15 +1055,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         )
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
 
     @can_return_tuple
     @auto_docstring
