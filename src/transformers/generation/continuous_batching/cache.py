@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
+import warnings
 from math import ceil, lcm
 from typing import Any
 
@@ -217,9 +218,6 @@ class PagedAttentionCache:
         self.allow_block_sharing = continuous_batching_config.allow_block_sharing
         allocators_can_share = all(ca.use_block_sharing for ca in self.cache_allocators.values())
         self.use_prefix_sharing = allocators_can_share and self.allow_block_sharing
-
-        # For block table support, we lazy init the name of the block table key
-        self._block_table_key = None
 
         # Helper attribute: the cache capacity expressed in whole-model blocks
         self.num_blocks = non_trash_bytes // bytes_per_block
@@ -429,12 +427,6 @@ class PagedAttentionCache:
 
         return key_states, value_states
 
-    def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
-        """Returns the K and V cache views for a block table update."""
-        allocator = self.layer_to_allocator[layer_idx]
-        k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
-        return allocator.index, k_cache, v_cache
-
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
         self.free_all_requests(clear_ledgers=True)
@@ -500,11 +492,29 @@ class PagedAttentionCache:
         for allocator in self.cache_allocators.values():
             allocator.fill_block_table(request_id, past_length, query_length, block_table[allocator.index])
 
+    # DEPRECATED METHODS
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
+        """Deprecated method to get the K and V cache views for a block table update. Now baked in "update"."""
+        warnings.warn(
+            "The get_cache_for_block_table function is deprecated and will be removed in v5.23 .",
+            FutureWarning,
+            stacklevel=2,
+        )
+        allocator = self.layer_to_allocator[layer_idx]
+        k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
+        return allocator.index, k_cache, v_cache
+
     def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
-        """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
-        signature is only inspected once. This is necessary because different version of flash have different names for
-        the block table key."""
-        if self._block_table_key is None:
+        """Deprecated method to get the name of the block table key for the given flash_attn_with_kvcache_fn. The
+        function's signature is only inspected once. This is necessary because different version of flash have different
+        names for the block table key."""
+        warnings.warn(
+            "The get_block_table_key function is deprecated and will be removed in v5.23 .",
+            FutureWarning,
+            stacklevel=2,
+        )
+        _block_table_key = getattr(self, "_block_table_key", None)
+        if _block_table_key is None:
             kwarg_names = inspect.signature(flash_attn_with_kvcache_fn).parameters.keys()
             if "block_table" in kwarg_names:
                 self._block_table_key = "block_table"
