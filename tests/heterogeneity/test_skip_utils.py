@@ -21,7 +21,7 @@ from transformers.testing_utils import is_torch_available, require_torch
 if is_torch_available():
     import torch
 
-    from transformers.integrations.heterogeneity import NoOpReplacement, ReturnEntry, get_skip_replacement_factory
+    from transformers.integrations.heterogeneity import ReturnEntry, get_skip_replacement_factory
 
 
 @require_torch
@@ -30,7 +30,6 @@ class TestSkipReplacement(unittest.TestCase):
         replacement_factory = get_skip_replacement_factory(torch.nn.Linear, None)
         module = replacement_factory()
 
-        self.assertIsInstance(module, NoOpReplacement)
         self.assertIs(module.source_class, torch.nn.Linear)
         self.assertIsNone(module(torch.randn(2, 4)))
 

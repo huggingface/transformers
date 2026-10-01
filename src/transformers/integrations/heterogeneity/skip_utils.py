@@ -104,7 +104,7 @@ def _resolve_return_entries(
 
 if is_torch_available():
 
-    class NoOpReplacement(nn.Module):
+    class _NoOpReplacement(nn.Module):
         def __init__(
             self,
             *,
@@ -164,7 +164,7 @@ def get_skip_replacement_factory(
         return_tuple = True
 
     return partial(
-        NoOpReplacement,
+        _NoOpReplacement,
         source_class=cls,
         return_entries=_resolve_return_entries(cls, return_entries),
         return_tuple=return_tuple,

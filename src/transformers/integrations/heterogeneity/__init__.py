@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils import is_torch_available
 from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, HeterogeneousConfigMixin
 from .heterogeneous_modeling_spec import (
     HeterogeneousModelingSpec,
@@ -44,8 +43,3 @@ __all__ = [
     "nest_skip_descriptor_paths",
     "support_generic_heterogeneous_modeling",
 ]
-
-if is_torch_available():
-    from .skip_utils import NoOpReplacement
-
-    __all__.append("NoOpReplacement")
