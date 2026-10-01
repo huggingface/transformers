@@ -20,12 +20,15 @@ from functools import partial, wraps
 from inspect import signature, unwrap
 from typing import TYPE_CHECKING, Any
 
+from transformers.utils import is_torch_tensor
+
 
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
 
-# Defaults match the mask factories when an attribute is absent from the config.
+# Defaults match the mask factories when an attribute is absent from the config. These attributes are global-only, so
+# they're the same on every layer.
 _COMMON_MASK_AFFECTING_ATTRIBUTES = {"is_causal": True, "_attn_implementation": None}
 
 
@@ -73,28 +76,40 @@ def _get_mask_layer_indices(config: PreTrainedConfig, create_mask_fn: Callable) 
 
 
 def _get_cache_geometry(
+    *,
     past_key_values: Any,
     query_length: Any,
     layer_idx: int,
+    assume_layers_have_same_query_offset_when_tensor: bool,
 ) -> tuple[int, ...] | None:
     if past_key_values is None:
         return ()
 
     query_offset = past_key_values.get_query_offset(layer_idx)
     key_value_length, key_value_offset = past_key_values.get_mask_sizes(query_length, layer_idx)
-    geometry = (query_offset, key_value_length, key_value_offset)
-    # Only Python ints are compared: comparing tensor values would force a device sync, or a graph break under
-    # `torch.compile`. An initialized `StaticLayer` returns its query offset as a tensor, so this returns `None` for it.
-    return geometry if all(type(value) is int for value in geometry) else None
+    if not is_torch_tensor(query_offset):
+        return query_offset, key_value_length, key_value_offset
+
+    # An initialized `StaticLayer` returns its query offset as a device tensor. Comparing tensor values would force a
+    # device sync, or a graph break under `torch.compile`, so, like upstream mask creation, assume these layers are all
+    # at the same position and leave the query offset out.
+    return (key_value_length, key_value_offset) if assume_layers_have_same_query_offset_when_tensor else None
 
 
 def _get_mask_reuse_key(
+    *,
     mask_settings: tuple[Any, ...],
     past_key_values: Any,
     query_length: Any,
     layer_idx: int,
+    assume_layers_have_same_query_offset_when_tensor: bool,
 ) -> tuple[Any, ...] | None:
-    cache_geometry = _get_cache_geometry(past_key_values, query_length, layer_idx)
+    cache_geometry = _get_cache_geometry(
+        past_key_values=past_key_values,
+        query_length=query_length,
+        layer_idx=layer_idx,
+        assume_layers_have_same_query_offset_when_tensor=assume_layers_have_same_query_offset_when_tensor,
+    )
     if cache_geometry is None:
         return None
 
@@ -102,10 +117,10 @@ def _get_mask_reuse_key(
 
 
 def _create_attention_masks_by_layer_idx(
+    *,
     create_mask_fn: Callable,
     attribute_name: str | None,
     config: PreTrainedConfig,
-    *args: Any,
     **kwargs: Any,
 ) -> AttentionMasksByLayerIdx:
     attention_masks = AttentionMasksByLayerIdx()
@@ -114,9 +129,15 @@ def _create_attention_masks_by_layer_idx(
     # needs the lengths to be equal to each other.
     reuse_keys_and_layer_indices: list[tuple[tuple[Any, ...], int]] = []
     past_key_values = kwargs.get("past_key_values")
+    common_mask_settings = tuple(
+        getattr(config, name, default) for name, default in _COMMON_MASK_AFFECTING_ATTRIBUTES.items()
+    )
+    layer_configs = config._heterogeneity_spec.model_layer_configs
+    # A layer that skips a module may never write to its cache, so its static position can fall behind the others'
+    any_layer_skips = any(layer_config.skip for layer_config in layer_configs.values())
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
-        layer_config = config.per_layer_config[layer_idx]
+        layer_config = layer_configs[layer_idx]
 
         if attribute_name is not None:
             attribute_value = getattr(layer_config, attribute_name)
@@ -127,18 +148,16 @@ def _create_attention_masks_by_layer_idx(
         else:
             mask_settings = ()
 
-        mask_settings = (
-            *mask_settings,
-            *(getattr(layer_config, name, default) for name, default in _COMMON_MASK_AFFECTING_ATTRIBUTES.items()),
-        )
+        mask_settings = (*mask_settings, *common_mask_settings)
 
         layer_kwargs = {**kwargs, "layer_idx": layer_idx}
 
         reuse_key = _get_mask_reuse_key(
-            mask_settings,
-            past_key_values,
-            layer_kwargs["inputs_embeds"].shape[1],
-            layer_idx,
+            mask_settings=mask_settings,
+            past_key_values=past_key_values,
+            query_length=layer_kwargs["inputs_embeds"].shape[1],
+            layer_idx=layer_idx,
+            assume_layers_have_same_query_offset_when_tensor=not any_layer_skips,
         )
 
         if reuse_key is not None:
@@ -150,7 +169,7 @@ def _create_attention_masks_by_layer_idx(
                 attention_masks[layer_idx] = attention_masks[reused_layer_idx]
                 continue
 
-        attention_masks[layer_idx] = create_mask_fn(layer_config, *args, **layer_kwargs)
+        attention_masks[layer_idx] = create_mask_fn(config=layer_config, **layer_kwargs)
         if reuse_key is not None:
             reuse_keys_and_layer_indices.append((reuse_key, layer_idx))
 
@@ -176,8 +195,8 @@ def support_per_layer_mask_creation(attribute_name: str | None = None) -> Callab
                     return attention_mask
 
                 return _create_attention_masks_by_layer_idx(
-                    create_mask_fn,
-                    attribute_name,
+                    create_mask_fn=create_mask_fn,
+                    attribute_name=attribute_name,
                     **mask_kwargs,
                 )
 

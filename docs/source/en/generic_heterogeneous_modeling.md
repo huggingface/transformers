@@ -125,6 +125,10 @@ spec = HeterogeneousModelingSpec(
 > [!WARNING]
 > Currently, using the cache when the first attention layer is skipped isn't supported, as it may silently produce
 > incorrect results.
+>
+> With a static cache, models that use `skip` don't share attention masks across layers, and a static cache that is
+> initialized in advance (for example with chunked prefill) still allocates key/value memory for layers whose
+> attention is skipped.
 
 ### Replacements
 

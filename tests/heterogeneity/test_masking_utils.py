@@ -29,6 +29,7 @@ if is_torch_available():
     from transformers.masking_utils import (
         create_bidirectional_mask,
         create_bidirectional_sliding_window_mask,
+        create_causal_mask,
         create_chunked_causal_mask,
         create_sliding_window_causal_mask,
     )
@@ -171,6 +172,22 @@ class TestHeterogeneousMasking(unittest.TestCase):
                 mask = create_mask(config, inputs_embeds, attention_mask=None, past_key_values=cache)
 
         self.assertIs(mask[0], mask[1])
+
+    @parameterized.expand([("no_skips", {}, True), ("with_skip", {0: {"skip": ["attention"]}}, False)])
+    def test_static_cache_layers_share_masks_unless_some_layer_skips(self, _name, per_layer_config, expect_shared):
+        config = tiny_llama_config(num_hidden_layers=2, per_layer_config=per_layer_config)
+        config._attn_implementation = "eager"
+        config._heterogeneity_spec.model_layer_configs = dict(enumerate(config.per_layer_config))
+        # Once a static layer is written to, it reports its position as a device tensor
+        cache = StaticCache(config=config, max_cache_len=8)
+        states = torch.randn(1, config.num_key_value_heads, 2, config.head_dim)
+        for layer_idx in range(config.num_hidden_layers):
+            cache.update(states, states, layer_idx=layer_idx)
+
+        mask = create_causal_mask(config, torch.randn(1, 1, config.hidden_size), None, cache)
+
+        # A layer that skips a module may never write to its cache, so masks are only shared when no layer skips
+        self.assertEqual(mask[0] is mask[1], expect_shared)
 
     def test_chunked_attention_masks_are_keyed_by_layer_idx(self):
         config = tiny_llama4_config(
