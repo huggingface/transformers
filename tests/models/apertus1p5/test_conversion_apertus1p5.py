@@ -41,6 +41,14 @@ if is_torch_available():
 
 @require_torch
 class Apertus1p5ConversionTest(unittest.TestCase):
+    def test_build_processor_requires_named_media_tokens(self):
+        tokenizer = Mock(spec=[])
+        with (
+            patch.object(conversion.AutoTokenizer, "from_pretrained", return_value=tokenizer),
+            self.assertRaisesRegex(ValueError, "missing named media special tokens.*image_token"),
+        ):
+            conversion.build_processor("legacy-checkpoint", {})
+
     def test_valid_logits_layout(self):
         pruned_logits = torch.tensor([[[1.0, -2.0]]])
         self.assertTrue(conversion._has_valid_logits_layout(pruned_logits, output_vocab_size=2))
