@@ -26,11 +26,10 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -43,7 +42,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_moss_transcribe_diarize import MossTranscribeDiarizeConfig
+from .configuration_moss_transcribe_diarize import MossTranscribeDiarizeConfig, MossTranscribeDiarizeEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -150,59 +149,28 @@ class MossTranscribeDiarizeAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
-        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        bsz, tgt_len, _ = hidden_states.size()
 
         # Scaling is susceptible to floating point arithmetics' imprecisions
         # which can lead to different results (this is dependent from model
-        # to model, e.g. moss_transcribe_diarize is one such case). We therefore keep the
+        # to model, e.g. whisper is one such case). We therefore keep the
         # original order of scaling to follow the original implementation
         # and enforce no scaling (1.0) in the attention call below.
-        query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
-
-        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
-        is_updated = False
-        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_values.is_updated[self.layer_idx] = True
-                past_key_values = past_key_values.cross_attention_cache
-            else:
-                past_key_values = past_key_values.self_attention_cache
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_values and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = past_key_values.layers[self.layer_idx].keys
-            value_states = past_key_values.layers[self.layer_idx].values
-        else:
-            # Use the query's batch dimension for kv view so that a different-batch
-            # encoder output (e.g. in tests) gets absorbed into the sequence axis,
-            # preserving backward-compatible behaviour.
-            kv_shape = (input_shape[0], -1, self.num_heads, self.head_dim)
-            key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
-            value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
-            if past_key_values is not None:
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -220,7 +188,7 @@ class MossTranscribeDiarizeAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -282,29 +250,37 @@ class MossTranscribeDiarizeEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring(
+    custom_intro="""
+    The MOSS-Transcribe-Diarize encoder, which is a Whisper encoder.
+    """
+)
 class MossTranscribeDiarizeEncoder(MossTranscribeDiarizePreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`MossTranscribeDiarizeEncoderLayer`].
 
     Args:
-        config: MossTranscribeDiarizeConfig
+        config: MossTranscribeDiarizeEncoderConfig
     """
 
+    # Ignore copy
+    config: MossTranscribeDiarizeEncoderConfig
+    main_input_name = "input_features"
+    input_modalities = "audio"
+    _no_split_modules = ["MossTranscribeDiarizeEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": MossTranscribeDiarizeEncoderLayer,
         "attentions": MossTranscribeDiarizeAttention,
     }
-    input_modalities = ("audio",)
 
-    def __init__(self, config: MossTranscribeDiarizeConfig):
+    def __init__(self, config: MossTranscribeDiarizeEncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
-        self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
@@ -316,6 +292,8 @@ class MossTranscribeDiarizeEncoder(MossTranscribeDiarizePreTrainedModel):
 
         self.layers = nn.ModuleList([MossTranscribeDiarizeEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
+        # Ignore copy
+        self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -339,56 +317,51 @@ class MossTranscribeDiarizeEncoder(MossTranscribeDiarizePreTrainedModel):
         input_features,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
-                the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~MossTranscribeDiarizeFeatureExtractor.__call__`]
+            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Log-mel features extracted from the raw speech waveform, one row per 30s Whisper window. See
+                [`~MossTranscribeDiarizeFeatureExtractor.__call__`].
             attention_mask (`torch.Tensor`)`, *optional*):
-                MossTranscribeDiarize does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
+                MossTranscribeDiarize does not support masking of the `input_features`, this argument is preserved for
+                compatibility, but it is not used.
         """
-
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
         if input_features.shape[-1] != expected_seq_length:
             raise ValueError(
-                f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+                f"MossTranscribeDiarize expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
+        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
-
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        all_positions = torch.arange(self.embed_positions.num_embeddings, device=inputs_embeds.device)
 
-        hidden_states = inputs_embeds + self.embed_positions(all_positions)
+        embed_pos = self.embed_positions.weight
+        hidden_states = (inputs_embeds + embed_pos).to(inputs_embeds.dtype)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         for idx, encoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
-
-            if not to_drop:
-                hidden_states = encoder_layer(
-                    hidden_states,
-                    None,
-                    **kwargs,
-                )
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+            )
 
         hidden_states = self.layer_norm(hidden_states)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
         )
+
+    # Ignore copy
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers and the output length of the audio encoder
+        """
+        input_lengths = (input_lengths - 1) // 2 + 1
+        output_lengths = (input_lengths - 2) // 2 + 1
+        return input_lengths, output_lengths
 
 
 @auto_docstring
@@ -438,11 +411,9 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
-    def __init__(self, config: MossTranscribeDiarizeConfig):
+    def __init__(self, config):
         super().__init__(config)
-        # Bypasses `AutoModel` (used by `AudioFlamingo3Model`), which would otherwise resolve
-        # `config.audio_config`'s "whisper" `model_type` to the full `WhisperModel` instead of just the encoder.
-        self.audio_tower = MossTranscribeDiarizeEncoder(config.audio_config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.multi_modal_projector = MossTranscribeDiarizeMultiModalProjector(config)
         self.post_init()
@@ -466,13 +437,8 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
             Mask marking each audio sample's valid raw-audio length, one row per sample. Used with
             `config.audio_chunk_size` to recover `audio_chunk_mapping`.
         """
-        device = input_features.device
-
         merge_size = self.config.audio_merge_size
-        conv_lengths = (input_features_mask.sum(-1).to(device=device) - 1) // 2 + 1
-        input_features = input_features.to(
-            device=self.audio_tower.conv1.weight.device, dtype=self.audio_tower.conv1.weight.dtype
-        )
+        conv_lengths = (input_features_mask.sum(-1) - 1) // 2 + 1
 
         audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         audio_embeds = audio_outputs.last_hidden_state

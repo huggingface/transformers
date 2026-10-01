@@ -362,6 +362,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("moonshine_streaming", "MoonshineStreamingModel"),
         ("moshi", "MoshiModel"),
         ("moss_transcribe_diarize", "MossTranscribeDiarizeModel"),
+        ("moss_transcribe_diarize_encoder", "MossTranscribeDiarizeEncoder"),
         ("mpnet", "MPNetModel"),
         ("mpt", "MptModel"),
         ("mra", "MraModel"),

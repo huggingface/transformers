@@ -27,6 +27,53 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
 @strict
+class MossTranscribeDiarizeEncoderConfig(PreTrainedConfig):
+    r"""
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+
+    Example:
+
+    ```python
+    >>> from transformers import MossTranscribeDiarizeEncoderConfig, MossTranscribeDiarizeEncoder
+
+    >>> # Initializing a MossTranscribeDiarizeEncoderConfig
+    >>> configuration = MossTranscribeDiarizeEncoderConfig()
+
+    >>> # Initializing a MossTranscribeDiarizeEncoder (with random weights)
+    >>> model = MossTranscribeDiarizeEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "moss_transcribe_diarize_encoder"
+
+    attribute_map = {
+        "d_model": "hidden_size",
+        "encoder_layers": "num_hidden_layers",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_ffn_dim": "intermediate_size",
+        "encoder_layerdrop": "layerdrop",
+    }
+
+    num_mel_bins: int = 80
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    intermediate_size: int = 4096
+    layerdrop: float | int = 0.0
+    activation_function: str = "gelu"
+    hidden_size: int = 1024
+    dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    scale_embedding: bool = False
+    max_source_positions: int = 1500
+
+
+@auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
+@strict
 class MossTranscribeDiarizeConfig(PreTrainedConfig):
     r"""
     audio_merge_size (`int`, *optional*, defaults to 4):
@@ -64,15 +111,10 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "whisper")
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "moss_transcribe_diarize_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["whisper"](
-                d_model=1024,
-                encoder_layers=24,
-                encoder_attention_heads=16,
-                encoder_ffn_dim=4096,
-            )
+            self.audio_config = CONFIG_MAPPING["moss_transcribe_diarize_encoder"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
@@ -92,7 +134,7 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
 
     @property
     def adaptor_input_dim(self) -> int:
-        return self.audio_config.d_model * self.audio_merge_size
+        return self.audio_config.hidden_size * self.audio_merge_size
 
 
-__all__ = ["MossTranscribeDiarizeConfig"]
+__all__ = ["MossTranscribeDiarizeConfig", "MossTranscribeDiarizeEncoderConfig"]

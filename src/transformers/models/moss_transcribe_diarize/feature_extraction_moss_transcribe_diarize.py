@@ -254,9 +254,8 @@ class MossTranscribeDiarizeFeatureExtractor(SequenceFeatureExtractor):
         padded_inputs["input_features_mask"] = rescaled_attention_mask
         del padded_inputs["attention_mask"]
 
-        # `input_features_mask` alone can't tell chunks apart at a window boundary, so `padding_mask` records
-        # each sample's raw length instead; downstream code derives `audio_chunk_mapping` from it via
-        # `self.n_samples` (the model does the same via `config.audio_chunk_size`).
+        # `input_features_mask` alone can't tell chunks apart at a window boundary, but `padding_mask` records
+        # each sample's raw length
         padding_mask = np.zeros((len(raw_speech), max(per_sample_lengths)), dtype=np.int64)
         for idx, length in enumerate(per_sample_lengths):
             padding_mask[idx, :length] = 1
