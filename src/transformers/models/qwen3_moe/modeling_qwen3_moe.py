@@ -231,7 +231,7 @@ class Qwen3MoeExperts(nn.Module):
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        # Single device-to-host copy; iterating the GPU tensor syncs on every use of `expert_idx`.
+        # .tolist() avoids per-expert GPU syncs
         for expert_idx in expert_hit[:, 0].tolist():
             if expert_idx == self.num_experts:
                 continue
