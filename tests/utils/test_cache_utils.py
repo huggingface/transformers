@@ -426,6 +426,34 @@ class CacheTest(unittest.TestCase):
                 # of bounds of the (shorter) key length downstream.
                 self.assertEqual(layer.update_indexer(indexer_keys).shape[1], 5)
 
+    def test_static_sliding_window_decoding_compiles_once(self):
+        """
+        Regression test: the sliding layer chose its decoding path on a Python int length, which `torch.compile`
+        specialized on, recompiling at every step (and falling back to eager once the recompile limit was hit).
+        Decoding past the window must reuse one graph and keep the last `sliding_window` tokens, in order.
+        """
+        sliding_window, num_tokens = 4, 11
+        layer = StaticSlidingWindowLayer(max_cache_len=16, sliding_window=sliding_window)
+        states = torch.arange(num_tokens, dtype=torch.float32, device=torch_device).view(1, 1, num_tokens, 1)
+        # Allocate the cache up front, as prefill does, so that only decoding gets compiled
+        layer.lazy_initialization(states[:, :, :1], states[:, :, :1])
+
+        def decode(key_states):
+            # As in a forward pass, the mask is sized before the cache is updated
+            mask_sizes = layer.get_mask_sizes(query_length=1)
+            keys, _ = layer.update(key_states, key_states.clone())
+            return keys.clone(), mask_sizes
+
+        torch._dynamo.reset()
+        compiled_decode = torch.compile(decode, backend="eager", fullgraph=True)
+        with torch._dynamo.config.patch(error_on_recompile=True):
+            for position in range(num_tokens):
+                keys, (kv_length, kv_offset) = compiled_decode(states[:, :, position : position + 1])
+                start = max(position - sliding_window + 1, 0)
+                self.assertEqual(kv_length, sliding_window)
+                self.assertEqual(int(kv_offset), start)
+                self.assertEqual(keys[0, 0, : position - start + 1, 0].tolist(), list(range(start, position + 1)))
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""

@@ -531,7 +531,8 @@ class StaticSlidingWindowLayer(StaticLayer):
     def __init__(self, max_cache_len: int, sliding_window: int, **kwargs):
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
-        # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
+        # Multi-token updates choose their path on a Python int, which `torch.compile` may specialize on: their positions
+        # repeat across calls. Decoding does not read it, and marks it stale (`None`) instead.
         self.cumulative_length_int = 0
 
     def update(
@@ -552,34 +553,35 @@ class StaticSlidingWindowLayer(StaticLayer):
             self.lazy_initialization(key_states, value_states)
 
         kv_length = key_states.shape[-2]
-        current_length = self.cumulative_length_int
+        if kv_length == 1:
+            # Decoding: one graph whatever the fill state. Branching on a Python int length would make `torch.compile`
+            # specialize on its value and recompile at every step, so the roll is selected on the tensor length instead.
+            is_full = self.cumulative_length >= self.max_cache_len
+            new_keys = torch.where(is_full, self.keys.roll(-1, dims=-2), self.keys)
+            new_values = torch.where(is_full, self.values.roll(-1, dims=-2), self.values)
+            position = self.cumulative_length.clamp(max=self.max_cache_len - 1).reshape(1)
+            new_keys.index_copy_(2, position, key_states)
+            new_values.index_copy_(2, position, value_states)
+            # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
+            self.keys.copy_(new_keys)
+            self.values.copy_(new_values)
+            self.cumulative_length.add_(1)
+            self.cumulative_length_int = None
+            # Very important to return the `self` tensors here, as they have the static dynamo address
+            return self.keys, self.values
+
+        current_length = self._cumulative_length_int()
         is_full = current_length >= self.max_cache_len
-        # Update it now that we saved the value above
-        self.cumulative_length_int += kv_length
+        self.cumulative_length_int = current_length + kv_length
+        # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
+        # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
+        cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
+        self.cumulative_length.add_(kv_length)
 
+        # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
         if is_full:
-            # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
-            # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
-            if key_states.shape[-2] == 1:
-                # Roll all values to the left by 1 position
-                new_keys = self.keys.roll(-1, dims=-2)
-                new_values = self.values.roll(-1, dims=-2)
-                # Overwrite the last position with new states
-                # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
-                index = torch.tensor([-1], dtype=int, device=self.device)
-                new_keys[:, :, index] = key_states
-                new_values[:, :, index] = value_states
-
-                # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
-                self.keys.copy_(new_keys)
-                self.values.copy_(new_values)
-
-                # Very important to return the `self` tensors here, as they have the static dynamo address
-                return self.keys, self.values
-            # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
-            else:
-                full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
+            full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
+            full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
         # Not yet full, but becoming full on this update
         elif current_length + kv_length > self.max_cache_len:
             # Fast prefill path, no need to cat() in this case, as the cache is currently empty
@@ -590,19 +592,12 @@ class StaticSlidingWindowLayer(StaticLayer):
                 full_key_states = torch.cat((self.keys[:, :, :current_length, :], key_states), dim=-2)
                 full_value_states = torch.cat((self.values[:, :, :current_length, :], value_states), dim=-2)
         else:
-            # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
-            # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
-            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
             try:
                 self.keys.index_copy_(2, cache_position, key_states)
                 self.values.index_copy_(2, cache_position, value_states)
             except NotImplementedError:
                 self.keys[:, :, cache_position] = key_states
                 self.values[:, :, cache_position] = value_states
-
-            # Update the tensor version of the length in-place (we don't need to update it if we are already outside
-            # of this branch, as we don't need the tensor anymore)
-            self.cumulative_length.add_(kv_length)
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
@@ -613,26 +608,32 @@ class StaticSlidingWindowLayer(StaticLayer):
         # we should return the whole states instead of `self.keys/values` here, as otherwise we lose some context
         return full_key_states, full_value_states
 
-    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int | torch.Tensor]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         sliding_window = self.max_cache_len
-        is_full = self.cumulative_length_int >= self.max_cache_len
+        if query_length == 1:
+            # Decoding always attends to the whole window; only the offset moves once it is full, and it stays a
+            # tensor so that `torch.compile` does not specialize on it
+            return sliding_window, (self.cumulative_length - sliding_window + 1).clamp(min=0)
 
-        kv_offset = max(self.cumulative_length_int - sliding_window + 1, 0)
+        cumulative_length = self._cumulative_length_int()
+        kv_offset = max(cumulative_length - sliding_window + 1, 0)
         # The cache is already full
-        if is_full:
+        if cumulative_length >= sliding_window:
             kv_length = sliding_window + query_length - 1
         # Not yet full, but becoming full on this update
-        elif self.cumulative_length_int + query_length > sliding_window:
-            kv_length = self.cumulative_length_int + query_length
+        elif cumulative_length + query_length > sliding_window:
+            kv_length = cumulative_length + query_length
         # Here the Cache is still smaller than the local size, but we return the local size as it's static
         else:
             kv_length = sliding_window
 
         return kv_length, kv_offset
 
-    def get_seq_length(self) -> int:
-        """Returns the sequence length of the cached states."""
+    def _cumulative_length_int(self) -> int:
+        """The cumulative length as a Python int, read back from the tensor after decoding steps."""
+        if self.cumulative_length_int is None:
+            self.cumulative_length_int = int(self.cumulative_length)
         return self.cumulative_length_int
 
     def reset(self):
