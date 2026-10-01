@@ -230,44 +230,8 @@ class Glm5NextTextHyperConnection(nn.Module):
     The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the `hc_mult` input
     streams through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
 
-    The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
-
-                                                  ┌───────────────────┐
-                             N input streams  ────│ FLATTEN + PROJECT |────> (pre, post, comb) weights
-                              [B, S, N, D]        └───────────────────┘      ([B, S, N],  [B, S, N],  [B, S, N, N])
-                                  │ │ │
-               ╭──────────────────┴─┼─┼──────────────────╮
-               │ ╭──────────────────┴─┼────────────────╮ │
-               │ │ ╭──────────────────┴──────────────╮ │ │
-               │ │ │                                 │ │ │
-        ┌─────────────────┐                          │ │ │
-        │ COLLAPSE (pre)  │                          │ │ │
-        └─────────────────┘                          │ │ │
-                 │                                   │ │ │
-            Block input                              │ │ │
-             [B, S, D]                               │ │ │
-                 │                                   │ │ │
-        ┌─────────────────┐                     ┌─────────────┐
-        │   ATTN or MLP   │                     │  MIX (comb) │
-        └─────────────────┘                     └─────────────┘
-                 │                                   │ │ │
-           Block output                              │ │ │
-             [B, S, D]                               │ │ │
-                 │                                   │ │ │
-        ┌─────────────────┐                          │ │ │
-        │  EXPAND (post)  │                          │ │ │
-        └─────────────────┘                          │ │ │
-               │ │ │                                 │ │ │
-        N expanded streams                    N residual streams
-           [B, S, N, D]                          [B, S, N, D]
-               │ │ │                                 │ │ │
-               │ │ ╰───────────┌─────────┐───────────╯ │ │
-               │ ╰─────────────│   ADD   │─────────────╯ │
-               ╰───────────────└─────────┘───────────────╯
-                                  │ │ │
-                                  ▼ ▼ ▼
-                            N output streams
-                              [B, S, N, D]
+    See the [mHC section](https://huggingface.co/docs/transformers/main/en/model_doc/glm5_next_text#mhc) of the model docs
+    for a diagram of how the mHC streams and module work.
     """
 
     def __init__(self, config: Glm5NextTextConfig):
@@ -287,13 +251,11 @@ class Glm5NextTextHyperConnection(nn.Module):
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Computes the weights used to mix in the `hc_mult` streams with the input and output of the next layer, which can
-        be an attention or a MLP layer. This is done through three weights:
+        be an attention or a MLP layer. This is done through the three returned weights:
 
         - pre: used to collapse the `hc_mult` input streams into one, creating an input tensor for the next layer
         - post: used to expand the output of the next layer back into `hc_mult` streams
         - comb: used to mix the `hc_mult` input streams with the `hc_mult` output streams
-
-        All weights are returned except "pre", which is consumed here.
         """
         batch_size, seq_len = hidden_streams.shape[:2]
         hc = self.hc_mult
@@ -325,10 +287,7 @@ class Glm5NextTextHyperConnection(nn.Module):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
 
-        # Since "pre" is meant to be used with the input streams (available here as `hidden_streams`), we collapse the
-        # streams here and return `collapsed` tensor, which will be the input for the next attention or MLP block.
-        collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
-        return post, comb, collapsed
+        return pre, post, comb
 
 
 class Glm5NextTextHyperHead(nn.Module):
@@ -1312,7 +1271,9 @@ class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
         dtype = hidden_states.dtype
 
         residual = hidden_states
-        post, comb, hidden_states = self.attn_hc(hidden_states)
+        pre, post, comb = self.attn_hc(hidden_states)
+        hidden_states = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(dtype)
+
         # Self attn
         hidden_states = self.input_layernorm(hidden_states)
         topk_indices = None
@@ -1339,7 +1300,8 @@ class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
         )
 
         residual = hidden_states
-        post, comb, hidden_states = self.ffn_hc(hidden_states)
+        pre, post, comb = self.ffn_hc(hidden_states)
+        hidden_states = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(dtype)
         # Feed forward
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)

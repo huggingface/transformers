@@ -1170,7 +1170,9 @@ class Glm5NextTextDecoderLayer(GlmMoeDsaDecoderLayer):
         dtype = hidden_states.dtype
 
         residual = hidden_states
-        post, comb, hidden_states = self.attn_hc(hidden_states)
+        pre, post, comb = self.attn_hc(hidden_states)
+        hidden_states = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(dtype)
+
         # Self attn
         hidden_states = self.input_layernorm(hidden_states)
         topk_indices = None
@@ -1197,7 +1199,8 @@ class Glm5NextTextDecoderLayer(GlmMoeDsaDecoderLayer):
         )
 
         residual = hidden_states
-        post, comb, hidden_states = self.ffn_hc(hidden_states)
+        pre, post, comb = self.ffn_hc(hidden_states)
+        hidden_states = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(dtype)
         # Feed forward
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)

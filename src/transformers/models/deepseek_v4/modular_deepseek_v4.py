@@ -791,44 +791,8 @@ class DeepseekV4HyperConnection(nn.Module):
     The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the `hc_mult` input
     streams through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
 
-    The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
-
-                                                  ┌───────────────────┐
-                             N input streams  ────│ FLATTEN + PROJECT |────> (pre, post, comb) weights
-                              [B, S, N, D]        └───────────────────┘      ([B, S, N],  [B, S, N],  [B, S, N, N])
-                                  │ │ │
-               ╭──────────────────┴─┼─┼──────────────────╮
-               │ ╭──────────────────┴─┼────────────────╮ │
-               │ │ ╭──────────────────┴──────────────╮ │ │
-               │ │ │                                 │ │ │
-        ┌─────────────────┐                          │ │ │
-        │ COLLAPSE (pre)  │                          │ │ │
-        └─────────────────┘                          │ │ │
-                 │                                   │ │ │
-            Block input                              │ │ │
-             [B, S, D]                               │ │ │
-                 │                                   │ │ │
-        ┌─────────────────┐                     ┌─────────────┐
-        │   ATTN or MLP   │                     │  MIX (comb) │
-        └─────────────────┘                     └─────────────┘
-                 │                                   │ │ │
-           Block output                              │ │ │
-             [B, S, D]                               │ │ │
-                 │                                   │ │ │
-        ┌─────────────────┐                          │ │ │
-        │  EXPAND (post)  │                          │ │ │
-        └─────────────────┘                          │ │ │
-               │ │ │                                 │ │ │
-        N expanded streams                    N residual streams
-           [B, S, N, D]                          [B, S, N, D]
-               │ │ │                                 │ │ │
-               │ │ ╰───────────┌─────────┐───────────╯ │ │
-               │ ╰─────────────│   ADD   │─────────────╯ │
-               ╰───────────────└─────────┘───────────────╯
-                                  │ │ │
-                                  ▼ ▼ ▼
-                            N output streams
-                              [B, S, N, D]
+    See the [mHC section](https://huggingface.co/docs/transformers/main/en/model_doc/deepseek_v4#mhc) of the model docs
+    for a diagram of how the mHC streams and module work.
     """
 
     def __init__(self, config: DeepseekV4Config):
@@ -848,13 +812,11 @@ class DeepseekV4HyperConnection(nn.Module):
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Computes the weights used to mix in the `hc_mult` streams with the input and output of the next layer, which can
-        be an attention or a MLP layer. This is done through three weights:
+        be an attention or a MLP layer. This is done through the three returned weights:
 
         - pre: used to collapse the `hc_mult` input streams into one, creating an input tensor for the next layer
         - post: used to expand the output of the next layer back into `hc_mult` streams
         - comb: used to mix the `hc_mult` input streams with the `hc_mult` output streams
-
-        All weights are returned except "pre", which is consumed here.
         """
         batch_size, seq_len = hidden_streams.shape[:2]
         hc = self.hc_mult
@@ -886,10 +848,7 @@ class DeepseekV4HyperConnection(nn.Module):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
 
-        # Since "pre" is meant to be used with the input streams (available here as `hidden_streams`), we collapse the
-        # streams here and return `collapsed` tensor, which will be the input for the next attention or MLP block.
-        collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
-        return post, comb, collapsed
+        return pre, post, comb
 
 
 class DeepseekV4HyperHead(nn.Module):
@@ -1051,25 +1010,21 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         input_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        # hidden_states throughout: [B, S, hc_mult, hidden].
-        # `post` / `comb` come out of the HC modules in fp32 (Sinkhorn projection runs
-        # in float); the .to(dtype) puts everything back to the input dtype before mixing
-        # so both sites stay consistent with `hidden_states`'s entry dtype.
-        # comb is consumed transposed: indexed as sum_j comb[j, k] * residual[j, d]
-        # (sum over the FIRST hc axis), equivalent to comb.T @ residual. Sinkhorn
-        # produces a doubly-stochastic but non-symmetric matrix, so the direction matters.
         dtype = hidden_states.dtype
-        post, comb, collapsed = self.attn_hc(hidden_states)
-        attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
-        hidden_states = post.to(dtype).unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
-            comb.to(dtype).transpose(-1, -2), hidden_states
-        )
 
-        post, comb, collapsed = self.ffn_hc(hidden_states)
+        # Because of mHC, hidden_states have shape [B, S, hc_mult, hidden]: we need to collapse the `hc_mult` streams
+        # into one before entering attention
+        pre, post, comb = self.attn_hc(hidden_states)
+        collapsed = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(dtype)
+        attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
+        attn_output = attn_output.unsqueeze(-2) * post.to(dtype).unsqueeze(-1)
+        hidden_states = attn_output + torch.matmul(comb.to(dtype).transpose(-1, -2), hidden_states)
+
+        pre, post, comb = self.ffn_hc(hidden_states)
+        collapsed = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(dtype)
         mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)
-        return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(
-            comb.to(dtype).transpose(-1, -2), hidden_states
-        )
+        mlp_output = post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2)
+        return mlp_output + torch.matmul(comb.to(dtype).transpose(-1, -2), hidden_states)
 
 
 class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):

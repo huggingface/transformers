@@ -61,14 +61,61 @@ All three types share the same backbone:
   §2.3.1) preserves local fine-grained dependencies; the long-range compressor's output is concatenated with this
   branch's KVs before core attention.
 
-### Manifold-Constrained Hyper-Connections (§2.2)
+### Manifold-Constrained Hyper-Connections (§2.2)[[mhc]]
 
-Residual connections are replaced by mHC (Xie et al., 2026): `hc_mult` parallel residual streams kept in shape
-`[B, S, hc_mult, D]` throughout each block. Two [`DeepseekV4HyperConnection`] modules — `attn_hc` and `ffn_hc` — mix
-streams in and out around the attention / MLP sublayers via a `(pre, post, comb)` triplet. The `comb` matrix is a
-doubly-stochastic projection produced by `hc_sinkhorn_iters` Sinkhorn–Knopp iterations on the manifold, making
-signal propagation non-expansive across deep stacks. A final [`DeepseekV4HyperHead`] collapses the `hc_mult`
-streams down to a single sequence before the model norm.
+Residual connections are replaced by mHC ([Xie et al., 2026](https://huggingface.co/papers/2512.24880)).  
+In a decoder block, there are usually two sub-blocks, an attention and a MLP.  These sub-blocks can appear in different flavours: attention can be linear attention, gated delta rule, MLA, ... and same goes for the MLP which can be replaced by a MoE.  
+But around these sub-blocks, there is always a residual stream: to the output of the sub-block is added the input of the sub-block. This is allowed because both tensors are shape `[batch_size, sequence_length, hidden_dim]` (or for short, `[B, S, D]`).
+
+The idea behind mHC is to replace this 1 residual stream with `hc_mult` residual streams. This makes the shape of the residual tensor `[B, S, hc_mult, D]`. Since this is not the input shape expected by the sub-block, we also add a mHC module that computes three weights based on the residual streams:
+
+- `pre`, which is used to collapse the `hc_mult` input streams into one, creating an input tensor of shape `[B, S, D]` compatible with the sub-block
+- `post`: which is used to expand the output of the sub-block back into `hc_mult` streams
+- `comb`: used to mix the `hc_mult` input streams with the `hc_mult` output streams
+
+    The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
+
+```text
+                                                  ┌───────────────────┐
+                             N input streams  ────│ FLATTEN + PROJECT │────> (pre, post, comb) weights
+                              [B, S, N, D]        └───────────────────┘      ([B, S, N],  [B, S, N],  [B, S, N, N])
+                                  │ │ │
+               ╭──────────────────┴─┼─┼──────────────────╮
+               │ ╭──────────────────┴─┼────────────────╮ │
+               │ │ ╭──────────────────┴──────────────╮ │ │
+               │ │ │                                 │ │ │
+        ┌─────────────────┐                          │ │ │
+        │ COLLAPSE (pre)  │                          │ │ │
+        └─────────────────┘                          │ │ │
+                 │                                   │ │ │
+            Block input                              │ │ │
+             [B, S, D]                               │ │ │
+                 │                                   │ │ │
+        ┌─────────────────┐                     ┌─────────────┐
+        │   ATTN or MLP   │                     │  MIX (comb) │
+        └─────────────────┘                     └─────────────┘
+                 │                                   │ │ │
+           Block output                              │ │ │
+             [B, S, D]                               │ │ │
+                 │                                   │ │ │
+        ┌─────────────────┐                          │ │ │
+        │  EXPAND (post)  │                          │ │ │
+        └─────────────────┘                          │ │ │
+               │ │ │                                 │ │ │
+        N expanded streams                    N residual streams
+           [B, S, N, D]                          [B, S, N, D]
+               │ │ │                                 │ │ │
+               │ │ ╰───────────┌─────────┐───────────╯ │ │
+               │ ╰─────────────│   ADD   │─────────────╯ │
+               ╰───────────────└─────────┘───────────────╯
+                                  │ │ │
+                                  ▼ ▼ ▼
+                            N output streams
+                              [B, S, N, D]
+```
+
+Two [`DeepseekV4HyperConnection`] modules, `attn_hc` and `ffn_hc`, are present in each block to compute those weight for the attention and the MoE sub-blocks.
+A final [`DeepseekV4HyperHead`] collapses the `hc_mult` streams down to a single sequence before the model norm.
 
 ### MoE schedule (§2.1)
 
