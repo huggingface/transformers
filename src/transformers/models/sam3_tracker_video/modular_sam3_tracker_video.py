@@ -248,11 +248,11 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     memory_fuser_hidden_act: str = "gelu"
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         self.memory_attention_rope_feat_sizes = (
             [72, 72] if self.memory_attention_rope_feat_sizes is None else self.memory_attention_rope_feat_sizes
         )
         self.image_size = kwargs.pop("image_size", 1008)
-        super().__post_init__(**kwargs)
 
     @property
     def memory_attention_rope_theta(self):
