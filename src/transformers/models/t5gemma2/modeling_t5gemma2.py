@@ -911,6 +911,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         # Unused for processor compatibility kept in signature.
         token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -924,11 +925,9 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-
             image_mask = self.get_image_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
         outputs = self.text_model(

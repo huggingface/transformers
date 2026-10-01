@@ -17,8 +17,8 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
-   move the model to the target device/dtype and build the partitioner list.
+1. **Backend preparation** (`_BACKEND_PREPARE`): move the model to the target device/dtype
+   and build the partitioner list.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -67,6 +67,7 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
+    from ..cache_utils import EncoderDecoderCache, StaticCache
     from ..modeling_utils import PreTrainedModel
 
     # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
@@ -145,7 +146,10 @@ class ExecutorchExporter(DynamoExporter):
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
+                exported_program,
+                partitioner=partitioner,
+                compile_config=_get_edge_compile_config(config.backend),
+                transform_passes=_get_transform_passes(config.backend),
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
@@ -154,7 +158,16 @@ class ExecutorchExporter(DynamoExporter):
         return executorch_programs_manager
 
 
-def _get_edge_compile_config() -> EdgeCompileConfig:
+def _get_transform_passes(backend: str):
+    """Return backend-specific graph transforms, or ``None`` for defaults."""
+    if backend == "mlx":
+        from executorch.backends.mlx.passes import get_default_passes
+
+        return get_default_passes()
+    return None
+
+
+def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
     """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
 
     Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
@@ -164,6 +177,8 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     but aren't in the core ATen opset. The CPU portable kernels handle them at
     runtime; XNNPACK leaves them in the non-delegated CPU portion of the graph.
     """
+    if backend == "mlx":
+        return EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True)
     return EdgeCompileConfig(
         _core_aten_ops_exception_list=[
             torch.ops.aten._fft_c2c.default,
@@ -258,9 +273,33 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+    """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
+    for value in sample_inputs.values():
+        caches = [value]
+        if isinstance(value, EncoderDecoderCache):
+            caches = [value.self_attention_cache, value.cross_attention_cache]
+        if any(isinstance(cache, StaticCache) for cache in caches):
+            raise ValueError(
+                "StaticCache is not supported by the ExecuTorch MLX backend. "
+                "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
+            )
+
+    from executorch.backends.mlx import MLXPartitioner
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    # MLX does not support grouped MoE kernels.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
+    partitioner = [MLXPartitioner()]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
+    "mlx": prepare_for_mlx,
 }
 
 
@@ -339,7 +378,8 @@ def _patch_topk(original):
     return patch
 
 
-@register_patch("executorch", "torch.detach", "torch.Tensor.detach")
+@register_patch("executorch.xnnpack", "torch.detach", "torch.Tensor.detach")
+@register_patch("executorch.cuda", "torch.detach", "torch.Tensor.detach")
 def _patch_detach(_original):
     """No-op detach."""
 
